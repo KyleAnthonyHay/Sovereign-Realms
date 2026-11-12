@@ -1,0 +1,67 @@
+# Unreal-generated local data (works with a project at root or below it)
+Intermediate/
+Saved/
+DerivedDataCache/
+Binaries/
+
+# Vendor plugins may require binaries that cannot be rebuilt from source.
+# Review these individually; add narrow ignores for generated source-plugin binaries.
+!**/Plugins/**/Binaries/
+!**/Plugins/**/Binaries/**
+
+# Do not ignore shared Config/, Content/, Source/, Plugins/, or Build/ resources.
+
+# IDE and editor state, regenerated project files
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Blender automatic backups; keep editable .blend sources
+*.blend[0-9]*
+*.blend@
+
+# Package outside the checkout; fallback output directories only
+PackagedBuilds/
+StagedBuilds/
+dist/
+
+# OS metadata
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local assistant/MCP configuration and workspaces
+.mcp.json
+.claude/settings.local.json
+.claude/local/
+.claude/worktrees/
+
+# Secrets and personal overrides; portable examples may be committed after review
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local.ini
+*.local.json
+*.pem
+*.key
+*.p12
+*.pfx
