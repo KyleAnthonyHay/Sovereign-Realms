@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "",
+	"Description": "Sovereign Realms - top-down fantasy RTS",
+	"Modules": [
+		{
+			"Name": "SovereignRealms",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [ "Engine" ]
+		}
+	],
+	"Plugins": [
+		{ "Name": "ModelingToolsEditorMode", "Enabled": true, "TargetAllowList": [ "Editor" ] },
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "ModelContextProtocol", "Enabled": true },
+		{ "Name": "EditorToolset", "Enabled": true },
+		{ "Name": "LiveCodingToolset", "Enabled": true },
+		{ "Name": "AutomationTestToolset", "Enabled": true },
+		{ "Name": "ConfigSettingsToolset", "Enabled": true },
+		{ "Name": "NiagaraToolsets", "Enabled": true }
+	]
+}
