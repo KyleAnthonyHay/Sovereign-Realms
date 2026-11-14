@@ -1,0 +1,38 @@
+{
+ "name": "rallyflag",
+ "mesh": "SM_Bld_RallyFlag",
+ "triangles": 96,
+ "bounds": {
+  "min": [
+   -22.9,
+   -38.0,
+   -4.0
+  ],
+  "max": [
+   23.7,
+   38.0,
+   210.0
+  ]
+ },
+ "colliders": [],
+ "sockets": {
+  "label": [
+   0.0,
+   0.0,
+   220.0
+  ]
+ },
+ "footprint": [
+  -30.0,
+  -30.0,
+  30.0,
+  30.0
+ ],
+ "ring_radius": 60.0,
+ "slots": [
+  "Bld_Banner",
+  "Bld_Beam",
+  "Bld_Bronze",
+  "Bld_Rock"
+ ]
+}

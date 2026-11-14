@@ -377,6 +377,74 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
 	bool bSpawnGreyboxObstacles = true;
 
+	// --------------------------------------------------------------- Economy
+	// Farms make food, mines make gold. The castle turns food into troops; gold is for buildings. No workers: buildings pay out on a timer.
+	UPROPERTY(EditAnywhere, Config, Category = "Economy", meta = (ClampMin = "0"))
+	int32 StartingGold = 150;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy", meta = (ClampMin = "0"))
+	int32 StartingFood = 110;
+
+	/** Food each farm adds per payout. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0"))
+	int32 FarmFoodPerPayout = 10;
+
+	/** Seconds between a farm's payouts. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0.2"))
+	float FarmPayoutInterval = 5.f;
+
+	/** Gold each mine adds per payout. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0"))
+	int32 MineGoldPerPayout = 10;
+
+	/** Seconds between a mine's payouts. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0.2"))
+	float MinePayoutInterval = 6.f;
+
+	/** Troops are paid for in food only; gold is kept for buildings. (The cost struct still carries a gold field, left at 0.) */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
+	FSRCost ShieldbearerCost = FSRCost(0, 40);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
+	FSRCost ArcherCost = FSRCost(0, 30);
+
+	/** Seconds the castle takes to train one Shieldbearer. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
+	float ShieldbearerBuildTime = 6.f;
+
+	/** Seconds the castle takes to train one Archer. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
+	float ArcherBuildTime = 5.f;
+
+	/** Recruits a castle can have waiting (including the one in training). */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "1", ClampMax = "12"))
+	int32 MaxRecruitQueue = 5;
+
+	/** Clearance (cm) recruits and move orders keep from a building's footprint when they are routed round it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "20"))
+	float BuildingRouteMargin = 85.f;
+
+	/** How long the "+N" over a building lives, and how far it floats up (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Feedback", meta = (ClampMin = "0.2"))
+	float PayoutPopupTime = 1.5f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Feedback", meta = (ClampMin = "0"))
+	float PayoutPopupRise = 130.f;
+
+	/** How long a resource counter flashes red and shakes when a purchase is refused. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Feedback", meta = (ClampMin = "0.05"))
+	float InsufficientFlashTime = 0.55f;
+
+	/** Selection outline round a building: line width (cm) and gap from the footprint. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Feedback", meta = (ClampMin = "2"))
+	float BuildingRingWidth = 18.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Feedback", meta = (ClampMin = "0"))
+	float BuildingRingGap = 34.f;
+
+	const FSRCost& CostFor(ESRUnitType Type) const { return Type == ESRUnitType::Archer ? ArcherCost : ShieldbearerCost; }
+	float BuildTimeFor(ESRUnitType Type) const { return Type == ESRUnitType::Archer ? ArcherBuildTime : ShieldbearerBuildTime; }
+
 	// --------------------------------------------------------------- Visuals
 	// Troop sprites: /Game/SR/Materials/M_UnitSprite on a camera-facing card. The three look values below are pushed
 	// into the shared material instances every frame, so they can be tuned while PIE runs.

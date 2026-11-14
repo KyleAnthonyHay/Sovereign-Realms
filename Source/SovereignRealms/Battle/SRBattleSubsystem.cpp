@@ -4,6 +4,8 @@
 #include "Units/SRUnit.h"
 #include "Units/SRProjectile.h"
 #include "Battle/SROrderMarker.h"
+#include "Battle/SREconomySubsystem.h"
+#include "Buildings/SRBuilding.h"
 #include "Player/SRCameraPawn.h"
 #include "Common/SRFeelSettings.h"
 #include "SovereignRealms.h"
@@ -247,6 +249,9 @@ void USRBattleSubsystem::Tick(float DeltaTime)
 		}
 	}
 
+	// Buildings: production, recruit queues, payout popups. Stepped here so they freeze and reset with the battle.
+	if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this)) { Economy->Step(Dt); }
+
 	CheckResult();
 	if (Result != ESRBattleResult::Ongoing) { TimeSinceResult += Dt; }
 }
@@ -336,6 +341,7 @@ void USRBattleSubsystem::ResetBattle()
 	UpdateSpriteLook();
 	SpawnObstacles();
 	SpawnScenario();
+	if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this)) { Economy->Reset(); }
 	bBattleStarted = true;
 
 	UE_LOG(LogSovereign, Log, TEXT("BATTLE RESET: player=%d enemy=%d"), CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy));
@@ -497,6 +503,17 @@ ASRUnit* USRBattleSubsystem::PickUnit(const FVector& RayOrigin, const FVector& R
 	return Best;
 }
 
+void USRBattleSubsystem::IgnoreBuildings(FCollisionQueryParams& Params) const
+{
+	if (const USREconomySubsystem* Economy = USREconomySubsystem::Get(this))
+	{
+		for (const ASRBuilding* Building : Economy->GetBuildings())
+		{
+			if (Building) { Params.AddIgnoredActor(Building); }
+		}
+	}
+}
+
 bool USRBattleSubsystem::SampleGround(const FVector2D& XY, float RefZ, float& OutZ) const
 {
 	const UWorld* World = GetWorld();
@@ -505,7 +522,8 @@ bool USRBattleSubsystem::SampleGround(const FVector2D& XY, float RefZ, float& Ou
 	FHitResult Hit;
 	const FVector Start(XY.X, XY.Y, RefZ + 400.f);
 	const FVector End(XY.X, XY.Y, RefZ - 50000.f);
-	const FCollisionQueryParams Params(SCENE_QUERY_STAT(SRGround), false);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SRGround), false);
+	IgnoreBuildings(Params); // a building's blocking box is a wall, never ground: the camera and the cursor look through it
 	if (World->LineTraceSingleByObjectType(Hit, Start, End, FCollisionObjectQueryParams(ECC_WorldStatic), Params))
 	{
 		OutZ = Hit.ImpactPoint.Z;
@@ -517,7 +535,8 @@ bool USRBattleSubsystem::SampleGround(const FVector2D& XY, float RefZ, float& Ou
 FVector USRBattleSubsystem::RayToGround(const FVector& RayOrigin, const FVector& RayDir) const
 {
 	FHitResult Hit;
-	const FCollisionQueryParams Params(SCENE_QUERY_STAT(SRCursor), false);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SRCursor), false);
+	IgnoreBuildings(Params);
 	if (GetWorld()->LineTraceSingleByObjectType(Hit, RayOrigin, RayOrigin + RayDir * 200000.f, FCollisionObjectQueryParams(ECC_WorldStatic), Params))
 	{
 		return Hit.ImpactPoint;

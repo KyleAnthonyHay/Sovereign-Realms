@@ -41,6 +41,9 @@ public:
 	void OrderAttackMove(const FVector2D& Dest);
 	void OrderAttack(ASRUnit* InTarget);
 	void OrderStop();
+	/** Move (or attack-move) through waypoints to the last point: how recruits and group moves get round buildings. */
+	void OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove);
+	int32 GetWaypointsLeft() const { return Waypoints.Num(); }
 
 	/** Little hop that says "order received". */
 	void Acknowledge(float Delay);
@@ -150,6 +153,7 @@ private:
 	// orders
 	ESROrder Order = ESROrder::Idle;
 	FVector2D Destination = FVector2D::ZeroVector;
+	TArray<FVector2D> Waypoints;   // points still to visit after Destination (Move / AttackMove)
 	FVector2D Home = FVector2D::ZeroVector;
 	TWeakObjectPtr<ASRUnit> Target;
 	float RetargetTimer = 0.f;

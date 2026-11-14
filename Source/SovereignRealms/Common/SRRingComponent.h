@@ -25,9 +25,14 @@ public:
 	/** Builds the ring mesh and its dynamic material. Call once after registering. */
 	void BuildRing(float InnerRadius, float OuterRadius, int32 Segments = 40);
 
+	/** Builds a rounded-rectangle outline instead (a building's footprint). The line is Width thick, inside the given half extents. */
+	void BuildRoundedRect(const FVector2D& HalfExtent, float CornerRadius, float Width, int32 CornerSegments = 6);
+
 	void SetRingColor(const FLinearColor& Color, float Opacity = 1.f);
 
 private:
+	void FinishMesh(const TArray<FVector>& Verts, const TArray<FVector2D>& UVs, int32 Segments);
+
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> RingMID;
 };

@@ -85,6 +85,7 @@ void ASRUnit::OrderMove(const FVector2D& Dest)
 	if (!IsAlive()) { return; }
 	Order = ESROrder::Move;
 	Destination = Dest;
+	Waypoints.Reset();
 	Target = nullptr;
 	bReturnHomeWhenDone = false;
 	CancelAttack();
@@ -96,8 +97,17 @@ void ASRUnit::OrderAttackMove(const FVector2D& Dest)
 	if (!IsAlive()) { return; }
 	Order = ESROrder::AttackMove;
 	Destination = Dest;
+	Waypoints.Reset();
 	RetargetTimer = 0.f; // look for something to fight right away
 	ResetProgress();
+}
+
+void ASRUnit::OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove)
+{
+	if (Points.Num() == 0) { return; }
+	if (bAttackMove) { OrderAttackMove(Points[0]); }
+	else { OrderMove(Points[0]); }
+	for (int32 i = 1; i < Points.Num(); ++i) { Waypoints.Add(Points[i]); }
 }
 
 void ASRUnit::OrderAttack(ASRUnit* InTarget)
@@ -105,6 +115,7 @@ void ASRUnit::OrderAttack(ASRUnit* InTarget)
 	if (!IsAlive() || !InTarget || !InTarget->IsAlive() || InTarget == this) { return; }
 	if (Target.Get() != InTarget) { CancelAttack(); }
 	Order = ESROrder::AttackTarget;
+	Waypoints.Reset();
 	Target = InTarget;
 	bReturnHomeWhenDone = false;
 }
@@ -113,6 +124,7 @@ void ASRUnit::OrderStop()
 {
 	if (!IsAlive()) { return; }
 	Order = ESROrder::Idle;
+	Waypoints.Reset();
 	Target = nullptr;
 	bReturnHomeWhenDone = false;
 	RetargetTimer = 0.6f; // a beat of real stillness before auto-acquire kicks back in
@@ -214,7 +226,18 @@ void ASRUnit::StepSim(float Dt)
 
 		// Arrived, or someone is parked on our slot and shoving would only cause jitter: settle.
 		const bool bGiveUp = NoProgressTime > (Dist < 260.f ? F.GiveUpTimeNear : F.GiveUpTimeFar);
-		if (Dist <= F.ArriveTolerance || bGiveUp)
+		if (Waypoints.Num() > 0)
+		{
+			// A corner on the way round a building: cut it at a run, no braking, and head for the next point.
+			if (Dist <= FMath::Max(F.ArriveTolerance, 55.f) || bGiveUp)
+			{
+				Destination = Waypoints[0];
+				Waypoints.RemoveAt(0);
+				ResetProgress();
+			}
+			Desired = (Destination - Pos).GetSafeNormal() * S.MaxSpeed;
+		}
+		else if (Dist <= F.ArriveTolerance || bGiveUp)
 		{
 			Order = ESROrder::Idle;
 		}

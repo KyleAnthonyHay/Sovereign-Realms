@@ -5,6 +5,8 @@
 // and the running game executes them (see USRBattleSubsystem::PollCommandInbox).
 
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SREconomySubsystem.h"
+#include "Buildings/SRBuilding.h"
 #include "Player/SRPlayerController.h"
 #include "Player/SRCameraPawn.h"
 #include "Units/SRUnit.h"
@@ -250,6 +252,58 @@ namespace
 				Unit->OrderMove(Unit->GetPos2D() + FVector2D(FMath::Cos(Yaw), FMath::Sin(Yaw)) * Distance);
 			}
 			UE_LOG(LogSovereign, Log, TEXT("sr.Fan: %d units"), Index);
+		}));
+
+	// --- kingdoms: economy, recruitment, rally point ---
+
+	FAutoConsoleCommandWithWorldAndArgs CmdGive(TEXT("sr.Give"), TEXT("sr.Give <gold|food> <amount>: add to (or with a negative amount take from) the player's stock."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
+			if (!Economy || Args.Num() < 2) { return; }
+			const ESRResource Resource = Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? ESRResource::Food : ESRResource::Gold;
+			Economy->AddResource(ESRTeam::Player, Resource, FCString::Atoi(*Args[1]));
+			UE_LOG(LogSovereign, Log, TEXT("sr.Give: player gold=%d food=%d"), Economy->GetResource(ESRTeam::Player, ESRResource::Gold), Economy->GetResource(ESRTeam::Player, ESRResource::Food));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdRecruit(TEXT("sr.Recruit"), TEXT("sr.Recruit <shield|archer>: queue a recruit at the player's castle (pays the cost; refused if it cannot be afforded)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ASRPlayerController* PC = GetSRController(World);
+			if (!PC || Args.Num() < 1) { return; }
+			const ESRUnitType Type = Args[0].StartsWith(TEXT("a"), ESearchCase::IgnoreCase) ? ESRUnitType::Archer : ESRUnitType::Shieldbearer;
+			const bool bOk = PC->RecruitAtCastle(Type);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Recruit %s: %s"), *Args[0], bOk ? TEXT("queued") : TEXT("REFUSED"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdSelectCastle(TEXT("sr.SelectCastle"), TEXT("sr.SelectCastle [farm|mine|enemy|none]: select the player's castle (or another building; none deselects)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ASRPlayerController* PC = GetSRController(World);
+			const USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
+			if (!PC || !Economy) { return; }
+			const FString What = Args.Num() > 0 ? Args[0].ToLower() : TEXT("castle");
+			ASRBuilding* Building = nullptr;
+			if (What == TEXT("farm")) { Building = Economy->FindBuilding(ESRBuildingType::Farm, ESRTeam::Player); }
+			else if (What == TEXT("mine")) { Building = Economy->FindBuilding(ESRBuildingType::Mine, ESRTeam::Player); }
+			else if (What == TEXT("enemy")) { Building = Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Enemy); }
+			else if (What != TEXT("none")) { Building = Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Player); }
+			PC->SelectBuilding(Building);
+			UE_LOG(LogSovereign, Log, TEXT("sr.SelectCastle: %s"), Building ? *Building->GetActorNameOrLabel() : TEXT("none"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdRally(TEXT("sr.Rally"), TEXT("sr.Rally X Y: set the player castle's rally point."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			FVector2D XY;
+			ASRPlayerController* PC = GetSRController(World);
+			if (PC && ParseXY(Args, XY)) { PC->SetCastleRally(GroundAt(World, XY)); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdEconomy(TEXT("sr.Economy"), TEXT("Log both teams' gold and food, income, and every building's timers, queue and rally point."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (const USREconomySubsystem* Economy = USREconomySubsystem::Get(World)) { Economy->LogStatus(); }
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdShot(TEXT("sr.Shot"), TEXT("sr.Shot <name>: save a screenshot of the game view (with HUD) to Saved/Screenshots/SR/<name>.png."),

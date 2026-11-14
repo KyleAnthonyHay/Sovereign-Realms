@@ -8,6 +8,7 @@
 #include "SRPlayerController.generated.h"
 
 class ASRUnit;
+class ASRBuilding;
 class ASRCameraPawn;
 class USRBattleSubsystem;
 class UInputAction;
@@ -29,6 +30,9 @@ struct FInputActionValue;
  *   Space / Home                                     centre on selection
  *   Ctrl|Cmd|Alt + 1..3 / 1..3                       set / recall control group (double-tap to centre)
  *   R                                                reset the battle
+ *   LMB on a building                                select it (info panel; the castle shows its recruit commands)
+ *   Q / E, or the panel buttons, castle selected     recruit a Shieldbearer / an Archer
+ *   RMB, castle selected                             set the rally point
  */
 UCLASS()
 class SOVEREIGNREALMS_API ASRPlayerController : public APlayerController
@@ -47,6 +51,18 @@ public:
 	void SelectAllPlayerUnits();
 	void ClearSelection();
 	const TArray<TWeakObjectPtr<ASRUnit>>& GetSelection() const { return Selection; }
+
+	// ---- Buildings: one at a time, never together with units ----
+	void SelectBuilding(ASRBuilding* Building);
+	ASRBuilding* GetSelectedBuilding() const { return SelectedBuilding.Get(); }
+	ASRBuilding* GetHoveredBuilding() const { return HoveredBuilding.Get(); }
+	/** Queue a recruit at the selected castle (or the player's castle if none is selected). */
+	bool RecruitAtCastle(ESRUnitType Type);
+	void SetCastleRally(const FVector& GroundPoint);
+	/** HUD feedback: which recruit button was last used, and when (real seconds). */
+	int32 GetLastRecruitButton() const { return LastRecruitButton; }
+	double GetLastRecruitTime() const { return LastRecruitTime; }
+	bool WasLastRecruitAccepted() const { return bLastRecruitAccepted; }
 
 	// ---- Orders to the current selection ----
 	void IssueMove(const FVector& GroundPoint, bool bAttackMove);
@@ -97,6 +113,10 @@ private:
 	void OnGroup1() { OnGroupKey(0); }
 	void OnGroup2() { OnGroupKey(1); }
 	void OnGroup3() { OnGroupKey(2); }
+	void OnRecruitShieldbearer() { RecruitHotkey(ESRUnitType::Shieldbearer); }
+	void OnRecruitArcher() { RecruitHotkey(ESRUnitType::Archer); }
+	void RecruitHotkey(ESRUnitType Type);
+	ASRBuilding* PickBuildingUnderCursor() const;
 
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MappingContext;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> PanAction;      // arrows
@@ -110,12 +130,18 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RecenterAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> ResetAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> GroupActions[3];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[2];
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
 
 	TArray<TWeakObjectPtr<ASRUnit>> Selection;
 	TArray<TWeakObjectPtr<ASRUnit>> ControlGroups[3];
 	TWeakObjectPtr<ASRUnit> Hovered;
+	TWeakObjectPtr<ASRBuilding> SelectedBuilding;
+	TWeakObjectPtr<ASRBuilding> HoveredBuilding;
+	int32 LastRecruitButton = -1;
+	double LastRecruitTime = -10.0;
+	bool bLastRecruitAccepted = false;
 	TArray<TWeakObjectPtr<ASRUnit>> BoxPreview;
 
 	// left mouse

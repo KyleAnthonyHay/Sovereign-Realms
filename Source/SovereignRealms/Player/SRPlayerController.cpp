@@ -2,7 +2,11 @@
 
 #include "Player/SRPlayerController.h"
 #include "Player/SRCameraPawn.h"
+#include "Player/SRHUD.h"
 #include "Units/SRUnit.h"
+#include "Buildings/SRBuilding.h"
+#include "Battle/SREconomySubsystem.h"
+#include "SovereignRealms.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SRFormation.h"
 #include "Battle/SROrderMarker.h"
@@ -72,6 +76,8 @@ void ASRPlayerController::BuildInput()
 	{
 		GroupActions[i] = MakeAction(*FString::Printf(TEXT("IA_Group%d"), i + 1), EInputActionValueType::Boolean);
 	}
+	RecruitActions[0] = MakeAction(TEXT("IA_RecruitShieldbearer"), EInputActionValueType::Boolean);
+	RecruitActions[1] = MakeAction(TEXT("IA_RecruitArcher"), EInputActionValueType::Boolean);
 
 	// A key gives +X. Swizzle moves it onto Y (up/down keys), Negate flips it (left/down keys).
 	auto MapAxisKey = [this](UInputAction* Action, FKey Key, bool bVertical, bool bNegative)
@@ -99,6 +105,8 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(GroupActions[0], EKeys::One);
 	MappingContext->MapKey(GroupActions[1], EKeys::Two);
 	MappingContext->MapKey(GroupActions[2], EKeys::Three);
+	MappingContext->MapKey(RecruitActions[0], EKeys::Q);
+	MappingContext->MapKey(RecruitActions[1], EKeys::E);
 }
 
 void ASRPlayerController::SetupInputComponent()
@@ -129,6 +137,8 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(GroupActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup1);
 	Input->BindAction(GroupActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup2);
 	Input->BindAction(GroupActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup3);
+	Input->BindAction(RecruitActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitShieldbearer);
+	Input->BindAction(RecruitActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitArcher);
 }
 
 void ASRPlayerController::PlayerTick(float DeltaTime)
@@ -285,6 +295,7 @@ void ASRPlayerController::OnRecenter()
 void ASRPlayerController::OnResetBattle()
 {
 	ClearSelection();
+	SelectBuilding(nullptr);
 	bAttackMoveArmed = false;
 	Battle->ResetBattle();
 	if (ASRCameraPawn* Camera = GetCameraPawn())
@@ -337,6 +348,18 @@ void ASRPlayerController::OnSelectPressed()
 		return;
 	}
 
+	// The command panel sits over the world: a click on it is for the panel, never a selection.
+	if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()))
+	{
+		const int32 Button = HUD->RecruitButtonAt(Mouse);
+		if (Button >= 0)
+		{
+			RecruitHotkey(Button == 1 ? ESRUnitType::Archer : ESRUnitType::Shieldbearer);
+			return;
+		}
+		if (HUD->IsOverPanel(Mouse)) { return; }
+	}
+
 	bSelectDown = true;
 	bBoxSelecting = false;
 	PressPos = DragPos = Mouse;
@@ -356,6 +379,7 @@ void ASRPlayerController::OnSelectReleased()
 		TArray<ASRUnit*> InBox;
 		GatherUnitsInBox(PressPos, DragPos, InBox);
 		if (InBox.Num() > 0 || !bShift) { SelectUnits(InBox, bShift); }
+		if (InBox.Num() == 0 && !bShift) { SelectBuilding(nullptr); } // an empty box deselects everything
 		return;
 	}
 
@@ -408,7 +432,10 @@ void ASRPlayerController::OnSelectReleased()
 	}
 	else if (!bShift)
 	{
+		// No troop under the cursor: a building, or empty ground (deselect).
+		ASRBuilding* Building = PickBuildingUnderCursor();
 		ClearSelection();
+		SelectBuilding(Building);
 	}
 }
 
@@ -423,6 +450,16 @@ void ASRPlayerController::OnCommandPressed()
 	FVector Origin, Dir;
 	if (!GetCursorRay(Origin, Dir)) { return; }
 
+	FVector2D Mouse;
+	if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && GetCursorScreenPos(Mouse) && HUD->IsOverPanel(Mouse)) { return; }
+
+	// With the player's castle selected, right-click plants its rally point.
+	if (ASRBuilding* Castle = SelectedBuilding.Get(); Castle && Castle->IsCastle() && Castle->Team == ESRTeam::Player)
+	{
+		SetCastleRally(Battle->RayToGround(Origin, Dir));
+		return;
+	}
+
 	ASRUnit* Unit = Battle->PickUnit(Origin, Dir, USRFeelSettings::Get().PickPadding);
 	if (Unit && Unit->GetTeam() == ESRTeam::Enemy)
 	{
@@ -432,6 +469,63 @@ void ASRPlayerController::OnCommandPressed()
 	{
 		IssueMove(Battle->RayToGround(Origin, Dir), false);
 	}
+}
+
+// ---------------------------------------------------------------- buildings
+
+void ASRPlayerController::SelectBuilding(ASRBuilding* Building)
+{
+	if (SelectedBuilding.Get() == Building) { return; }
+	if (SelectedBuilding.IsValid()) { SelectedBuilding->SetSelected(false); }
+	SelectedBuilding = Building;
+	if (Building)
+	{
+		ClearSelection();
+		bAttackMoveArmed = false;
+		Building->SetSelected(true);
+	}
+}
+
+ASRBuilding* ASRPlayerController::PickBuildingUnderCursor() const
+{
+	FVector Origin, Dir;
+	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
+	return (Economy && GetCursorRay(Origin, Dir)) ? Economy->PickBuilding(Origin, Dir) : nullptr;
+}
+
+bool ASRPlayerController::RecruitAtCastle(ESRUnitType Type)
+{
+	ASRBuilding* Castle = SelectedBuilding.Get();
+	if (!Castle || !Castle->IsCastle() || Castle->Team != ESRTeam::Player)
+	{
+		const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
+		Castle = Economy ? Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Player) : nullptr;
+	}
+	LastRecruitButton = Type == ESRUnitType::Archer ? 1 : 0;
+	LastRecruitTime = GetWorld()->GetRealTimeSeconds();
+	bLastRecruitAccepted = Castle && Castle->QueueRecruit(Type);
+	return bLastRecruitAccepted;
+}
+
+void ASRPlayerController::RecruitHotkey(ESRUnitType Type)
+{
+	// The hotkeys and buttons belong to the castle's panel: they do nothing unless it is selected.
+	const ASRBuilding* Castle = SelectedBuilding.Get();
+	if (Castle && Castle->IsCastle() && Castle->Team == ESRTeam::Player) { RecruitAtCastle(Type); }
+}
+
+void ASRPlayerController::SetCastleRally(const FVector& GroundPoint)
+{
+	ASRBuilding* Castle = SelectedBuilding.Get();
+	if (!Castle || !Castle->IsCastle() || Castle->Team != ESRTeam::Player)
+	{
+		const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
+		Castle = Economy ? Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Player) : nullptr;
+	}
+	if (!Castle) { return; }
+	Castle->SetRallyPoint(FVector2D(GroundPoint.X, GroundPoint.Y));
+	const FVector2D Rally = Castle->GetRallyPoint();
+	ASROrderMarker::SpawnMarker(GetWorld(), FVector(Rally.X, Rally.Y, GroundPoint.Z), USRFeelSettings::Get().MoveMarkerColor);
 }
 
 // ------------------------------------------------------------------- orders
@@ -446,14 +540,20 @@ void ASRPlayerController::IssueMove(const FVector& GroundPoint, bool bAttackMove
 	FVector2D Dest(GroundPoint.X, GroundPoint.Y);
 	Dest.X = FMath::Clamp(Dest.X, -F.MapHalfExtent.X, F.MapHalfExtent.X);
 	Dest.Y = FMath::Clamp(Dest.Y, -F.MapHalfExtent.Y, F.MapHalfExtent.Y);
+	if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this)) { Dest = Eco->ClearOfBuildings(Dest); } // a click on a building means "go there", beside it
 
 	TArray<FVector2D> Slots;
 	SRFormation::ComputeSlots(Units, Dest, Slots);
 
+	// There is no navmesh: a straight line through a building's footprint is replaced by a walk round its corners.
+	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
+	TArray<FVector2D> Path;
 	for (int32 i = 0; i < Units.Num(); ++i)
 	{
-		if (bAttackMove) { Units[i]->OrderAttackMove(Slots[i]); }
-		else { Units[i]->OrderMove(Slots[i]); }
+		Path.Reset();
+		if (Economy) { Economy->RoutePath(Units[i]->GetPos2D(), Slots[i], Path); }
+		else { Path.Add(Slots[i]); }
+		Units[i]->OrderMovePath(Path, bAttackMove);
 		Units[i]->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay));
 	}
 
@@ -488,6 +588,7 @@ void ASRPlayerController::IssueStop()
 void ASRPlayerController::SelectUnits(const TArray<ASRUnit*>& Units, bool bAdditive)
 {
 	if (!bAdditive) { ClearSelection(); }
+	if (Units.Num() > 0) { SelectBuilding(nullptr); }
 	for (ASRUnit* Unit : Units)
 	{
 		if (Unit && Unit->IsActive() && !Unit->IsSelected())
@@ -544,6 +645,8 @@ void ASRPlayerController::UpdateHover()
 	}
 	BoxPreview.Reset();
 	Hovered = nullptr;
+	if (HoveredBuilding.IsValid()) { HoveredBuilding->SetHovered(false); }
+	HoveredBuilding = nullptr;
 
 	if (bBoxSelecting)
 	{
@@ -558,10 +661,18 @@ void ASRPlayerController::UpdateHover()
 		return;
 	}
 
+	FVector2D Mouse;
+	if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && GetCursorScreenPos(Mouse) && HUD->IsOverPanel(Mouse)) { return; }
+
 	if (ASRUnit* Unit = PickUnitUnderCursor())
 	{
 		Unit->SetHovered(true);
 		Hovered = Unit;
+	}
+	else if (ASRBuilding* Building = PickBuildingUnderCursor())
+	{
+		Building->SetHovered(true);
+		HoveredBuilding = Building;
 	}
 }
 

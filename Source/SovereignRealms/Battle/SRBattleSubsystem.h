@@ -134,6 +134,7 @@ private:
 	void UpdateSpriteView();
 	void UpdateSpriteLook();
 	void OnShotEvent(ESRShotEvent Event, ASRUnit* Unit);
+	void IgnoreBuildings(struct FCollisionQueryParams& Params) const;
 
 	UPROPERTY(Transient) TArray<TObjectPtr<ASRUnit>> Units;
 	UPROPERTY(Transient) TArray<TObjectPtr<ASRUnit>> Corpses;

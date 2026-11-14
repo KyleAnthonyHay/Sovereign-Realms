@@ -5,11 +5,42 @@
 #include "CoreMinimal.h"
 #include "SRTypes.generated.h"
 
-UENUM()
+UENUM(BlueprintType)
 enum class ESRTeam : uint8
 {
 	Player,
 	Enemy
+};
+
+/** What a building is for. Castle: the kingdom's seat, recruits troops. Farm: food. Mine: gold. */
+UENUM(BlueprintType)
+enum class ESRBuildingType : uint8
+{
+	Castle,
+	Farm,
+	Mine
+};
+
+enum class ESRResource : uint8
+{
+	Gold,
+	Food
+};
+
+/** A price in both resources. */
+USTRUCT()
+struct FSRCost
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Config, Category = "Cost", meta = (ClampMin = "0"))
+	int32 Gold = 0;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Cost", meta = (ClampMin = "0"))
+	int32 Food = 0;
+
+	FSRCost() = default;
+	FSRCost(int32 InGold, int32 InFood) : Gold(InGold), Food(InFood) {}
 };
 
 UENUM()

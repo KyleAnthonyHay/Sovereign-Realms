@@ -1,6 +1,6 @@
 #!/bin/sh
 # Editor lifecycle for scripted work on macOS (Live Coding does not work there).
-#   Tools/editor.sh quit      save nothing, quit, wait until the process and the MCP port are gone
+#   Tools/editor.sh quit      save dirty packages, quit, wait until the process and the MCP port are gone
 #   Tools/editor.sh build     build SovereignRealmsEditor (editor must be closed)
 #   Tools/editor.sh start     launch on the project and wait for the MCP server (port 8000)
 #   Tools/editor.sh rebuild   quit + build + start
@@ -9,6 +9,8 @@ UE="${UE_ROOT:-/Users/Shared/Epic Games/UnrealInstall/UE_5.8}"
 running() { pgrep -f "UnrealEditor.app/Contents/MacOS/UnrealEditor" >/dev/null; }
 listening() { lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; }
 quit() {
+    # unsaved packages put up a save dialog that blocks the quit: save them through the Python bridge first
+    running && python3 "$ROOT/Tools/ue_py.py" -c "import unreal; unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)" 20 >/dev/null 2>&1
     running && osascript -e 'quit app "UnrealEditor"' >/dev/null 2>&1
     i=0
     while running || listening; do

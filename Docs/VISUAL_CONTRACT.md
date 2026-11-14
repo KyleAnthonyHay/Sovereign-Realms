@@ -210,7 +210,7 @@ does not crawl when the camera pans. `*_N` normal maps and `T_Splat` are linear 
 | `Terrain/Plateaus` | Stepped plateaus framing the field: tall and many-tiered on the far side (+X, two ranks) and the flanks, one low step on the camera side so nothing hides the field. Each starts with a walkable 34 to 40 cm apron that may lap into the field; every taller tier stays at least 95 cm outside the +/-3000 bound. | WorldStatic, blocks |
 | `Terrain/Backdrop` | Eight big simple hills at X 7000..12000 that only ever show through the haze. | WorldStatic |
 | `Terrain/Shore` | The pond's bank wall and bed (far-left corner, X > 3150, outside the bound). | WorldStatic |
-| `Props/Rocks` | Five blocking boulders: `Rock_Centre`, `Rock_East`, `Rock_West`, `Rock_SW`, `Rock_NE` (same positions and footprints as before). Each has one invisible convex box `<name>_Collision` (tag `SRBlocker`); the visible stone has no collision. Standing stones by the water. Instanced actors `Stones` (scree, outcrops) and `Deadwood` (logs). | Only the `_Collision` boxes |
+| `Props/Rocks` | Four blocking boulders: `Rock_Centre`, `Rock_East`, `Rock_West`, `Rock_NE` (`Rock_SW` made way for the castle). Each has one invisible convex box `<name>_Collision` (tag `SRBlocker`); the visible stone has no collision. Standing stones by the water. Instanced actors `Stones` (scree, outcrops) and `Deadwood` (logs). | Only the `_Collision` boxes |
 | `Props/Ruin` | The landmark: a sandstone ruin by the lane at about (-560, -900) (two pillars, a broken wall, fallen blocks, standing stones, a banner pole), and a ruined gate where the road leaves the field at about (3560, 860). In-field pieces have `<name>_Collision` boxes. | Only the `_Collision` boxes |
 | `Props/Foliage` | Instanced actors `Conifers` (about 380 firs, five sizes 4.3 to 12.5 m) and `Grass` (about 15,000 blade / fern / flower cards, no shadows). 24 firs stand inside the field off the lane; each has a 46 x 46 cm box `Fir_NN_Collision` (tag `SRBlocker`). Two stand just behind the player's start so their tops blur into the bottom of the opening view. | Only the `_Collision` boxes |
 | `Props/Fences`, `Props/Logs` | Fence runs, stumps and logs along the road and behind the player's start. Dressing only. | none |
@@ -384,3 +384,64 @@ lets the image settle and saves `Saved/Screenshots/SR/<name>.png`; the log line 
   re-rendered (`Tools/blender/build_all.sh --elev N` if the camera changes).
 - Shadows on other troops and on walls are short (see Shadow above).
 - The sprite's below-pivot part is laid on a flat plane at the unit's ground height; on a ledge it overhangs.
+
+## Buildings (castle, farm, mine)
+
+Real 3D meshes modelled by script in Blender, textured with the same code-drawn pixel art at 4 cm per texel, lit by
+the level like the terrain. How to rebuild them: `SourceArt/Buildings/README.md`.
+
+### Pipeline (after steps 1-5 above; all re-runnable)
+
+| Step | Command | Produces |
+| --- | --- | --- |
+| B1. Textures | `Tools/.venv/bin/python Tools/textures/gen_building_textures.py` | `SourceArt/Textures/T_Bld_*.png` (+ `_N`). Alpha is a mask: 0.6 = team-coloured or glinting texel; 0 = hole on card textures. |
+| B2. Models | `Blender -b -P Tools/blender/build_building.py -- castle` (also `farm`, `mine`, `rallyflag`) | `SourceArt/Buildings/SM_Bld_<Name>.gltf`, `<name>.json` (footprint, sockets), `blender/<name>.blend`, previews in `Saved/BuildingPreview/`. Kit: `Tools/blender/bldkit.py`; one module per building, `bld_<name>.py`. |
+| B3. Import | `Tools/ue_py.py -c "PARTS=['textures']; TEX_PREFIX='T_Bld_'; exec(open(r'<repo>/Tools/import_world_assets.py').read())"`, then `ONLY=['building']` with `build_visual_materials.py`, then `Tools/ue_py.py Tools/import_buildings.py` | `/Game/SR/Textures/T_Bld_*`, `/Game/SR/Materials/M_Building`, `M_BuildingCard`, `MI_Bld_<slot>`, `/Game/SR/Buildings/SM_Bld_*`. |
+| B4. Placement | `BUILDINGS` in `Tools/world/gen_battlefield.py` (step 2), then step 5, or only `PARTS=['buildings']` | `ASRBuilding` actors in the outliner folder `Buildings`. Step 2 also clears terraces and dressing under the footprints and paints packed earth, the castle court and footpaths into `T_Splat`. |
+
+The editor's Python bridge now starts by itself (`Content/Python/init_unreal.py`). `Tools/editor.sh quit|build|start|rebuild`
+wraps the C++ cycle; `Tools/pie.py start|run|shot|log|stop` drives PIE and the `sr.*` commands from the shell.
+
+### Mesh and material contract
+
+- Authored in Unreal cm, front (gate, adit, yard) toward local -X, origin on the ground. No collision on the mesh.
+- UV0 in centimetres (walls: distance round the footprint, v = -z, so courses meet at corners). UV1.x = cm below the
+  head of the wall (opaque slots) or sway weight 0..1 (card slots). Vertex colour R = baked shade.
+- One material slot per surface, named `Bld_<slot>`, mapped to `MI_Bld_<slot>` at import. The table is
+  `BUILDING_SLOTS` in `Tools/build_visual_materials.py`, mirrored by `MATERIALS` in `bldkit.py`.
+- **Custom primitive data 0..2 = team colour** on the building's mesh component (`TeamColor`, masked by texture
+  alpha 0.6 on slots with `TeamMask` 1: friezes, banners, awnings). The same assets serve both teams.
+
+| Material | Parameters worth knowing |
+| --- | --- |
+| `M_Building` (opaque) | `Tex`, `Size`, `NormalTex`, `NormalStrength`; `TeamMask`, `TeamBoost`; `GlowMask`, `Glow` (gold ore glints); weathering in whole texels: `Damp`, `DampHeight`, `DampTint` (dark foot), `Bleach`, `BleachDepth`, `BleachTint` (pale wall heads, from UV1.x), `Moss`, `MossHeight` (creeps up from the turf, joints first), `MossTop`, `MossSlope` (turf on up-facing rock); `WorldTop` (world-aligned turf on the mine's ledges); `Tint`, `Roughness`, `Specular`. Height is measured from the actor origin. |
+| `M_BuildingCard` (masked, two-sided) | `Tex`, `Size`, `TeamMask`, `Glow` (flames: emissive, flickering), `RootShade`, `UpNormal` (1 = lit like the ground: crops), `SwayAmount`, `SwaySpeed`. |
+
+### The three buildings
+
+| Asset | Footprint (blocks movement) | Height | Triangles | Notes |
+| --- | --- | --- | --- | --- |
+| `SM_Bld_Castle` | 1120 x 1320 cm | about 8.6 m roofs, 11.6 m with standards | 7,298 | Battered sandstone curtain, four towers, gatehouse with a 2.56 m gate, plastered upper hall. Sockets: `gate` (-600, 0), `rally` (-780, 800), `label`. |
+| `SM_Bld_Farm` | 880 x 960 cm | 4.6 m | 3,937 | Barley field (card rows 32 cm apart), stubble with stooks, cottage, granary, haystack, cart, olives. |
+| `SM_Bld_Mine` | 820 x 840 cm | 5.4 m, 6.9 m with standard | 2,757 | Stepped bluff in the terraces' own cliff / turf, timber adit, track and ore cart, awning with crated gold, windlass, spoil. |
+| `SM_Bld_RallyFlag` | none | 2.1 m | 96 | The castle's rally marker. |
+
+Placed by `BUILDINGS`: player castle (-2000, -1300), mine (-2570, -2550), farm (-2500, 620); enemy castle (2250, -1100).
+
+### Gameplay (what the code does with them)
+
+- `ASRBuilding` (`Source/SovereignRealms/Buildings`): type, team, mesh, footprint, sockets. One WorldStatic box over
+  the footprint blocks troops; ground and cursor traces ignore buildings. Selection outline: a rounded rectangle
+  round the footprint (`USRRingComponent::BuildRoundedRect`).
+- `USREconomySubsystem` (`Battle/SREconomySubsystem`): gold and food per team, building registry, payout popups,
+  refusal feedback, `RoutePath` (waypoints round footprints; recruits and player move orders use it through
+  `ASRUnit::OrderMovePath`). Stepped by `USRBattleSubsystem`, reset with the battle.
+- Farms pay food, mines pay gold, on timers. The castle recruits for **food only**; gold is kept for buildings.
+- Controls: click a building to select it (never box-selected); castle selected: `Q` Shieldbearer, `E` Archer or
+  the panel buttons, right-click sets the rally point. HUD: resource bar top centre, building panel bottom centre,
+  "+N" popups, a training bar over a working castle.
+- Settings: Project Settings > Game > Sovereign Feel > Economy (`StartingGold`, `StartingFood`, `FarmFoodPerPayout`,
+  `FarmPayoutInterval`, `MineGoldPerPayout`, `MinePayoutInterval`, `ShieldbearerCost`, `ArcherCost`,
+  `ShieldbearerBuildTime`, `ArcherBuildTime`, `MaxRecruitQueue`, `BuildingRouteMargin`, popup / flash / outline values).
+- Console: `sr.Give gold|food N`, `sr.Recruit shield|archer`, `sr.SelectCastle [farm|mine|enemy|none]`,
+  `sr.Rally X Y`, `sr.Economy`. Log lines: `PAYOUT`, `RECRUIT queued / refused / ready`, `RALLY`, `ECONOMY`.

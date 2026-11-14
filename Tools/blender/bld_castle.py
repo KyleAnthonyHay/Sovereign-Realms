@@ -187,6 +187,6 @@ def build(k):
         k.hang_cloth((cx - 136, cy - 32, 468), (cx - 136, cy + 32, 468), 192.0)
     dressing(k)
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 620))
-    k.sockets["gate"] = (-640.0, 0.0, 0.0)          # where a recruit appears
-    k.sockets["rally"] = (-800.0, 420.0, 0.0)       # default rally point
+    k.sockets["gate"] = (-600.0, 0.0, 0.0)          # where a recruit appears: just outside the doors
+    k.sockets["rally"] = (-780.0, 800.0, 0.0)       # default rally point: the court, clear of the right-hand tower
     k.sockets["label"] = (0.0, 0.0, top + 270.0)
