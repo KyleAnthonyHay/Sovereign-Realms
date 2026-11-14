@@ -41,6 +41,10 @@ enum class ESRSound : uint8
 	Defeat,
 	AmbientLoop,
 	MusicLoop,
+	ArrowFly,      // rides on each arrow (and, pitched down, each catapult stone)
+	SwordSwing,    // a melee wind-up
+	HorseSnort,
+	GallopLoop,    // under a galloping rider (looping, attached)
 	Count UMETA(Hidden)
 };
 
@@ -63,8 +67,15 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 
-	/** A battle sound at a world position (skipped when far from the camera's focus). */
-	void PlayAt(ESRSound Sound, const FVector& Location, float VolumeScale = 1.f);
+	/** A battle sound at a world position. Beyond the sound's range it is not played; inside, it fades with distance. */
+	void PlayAt(ESRSound Sound, const FVector& Location, float VolumeScale = 1.f, float PitchScale = 1.f);
+	/** A battle sound that moves with a component (an arrow in flight, a galloping rider). A looping one keeps
+	 * playing until the caller fades it out; returns null if it was not started (out of range, too many voices). */
+	class UAudioComponent* PlayAttached(ESRSound Sound, USceneComponent* AttachTo, float VolumeScale = 1.f, float PitchScale = 1.f, float FadeIn = 0.f);
+	/** How far (cm) a sound carries (its range x SoundRangeScale). */
+	float RangeOf(ESRSound Sound) const;
+	/** Within that range of the listener (worth starting a loop for). */
+	bool IsInRange(ESRSound Sound, const FVector& Location, float Slack = 1.f) const;
 	/** A UI / announcement sound (not positioned). */
 	void Play2D(ESRSound Sound, float VolumeScale = 1.f);
 
@@ -79,8 +90,13 @@ private:
 	bool Allow(ESRSound Sound);
 	bool IsUISound(ESRSound Sound) const;
 
+	/** Every loaded wave (keeps them alive); Variants[i] are sound i's takes (S_<Name>, S_<Name>_2, ...), one picked at random. */
 	UPROPERTY(Transient) TArray<TObjectPtr<USoundBase>> Sounds;
-	UPROPERTY(Transient) TObjectPtr<USoundAttenuation> Attenuation;
+	TArray<USoundBase*> Variants[int32(ESRSound::Count)];
+	/** One falloff per sound: full volume near, a smooth fade to silence at its range. */
+	UPROPERTY(Transient) TArray<TObjectPtr<USoundAttenuation>> Attenuations;
+	/** Attached loops still running (capped per sound). */
+	TArray<TWeakObjectPtr<UAudioComponent>> Loops;
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> AmbientComp;
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> MusicComp;
 

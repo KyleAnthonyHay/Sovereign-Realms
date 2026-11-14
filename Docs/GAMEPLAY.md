@@ -196,9 +196,17 @@ health left; towers and the castle count as defenders where they reach. Difficul
 `Tools/audio/gen_sounds.py` synthesises 27 sounds (no samples): bronze clangs, hide and wood thuds, a plucked
 bowstring, arrow impacts, ram's-horn calls and fanfares, coins and grain, hammering, collapse, a wind-and-birdsong
 ambient loop and a lyre-over-drone music loop. `Tools/import_audio.py` brings them into `/Game/SR/Audio`.
-`USRAudioSubsystem` plays them positioned at the camera's focus (a listener over the focus point, so screen-left is
-heard on the left), with a minimum gap and voice cap per sound so a big melee stays a clatter. Volumes: Sovereign Feel
-> Audio and the settings menu.
+Recorded sounds (`SourceArt/Audio/Recorded`, turned into game sounds by `Tools/audio/prep_recorded.py`): two bow
+releases (picked at random), an arrow whistle that rides on every arrow (pitched down, on catapult stones), a sword
+swing on every melee wind-up, two horse snorts (idle riders, now and then) and a gallop loop cut from a pass-by that
+plays under riders at speed (three at most at once) and fades in and out as they start and stop.
+`USRAudioSubsystem` plays them positioned from a listener over the camera's focus (so screen-left is heard on the
+left) that rises with the zoom (`ListenerZoomHeight`), with a minimum gap and voice cap per sound so a big melee stays
+a clatter. **Hearing range**: every positioned sound has its own range (pickaxe 18 m, arrow whistle 20 m, sword 32 m,
+building hit 40 m, a collapse 90 m; `SoundRangeScale` scales them all). Inside a fifth of it a sound is at full
+volume, then it fades on a smooth curve to silence exactly at the range, so nothing cuts off as the camera moves away:
+a playing sound (a gallop, a hammer) fades out as you pass its edge, and zoomed far out only the big sounds carry.
+Sounds wholly out of range are not started. Volumes: Sovereign Feel > Audio and the settings menu.
 
 ## Shadow flicker
 

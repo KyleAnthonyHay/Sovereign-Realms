@@ -141,6 +141,10 @@ private:
 	void StepBuild(float Dt, FVector2D& Desired, FVector2D& FaceDir);
 	void LookForWork(float Dt);
 	void TickAttack(float Dt, ASRUnit* T);
+	/** Starts the wind-up of a strike (and its swing sound). */
+	void BeginSwing();
+	/** Horses: the gallop under a rider at speed, the odd snort at rest. */
+	void StepHorseSounds(float Dt);
 	void Strike(ASRUnit* T);
 	void StrikeBuilding(ASRBuilding* B);
 	/** Steering toward a chase target: straight when the way is clear, otherwise along a grid path refreshed now and then. */
@@ -220,6 +224,9 @@ private:
 	float Cooldown = 0.f;
 	double LastStrikeTime = -100.0;
 	float DustClock = 0.f;   // cavalry charge: the first blow after a rest
+	TWeakObjectPtr<class UAudioComponent> GallopSound;
+	float SnortClock = 0.f;
+	float GallopRetry = 0.f;
 	float HitStopLeft = 0.f;
 	double LastDamagedTime = -100.0;
 

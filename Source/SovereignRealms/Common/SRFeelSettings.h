@@ -784,9 +784,15 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
 	float MusicVolume = 0.35f;
 
-	/** Battle sounds further than this (cm) from the camera's focus are not played at all. */
-	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "500"))
-	float AudibleDistance = 5200.f;
+	/** Every battle sound has its own hearing range (a sword clash carries less far than a collapsing tower); this
+	 * scales them all. A sound fades smoothly to silence at the edge of its range, measured from a listener over the
+	 * camera's focus that rises as the camera zooms out (so small sounds drop away first). */
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0.2", ClampMax = "4"))
+	float SoundRangeScale = 1.f;
+
+	/** How high (as a share of the camera's zoom distance) the listener sits over the focus point. */
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
+	float ListenerZoomHeight = 0.25f;
 
 	const FSRCost& CostFor(ESRUnitType Type) const
 	{

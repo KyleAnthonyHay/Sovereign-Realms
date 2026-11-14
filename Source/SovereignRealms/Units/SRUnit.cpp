@@ -53,6 +53,7 @@ void ASRUnit::InitUnit(ESRUnitType InType, ESRTeam InTeam, float InSpawnDelay, c
 	// Desynchronise the idle cycle and retargeting between units.
 	AnimTime = FMath::FRandRange(0.f, 10.f);
 	RetargetTimer = FMath::FRandRange(0.f, 0.3f);
+	SnortClock = FMath::FRandRange(3.f, 16.f);
 
 	BuildVisuals();
 	StepVisual(0.f);
@@ -260,8 +261,7 @@ void ASRUnit::StepSim(float Dt)
 			const float AimError = FMath::Abs(FMath::FindDeltaAngleDegrees(FacingYaw, YawFromDir(ToDir)));
 			if (Cooldown <= 0.f && AimError < 30.f)
 			{
-				AttackPhase = ESRAttackPhase::Windup;
-				PhaseTime = 0.f;
+				BeginSwing();
 			}
 		}
 	}
@@ -288,8 +288,7 @@ void ASRUnit::StepSim(float Dt)
 			const float AimError = FMath::Abs(FMath::FindDeltaAngleDegrees(FacingYaw, YawFromDir(ToDir)));
 			if (Cooldown <= 0.f && AimError < 25.f)
 			{
-				AttackPhase = ESRAttackPhase::Windup;
-				PhaseTime = 0.f;
+				BeginSwing();
 			}
 			else if (S.bRanged && S.KeepDistance > 0.f && Cooldown > 0.2f)
 			{
@@ -558,6 +557,18 @@ void ASRUnit::LookForWork(float Dt)
 		if (Score < BestScore) { BestScore = Score; Best = B; }
 	}
 	if (Best) { OrderBuild(Best); }
+}
+
+void ASRUnit::BeginSwing()
+{
+	AttackPhase = ESRAttackPhase::Windup;
+	PhaseTime = 0.f;
+	// a blade (or a rider's sword) cuts the air as the blow comes in
+	const FSRUnitStats& S = Stats();
+	if (!S.bRanged && !S.bBuilder)
+	{
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::SwordSwing, SimPos + FVector(0.f, 0.f, 100.f), 1.f, UnitType == ESRUnitType::Horseman ? 0.85f : 1.f); }
+	}
 }
 
 void ASRUnit::TickAttack(float Dt, ASRUnit* T)

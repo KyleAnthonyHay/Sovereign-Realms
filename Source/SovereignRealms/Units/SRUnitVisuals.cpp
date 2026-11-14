@@ -22,6 +22,8 @@
 #include "Common/SRFeelSettings.h"
 #include "Common/SRRingComponent.h"
 #include "Battle/SRPlatoonSubsystem.h"
+#include "Common/SRAudioSubsystem.h"
+#include "Components/AudioComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/DecalComponent.h"
 
@@ -227,6 +229,8 @@ void ASRUnit::StepVisual(float Dt)
 
 	HitFlash = FMath::Max(0.f, HitFlash - Dt / FMath::Max(F.HitFlashTime, 0.01f));
 
+	if (UnitType == ESRUnitType::Horseman) { StepHorseSounds(Dt); }
+
 	// Off screen: hide everything and skip the per-frame posing (transforms, sheet cells, shadow cards). The
 	// simulation is unaffected; the pose is rebuilt the frame the unit comes back into view.
 	// Off screen, or an enemy in the fog of war.
@@ -372,6 +376,40 @@ void ASRUnit::StepVisual(float Dt)
 	}
 
 	ApplySprite(Anim, Frame, 1.f, Offset, Scale);
+}
+
+void ASRUnit::StepHorseSounds(float Dt)
+{
+	USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this);
+	if (!Audio) { return; }
+	const FSRUnitStats& S = Stats();
+	const bool bGallop = !bDead && bActive && Velocity.SizeSquared() > FMath::Square(S.MaxSpeed * 0.5f);
+	UAudioComponent* G = GallopSound.Get();
+	if (bGallop && !G)
+	{
+		// started when in earshot (and while fewer than three gallops already play); it fades in rather than pops
+		GallopRetry -= Dt;
+		if (GallopRetry <= 0.f)
+		{
+			GallopRetry = 0.4f;
+			GallopSound = Audio->PlayAttached(ESRSound::GallopLoop, Root, 1.f, FMath::FRandRange(0.94f, 1.06f), 0.35f);
+		}
+	}
+	else if (G && (!bGallop || !G->IsPlaying()))
+	{
+		G->FadeOut(0.6f, 0.f);   // reins in: the hooves die away
+		GallopSound = nullptr;
+	}
+	// at rest, now and then a snort
+	if (!bDead && bActive && !bGallop)
+	{
+		SnortClock -= Dt;
+		if (SnortClock <= 0.f)
+		{
+			SnortClock = FMath::FRandRange(9.f, 22.f);
+			Audio->PlayAt(ESRSound::HorseSnort, SimPos + FVector(0.f, 0.f, 120.f));
+		}
+	}
 }
 
 void ASRUnit::StepDeathVisual(float Dt)

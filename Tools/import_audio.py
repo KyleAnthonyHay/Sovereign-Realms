@@ -28,7 +28,7 @@ for t in tasks:
     if wave is None:
         print("FAILED", name)
         continue
-    wave.set_editor_property("looping", name in ("S_AmbientLoop", "S_MusicLoop"))
+    wave.set_editor_property("looping", name in ("S_AmbientLoop", "S_MusicLoop", "S_GallopLoop"))
     eal.save_loaded_asset(wave, False)
     n += 1
 print("sounds imported:", n)

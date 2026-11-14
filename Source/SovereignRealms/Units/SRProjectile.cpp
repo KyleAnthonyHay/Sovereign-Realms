@@ -48,7 +48,20 @@ ASRProjectile* ASRProjectile::LaunchArrow(UWorld* World, ESRTeam Team, ASRUnit* 
 	Arrow->ShooterTeam = Team;
 	Arrow->BuildVisuals(Team);
 	Arrow->Tick(0.f);
-	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(World)) { Audio->PlayAt(ESRSound::BowRelease, From); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(World))
+	{
+		if (bStone)
+		{
+			// the throwing arm's heavy whoom, then the stone's low rush through the air with it
+			Audio->PlayAt(ESRSound::SwordSwing, From, 1.4f, 0.45f);
+			Audio->PlayAttached(ESRSound::ArrowFly, Arrow->GetRootComponent(), 1.3f, 0.55f);
+		}
+		else
+		{
+			Audio->PlayAt(ESRSound::BowRelease, From);
+			Audio->PlayAttached(ESRSound::ArrowFly, Arrow->GetRootComponent());   // the whistle travels with the arrow
+		}
+	}
 	return Arrow;
 }
 

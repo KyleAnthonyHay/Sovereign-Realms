@@ -124,7 +124,13 @@ def fade(x, fin=0.002, fout=0.01):
     return x
 
 
+# Replaced by recorded sounds (Tools/audio/prep_recorded.py): not synthesised, so a re-run never overwrites them.
+RECORDED = {"BowRelease"}
+
+
 def write(name, x, peak=0.89):
+    if name in RECORDED:
+        return
     x = fade(norm(x, peak))
     os.makedirs(OUT, exist_ok=True)
     path = os.path.join(OUT, "S_%s.wav" % name)
