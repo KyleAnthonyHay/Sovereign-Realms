@@ -41,6 +41,10 @@ PackagedBuilds/
 StagedBuilds/
 dist/
 
+# Python environment for the offline art generators (Tools/textures, Tools/world)
+Tools/.venv/
+__pycache__/
+
 # OS metadata
 .DS_Store
 ._*

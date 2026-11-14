@@ -4,6 +4,9 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "Camera/CameraComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "EngineUtils.h"
 #include "Player/SRPlayerController.h"
 
 namespace
@@ -42,6 +45,10 @@ void ASRCameraPawn::BeginPlay()
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	Zoom = ZoomTarget = F.ZoomDefault;
 	Focus = F.PlayerStart;
+	if (TActorIterator<AExponentialHeightFog> It(GetWorld()); It)
+	{
+		Haze = It->GetComponent();
+	}
 	ApplyView(0.f);
 }
 
@@ -211,6 +218,15 @@ void ASRCameraPawn::ApplyView(float DeltaSeconds)
 	FPostProcessSettings& PP = Camera->PostProcessSettings;
 	PP.bOverride_MotionBlurAmount = F.bDisableMotionBlur;
 	PP.MotionBlurAmount = 0.f;
+
+	// Haze begins just past the focus point at every zoom, so the fight stays clear and the distance glows.
+	if (F.bHazeTracksFocus && Haze.IsValid())
+	{
+		const float Start = Distance * F.HazeStartFraction;
+		Haze->SetStartDistance(Start);
+		Haze->SetVolumetricFogStartDistance(Start);
+		Haze->SetVolumetricFogNearFadeInDistance(Distance * F.HazeFadeFraction);
+	}
 
 	// Tilt-shift: physical depth of field focused on the focus point. The virtual sensor is scaled with the
 	// focus distance so the blur gradient looks the same at every zoom (a real lens would lose it when far).

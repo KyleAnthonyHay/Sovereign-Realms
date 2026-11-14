@@ -1,13 +1,22 @@
-"""Builds (or rebuilds in place) the procedural materials under /Game/SR/Materials.
+"""Builds (or rebuilds in place) the materials under /Game/SR/Materials.
 
 Run inside the editor:  Tools/ue_py.py Tools/build_visual_materials.py
-Everything is procedural (world-aligned hashes in Custom nodes), so there are no textures.
+(after Tools/import_world_assets.py, which brings in the pixel-art textures they sample).
 Re-running keeps asset references intact: graphs are cleared and rebuilt.
 See Docs/VISUAL_CONTRACT.md for the parameter contract.
+
+World materials share three ideas:
+  * one texel density: every mesh carries UV0 in centimetres (or the material uses world XY), and
+    the material divides by TexelSize (4 cm), so a texel is the same size on every surface;
+  * crisp texels without crawl: textures are sampled through SRPix.S, which snaps to the texel
+    grid but anti-aliases the texel edge over one screen pixel (and falls back to the mip chain
+    once texels are smaller than a pixel), so panning the camera does not make the art shimmer;
+  * real light on the pixels: the art is albedo only. Lumen, the sun and the shadow maps do the rest.
 """
 import unreal
 
 DIR = "/Game/SR/Materials"
+TEX = "/Game/SR/Textures/"
 mel = unreal.MaterialEditingLibrary
 eal = unreal.EditorAssetLibrary
 MP = unreal.MaterialProperty
@@ -67,9 +76,26 @@ class G:
         if not ok:
             raise RuntimeError("connect failed: %s -> %s.%s" % (src.get_name(), dst.get_name(), dst_in))
 
-    def custom(self, code, out_type, inputs, desc):
-        """inputs: list of (name, expression) or (name, expression, output_name)."""
+    def tex(self, name, asset, linear=False, group="Textures"):
+        """Texture object parameter, for sampling inside a Custom node."""
+        t = unreal.EditorAssetLibrary.load_asset(TEX + asset)
+        if t is None:
+            raise RuntimeError("missing texture " + TEX + asset + " (run Tools/import_world_assets.py first)")
+        st = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR if linear else unreal.MaterialSamplerType.SAMPLERTYPE_COLOR
+        return self.node(unreal.MaterialExpressionTextureObjectParameter, parameter_name=name, texture=t, sampler_type=st, group=group)
+
+    def custom(self, code, out_type, inputs, desc, outputs=None):
+        """inputs: list of (name, expression) or (name, expression, output_name).
+        outputs: extra named outputs [(name, type)], assigned in the code as plain variables."""
         c = self.node(unreal.MaterialExpressionCustom, code=code, output_type=out_type, description=desc)
+        if outputs:
+            outs = []
+            for name, typ in outputs:
+                co = unreal.CustomOutput()
+                co.set_editor_property("output_name", name)
+                co.set_editor_property("output_type", typ)
+                outs.append(co)
+            c.set_editor_property("additional_outputs", outs)
         ins = []
         for item in inputs:
             ci = unreal.CustomInput()
@@ -92,7 +118,27 @@ class G:
 
 
 F1 = unreal.CustomMaterialOutputType.CMOT_FLOAT1
+F2 = unreal.CustomMaterialOutputType.CMOT_FLOAT2
 F3 = unreal.CustomMaterialOutputType.CMOT_FLOAT3
+F4 = unreal.CustomMaterialOutputType.CMOT_FLOAT4
+
+# Shared HLSL: crisp, anti-aliased texel sampling. `uv` is in texels, `size` is the texture size in texels.
+PIX = r"""
+struct SRPix
+{
+	float4 S(Texture2D T, float2 uv, float2 size)
+	{
+		float2 fw = max(fwidth(uv), 1e-5);
+		float2 seam = floor(uv + 0.5);
+		float2 p = seam + clamp((uv - seam) / fw, -0.5, 0.5);
+		return T.SampleGrad(View.SharedTrilinearWrappedSampler, p / size, ddx(uv) / size, ddy(uv) / size);
+	}
+	float4 Texel(Texture2D T, float2 texel, float2 size) { return T.SampleLevel(View.SharedPointWrappedSampler, (floor(texel) + 0.5) / size, 0); }
+	float h(float2 p) { float3 p3 = frac(float3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return frac((p3.x + p3.y) * p3.z); }
+	float lum(float3 c) { return dot(c, float3(0.3, 0.59, 0.11)); }
+};
+SRPix px;
+"""
 
 
 # ----------------------------------------------------------------------------- units
@@ -173,191 +219,269 @@ def build_ring():
 
 
 # ----------------------------------------------------------------------------- terrain
-TERRAIN_CODE = r"""
-struct SRT
-{
-	float h(float2 p) { float3 p3 = frac(float3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return frac((p3.x + p3.y) * p3.z); }
-	float vn(float2 p) { float2 i = floor(p); float2 f = frac(p); f = f * f * (3.0 - 2.0 * f);
-		return lerp(lerp(h(i), h(i + float2(1, 0)), f.x), lerp(h(i + float2(0, 1)), h(i + float2(1, 1)), f.x), f.y); }
-};
-SRT f;
+TERRAIN_CODE = PIX + r"""
 float T = max(Texel, 0.5);
-float3 c = floor(P / T + 0.001);                 // texel coordinates: everything below is constant per texel
-float hx = f.h(c.xy + c.z * 17.0);
-float2 w = c.xy * T;
-float nBig = f.vn(w / 520.0) * 0.65 + f.vn(w / 170.0 + 31.7) * 0.35;
-float nMid = f.vn(w / 60.0 + 7.3);
-
-// ---- grass: three posterised greens in soft clumps, plus sparse dry blades (2 texels tall)
-float nSmall = f.vn(w / 13.0 + 3.1);
-float gv = nBig * 0.50 + nMid * 0.26 + nSmall * 0.30 + hx * 0.10 - 0.08;
-float3 grass = gv < 0.36 ? GrassDark : (gv < 0.63 ? GrassMid : GrassLight);
-float blade = f.h(float2(c.x, floor(c.y * 0.5)) + 91.0);
-if (blade > 0.91 && nBig > 0.42) grass = lerp(grass, GrassDry, 0.75);
-
-// ---- dirt: a meandering track along X plus worn patches; ragged, dithered edges
-float ph = w.x / max(Path.y, 1.0) * 6.2832;
-float centre = Path.w + Path.x * sin(ph) + Path.x * 0.3 * sin(ph * 2.7 + 1.3);
-float d = abs(w.y - centre) + (nMid - 0.5) * Path.z * 1.1 + (hx - 0.5) * Path.z * 0.45;
-float pathM = (d < Path.z && P.z < PathMaxZ) ? 1.0 : 0.0;
-float worn = f.vn(w / 300.0 + 77.1) * 0.6 + nMid * 0.3 + hx * 0.12;
-float patchM = (worn > DirtPatches && P.z < PathMaxZ) ? 1.0 : 0.0;
-float3 dirt = (f.vn(w / 11.0 + 9.4) * 0.8 + hx * 0.2 + nMid * 0.3) > 0.68 ? DirtLight : DirtDark;
-if (f.h(floor(c.xy * 0.5) + 5.5) > 0.945) dirt = Pebble;
-if (d > Path.z * 0.72 && pathM > 0.5 && hx > 0.4) dirt = DirtDark * 0.8;
-float3 top = lerp(grass, dirt, max(pathM, patchM));
-
-// ---- stone courses for the sides: offset blocks, dark joints, the odd earthy block
-float ua = abs(N.x) > abs(N.y) ? c.y : c.x;
-float R = max(Course, 2.0);
-float zj = c.z + floor(f.h(float2(floor(ua / 9.0), 1.3)) * 3.0);   // courses step up and down: rock, not masonry
-float row = floor(zj / R);
-float rh = f.h(float2(row, 3.7));
-float W = floor(lerp(R * 1.5, R * 3.6, rh));
-float uo = ua + floor(rh * 37.0);
-float col = floor(uo / W);
-float bid = f.h(float2(col, row * 1.37 + 11.0));
-float3 stone = bid < 0.34 ? StoneDark : (bid < 0.76 ? StoneMid : StoneLight);
-if (bid > 0.9) stone = lerp(stone, Earth, 0.65);
-stone *= 0.9 + 0.2 * hx;
-if ((zj - row * R) < 1.0 || (uo - col * W) < 1.0) stone = StoneDark * Joint;
-
-float3 side;
-if (RockTop > 0.5)
+float3 col;
+float3 nrm = float3(0, 0, 1);
+float rough = 0.95;
+if (N.z > 0.5)
 {
-	// boulders: bare stone with moss creeping over the top and down the upper courses
-	float moss = nMid * 0.7 + hx * 0.45;
-	top = moss < Moss ? grass : (hx > 0.5 ? StoneLight : StoneMid) * (0.92 + 0.16 * hx);
-	float td = TopDist / T;
-	side = (td < 2.0 + 5.0 * f.h(float2(ua, 7.7)) * Moss && moss < Moss + 0.15) ? GrassDark : stone;
+	// ---- top: world-aligned. Texture 'up' is world +X (up the screen), so blades stand toward the horizon.
+	float2 uv = float2(P.y, -P.x) / T;
+	float2 tc = floor(uv) + 0.5;                                   // this texel
+	float2 wc = float2(-tc.y, tc.x) * T;                            // its world XY
+	float4 sp = Splat.SampleLevel(View.SharedBilinearClampedSampler, (wc - SplatRect.xy) / SplatRect.z, 0);
+	float hx = px.h(tc);
+	float3 g0 = px.S(Grass, uv, 128).rgb;
+	float tip = saturate((px.lum(px.Texel(Grass, uv, 128).rgb) - 0.045) / 0.16);     // 0 thatch .. 1 blade tip, per texel
+	col = g0;
+	// moss and straw take over tuft by tuft (blade tips hold out longest), never as a soft blend
+	if (sp.g > 0.5 + (hx - 0.5) * 0.35 + (tip - 0.5) * 0.2) col = px.S(GrassMoss, uv, 128).rgb;
+	if (sp.b > 0.5 + (hx - 0.5) * 0.35 - (tip - 0.5) * 0.2) col = px.S(GrassDry, uv, 128).rgb;
+	// road: bare earth first, with grass tips poking into its edge; then stones, joints dissolving first
+	float r = sp.r;
+	if (r > 0.2 + tip * 0.22 + (hx - 0.5) * 0.1)
+	{
+		col = px.S(Dirt, uv, 128).rgb;
+		nrm = px.S(DirtN, uv, 128).xyz * 2.0 - 1.0;
+		rough = 0.9;
+		float3 cb = px.Texel(Cobble, uv, 128).rgb;
+		float body = saturate((px.lum(cb) - 0.05) / 0.2);          // 0 in the joints .. 1 on a stone's face
+		if (r > 0.9 - body * 0.32)
+		{
+			col = px.S(Cobble, uv, 128).rgb;
+			nrm = px.S(CobbleN, uv, 128).xyz * 2.0 - 1.0;
+			rough = StoneRoughness;
+		}
+		nrm = normalize(float3(-nrm.y * NormalStrength, nrm.x * NormalStrength, nrm.z));
+	}
+	col *= lerp(1.0, sp.a, FootShade);                             // shade baked at cliff feet
+	col *= 1.0 + (sp.b - sp.g) * TintRange;                        // dry ground a little lighter, mossy a little deeper
 }
 else
 {
-	// terraces: turf hanging over the lip, then a ragged band of earth, then stone
-	float td = TopDist / T;
-	float c1 = f.h(float2(ua, 7.7));
-	float c2 = f.h(float2(floor(ua / 3.0), 2.2));
-	float turf = 1.0 + floor(c1 * 2.6) + floor(c2 * 2.0);
-	float soil = turf + SoilDepth + floor(c2 * 4.0) + floor(c1 * 1.5);
-	side = td < turf ? (hx > 0.45 ? GrassDark : GrassMid * 0.8) : (td < soil ? Earth * (0.8 + 0.4 * hx) : stone);
+	// ---- side: UV0 = (distance along the outline, depth below the turf) in cm; UV1.x = wall height
+	float2 uv = UV0 / T;
+	float wallH = UV1.x;
+	col = px.S(Cliff, uv, 128).rgb;
+	float3 tn = px.S(CliffN, uv, 128).xyz * 2.0 - 1.0;
+	float3 Tw = normalize(float3(-N.y, N.x, 0.0));
+	nrm = normalize(Tw * tn.x * NormalStrength + float3(0, 0, -1) * tn.y * NormalStrength + N * tn.z);
+	rough = StoneRoughness + 0.1;
+	// turf hanging over the edge, never more than about half the wall
+	float lipMax = min(23.0, wallH / T * LipFraction);
+	if (uv.y < lipMax)
+	{
+		float4 lp = px.S(Lip, float2(uv.x, min(uv.y, 23.4)), float2(128, 24));
+		float grassW = saturate((lp.a - 0.6) / 0.3);
+		float shadow = saturate(lp.a / 0.43) * (1.0 - grassW);
+		col = lerp(col * (1.0 - shadow * LipShadow), lp.rgb, grassW);
+		nrm = normalize(lerp(nrm, normalize(N + float3(0, 0, 0.6)), grassW));
+		rough = lerp(rough, 0.95, grassW);
+	}
+	float above = wallH - UV0.y;                                    // cm above the wall's foot
+	col *= lerp(1.0 - FootShade * 0.35, 1.0, saturate(above / 30.0));
 }
-return N.z > 0.6 ? top : side;
+OutNormal = nrm;
+OutRough = rough;
+return col * Tint;
 """
 
 
 def build_terrain():
     mat = get_material("M_Terrain")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("tangent_space_normal", False)
     g = G(mat)
-    P = g.node(unreal.MaterialExpressionWorldPosition)
+    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
     N = g.node(unreal.MaterialExpressionVertexNormalWS)
-
-    # World distance from this pixel down from the top of the mesh. Engine basic shapes span local Z -50..50.
-    up_ws = g.node(unreal.MaterialExpressionTransform,
-                   transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
-                   transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
-    g.link(g.const3(0.0, 0.0, 1.0), up_ws, "")
-    top_dist_v = g.custom("return (50.0 - LP.z) * length(Up);", F1,
-                          [("LP", g.node(unreal.MaterialExpressionPreSkinnedPosition)), ("Up", up_ws)], "Depth below top")
-    top_dist = g.node(unreal.MaterialExpressionVertexInterpolator)
-    g.link(top_dist_v, top_dist, "VS")
-
+    uv0 = g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)
+    uv1 = g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)
     params = [
-        ("P", P), ("N", N), ("TopDist", top_dist),
-        ("Texel", g.scalar("TexelSize", 3.5, "Crunch")),
-        ("Course", g.scalar("StoneCourseTexels", 6.0, "Crunch")),
-        ("GrassDark", g.vector("GrassDark", srgb("#4a5a2a"), "Grass")),
-        ("GrassMid", g.vector("GrassMid", srgb("#667a33"), "Grass")),
-        ("GrassLight", g.vector("GrassLight", srgb("#86923f"), "Grass")),
-        ("GrassDry", g.vector("GrassDry", srgb("#b9a857"), "Grass")),
-        ("DirtDark", g.vector("DirtDark", srgb("#6e5639"), "Dirt")),
-        ("DirtLight", g.vector("DirtLight", srgb("#927550"), "Dirt")),
-        ("Pebble", g.vector("Pebble", srgb("#93876f"), "Dirt")),
-        ("Earth", g.vector("Earth", srgb("#5c4630"), "Dirt")),
-        ("StoneDark", g.vector("StoneDark", srgb("#5d584c"), "Stone")),
-        ("StoneMid", g.vector("StoneMid", srgb("#857d6a"), "Stone")),
-        ("StoneLight", g.vector("StoneLight", srgb("#9a8f78"), "Stone")),
-        # Path: X = meander amplitude, Y = wavelength, Z = half width, W = centre Y (all cm)
-        ("Path", g.vector("Path", lin(380.0, 5200.0, 150.0, 60.0), "Dirt"), "RGBA"),
-        ("PathMaxZ", g.scalar("PathMaxZ", 20.0, "Dirt")),
-        ("DirtPatches", g.scalar("DirtPatchThreshold", 0.80, "Dirt")),
-        ("SoilDepth", g.scalar("SoilDepthTexels", 5.0, "Dirt")),
-        ("Joint", g.scalar("JointBrightness", 0.76, "Stone")),
-        ("RockTop", g.scalar("RockTop", 0.0, "Rock")),
-        ("Moss", g.scalar("Moss", 0.45, "Rock")),
+        ("P", P), ("N", N), ("UV0", uv0), ("UV1", uv1),
+        ("Grass", g.tex("Grass", "T_Grass")), ("GrassMoss", g.tex("GrassMoss", "T_GrassMoss")), ("GrassDry", g.tex("GrassDry", "T_GrassDry")),
+        ("Dirt", g.tex("Dirt", "T_Dirt")), ("DirtN", g.tex("DirtNormal", "T_Dirt_N", True)),
+        ("Cobble", g.tex("Cobble", "T_Cobble")), ("CobbleN", g.tex("CobbleNormal", "T_Cobble_N", True)),
+        ("Cliff", g.tex("Cliff", "T_Cliff")), ("CliffN", g.tex("CliffNormal", "T_Cliff_N", True)),
+        ("Lip", g.tex("Lip", "T_Lip")), ("Splat", g.tex("Splat", "T_Splat", True)),
+        ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
+        # SplatRect: XY = world origin of the splat map, Z = its world size (cm). Written by gen_battlefield.py's layout.
+        ("SplatRect", g.vector("SplatRect", lin(-5600.0, -6144.0, 12288.0, 0.0), "Splat"), "RGBA"),
+        ("NormalStrength", g.scalar("NormalStrength", 1.0, "Surface")),
+        ("StoneRoughness", g.scalar("StoneRoughness", 0.72, "Surface")),
+        ("FootShade", g.scalar("FootShade", 0.6, "Shading")),
+        ("LipShadow", g.scalar("LipShadow", 0.4, "Shading")),
+        ("LipFraction", g.scalar("LipFraction", 0.55, "Shading")),
+        ("TintRange", g.scalar("TintRange", 0.08, "Shading")),
+        ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Shading")),
     ]
-    colour = g.custom(TERRAIN_CODE, F3, params, "Terrain colour (top / side by normal)")
+    colour = g.custom(TERRAIN_CODE, F3, params, "Terrain: turf / road on top, strata + turf lip on the sides", outputs=[("OutNormal", F3), ("OutRough", F1)])
     g.out(colour, MP.MP_BASE_COLOR)
-    g.out(g.scalar("Roughness", 0.92, "Surface"), MP.MP_ROUGHNESS)
-    g.out(g.scalar("Specular", 0.18, "Surface"), MP.MP_SPECULAR)
+    g.out(colour, MP.MP_NORMAL, "OutNormal")
+    g.out(colour, MP.MP_ROUGHNESS, "OutRough")
+    g.out(g.scalar("Specular", 0.25, "Surface"), MP.MP_SPECULAR)
+    g.finish()
+    return mat
+
+
+# ----------------------------------------------------------------------------- props (rocks, masonry, timber)
+PROP_CODE = PIX + r"""
+float T = max(Texel, 0.5);
+float2 uv = UV0 / T;
+float3 col = VCb > 0.5 ? px.S(TexA, uv, SizeA.xy).rgb : px.S(TexB, uv, SizeB.xy).rgb;
+// moss / turf settling on up-facing stone, texel by texel
+// turf settles on up-facing facets, a whole facet at a time (no dither: a facet is either mossed over or bare)
+if (Moss > 0.0 && N.z > lerp(1.02, MossSlope, Moss))
+{
+	col = px.S(MossTex, float2(P.y, -P.x) / T, 128).rgb;
+}
+// grounded: darker where the piece meets the turf
+col *= lerp(1.0 - FootShade, 1.0, saturate((P.z - PivotZ + 4.0) / 36.0));
+return col * Tint;
+"""
+
+
+def build_prop():
+    mat = get_material("M_Prop")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mel.set_base_material_usage(mat, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
+    g = G(mat)
+    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    obj = g.node(unreal.MaterialExpressionObjectPositionWS)
+    pivot_z = g.node(unreal.MaterialExpressionComponentMask, r=False, g=False, b=True, a=False)
+    g.link(obj, pivot_z, "")
+    params = [
+        ("P", P), ("N", g.node(unreal.MaterialExpressionVertexNormalWS)), ("UV0", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)),
+        ("VCb", g.node(unreal.MaterialExpressionVertexColor), "B"), ("PivotZ", pivot_z),
+        ("TexA", g.tex("TexA", "T_Rock")), ("TexB", g.tex("TexB", "T_Rock")), ("MossTex", g.tex("MossTex", "T_GrassMoss")),
+        ("SizeA", g.vector("SizeA", lin(64.0, 64.0, 0.0, 0.0), "Textures"), "RGBA"),
+        ("SizeB", g.vector("SizeB", lin(64.0, 64.0, 0.0, 0.0), "Textures"), "RGBA"),
+        ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
+        ("Moss", g.scalar("Moss", 0.0, "Moss")), ("MossSlope", g.scalar("MossSlope", 0.6, "Moss")),
+        ("FootShade", g.scalar("FootShade", 0.35, "Shading")),
+        ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Shading")),
+    ]
+    colour = g.custom(PROP_CODE, F3, params, "Prop: UV0 in cm, texture A / B by vertex colour B, moss on top")
+    g.out(colour, MP.MP_BASE_COLOR)
+    g.out(g.scalar("Roughness", 0.82, "Surface"), MP.MP_ROUGHNESS)
+    g.out(g.scalar("Specular", 0.3, "Surface"), MP.MP_SPECULAR)
     g.finish()
     return mat
 
 
 # ----------------------------------------------------------------------------- foliage
-FOLIAGE_CODE = r"""
-struct SRF { float h(float3 p) { p = frac(p * 0.1031); p += dot(p, p.zyx + 31.32); return frac((p.x + p.y) * p.z); } };
-SRF f;
+FOLIAGE_CODE = PIX + r"""
 float T = max(Texel, 0.5);
-float3 c = floor(P / T + 0.001);
-float hx = f.h(c);
-float needle = fmod(abs(c.z), 2.0) < 1.0 ? 0.0 : 1.0;          // alternating rows read as layered boughs
-float v = (1.0 - saturate(LZ)) * 0.62 + hx * 0.42 + needle * 0.10 + (Rand - 0.5) * 0.22;
-float3 col = v < 0.40 ? Dark : (v < 0.74 ? Mid : Light);       // skirt of each tier catches light, the top sits in shade
-if (hx > 0.95) col = Tip;
-return col * (0.88 + 0.24 * Rand);
+float2 uv = UV0 / T;
+float4 c;
+if (VCb > 0.5) { c = float4(px.S(Bark, uv, float2(32, 64)).rgb, 1.0); }
+else
+{
+	c = px.S(Needles, uv, float2(64, 48));
+	c.rgb *= lerp(ShadeFloor, 1.0, UV1.x) * (0.9 + 0.2 * Rand);     // dark under each tier and at the base, lit toward the crown
+	c.rgb = lerp(c.rgb, c.rgb * TipTint, saturate(UV1.x * UV1.x));
+}
+OutAlpha = c.a;
+OutSub = c.rgb * Subsurface * (VCb > 0.5 ? 0.0 : 1.0);
+return c.rgb * Tint;
 """
 
+SWAY_CODE = r"""
+float t = Time * Speed + Rand * 6.2832;
+return float3(sin(t + P.y * 0.004), cos(t * 0.83 + P.x * 0.004), 0.0) * Amount * Weight * Weight;
+"""
 
 def build_foliage():
     mat = get_material("M_Foliage")
-    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE)
+    mat.set_editor_property("opacity_mask_clip_value", 0.5)
     mel.set_base_material_usage(mat, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
     g = G(mat)
-    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
     rand = g.node(unreal.MaterialExpressionPerInstanceRandom)
-    # Height within the mesh, 0 at the base and 1 at the tip (basic shapes span local Z -50..50).
-    lz_v = g.custom("return LP.z / 100.0 + 0.5;", F1, [("LP", g.node(unreal.MaterialExpressionPreSkinnedPosition))], "Local height 0..1")
-    lz = g.node(unreal.MaterialExpressionVertexInterpolator)
-    g.link(lz_v, lz, "VS")
+    uv1 = g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)
+    vc = g.node(unreal.MaterialExpressionVertexColor)
     colour = g.custom(FOLIAGE_CODE, F3, [
-        ("P", P), ("LZ", lz), ("Rand", rand),
-        ("Texel", g.scalar("TexelSize", 3.5, "Crunch")),
-        ("Dark", g.vector("Dark", srgb("#1f3326"), "Colour")),
-        ("Mid", g.vector("Mid", srgb("#2f4a2f"), "Colour")),
-        ("Light", g.vector("Light", srgb("#4a6336"), "Colour")),
-        ("Tip", g.vector("Tip", srgb("#74833f"), "Colour")),
-    ], "Foliage colour")
-    sway = g.custom(
-        "float k = saturate(P.z / 900.0);\n"
-        "float t = Time * Speed + Rand * 6.2832;\n"
-        "return float3(sin(t + P.y * 0.004), cos(t * 0.83 + P.x * 0.004), 0.0) * Amount * k * k;",
-        F3, [("P", g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)),
-             ("Time", g.node(unreal.MaterialExpressionTime)), ("Rand", rand),
-             ("Speed", g.scalar("SwaySpeed", 1.1, "Sway")), ("Amount", g.scalar("SwayAmount", 3.0, "Sway"))], "Wind sway")
+        ("UV0", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)), ("UV1", uv1), ("VCb", vc, "B"), ("Rand", rand),
+        ("Needles", g.tex("Needles", "T_Needles")), ("Bark", g.tex("Bark", "T_Bark")),
+        ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
+        ("ShadeFloor", g.scalar("ShadeFloor", 0.2, "Colour")),
+        ("TipTint", g.vector("TipTint", lin(1.12, 1.08, 0.86), "Colour")),
+        ("Subsurface", g.scalar("Subsurface", 0.55, "Colour")),
+        ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Colour")),
+    ], "Conifer: needles / bark by vertex colour B", outputs=[("OutAlpha", F1), ("OutSub", F3)])
+    weight = g.node(unreal.MaterialExpressionComponentMask, r=False, g=True, b=False, a=False)
+    g.link(uv1, weight, "")
+    sway = g.custom(SWAY_CODE, F3, [
+        ("P", g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)),
+        ("Time", g.node(unreal.MaterialExpressionTime)), ("Rand", rand), ("Weight", weight),
+        ("Speed", g.scalar("SwaySpeed", 1.1, "Sway")), ("Amount", g.scalar("SwayAmount", 5.0, "Sway"))], "Wind sway")
     g.out(colour, MP.MP_BASE_COLOR)
+    g.out(colour, MP.MP_OPACITY_MASK, "OutAlpha")
+    g.out(colour, MP.MP_SUBSURFACE_COLOR, "OutSub")
     g.out(sway, MP.MP_WORLD_POSITION_OFFSET)
     g.out(g.scalar("Roughness", 0.85, "Surface"), MP.MP_ROUGHNESS)
-    g.out(g.const(0.15), MP.MP_SPECULAR)
+    g.out(g.const(0.2), MP.MP_SPECULAR)
+    g.finish()
+    return mat
+
+
+# ----------------------------------------------------------------------------- sprite cards (grass, ferns, flowers, banner)
+CARD_CODE = PIX + r"""
+float4 c = px.S(Tex, UV0 * Size.xy, Size.xy);
+c.rgb *= lerp(RootShade, 1.0, saturate(UV1.y * 2.2)) * (0.88 + 0.24 * Rand);     // sinks into the turf at the root
+OutAlpha = c.a;
+return c.rgb * Tint;
+"""
+
+
+def build_card():
+    mat = get_material("M_Card")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("tangent_space_normal", False)
+    mat.set_editor_property("opacity_mask_clip_value", 0.5)
+    mel.set_base_material_usage(mat, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
+    g = G(mat)
+    rand = g.node(unreal.MaterialExpressionPerInstanceRandom)
+    uv1 = g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)
+    colour = g.custom(CARD_CODE, F3, [
+        ("UV0", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)), ("UV1", uv1), ("Rand", rand),
+        ("Tex", g.tex("Tex", "T_Tufts")),
+        ("Size", g.vector("Size", lin(96.0, 24.0, 0.0, 0.0), "Textures"), "RGBA"),
+        ("RootShade", g.scalar("RootShade", 0.6, "Colour")),
+        ("Tint", g.vector("Tint", lin(0.86, 0.86, 0.86), "Colour")),
+    ], "Sprite card (UV0 0..1)", outputs=[("OutAlpha", F1)])
+    weight = g.node(unreal.MaterialExpressionComponentMask, r=False, g=True, b=False, a=False)
+    g.link(uv1, weight, "")
+    sway = g.custom(SWAY_CODE, F3, [
+        ("P", g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)),
+        ("Time", g.node(unreal.MaterialExpressionTime)), ("Rand", rand), ("Weight", weight),
+        ("Speed", g.scalar("SwaySpeed", 1.6, "Sway")), ("Amount", g.scalar("SwayAmount", 2.5, "Sway"))], "Wind sway")
+    g.out(colour, MP.MP_BASE_COLOR)
+    g.out(colour, MP.MP_OPACITY_MASK, "OutAlpha")
+    g.out(g.const3(0.0, 0.0, 1.0), MP.MP_NORMAL)        # lit like the ground it stands in, from both sides
+    g.out(sway, MP.MP_WORLD_POSITION_OFFSET)
+    g.out(g.scalar("Roughness", 0.95, "Surface"), MP.MP_ROUGHNESS)
+    g.out(g.const(0.1), MP.MP_SPECULAR)
     g.finish()
     return mat
 
 
 # ----------------------------------------------------------------------------- water
-WATER_CODE = r"""
-struct SRW { float h(float2 p) { float3 p3 = frac(float3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return frac((p3.x + p3.y) * p3.z); }
-	float vn(float2 p) { float2 i = floor(p); float2 f = frac(p); f = f * f * (3.0 - 2.0 * f);
-		return lerp(lerp(h(i), h(i + float2(1, 0)), f.x), lerp(h(i + float2(0, 1)), h(i + float2(1, 1)), f.x), f.y); } };
-SRW f;
+WATER_CODE = PIX + r"""
 float T = max(Texel, 0.5);
-float2 c = floor(P.xy / T + 0.001);
-float2 w = c * T;
-float a = f.vn(w / 260.0 + float2(Time * 0.06, Time * 0.045));
-float b = f.vn(w / 95.0 - float2(Time * 0.09, -Time * 0.07));
-float r = a * 0.6 + b * 0.4;
-float3 col = lerp(Deep, Shallow, smoothstep(0.35, 0.75, r));
-float glint = abs(r - 0.5) < 0.012 ? 1.0 : 0.0;                 // thin moving caustic lines, crunchy like the land
-return col + Foam * glint * 0.07;
+float2 uv = float2(P.y, -P.x) / T;
+// two ripple layers sliding past each other, stepped a whole texel at a time so the pixels stay pixels
+float2 a = uv + floor(float2(Time * Speed.x, Time * Speed.y));
+float2 b = uv * 1.0 + float2(31.0, 17.0) - floor(float2(Time * Speed.z, -Time * Speed.w));
+float3 ca = px.S(Tex, a, 64).rgb;
+float3 cb = px.S(Tex, b, 64).rgb;
+float3 col = max(ca, cb * 0.85);
+float glint = saturate((px.lum(col) - GlintLevel) * 6.0);
+OutEmissive = Glint.rgb * glint * Glint.a;
+return lerp(col * Tint.rgb, Deep.rgb, DeepMix);
 """
 
 
@@ -367,28 +491,36 @@ def build_water():
     g = G(mat)
     colour = g.custom(WATER_CODE, F3, [
         ("P", g.node(unreal.MaterialExpressionWorldPosition)), ("Time", g.node(unreal.MaterialExpressionTime)),
-        ("Texel", g.scalar("TexelSize", 3.5, "Crunch")),
-        ("Deep", g.vector("Deep", srgb("#1c3f47"), "Colour")),
-        ("Shallow", g.vector("Shallow", srgb("#2c5c5f"), "Colour")),
-        ("Foam", g.vector("Foam", srgb("#cfe6dc"), "Colour")),
-    ], "Water colour")
+        ("Tex", g.tex("Tex", "T_Water")),
+        ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
+        ("Speed", g.vector("ScrollTexelsPerSecond", lin(1.6, 0.5, 1.1, 0.8), "Motion"), "RGBA"),
+        ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Colour")),
+        ("Deep", g.vector("Deep", srgb("#12303a"), "Colour")),
+        ("DeepMix", g.scalar("DeepMix", 0.25, "Colour")),
+        ("Glint", g.vector("Glint", lin(1.0, 0.92, 0.75, 0.6), "Colour"), "RGBA"),
+        ("GlintLevel", g.scalar("GlintLevel", 0.32, "Colour")),
+    ], "Water colour", outputs=[("OutEmissive", F3)])
     g.out(colour, MP.MP_BASE_COLOR)
-    g.out(g.scalar("Roughness", 0.12, "Surface"), MP.MP_ROUGHNESS)
-    g.out(g.const(0.6), MP.MP_SPECULAR)
+    g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
+    g.out(g.scalar("Roughness", 0.1, "Surface"), MP.MP_ROUGHNESS)
+    g.out(g.scalar("Specular", 0.6, "Surface"), MP.MP_SPECULAR)
     g.finish()
 
 
-def make_instance(name, parent, scalars=None, vectors=None):
+def make_instance(name, parent, scalars=None, vectors=None, textures=None):
     path = DIR + "/" + name
     if eal.does_asset_exist(path):
         mi = eal.load_asset(path)
     else:
         mi = unreal.AssetToolsHelpers.get_asset_tools().create_asset(name, DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
     mel.set_material_instance_parent(mi, parent)
+    mel.clear_all_material_instance_parameters(mi)
     for k, v in (scalars or {}).items():
         mel.set_material_instance_scalar_parameter_value(mi, k, v)
     for k, v in (vectors or {}).items():
         mel.set_material_instance_vector_parameter_value(mi, k, v)
+    for k, v in (textures or {}).items():
+        mel.set_material_instance_texture_parameter_value(mi, k, eal.load_asset(TEX + v))
     mel.update_material_instance(mi)
     eal.save_loaded_asset(mi, False)
     print("built", path)
@@ -396,13 +528,30 @@ def make_instance(name, parent, scalars=None, vectors=None):
 
 if not eal.does_directory_exist(DIR):
     eal.make_directory(DIR)
-build_unit()
-build_ring()
-terrain = build_terrain()
-foliage = build_foliage()
-build_water()
-make_instance("MI_Terrain_Rock", terrain, scalars={"RockTop": 1.0, "Moss": 0.42, "StoneCourseTexels": 11.0, "JointBrightness": 0.86})
-make_instance("MI_Foliage_Tuft", foliage, scalars={"SwayAmount": 0.0},
-              vectors={"Dark": srgb("#5a6a2c"), "Mid": srgb("#7b8436"), "Light": srgb("#9a9a45"), "Tip": srgb("#c4b660")})
-make_instance("MI_Foliage_Trunk", foliage, scalars={"SwayAmount": 0.0},
-              vectors={"Dark": srgb("#3a2a1c"), "Mid": srgb("#4d3823"), "Light": srgb("#63492d"), "Tip": srgb("#7a5c3a")})
+for stale in ("MI_Terrain_Rock", "MI_Foliage_Tuft", "MI_Foliage_Trunk"):      # instances from the first, texture-less pass
+    if eal.does_asset_exist(DIR + "/" + stale):
+        eal.delete_asset(DIR + "/" + stale)
+ONLY = globals().get("ONLY")          # e.g. ONLY = ["terrain"] to rebuild one material while iterating
+if not ONLY or "unit" in ONLY:
+    build_unit()
+    build_ring()
+if not ONLY or "terrain" in ONLY:
+    build_terrain()
+if not ONLY or "water" in ONLY:
+    build_water()
+if not ONLY or "prop" in ONLY:
+    prop = build_prop()
+    make_instance("MI_Prop_Rock", prop, scalars={"Moss": 1.0, "MossSlope": 0.84, "Roughness": 0.86},
+                  vectors={"SizeA": lin(64, 64, 0, 0), "Tint": lin(0.8, 0.78, 0.72)}, textures={"TexA": "T_Rock"})
+    make_instance("MI_Prop_Sandstone", prop, scalars={"Moss": 0.0, "Roughness": 0.8},
+                  vectors={"SizeA": lin(128, 64, 0, 0)}, textures={"TexA": "T_Sandstone"})
+    make_instance("MI_Prop_Wood", prop, scalars={"Roughness": 0.8, "FootShade": 0.25},
+                  vectors={"SizeA": lin(64, 32, 0, 0)}, textures={"TexA": "T_Wood"})
+    make_instance("MI_Prop_Log", prop, scalars={"Moss": 0.0, "Roughness": 0.85},
+                  vectors={"SizeA": lin(16, 16, 0, 0), "SizeB": lin(32, 64, 0, 0)}, textures={"TexA": "T_LogEnd", "TexB": "T_Bark"})
+if not ONLY or "foliage" in ONLY:
+    build_foliage()
+if not ONLY or "card" in ONLY:
+    cardm = build_card()
+    make_instance("MI_Card_Banner", cardm, scalars={"RootShade": 1.0, "SwayAmount": 5.0, "SwaySpeed": 2.2},
+                  vectors={"Size": lin(16, 40, 0, 0), "Tint": lin(1, 1, 1)}, textures={"Tex": "T_Banner"})

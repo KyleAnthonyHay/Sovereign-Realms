@@ -32,21 +32,21 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Camera")
 	float CameraYaw = 0.f;
 
-	/** Narrow FOV flattens perspective for the miniature / diorama look. */
+	/** Horizontal FOV. Fairly wide with a close, low camera: terraces show their faces and the hazy distance gets into frame; the tilt-shift supplies the miniature feel. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera", meta = (ClampMin = "10", ClampMax = "100"))
-	float CameraFOV = 38.f;
+	float CameraFOV = 50.f;
 
 	/** Camera distance from the focus point when fully zoomed in. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "200"))
-	float ZoomDistanceMin = 1300.f;
+	float ZoomDistanceMin = 950.f;
 
 	/** Camera distance from the focus point when fully zoomed out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "200"))
-	float ZoomDistanceMax = 4800.f;
+	float ZoomDistanceMax = 3600.f;
 
 	/** 0 = fully in, 1 = fully out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
-	float ZoomDefault = 0.55f;
+	float ZoomDefault = 0.5f;
 
 	/** Zoom fraction per mouse-wheel notch. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0.01", ClampMax = "1"))
@@ -58,11 +58,11 @@ public:
 
 	/** Pitch when fully zoomed in (lower / more side-on). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "-89", ClampMax = "-10"))
-	float PitchZoomedIn = -43.f;
+	float PitchZoomedIn = -30.f;
 
 	/** Pitch when fully zoomed out (steeper / more top-down). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "-89", ClampMax = "-10"))
-	float PitchZoomedOut = -60.f;
+	float PitchZoomedOut = -46.f;
 
 	/** When zooming in, how far the focus slides toward the cursor per notch (0 = off). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
@@ -370,13 +370,13 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift")
 	bool bTiltShift = true;
 
-	/** Blur strength when fully zoomed OUT: the blur-disc diameter, as a percentage of screen width, of something infinitely far behind the focus point. Ground at the top / bottom screen edge gets roughly a sixth of this. */
+	/** Blur strength when fully zoomed OUT: the blur-disc diameter, as a percentage of screen width, of something infinitely far behind the focus point. Kept low so the whole tactical view stays readable; the default zoom sits between this and the zoomed-in value. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "0", ClampMax = "20"))
-	float TiltShiftBlur = 3.2f;
+	float TiltShiftBlur = 1.6f;
 
-	/** Blur strength when fully zoomed IN (same unit). Lower than the zoomed-out value, because the close camera is flatter and sees a deeper slice of the field: the same lens would smear the units in the lower half of the screen. */
+	/** Blur strength when fully zoomed IN (same unit). The close, low camera sees a deep slice of the field, so this is what sets how soft the foreground props and the hazy distance get in the cinematic view. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "0", ClampMax = "20"))
-	float TiltShiftBlurZoomedIn = 1.3f;
+	float TiltShiftBlurZoomedIn = 1.5f;
 
 	/** Moves the sharp plane (cm) nearer (-) or farther (+) than the camera focus point. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift")
@@ -385,6 +385,20 @@ public:
 	/** Aperture used for the bokeh shape only (blur size is set by Tilt Shift Blur). */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "1", ClampMax = "22"))
 	float TiltShiftFstop = 1.4f;
+
+	// Distance haze. The level's Exponential Height Fog starts just past the focus point, whatever the zoom,
+	// so the troops in the sharp band stay clear while everything up-screen sinks into lit haze (and light shafts).
+	/** Camera drives the fog start distance from its focus distance. Untick to leave the fog actor's own values alone. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Haze")
+	bool bHazeTracksFocus = true;
+
+	/** Where the haze begins, as a fraction of the camera-to-focus distance (1 = exactly at the focus point). */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Haze", meta = (ClampMin = "0", ClampMax = "4"))
+	float HazeStartFraction = 1.05f;
+
+	/** Distance over which the haze fades in past its start, as a fraction of the camera-to-focus distance. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Haze", meta = (ClampMin = "0", ClampMax = "4"))
+	float HazeFadeFraction = 0.7f;
 
 	// ----------------------------------------------------------------- Debug
 	/** Log every hit to LogSovereign (deaths and battle results are always logged). */

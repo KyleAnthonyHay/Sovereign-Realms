@@ -7,6 +7,7 @@
 #include "SRCameraPawn.generated.h"
 
 class UCameraComponent;
+class UExponentialHeightFogComponent;
 
 /**
  * RTS camera rig. The pawn sits on the ground at the focus point; the camera hangs
@@ -48,6 +49,9 @@ private:
 	void ApplyView(float DeltaSeconds);
 
 	UPROPERTY(VisibleAnywhere, Category = "Camera") TObjectPtr<UCameraComponent> Camera;
+
+	/** The level's height fog, if it has one: its start distance follows the focus distance (Sovereign Feel > Visuals > Haze). */
+	TWeakObjectPtr<UExponentialHeightFogComponent> Haze;
 
 	FVector2D Focus = FVector2D::ZeroVector;
 	float FocusZ = 0.f;
