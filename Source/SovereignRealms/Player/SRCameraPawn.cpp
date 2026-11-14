@@ -208,6 +208,28 @@ void ASRCameraPawn::ApplyView(float DeltaSeconds)
 	SetActorLocation(FocusPoint);
 	Camera->SetWorldLocationAndRotation(CameraPos, ViewRot);
 	Camera->SetFieldOfView(F.CameraFOV);
-	Camera->PostProcessSettings.bOverride_MotionBlurAmount = F.bDisableMotionBlur;
-	Camera->PostProcessSettings.MotionBlurAmount = 0.f;
+	FPostProcessSettings& PP = Camera->PostProcessSettings;
+	PP.bOverride_MotionBlurAmount = F.bDisableMotionBlur;
+	PP.MotionBlurAmount = 0.f;
+
+	// Tilt-shift: physical depth of field focused on the focus point. The virtual sensor is scaled with the
+	// focus distance so the blur gradient looks the same at every zoom (a real lens would lose it when far).
+	const float Blur = FMath::Lerp(F.TiltShiftBlurZoomedIn, F.TiltShiftBlur, Zoom);
+	const bool bDof = F.bTiltShift && Blur > 0.f;
+	PP.bOverride_DepthOfFieldFocalDistance = bDof;
+	PP.bOverride_DepthOfFieldFstop = bDof;
+	PP.bOverride_DepthOfFieldMinFstop = bDof;
+	PP.bOverride_DepthOfFieldSensorWidth = bDof;
+	if (bDof)
+	{
+		const float FocusDistance = FMath::Max(Distance + F.TiltShiftFocusOffset, 50.f);
+		const float FocalPerSensor = 0.5f / FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(F.CameraFOV, 5.f, 170.f) * 0.5f));
+		// Blur disc at infinity (fraction of sensor width) = FocalPerSensor / Fstop * f / (S - f). Solve for f.
+		const float Ratio = Blur * 0.01f * F.TiltShiftFstop / FocalPerSensor;
+		const float FocalLengthMm = FocusDistance * 10.f * Ratio / (1.f + Ratio);
+		PP.DepthOfFieldFocalDistance = FocusDistance;
+		PP.DepthOfFieldFstop = F.TiltShiftFstop;
+		PP.DepthOfFieldMinFstop = F.TiltShiftFstop;
+		PP.DepthOfFieldSensorWidth = FocalLengthMm / FocalPerSensor;
+	}
 }

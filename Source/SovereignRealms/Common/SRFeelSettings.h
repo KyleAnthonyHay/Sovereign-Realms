@@ -365,6 +365,27 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
 	bool bSpawnGreyboxObstacles = true;
 
+	// --------------------------------------------------------------- Visuals
+	/** Miniature / tilt-shift depth of field on the game camera. The focus plane is locked to the camera's focus point, so it follows pan and zoom. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift")
+	bool bTiltShift = true;
+
+	/** Blur strength when fully zoomed OUT: the blur-disc diameter, as a percentage of screen width, of something infinitely far behind the focus point. Ground at the top / bottom screen edge gets roughly a sixth of this. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "0", ClampMax = "20"))
+	float TiltShiftBlur = 3.2f;
+
+	/** Blur strength when fully zoomed IN (same unit). Lower than the zoomed-out value, because the close camera is flatter and sees a deeper slice of the field: the same lens would smear the units in the lower half of the screen. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "0", ClampMax = "20"))
+	float TiltShiftBlurZoomedIn = 1.3f;
+
+	/** Moves the sharp plane (cm) nearer (-) or farther (+) than the camera focus point. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift")
+	float TiltShiftFocusOffset = 0.f;
+
+	/** Aperture used for the bokeh shape only (blur size is set by Tilt Shift Blur). */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "1", ClampMax = "22"))
+	float TiltShiftFstop = 1.4f;
+
 	// ----------------------------------------------------------------- Debug
 	/** Log every hit to LogSovereign (deaths and battle results are always logged). */
 	UPROPERTY(EditAnywhere, Config, Category = "Debug")
