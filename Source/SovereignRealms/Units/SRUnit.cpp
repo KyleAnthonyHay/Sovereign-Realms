@@ -571,6 +571,7 @@ void ASRUnit::AlertTo(ASRUnit* Threat)
 
 void ASRUnit::Die(ASRUnit* Killer, const FVector2D& HitDir)
 {
+	if (SpriteCard) { SpriteCard->SetRenderCustomDepth(false); }   // the fallen do not show through walls
 	const USRFeelSettings& F = USRFeelSettings::Get();
 
 	// Out of combat this instant; the subsystem moves us to the corpse list at the end of the frame.

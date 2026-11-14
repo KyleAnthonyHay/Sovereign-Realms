@@ -75,6 +75,9 @@ void ASRUnit::BuildVisuals()
 
 	const FLinearColor TeamCol = Battle->TeamColor(Team);
 	SpriteCard->SetCustomPrimitiveDataVector4(SRSprite::DataTeamColor, FVector4(TeamCol.R, TeamCol.G, TeamCol.B, 1.f));
+	// custom depth + team stencil: behind a building the troop shows through as a silhouette (M_Occlusion)
+	SpriteCard->SetRenderCustomDepth(true);
+	SpriteCard->SetCustomDepthStencilValue(Team == ESRTeam::Player ? 1 : 2);
 
 	Blob = NewObject<UDecalComponent>(this);
 	Blob->SetUsingAbsoluteRotation(true);

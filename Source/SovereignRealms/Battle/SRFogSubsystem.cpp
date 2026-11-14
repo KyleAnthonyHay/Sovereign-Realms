@@ -196,6 +196,11 @@ void USRFogSubsystem::EnsureView()
 			if (UCameraComponent* Cam = Pawn->FindComponentByClass<UCameraComponent>())
 			{
 				Cam->PostProcessSettings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f, FogMaterial));
+				// and the troops' silhouettes behind buildings (custom depth, team in the stencil)
+				if (UMaterialInterface* Occ = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SR/Materials/M_Occlusion.M_Occlusion")))
+				{
+					Cam->PostProcessSettings.WeightedBlendables.Array.Add(FWeightedBlendable(1.f, Occ));
+				}
 				bHadView = true;
 			}
 		}
