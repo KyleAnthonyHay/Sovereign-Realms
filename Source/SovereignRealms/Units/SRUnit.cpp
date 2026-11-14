@@ -713,7 +713,16 @@ void ASRUnit::Die(ASRUnit* Killer, const FVector2D& HitDir)
 	TargetBuilding = nullptr;
 
 	Battle->AddCameraTrauma(SimPos, F.ShakeTraumaDeath);
-	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::Death, SimPos); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this))
+	{
+		// an engine does not cry out: its timbers burst apart (with a shower of splinters)
+		if (UnitType == ESRUnitType::Catapult)
+		{
+			Audio->PlayAt(ESRSound::CatapultBreak, SimPos + FVector(0.f, 0.f, 80.f));
+			if (Battle) { Battle->SpawnFX(ESRFX::Debris, SimPos + FVector(0.f, 0.f, 60.f), 1.3f); }
+		}
+		else { Audio->PlayAt(ESRSound::Death, SimPos); }
+	}
 	Battle->NotifyUnitDied(this, Killer);
 }
 

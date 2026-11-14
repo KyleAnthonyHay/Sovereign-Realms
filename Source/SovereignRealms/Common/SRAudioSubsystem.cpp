@@ -57,6 +57,7 @@ namespace
 		{ TEXT("SwordSwing"),      0.04f,  4.f, 0.50f, 0.10f, 2400.f },
 		{ TEXT("HorseSnort"),      0.80f,  2.f, 0.55f, 0.08f, 2000.f },
 		{ TEXT("GallopLoop"),      0.00f,  3.f, 0.55f, 0.06f, 3800.f },
+		{ TEXT("CatapultBreak"),   0.20f,  2.f, 0.90f, 0.06f, 5000.f },
 	};
 	/** Attached loops of one sound playing at once. */
 	const int32 MaxLoopsPerSound = 3;

@@ -45,6 +45,7 @@ enum class ESRSound : uint8
 	SwordSwing,    // a melee wind-up
 	HorseSnort,
 	GallopLoop,    // under a galloping rider (looping, attached)
+	CatapultBreak, // a catapult destroyed
 	Count UMETA(Hidden)
 };
 

@@ -8,6 +8,7 @@ venv: Tools/.venv/bin/python Tools/audio/prep_recorded.py, then import (Tools/ue
   sword_swing.wav      -> S_SwordSwing                       (melee wind-up)
   horse_snort_1/2.wav  -> S_HorseSnort, S_HorseSnort_2
   horse_pass_by.wav    -> S_GallopLoop                       (its loudest two seconds, cross-faded into a loop)
+  catapult_break.wav   -> S_CatapultBreak                    (a catapult destroyed: timber bursting apart)
   hammer_nail.wav      -> S_BuildHammer, S_BuildHammer_2..5  (its five blows, one take each; replaces the synthesised one)
 Uses macOS afconvert to read the 24-bit / 96 kHz / stereo originals.
 """
@@ -82,6 +83,7 @@ def main():
     write("HorseSnort", trim(read("horse_snort_1.wav")), peak=0.8)
     write("HorseSnort_2", trim(read("horse_snort_2.wav")), peak=0.8)
     write("GallopLoop", loop(read("horse_pass_by.wav"), 0.95, 3.15, 0.25), peak=0.8)
+    write("CatapultBreak", trim(read("catapult_break.wav")))
     for k, hit in enumerate(split_hits(read("hammer_nail.wav"))[:6]):
         write("BuildHammer" if k == 0 else "BuildHammer_%d" % (k + 1), trim(hit), peak=0.8)
 
