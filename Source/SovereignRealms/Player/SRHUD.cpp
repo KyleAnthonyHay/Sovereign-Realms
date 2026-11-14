@@ -484,6 +484,58 @@ void ASRHUD::DrawRangeCircles()
 		RangeCircles.Reset();
 		return;
 	}
+
+	// A tower's (or the castle's) reach: the selected one, or the tower in hand while placing it.
+	{
+		FVector2D Centre;
+		float Reach = 0.f, RefZ = 0.f;
+		bool bEnemy = false;
+		if (PC->IsPlacing())
+		{
+			const FSRBuildingStats& S = F.BuildingStatsFor(PC->GetPlacingType());
+			const FVector L = PC->GetPlacementLocation();
+			Centre = FVector2D(L.X, L.Y) + (S.FootprintMin + S.FootprintMax) * 0.5f;
+			Reach = S.AttackRange;
+			RefZ = L.Z;
+		}
+		else if (const ASRBuilding* B = PC->GetSelectedBuilding(); B && B->IsFinished())
+		{
+			Centre = B->GetFootprintCentre();
+			Reach = B->Stats().AttackRange;
+			RefZ = B->GetActorLocation().Z;
+			bEnemy = B->Team == ESRTeam::Enemy;
+		}
+		if (Reach > 0.f)
+		{
+			if (FVector2D::DistSquared(Centre, BuildingReach.At) > 1.f || BuildingReach.Sight.Num() == 0)
+			{
+				BuildingReach.At = Centre;
+				const int32 N = FMath::Clamp(FMath::RoundToInt(Reach / 22.f), 48, 96);
+				BuildingReach.Sight.Reset(N);
+				for (int32 i = 0; i < N; ++i)
+				{
+					const float Ang = 2.f * PI * i / N;
+					const FVector2D P = Centre + FVector2D(FMath::Cos(Ang), FMath::Sin(Ang)) * Reach;
+					float Z = RefZ;
+					Battle->SampleGround(P, RefZ + 600.f, Z);
+					BuildingReach.Sight.Add(FVector(P.X, P.Y, Z + 15.f));
+				}
+			}
+			const FLinearColor Color = bEnemy ? FLinearColor(1.f, 0.3f, 0.25f, 0.9f) : F.RangeCircleColor;
+			const int32 N = BuildingReach.Sight.Num();
+			const float W = FMath::Max(1.f, U(2.5f));
+			for (int32 i = 0; i < N; ++i)
+			{
+				const FVector S0 = Canvas->Project(BuildingReach.Sight[i]);
+				const FVector S1 = Canvas->Project(BuildingReach.Sight[(i + 1) % N]);
+				if (S0.Z > 0.f && S1.Z > 0.f) { DrawLine(S0.X, S0.Y, S1.X, S1.Y, Color, W); }
+			}
+		}
+		else
+		{
+			BuildingReach.Sight.Reset();
+		}
+	}
 	// The selected troops nearest the middle of the selection (a big blob of circles reads as nothing).
 	TArray<ASRUnit*> Units;
 	FVector2D Mid = FVector2D::ZeroVector;

@@ -124,6 +124,8 @@ public:
 	/** Why the spot under the cursor is refused (empty when it is fine). */
 	const FText& GetPlacementReason() const { return PlacementReason; }
 	bool IsPlacementValid() const { return bPlacementValid; }
+	/** Where the building in hand would stand (its origin), while placing. */
+	FVector GetPlacementLocation() const { return PlacementLocation; }
 
 	// ---- Platoons ----
 	/** The platoon key: assign (Ctrl/Cmd/Alt), add (Shift) or select (double-tap centres). */
@@ -236,6 +238,7 @@ private:
 	ESRBuildingType PlacingType = ESRBuildingType::Farm;
 	FText PlacementReason;
 	bool bPlacementValid = false;
+	FVector PlacementLocation = FVector::ZeroVector;
 	TWeakObjectPtr<ASRUnit> Hovered;
 	TWeakObjectPtr<ASRBuilding> SelectedBuilding;
 	TWeakObjectPtr<ASRBuilding> HoveredBuilding;

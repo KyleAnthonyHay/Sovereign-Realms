@@ -128,6 +128,8 @@ private:
 	void DrawRangeCircles();
 	struct FRangeCircle { FVector2D At = FVector2D(1e9, 1e9); TArray<FVector> Sight, Reach; };
 	TMap<TWeakObjectPtr<ASRUnit>, FRangeCircle> RangeCircles;
+	/** A shooting building's reach (selected tower / castle, or a tower being placed), re-sampled when it moves. */
+	FRangeCircle BuildingReach;
 
 	// ---- in-game HUD (SRHUDGame.cpp) ----
 	void DrawGameHUD();

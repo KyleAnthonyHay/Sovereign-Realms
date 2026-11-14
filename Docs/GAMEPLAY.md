@@ -65,7 +65,8 @@ while selected; `USRBattleSubsystem::CommandPatrol`).
 **Line of sight**: a troop notices (and, in Aggressive stance or on an attack-move, goes for) enemy troops and buildings
 within its sight: 13 m for Shieldbearers, 15 m for Archers (bow range 8.8 m). Selected troops show it on the ground: a
 dashed blue outline for sight, a solid orange one for archers' bow range (one merged outline per group; Sovereign Feel
-> Combat > Show Range Circles).
+> Combat > Show Range Circles). A selected watchtower or castle shows its reach the same way (red for the enemy's),
+and so does a tower while you are placing it.
 
 **Stances** (per platoon or per selection, G cycles): Aggressive (chase anything in acquire range), Defensive (chase at
 most 9 m from the post, then return), Hold Ground (never move to fight; H gives a one-off hold order).

@@ -664,6 +664,7 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 	if (Building->BuildingType == ESRBuildingType::Tower)
 	{
 		Text(FString::Printf(TEXT("Shoots enemies in range: %.0f damage every %.1f s"), Stats.AttackDamage, Stats.AttackInterval), X, LY, U(15.f), Parchment);
+		Text(FString::Printf(TEXT("Reach %.0f m (the orange circle)"), Stats.AttackRange / 100.f), X, LY + U(22.f), U(14.f), Dim);
 		return;
 	}
 	if (!bRecruits)

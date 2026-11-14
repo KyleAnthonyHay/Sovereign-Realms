@@ -1106,6 +1106,7 @@ void ASRPlayerController::UpdatePlacement()
 	const FSRPlacement P = Grid->CheckPlacement(PlacingType, ESRTeam::Player, FVector2D(Ground));
 	bPlacementValid = P.bValid;
 	PlacementReason = P.Reason;
+	PlacementLocation = P.Location;
 	if (Preview) { Preview->Show(PlacingType, P); }
 }
 
