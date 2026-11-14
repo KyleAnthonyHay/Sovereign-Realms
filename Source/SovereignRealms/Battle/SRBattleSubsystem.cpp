@@ -205,6 +205,14 @@ void USRBattleSubsystem::Tick(float DeltaTime)
 
 	if (!bBattleStarted) { return; }
 
+	if (bSimPaused)
+	{
+		// Menus: hold everything where it stands, but keep the sprites facing the (still moving) camera.
+		for (ASRUnit* Unit : Units) { if (Unit) { Unit->StepVisual(0.f); } }
+		for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->StepVisual(0.f); } }
+		return;
+	}
+
 	if (FreezeFramesLeft > 0)
 	{
 		// Debug capture (sr.ShotOn): hold the battle on the frame of the event until the image has settled
@@ -322,6 +330,7 @@ void USRBattleSubsystem::ResolveOverlaps(float DeltaTime)
 
 void USRBattleSubsystem::NotifyBuildingDestroyed(ASRBuilding* Building)
 {
+	if (Building) { ++MatchStats.BuildingsLost[int32(Building->Team)]; }
 	if (!Building || !Building->IsCastle() || Result != ESRBattleResult::Ongoing) { return; }
 	Result = Building->Team == ESRTeam::Enemy ? ESRBattleResult::PlayerWon : ESRBattleResult::EnemyWon;
 	TimeSinceResult = 0.f;
@@ -370,6 +379,7 @@ void USRBattleSubsystem::ResetBattle()
 	for (TActorIterator<ASROrderMarker> It(World); It; ++It) { It->Destroy(); }
 
 	bAutoBattle = false;
+	MatchStats = FSRMatchStats();
 	Result = ESRBattleResult::Ongoing;
 	TimeSinceResult = 0.f;
 	BattleClock = 0.f;
@@ -621,6 +631,7 @@ void USRBattleSubsystem::NotifyUnitDied(ASRUnit* Unit, const ASRUnit* Killer)
 {
 	UE_LOG(LogSovereign, Log, TEXT("DEATH %s  killed by %s  (remaining: player=%d enemy=%d)"),
 		*Unit->GetLabel(), Killer ? *Killer->GetLabel() : TEXT("?"), CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy));
+	++MatchStats.TroopsLost[int32(Unit->GetTeam())];
 	OnShotEvent(ESRShotEvent::Death, Unit);
 }
 

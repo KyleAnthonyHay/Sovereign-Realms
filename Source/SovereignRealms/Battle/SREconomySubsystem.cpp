@@ -386,6 +386,7 @@ ASRBuilding* USREconomySubsystem::PlaceBuilding(ESRBuildingType Type, ESRTeam Te
 
 void USREconomySubsystem::NotifyBuildingFinished(ASRBuilding* Building)
 {
+	if (USRBattleSubsystem* Battle = Building ? USRBattleSubsystem::Get(this) : nullptr) { Battle->NoteBuildingBuilt(Building->Team); }
 	if (Building && Building->Team == ESRTeam::Player)
 	{
 		const FVector2D At = Building->GetFootprintCentre();

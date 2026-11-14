@@ -32,6 +32,15 @@ enum class ESRBattleResult : uint8
 	EnemyWon
 };
 
+/** What happened in the match so far, per team (index = ESRTeam). Shown on the victory / defeat screen. */
+struct FSRMatchStats
+{
+	int32 Recruited[2] = { 0, 0 };
+	int32 TroopsLost[2] = { 0, 0 };
+	int32 BuildingsBuilt[2] = { 0, 0 };
+	int32 BuildingsLost[2] = { 0, 0 };
+};
+
 /**
  * Owns the battle: the unit registry, the per-frame simulation order
  * (think -> move -> push apart -> animate), scenario spawning / reset,
@@ -114,7 +123,20 @@ public:
 	 */
 	void ArmShot(ESRShotEvent Event, const FString& Name, int32 UnitType, int32 Team);
 	/** True while a debug capture holds the battle still; projectiles pause too. */
-	bool IsFrozen() const { return FreezeFramesLeft > 0; }
+	bool IsFrozen() const { return FreezeFramesLeft > 0 || bSimPaused; }
+
+	/**
+	 * The pause the menus use (USRGameFlowSubsystem): the whole simulation holds still (troops, buildings, the
+	 * commanders, projectiles, workers, the battle clock) while the world itself keeps ticking, so the camera, the
+	 * interface, sounds and the debug command inbox stay live.
+	 */
+	void SetSimPaused(bool bPaused) { bSimPaused = bPaused; }
+	bool IsSimPaused() const { return bSimPaused; }
+
+	// ---- match statistics (read by the end-of-match screen) ----
+	const FSRMatchStats& GetStats() const { return MatchStats; }
+	void NoteRecruit(ESRTeam Team) { ++MatchStats.Recruited[int32(Team)]; }
+	void NoteBuildingBuilt(ESRTeam Team) { ++MatchStats.BuildingsBuilt[int32(Team)]; }
 
 	/** Adds camera trauma, attenuated by distance from the camera focus. */
 	void AddCameraTrauma(const FVector& WorldLocation, float Amount) const;
@@ -164,6 +186,8 @@ private:
 
 	bool bBattleStarted = false;
 	bool bAutoBattle = false;
+	bool bSimPaused = false;
+	FSRMatchStats MatchStats;
 	ESRBattleResult Result = ESRBattleResult::Ongoing;
 	float TimeSinceResult = 0.f;
 	float BattleClock = 0.f;

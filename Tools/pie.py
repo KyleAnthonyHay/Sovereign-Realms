@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Drive a Play-In-Editor session from the shell (needs the editor open with its MCP server).
 
-  pie.py start                       start PIE in a floating window and wait for the battle to begin
+  pie.py start [wait] [--menu]       start PIE in a floating window and start a match (sr.StartMatch); with --menu
+                                     stay on the main menu instead
   pie.py stop
   pie.py run "<cmd>" ["<cmd>" ...]   write console commands to Saved/SRCommands.txt (the game polls it), wait for pickup
   pie.py shot <name> [X Y [zoom]]    optionally move the camera, let the image settle, save Saved/Screenshots/SR/<name>.png
@@ -57,7 +58,11 @@ def main(a):
         return 0
     if a[0] == "start":
         print(mcp("StartPIE", {"options": {"bSimulate": False, "playMode": "PlayMode_InEditorFloating", "warmupSeconds": 2.0}})[:300])
-        time.sleep(float(a[1]) if len(a) > 1 else 4.0)
+        rest = [x for x in a[1:] if x != "--menu"]
+        time.sleep(float(rest[0]) if rest else 4.0)
+        if "--menu" not in a:                    # the game opens on its main menu: tests want the battle
+            run(["sr.StartMatch"])
+            time.sleep(1.0)
     elif a[0] == "stop":
         print(mcp("StopPIE")[:200])
     elif a[0] == "run":

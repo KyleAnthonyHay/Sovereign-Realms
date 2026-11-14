@@ -268,6 +268,7 @@ void ASRBuilding::SpawnRecruit(ESRUnitType Type)
 	const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Out.Y, Out.X));
 
 	ASRUnit* Unit = Battle->SpawnUnit(Type, Team, Gate2D, Yaw, 0.f);
+	Battle->NoteRecruit(Team);
 	if (!Unit) { return; }
 
 	// Step clear of the gate, then round the buildings to the rally point. Recruits fan out a little so a batch does

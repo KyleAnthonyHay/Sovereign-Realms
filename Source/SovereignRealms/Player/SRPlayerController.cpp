@@ -15,6 +15,7 @@
 #include "Buildings/SRPlacementPreview.h"
 #include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
+#include "Battle/SRGameFlowSubsystem.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
@@ -47,7 +48,7 @@ void ASRPlayerController::BeginPlay()
 		if (UEnhancedInputLocalPlayerSubsystem* Input = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
 		{
 			BuildInput();
-			Input->AddMappingContext(MappingContext, 0);
+			Input->AddMappingContext(bMenuInput ? MenuContext : MappingContext, 0);
 		}
 	}
 }
@@ -75,7 +76,7 @@ void ASRPlayerController::BuildInput()
 	KeyAAction = MakeAction(TEXT("IA_KeyA"), EInputActionValueType::Boolean);
 	KeySAction = MakeAction(TEXT("IA_KeyS"), EInputActionValueType::Boolean);
 	RecenterAction = MakeAction(TEXT("IA_Recenter"), EInputActionValueType::Boolean);
-	ResetAction = MakeAction(TEXT("IA_ResetBattle"), EInputActionValueType::Boolean);
+	HelpAction = MakeAction(TEXT("IA_Help"), EInputActionValueType::Boolean);
 	for (int32 i = 0; i < 6; ++i)
 	{
 		GroupActions[i] = MakeAction(*FString::Printf(TEXT("IA_Platoon%d"), i + 1), EInputActionValueType::Boolean);
@@ -113,7 +114,14 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(KeySAction, EKeys::S);
 	MappingContext->MapKey(RecenterAction, EKeys::SpaceBar);
 	MappingContext->MapKey(RecenterAction, EKeys::Home);
-	MappingContext->MapKey(ResetAction, EKeys::R);
+	MappingContext->MapKey(HelpAction, EKeys::F1);
+
+	// While a menu is up: the mouse, Esc and F1 only.
+	MenuContext = NewObject<UInputMappingContext>(this, TEXT("IMC_SovereignMenu"));
+	MenuContext->MapKey(SelectAction, EKeys::LeftMouseButton);
+	MenuContext->MapKey(CommandAction, EKeys::RightMouseButton);
+	MenuContext->MapKey(CancelAction, EKeys::Escape);
+	MenuContext->MapKey(HelpAction, EKeys::F1);
 	const FKey Digits[6] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
 	for (int32 i = 0; i < 6; ++i) { MappingContext->MapKey(GroupActions[i], Digits[i]); }
 	MappingContext->MapKey(BuildActions[0], EKeys::Z);
@@ -153,7 +161,7 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(KeySAction, ETriggerEvent::Started, this, &ASRPlayerController::OnKeySPressed);
 	Input->BindAction(KeySAction, ETriggerEvent::Completed, this, &ASRPlayerController::OnKeySReleased);
 	Input->BindAction(RecenterAction, ETriggerEvent::Started, this, &ASRPlayerController::OnRecenter);
-	Input->BindAction(ResetAction, ETriggerEvent::Started, this, &ASRPlayerController::OnResetBattle);
+	Input->BindAction(HelpAction, ETriggerEvent::Started, this, &ASRPlayerController::OnHelp);
 	Input->BindAction(GroupActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup1);
 	Input->BindAction(GroupActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup2);
 	Input->BindAction(GroupActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup3);
@@ -191,7 +199,7 @@ void ASRPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	UpdateHover();
-	if (bPlacing) { UpdatePlacement(); }
+	if (bPlacing && !bMenuInput) { UpdatePlacement(); }
 
 	if (ASRCameraPawn* Camera = GetCameraPawn())
 	{
@@ -205,6 +213,14 @@ FVector2D ASRPlayerController::ComputePanInput()
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	FVector2D Pan = FVector2D::ZeroVector;
+
+	if (const USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this); Flow && Flow->IsModal())
+	{
+		// Main menu: a slow drift in a wide circle over the realm. Any other menu: the camera rests.
+		if (Flow->GetState() != ESRGameState::MainMenu) { return Pan; }
+		const float Angle = float(GetWorld()->GetRealTimeSeconds()) * 0.06f;
+		return FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * 0.016f;
+	}
 
 	if (const UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(InputComponent))
 	{
@@ -324,16 +340,38 @@ void ASRPlayerController::OnRecenter()
 	RecenterOnSelection();
 }
 
-void ASRPlayerController::OnResetBattle()
+void ASRPlayerController::OnHelp()
+{
+	if (ASRHUD* HUD = Cast<ASRHUD>(GetHUD())) { HUD->ToggleLegend(); }
+}
+
+void ASRPlayerController::OnEscapeUnhandled()
+{
+	if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this)) { Flow->SetPaused(true); }
+}
+
+void ASRPlayerController::ResetForNewMatch()
 {
 	ClearSelection();
 	SelectBuilding(nullptr);
+	CancelPlacement();
 	bAttackMoveArmed = false;
-	Battle->ResetBattle();
-	if (ASRCameraPawn* Camera = GetCameraPawn())
-	{
-		Camera->FocusOn(USRFeelSettings::Get().PlayerStart, false);
-	}
+	bSelectDown = bBoxSelecting = false;
+}
+
+void ASRPlayerController::SetMenuInput(bool bMenu)
+{
+	if (bMenuInput == bMenu) { return; }
+	bMenuInput = bMenu;
+	// whatever was half done with the mouse or the tap-or-hold keys ends here
+	bSelectDown = bBoxSelecting = false;
+	bKeyADown = bKeySDown = false;
+	if (ASRCameraPawn* Camera = GetCameraPawn()) { Camera->EndDragPan(); }
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	UEnhancedInputLocalPlayerSubsystem* Input = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+	if (!Input || !MappingContext) { return; }
+	Input->RemoveMappingContext(bMenu ? MappingContext : MenuContext);
+	Input->AddMappingContext(bMenu ? MenuContext : MappingContext, 0);
 }
 
 // ---------------------------------------------------------- mouse: selection
@@ -343,9 +381,11 @@ void ASRPlayerController::OnSelectPressed()
 	FVector2D Mouse;
 	if (!GetCursorScreenPos(Mouse)) { return; }
 
+	// The interface sits over the world: a press on a panel (or anywhere, while a menu is up) is for it alone.
+	if (ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && HUD->OnMousePress(Mouse, false)) { return; }
+
 	if (bPlacing)
 	{
-		if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && HUD->IsOverPanel(Mouse)) { return; }
 		TryPlace();
 		return;
 	}
@@ -362,18 +402,6 @@ void ASRPlayerController::OnSelectPressed()
 		}
 		if (!IsShiftDown()) { bAttackMoveArmed = false; }
 		return;
-	}
-
-	// The command panel sits over the world: a click on it is for the panel, never a selection.
-	if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()))
-	{
-		const int32 Button = HUD->RecruitButtonAt(Mouse);
-		if (Button >= 0)
-		{
-			RecruitHotkey(Button == 1 ? ESRUnitType::Archer : ESRUnitType::Shieldbearer);
-			return;
-		}
-		if (HUD->IsOverPanel(Mouse)) { return; }
 	}
 
 	bSelectDown = true;
@@ -457,6 +485,9 @@ void ASRPlayerController::OnSelectReleased()
 
 void ASRPlayerController::OnCommandPressed()
 {
+	FVector2D Mouse;
+	if (ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && GetCursorScreenPos(Mouse) && HUD->OnMousePress(Mouse, true)) { return; }
+
 	if (bPlacing)
 	{
 		CancelPlacement(); // right-click drops the building you were about to place
@@ -470,9 +501,6 @@ void ASRPlayerController::OnCommandPressed()
 
 	FVector Origin, Dir;
 	if (!GetCursorRay(Origin, Dir)) { return; }
-
-	FVector2D Mouse;
-	if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && GetCursorScreenPos(Mouse) && HUD->IsOverPanel(Mouse)) { return; }
 
 	// With the player's castle selected, right-click plants its rally point.
 	if (ASRBuilding* Castle = SelectedBuilding.Get(); Castle && Castle->IsCastle() && Castle->Team == ESRTeam::Player)
@@ -677,6 +705,10 @@ void ASRPlayerController::UpdateHover()
 	if (HoveredBuilding.IsValid()) { HoveredBuilding->SetHovered(false); }
 	HoveredBuilding = nullptr;
 
+	// Nothing in the world is under the cursor while it is on the interface.
+	FVector2D Cursor;
+	if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && !bBoxSelecting && GetCursorScreenPos(Cursor) && HUD->IsOverUI(Cursor)) { return; }
+
 	if (bBoxSelecting)
 	{
 		// Live preview of what the box will grab.
@@ -689,9 +721,6 @@ void ASRPlayerController::UpdateHover()
 		}
 		return;
 	}
-
-	FVector2D Mouse;
-	if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && GetCursorScreenPos(Mouse) && HUD->IsOverPanel(Mouse)) { return; }
 
 	if (ASRUnit* Unit = PickUnitUnderCursor())
 	{
@@ -951,6 +980,8 @@ void ASRPlayerController::TryPlace()
 
 void ASRPlayerController::OnCancel()
 {
+	// An open overlay or menu screen closes first.
+	if (ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && HUD->OnEscape()) { return; }
 	if (bPlacing) { CancelPlacement(); return; }
 	if (bAttackMoveArmed) { bAttackMoveArmed = false; return; }
 	if (Selection.Num() > 0 || SelectedBuilding.IsValid()) { ClearSelection(); SelectBuilding(nullptr); return; }

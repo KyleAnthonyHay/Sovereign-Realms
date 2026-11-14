@@ -1174,9 +1174,15 @@ def finish_splat(X, Y, R, moss, dry):
 
 
 # ============================================================================================ preview
-def write_preview(splat, path):
+def write_preview(splat, path, minimap=0):
+    """The annotated planning preview, or (minimap = N) the HUD's N x N minimap base: exactly the +/-BOUND play
+    square, +X up and +Y right like the game camera, terrain, water, woods and rocks only (the HUD draws buildings,
+    troops and veins live on top). Imported as /Game/SR/Textures/T_MinimapBase."""
     x0, x1, y0, y1 = -BOUND - 1600, BOUND + 4000, -BOUND - 3000, BOUND + 3000
     scale = 0.04
+    if minimap:
+        x0, x1, y0, y1 = -BOUND, BOUND, -BOUND, BOUND
+        scale = minimap / (2.0 * BOUND)
     w, h = int((y1 - y0) * scale), int((x1 - x0) * scale)
     xs = x1 - (np.arange(h) + 0.5) / scale
     ys = y0 + (np.arange(w) + 0.5) / scale
@@ -1194,7 +1200,7 @@ def write_preview(splat, path):
     col = np.array([96, 112, 52], np.float32) * (1 - sp[..., 1:2] * 0.3) + np.array([40, 30, 0], np.float32) * sp[..., 2:3]
     col = col * (1 - sp[..., 0:1]) + np.array([150, 120, 85], np.float32) * sp[..., 0:1]
     col = col * (0.75 + np.clip(z, 0, 900)[..., None] / 900.0 * 0.9) * sp[..., 3:4]
-    zs = hm(Xg - 14, Yg + 14)                                  # cheap relief
+    zs = hm(Xg - (60 if minimap else 14), Yg + (60 if minimap else 14))   # cheap relief
     col = np.where((zs > z + 5)[..., None], col * 0.55, np.where((zs < z - 5)[..., None], col * 1.25, col))
     col = np.where((z < -1)[..., None], np.array([40, 90, 100], np.float32), col)
     img = Image.fromarray(np.clip(col, 0, 255).astype(np.uint8))
@@ -1203,17 +1209,24 @@ def write_preview(splat, path):
     def P(x, y):
         return ((y - y0) * scale, (x1 - x) * scale)
 
-    d.rectangle([P(BOUND, -BOUND), P(-BOUND, BOUND)], outline=(255, 255, 255))
+    if not minimap:
+        d.rectangle([P(BOUND, -BOUND), P(-BOUND, BOUND)], outline=(255, 255, 255))
+    k = scale / 0.04
     for mesh, lst in INSTANCES.items():
         if mesh.startswith("SM_Conifer"):
             for x, y, z, yaw, s in lst:
                 cx, cy = P(x, y)
-                d.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], fill=(25, 60, 30), outline=(10, 30, 15))
+                r = max(7 * k, 1.0)
+                d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(25, 60, 30), outline=(10, 30, 15) if not minimap else None)
         elif mesh.startswith("SM_Rock"):
             for x, y, z, yaw, s in lst:
                 cx, cy = P(x, y)
-                rr = 2 if "_S" in mesh else (5 if "_M" in mesh else 9)
-                d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=(150, 145, 130))
+                rr = (2 if "_S" in mesh else (5 if "_M" in mesh else 9)) * k
+                if rr >= 0.8:
+                    d.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=(150, 145, 130))
+    if minimap:
+        img.save(path)
+        return
     for b in BLOCKERS:
         cx, cy = P(b["pos"][0], b["pos"][1])
         d.rectangle([cx - 8, cy - 8, cx + 8, cy + 8], outline=(255, 60, 40))
@@ -1246,6 +1259,11 @@ def main():
 
     build_layout()
     buildings = apply_kingdoms()
+
+    if "--minimap" in sys.argv:                                # only the HUD's minimap base; nothing else is rewritten
+        write_preview(finish_splat(X, Y, R, moss, dry), os.path.join(ROOT, "SourceArt", "Textures", "T_MinimapBase.png"), minimap=512)
+        print("minimap written")
+        return
 
     # ---- meshes
     meshes = []
@@ -1322,6 +1340,7 @@ def main():
         json.dump(layout, f, separators=(",", ":"))
     os.makedirs(os.path.join(ROOT, "Saved", "WorldPreview"), exist_ok=True)
     write_preview(splat, os.path.join(ROOT, "Saved", "WorldPreview", "map.png"))
+    write_preview(splat, os.path.join(ROOT, "SourceArt", "Textures", "T_MinimapBase.png"), minimap=512)
     print("meshes %d (%d tris), tiers %d, instances %d, actors %d, blockers %d" % (
         count, tris, len(TIERS), sum(len(v) for v in INSTANCES.values()), len(ACTORS), len(BLOCKERS)))
 

@@ -668,7 +668,7 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Debug")
 	bool bLogHits = true;
 
-	/** Show the controls reminder in the top-left corner. */
+	/** Start straight in a match instead of on the title screen (also: the -SRSkipMenu switch, or sr.StartMatch). */
 	UPROPERTY(EditAnywhere, Config, Category = "Debug")
-	bool bShowControlsHint = true;
+	bool bSkipMainMenu = false;
 };

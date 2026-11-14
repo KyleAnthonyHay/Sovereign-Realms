@@ -35,10 +35,16 @@ struct FInputActionValue;
  *   Z / X / C                                        build a Farm / Gold Mine / Watchtower (LMB place, Shift keeps
  *                                                    placing, RMB or Esc cancels)
  *   Delete                                           pull down the selected building while it is still being built
- *   R                                                reset the battle
+ *   Esc                                              cancel placement / attack-move, clear the selection, then pause
+ *   F1                                               the controls overlay
  *   LMB on a building                                select it (info panel; the castle shows its recruit commands)
  *   Q / E, or the panel buttons, castle selected     recruit a Shieldbearer / an Archer
  *   RMB, castle selected                             set the rally point
+ *   Minimap: LMB (drag) moves the camera, RMB orders the selection there
+ *
+ * The interface (ASRHUD) sees every mouse press first (OnSelectPressed / OnCommandPressed ask ASRHUD::OnMousePress),
+ * so a click on a panel never reaches the world. While a menu is up (USRGameFlowSubsystem::IsModal) the game mapping
+ * context is swapped for a tiny menu one (mouse buttons, Esc, F1): no hotkey, order or camera input gets through.
  */
 UCLASS()
 class SOVEREIGNREALMS_API ASRPlayerController : public APlayerController
@@ -70,8 +76,19 @@ public:
 	double GetLastRecruitTime() const { return LastRecruitTime; }
 	bool WasLastRecruitAccepted() const { return bLastRecruitAccepted; }
 
-	/** Esc with nothing to cancel: the pause menu's hook (the UI overrides / binds this). */
-	virtual void OnEscapeUnhandled() {}
+	/** Esc with nothing to cancel: opens the pause menu. */
+	virtual void OnEscapeUnhandled();
+
+	// ---- Interface hooks ----
+	/** Swaps the game key bindings for the menu's (mouse buttons, Esc, F1) and back; drops any half-made drag. */
+	void SetMenuInput(bool bMenu);
+	/** Nothing selected, nothing in hand: called when a match starts or the main menu opens. */
+	void ResetForNewMatch();
+	/** The command buttons of the selection panel (same as the A / F / G / Delete keys). */
+	void ArmAttackMoveCommand() { ArmAttackMove(); }
+	void CycleFormationCommand() { OnCycleFormation(); }
+	void CycleStanceCommand() { OnCycleStance(); }
+	void CancelConstructionCommand() { OnDeleteBuilding(); }
 
 	// ---- Building placement ----
 	void BeginPlacement(ESRBuildingType Type);
@@ -135,7 +152,7 @@ private:
 	void OnKeySPressed();
 	void OnKeySReleased();
 	void OnRecenter();
-	void OnResetBattle();
+	void OnHelp();
 	void OnGroupKey(int32 Index) { PlatoonKey(Index); }
 	void OnGroup1() { OnGroupKey(0); }
 	void OnGroup2() { OnGroupKey(1); }
@@ -168,7 +185,9 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> KeyAAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> KeySAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RecenterAction;
-	UPROPERTY(Transient) TObjectPtr<UInputAction> ResetAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> HelpAction;
+	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MenuContext;
+	bool bMenuInput = false;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> GroupActions[6];
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildActions[3];
 	UPROPERTY(Transient) TObjectPtr<UInputAction> HoldAction;

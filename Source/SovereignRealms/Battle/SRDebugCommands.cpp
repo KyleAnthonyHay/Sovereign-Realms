@@ -9,6 +9,7 @@
 #include "Battle/SRAISubsystem.h"
 #include "Battle/SRGridSubsystem.h"
 #include "Battle/SRPlatoonSubsystem.h"
+#include "Battle/SRGameFlowSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "Buildings/SRBuilding.h"
 #include "Player/SRPlayerController.h"
@@ -22,6 +23,8 @@
 #include "InputKeyEventArgs.h"
 #include "TimerManager.h"
 #include "Misc/Paths.h"
+#include "Engine/GameViewportClient.h"
+#include "Widgets/SWindow.h"
 
 namespace
 {
@@ -365,6 +368,61 @@ namespace
 			if (!PC || Args.Num() == 0) { return; }
 			if (Args[0] == TEXT("off")) { PC->CancelPlacement(); return; }
 			PC->BeginPlacement(Args[0] == TEXT("mine") ? ESRBuildingType::Mine : (Args[0] == TEXT("tower") ? ESRBuildingType::Tower : ESRBuildingType::Farm));
+		}));
+
+	// ---- game flow: the menus, for scripted tests ----
+	FAutoConsoleCommandWithWorldAndArgs CmdStartMatch(TEXT("sr.StartMatch"), TEXT("sr.StartMatch [0=easy|1=normal|2=hard]: start a match now, skipping the menus (keeps the difficulty if none is given)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->StartMatch(Args.Num() > 0 ? FCString::Atoi(*Args[0]) : -1); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdMenu(TEXT("sr.Menu"), TEXT("sr.Menu <main|play>: go to the main menu, or start a match."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World);
+			if (!Flow) { return; }
+			if (Args.Num() > 0 && Args[0].Equals(TEXT("play"), ESearchCase::IgnoreCase)) { Flow->StartMatch(); }
+			else { Flow->EnterMainMenu(); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPause(TEXT("sr.Pause"), TEXT("sr.Pause [0|1]: pause (pause menu) or resume the match."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->SetPaused(Args.Num() == 0 || Args[0] != TEXT("0")); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdKillCastle(TEXT("sr.KillCastle"), TEXT("sr.KillCastle <enemy|player>: bring a castle down (ends the match: victory / defeat screen)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
+			const bool bPlayer = Args.Num() > 0 && Args[0].Equals(TEXT("player"), ESearchCase::IgnoreCase);
+			if (ASRBuilding* Castle = Economy ? Economy->GetCastle(bPlayer ? ESRTeam::Player : ESRTeam::Enemy) : nullptr) { Castle->ReceiveDamage(1.0e9f, nullptr); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdWindowSize(TEXT("sr.WindowSize"), TEXT("sr.WindowSize W H: resize the game window so the view is W x H pixels (interface scaling tests; r.SetRes does nothing in a PIE window)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UGameViewportClient* Client = World ? World->GetGameViewport() : nullptr;
+			const TSharedPtr<SWindow> Window = Client ? Client->GetWindow() : nullptr;
+			if (!Window.IsValid() || !Client->Viewport || Args.Num() < 2) { return; }
+			// keep the window's own chrome (title bar): grow or shrink by the difference to the current view
+			const FVector2D Chrome = Window->GetSizeInScreen() - FVector2D(Client->Viewport->GetSizeXY());
+			Window->Resize(FVector2D(FCString::Atof(*Args[0]), FCString::Atof(*Args[1])) + Chrome);
+			UE_LOG(LogSovereign, Log, TEXT("sr.WindowSize %s x %s"), *Args[0], *Args[1]);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdAlert(TEXT("sr.Alert"), TEXT("sr.Alert <attack|lost|done|wave|pop|info> [X Y]: push a test alert (optionally at a world position, which pings the minimap)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
+			if (!Economy || Args.Num() == 0) { return; }
+			static const TCHAR* Names[] = { TEXT("attack"), TEXT("lost"), TEXT("done"), TEXT("wave"), TEXT("pop"), TEXT("info") };
+			static const TCHAR* Texts[] = { TEXT("Your Farm is under attack!"), TEXT("Farm destroyed"), TEXT("Farm completed"), TEXT("The enemy marches on your realm!"), TEXT("Housing is full: build farms"), TEXT("A message") };
+			int32 Kind = 5;
+			for (int32 i = 0; i < 6; ++i) { if (Args[0].Equals(Names[i], ESearchCase::IgnoreCase)) { Kind = i; } }
+			const FVector2D At(Args.Num() > 2 ? FCString::Atof(*Args[1]) : 0.f, Args.Num() > 2 ? FCString::Atof(*Args[2]) : 0.f);
+			Economy->PushAlert(ESRAlertKind(Kind), FText::FromString(Texts[Kind]), Args.Num() > 2 ? &At : nullptr);
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdPlatoon(TEXT("sr.Platoon"), TEXT("sr.Platoon <n> [assign|select|stance|formation]: platoon n (1-based) from / to the selection."),
