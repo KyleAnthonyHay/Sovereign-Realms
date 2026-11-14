@@ -216,6 +216,11 @@ private:
 	void StepMarchSounds(float Dt);
 	struct FMarchVoice { TWeakObjectPtr<class UAudioComponent> Comp; FVector Pos = FVector::ZeroVector; FVector Want = FVector::ZeroVector; float Gain = 1.f; bool bSeen = false; };
 	TArray<FMarchVoice> MarchVoices;
+	/** The roar of a big fight near the camera: louder with more troops engaged, following the fight's middle. */
+	void StepBattleRoar(float Dt);
+	TWeakObjectPtr<class UAudioComponent> RoarComp;
+	FVector RoarPos = FVector::ZeroVector, RoarWant = FVector::ZeroVector;
+	float RoarClock = 0.f;
 	float MarchClock = 0.f;
 	void RebuildBuckets();
 

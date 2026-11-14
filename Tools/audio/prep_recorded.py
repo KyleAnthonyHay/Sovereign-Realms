@@ -17,7 +17,21 @@ venv: Tools/.venv/bin/python Tools/audio/prep_recorded.py, then import (Tools/ue
   marching.wav         -> S_MarchLoop                        (twelve steady seconds - twelve paces - cross-faded)
   catapult_break.wav   -> S_CatapultBreak                    (a catapult destroyed: timber bursting apart)
   hammer_nail.wav      -> S_BuildHammer, S_BuildHammer_2..5  (its five blows, one take each; replaces the synthesised one)
-Uses macOS afconvert to read the 24-bit / 96 kHz / stereo originals.
+
+CC0 sounds found online (SourceArt/Audio/Recorded/cc0, sources in its CREDITS.md):
+  impactBell_heavy     -> S_BellCastle      (selecting the castle)
+  sheep, birds         -> S_Sheep, S_Birds  (the farm: selecting it, and its life)
+  impactMining         -> S_Mining          (selecting a mine)
+  creak1-3             -> S_Creak           (watchtower; the catapult's arm, pitched down)
+  drawKnife1-3         -> S_BladeDraw       (selecting the barracks)
+  blacksmith, anvil    -> S_Anvil           (the barracks' armourer at work)
+  impactPlank_medium   -> S_TargetThunk     (the archery range: arrows into the butts)
+  saw (cut in strokes), chop -> S_Woodwork  (the siege workshop; sites going up)
+  impactWood_heavy + impactSoft_heavy -> S_StoneImpact (a catapult stone landing)
+  crowd                -> S_BattleLoop      (the roar over a big fight)
+  wind_excerpt         -> S_WindLoop        (the high wind when zoomed far out)
+
+Uses macOS afconvert to read the originals (24-bit / 96 kHz / stereo wav, ogg, flac) and soundfile to load them.
 """
 import os
 import subprocess
@@ -25,6 +39,7 @@ import tempfile
 import wave
 
 import numpy as np
+import soundfile as sf
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC = os.path.join(ROOT, "SourceArt", "Audio", "Recorded")
@@ -35,8 +50,8 @@ SR = 48000
 def read(name):
     tmp = os.path.join(tempfile.mkdtemp(), "x.wav")
     subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@%d" % SR, "-c", "1", os.path.join(SRC, name), tmp], check=True)
-    with wave.open(tmp) as w:
-        return np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64) / 32768.0
+    a, _ = sf.read(tmp)
+    return a if a.ndim == 1 else a.mean(axis=1)
 
 
 def trim(x, floor_db=-55.0):
@@ -109,6 +124,64 @@ def fire_loop(x, seconds=6.0, grains=46, seed=7):
     return out
 
 
+def cc0(name):
+    return read(os.path.join("cc0", name))
+
+
+def takes(base, clips, peak=0.85):
+    for k, c in enumerate(clips):
+        write(base if k == 0 else "%s_%d" % (base, k + 1), c, peak=peak)
+
+
+def loudest(x, seconds, count):
+    """The count loudest non-overlapping windows of x, faded at both ends."""
+    n = int(seconds * SR)
+    hop = n // 4
+    scores = sorted(((np.sqrt(np.mean(x[i:i + n] ** 2)), i) for i in range(0, len(x) - n, hop)), reverse=True)
+    picked = []
+    for _, i in scores:
+        if all(abs(i - j) >= n for j in picked):
+            picked.append(i)
+        if len(picked) == count:
+            break
+    f = int(0.08 * SR)
+    out = []
+    for i in sorted(picked):
+        c = x[i:i + n].copy()
+        c[:f] *= np.linspace(0, 1, f)
+        c[-f:] *= np.linspace(1, 0, f)
+        out.append(c)
+    return out
+
+
+def main_cc0():
+    takes("BellCastle", [trim(cc0("impactBell_heavy_00%d.ogg" % k)) for k in (0, 1)], peak=0.8)
+    takes("Sheep", [trim(cc0("sheep.flac"))])
+    takes("Birds", loudest(cc0("birds.ogg"), 1.6, 3), peak=0.6)
+    takes("Mining", [trim(cc0("impactMining_00%d.ogg" % k)) for k in range(5)])
+    takes("Creak", [trim(cc0("creak%d.ogg" % k)) for k in (1, 2, 3)], peak=0.8)
+    takes("BladeDraw", [trim(cc0("drawKnife%d.ogg" % k)) for k in (1, 2, 3)], peak=0.8)
+    takes("Anvil", [trim(cc0("blacksmith.wav")), trim(cc0("anvil.ogg")[: int(1.6 * SR)])], peak=0.75)
+    takes("TargetThunk", [trim(cc0("impactPlank_medium_00%d.ogg" % k)) for k in range(5)])
+    saw = cc0("saw.ogg")
+    strokes = [saw[int(a * SR): int((a + 1.1) * SR)].copy() for a in (0.3, 1.5, 2.7, 3.9)]
+    for c in strokes:
+        f = int(0.06 * SR)
+        c[:f] *= np.linspace(0, 1, f)
+        c[-f:] *= np.linspace(1, 0, f)
+    takes("Woodwork", strokes + [trim(cc0("chop.ogg"))], peak=0.75)
+    stones = []
+    for k in range(5):
+        a, b = trim(cc0("impactWood_heavy_00%d.ogg" % k)), trim(cc0("impactSoft_heavy_00%d.ogg" % k))
+        m = np.zeros(max(len(a), len(b)))
+        m[:len(a)] += a / max(np.abs(a).max(), 1e-6)
+        m[:len(b)] += 0.8 * b / max(np.abs(b).max(), 1e-6)
+        stones.append(m)
+    takes("StoneImpact", stones, peak=0.9)
+    write("BattleLoop", loop(cc0("crowd.ogg"), 1.0, 26.0, 0.6), peak=0.7)
+    write("WindLoop", loop(cc0("wind_excerpt.wav"), 0.5, 23.5, 1.5), peak=0.7)
+
+
 def main():
     write("BowRelease", trim(read("bow_release_1.wav")))
     write("BowRelease_2", trim(read("bow_release_2.wav")))
@@ -131,3 +204,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    main_cc0()

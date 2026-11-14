@@ -50,6 +50,19 @@ enum class ESRSound : uint8
 	FireCrackle,   // a flare-up of the fire
 	MarchLoop,     // a body of foot troops on the move (looping, one per group)
 	HorseNeigh,    // a rider leaves the stable, a charge lands
+	// CC0 sounds (SourceArt/Audio/Recorded/cc0): each building's voice and life, siege, battle and wind
+	BellCastle,    // the castle selected
+	Sheep,         // the farm
+	Birds,         // the farm's life
+	Mining,        // a mine selected
+	Creak,         // timber: the watchtower; the catapult's arm (pitched down)
+	BladeDraw,     // the barracks selected
+	Anvil,         // the barracks' armourer at work
+	TargetThunk,   // the archery range: arrows into the butts
+	Woodwork,      // the siege workshop sawing and chopping; a site going up
+	StoneImpact,   // a catapult stone lands
+	BattleLoop,    // the roar over a big fight (looping)
+	WindLoop,      // high wind when zoomed far out (looping, not positioned)
 	Count UMETA(Hidden)
 };
 
@@ -110,9 +123,11 @@ private:
 	TArray<TWeakObjectPtr<UAudioComponent>> Loops;
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> AmbientComp;
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> MusicComp;
+	UPROPERTY(Transient) TObjectPtr<UAudioComponent> WindComp;
 
 	float LastPlayed[int32(ESRSound::Count)] = {};
 	float VoiceLoad[int32(ESRSound::Count)] = {};
 	bool bLoaded = false;
 	FVector Listener = FVector::ZeroVector;
+	float WindVolume = 0.f;
 };

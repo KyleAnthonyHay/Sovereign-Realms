@@ -565,7 +565,12 @@ void ASRUnit::BeginSwing()
 	PhaseTime = 0.f;
 	// a blade (or a rider's sword) cuts the air as the blow comes in
 	const FSRUnitStats& S = Stats();
-	if (!S.bRanged && !S.bBuilder)
+	if (S.bStoneProjectile)
+	{
+		// the arm is winched back: timber groans
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::Creak, SimPos + FVector(0.f, 0.f, 120.f), 1.3f, 0.6f); }
+	}
+	else if (!S.bRanged && !S.bBuilder)
 	{
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::SwordSwing, SimPos + FVector(0.f, 0.f, 100.f), 1.f, UnitType == ESRUnitType::Horseman ? 0.85f : 1.f); }
 	}

@@ -265,7 +265,12 @@ private:
 	void StopFireSound(float Fade);
 	TWeakObjectPtr<class UAudioComponent> FireSound;
 	float FireRetry = 0.f;
-	float CrackleClock = 0.f;     // -1 = not worked out yet (a saved game): asked of the economy on first need
+	float CrackleClock = 0.f;
+	float LifeClock = 0.f;
+	/** Its own voice when the player selects it (a bell for the castle, a baa for the farm, ...). */
+	void PlayVoice();
+	/** Its life, now and then, heard close by (the farm's sheep and birds, the armourer's anvil, the range's targets...). */
+	void StepLife(float Dt);     // -1 = not worked out yet (a saved game): asked of the economy on first need
 	int32 BuildersWorking = 0;
 	void CountBuilders();
 	void StepRepair(float Dt);

@@ -62,6 +62,18 @@ namespace
 		{ TEXT("FireCrackle"),     0.40f,  2.f, 0.55f, 0.10f, 3000.f },
 		{ TEXT("MarchLoop"),       0.00f,  3.f, 0.50f, 0.00f, 3200.f },
 		{ TEXT("HorseNeigh"),      1.50f,  2.f, 0.70f, 0.08f, 4000.f },
+		{ TEXT("BellCastle"),      0.50f,  1.f, 0.60f, 0.03f, 6000.f },
+		{ TEXT("Sheep"),           1.00f,  2.f, 0.50f, 0.08f, 2200.f },
+		{ TEXT("Birds"),           1.00f,  2.f, 0.35f, 0.05f, 2000.f },
+		{ TEXT("Mining"),          0.12f,  3.f, 0.50f, 0.08f, 2500.f },
+		{ TEXT("Creak"),           0.30f,  3.f, 0.50f, 0.08f, 1800.f },
+		{ TEXT("BladeDraw"),       0.30f,  2.f, 0.60f, 0.06f, 2500.f },
+		{ TEXT("Anvil"),           0.30f,  2.f, 0.45f, 0.05f, 2600.f },
+		{ TEXT("TargetThunk"),     0.15f,  3.f, 0.55f, 0.08f, 2200.f },
+		{ TEXT("Woodwork"),        0.30f,  3.f, 0.45f, 0.05f, 2400.f },
+		{ TEXT("StoneImpact"),     0.05f,  4.f, 0.90f, 0.08f, 5000.f },
+		{ TEXT("BattleLoop"),      0.00f,  1.f, 0.45f, 0.00f, 4500.f },
+		{ TEXT("WindLoop"),        0.00f,  1.f, 0.50f, 0.00f, 0.f },
 	};
 }
 
@@ -143,6 +155,15 @@ void USRAudioSubsystem::Tick(float DeltaTime)
 			const ASRCameraPawn* Camera = Cast<ASRCameraPawn>(Pawn);
 			const float Height = 400.f + (Camera ? Camera->GetZoomDistance() * USRFeelSettings::Get().ListenerZoomHeight : 300.f);
 			Listener = Pawn->GetActorLocation() + FVector(0.f, 0.f, Height);
+			// up high the wind takes over: it rises over the last part of the zoom range
+			if (WindComp && Camera)
+			{
+				const USRFeelSettings& F = USRFeelSettings::Get();
+				const float Out = FMath::GetMappedRangeValueClamped(FVector2f(F.ZoomDistanceMin + (F.ZoomDistanceMax - F.ZoomDistanceMin) * 0.4f, F.ZoomDistanceMax), FVector2f(0.f, 1.f), Camera->GetZoomDistance());
+				const float Want = F.MasterVolume * F.AmbientVolume * Rules[int32(ESRSound::WindLoop)].Volume * Out * Out * (3.f - 2.f * Out);
+				WindVolume = FMath::FInterpTo(WindVolume, Want, DeltaTime, 2.f);
+				WindComp->SetVolumeMultiplier(FMath::Max(WindVolume, 0.0001f));
+			}
 			PC->SetAudioListenerOverride(nullptr, Listener, FRotator(0.f, USRFeelSettings::Get().CameraYaw, 0.f));
 		}
 	}
@@ -185,8 +206,9 @@ UAudioComponent* USRAudioSubsystem::PlayAttached(ESRSound Sound, USceneComponent
 	const float Vol = F.MasterVolume * F.EffectsVolume * R.Volume * VolumeScale;
 	const float Pitch = PitchScale * (1.f + FMath::FRandRange(-R.PitchJitter, R.PitchJitter));
 	UAudioComponent* C = UGameplayStatics::SpawnSoundAttached(S, AttachTo, NAME_None, FVector::ZeroVector, EAttachLocation::KeepRelativeOffset, false,
-		FadeIn > 0.f ? 0.f : Vol, Pitch, 0.f, Attenuations[I], nullptr, true);   // a loop is destroyed once faded out
-	if (C && FadeIn > 0.f) { C->FadeIn(FadeIn, Vol); }
+		Vol, Pitch, 0.f, Attenuations[I], nullptr, true);   // a loop is destroyed once faded out
+	// the fade works on its own fader (0 -> 1) on top of the volume multiplier
+	if (C && FadeIn > 0.f) { C->FadeIn(FadeIn, 1.f); }
 	if (C && bLoop) { Loops.Add(C); }
 	return C;
 }
@@ -229,9 +251,9 @@ UAudioComponent* USRAudioSubsystem::PlayLoopAt(ESRSound Sound, const FVector& Lo
 	for (const TWeakObjectPtr<UAudioComponent>& C : Loops) { Running += (C.IsValid() && C->Sound && C->IsPlaying() && Variants[I].Contains(C->Sound.Get())) ? 1 : 0; }
 	if (Running >= FMath::RoundToInt(Rules[I].MaxLoad)) { return nullptr; }
 	const float Vol = BaseVolume(Sound) * VolumeScale;
-	UAudioComponent* C = UGameplayStatics::SpawnSoundAtLocation(this, S, Location, FRotator::ZeroRotator, FadeIn > 0.f ? 0.f : Vol, 1.f,
-		FMath::FRandRange(0.f, 6.f), Attenuations[I], nullptr, true);
-	if (C && FadeIn > 0.f) { C->FadeIn(FadeIn, Vol, FMath::FRandRange(0.f, 6.f)); }
+	const float Start = FMath::FRandRange(0.f, 6.f);   // not every loop from its first second
+	UAudioComponent* C = UGameplayStatics::SpawnSoundAtLocation(this, S, Location, FRotator::ZeroRotator, Vol, 1.f, Start, Attenuations[I], nullptr, true);
+	if (C && FadeIn > 0.f) { C->FadeIn(FadeIn, 1.f, Start); }
 	if (C) { Loops.Add(C); }
 	return C;
 }
@@ -269,6 +291,11 @@ void USRAudioSubsystem::StartLoops()
 		AmbientComp = UGameplayStatics::CreateSound2D(this, GetSound(ESRSound::AmbientLoop), F.MasterVolume * F.AmbientVolume, 1.f, 0.f, nullptr, true, false);
 		if (AmbientComp) { AmbientComp->FadeIn(2.5f, F.MasterVolume * F.AmbientVolume); }
 	}
+	if (!WindComp && GetSound(ESRSound::WindLoop))
+	{
+		WindComp = UGameplayStatics::CreateSound2D(this, GetSound(ESRSound::WindLoop), 0.f, 1.f, 0.f, nullptr, true, false);
+		if (WindComp) { WindComp->Play(FMath::FRandRange(0.f, 20.f)); }
+	}
 	if (!MusicComp && GetSound(ESRSound::MusicLoop))
 	{
 		MusicComp = UGameplayStatics::CreateSound2D(this, GetSound(ESRSound::MusicLoop), F.MasterVolume * F.MusicVolume, 1.f, 0.f, nullptr, true, false);
@@ -280,6 +307,7 @@ void USRAudioSubsystem::StopLoops()
 {
 	if (AmbientComp) { AmbientComp->FadeOut(1.f, 0.f); AmbientComp = nullptr; }
 	if (MusicComp) { MusicComp->FadeOut(1.5f, 0.f); MusicComp = nullptr; }
+	if (WindComp) { WindComp->FadeOut(1.f, 0.f); WindComp = nullptr; }
 }
 
 void USRAudioSubsystem::RefreshLoopVolumes()

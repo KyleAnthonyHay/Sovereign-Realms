@@ -256,6 +256,6 @@ void ASRProjectile::Burst()
 		}
 	}
 	if (Battle) { Battle->AddCameraTrauma(AimPoint, 0.25f); }
-	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildingHit, AimPoint, 1.f); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::StoneImpact, AimPoint, 1.f); }
 	if (Battle) { Battle->SpawnFX(ESRFX::Impact, AimPoint); }
 }

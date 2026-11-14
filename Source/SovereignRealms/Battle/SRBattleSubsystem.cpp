@@ -268,6 +268,7 @@ void USRBattleSubsystem::StepFrame(float Dt)
 	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Step(Dt); }
 	StepPatrols(Dt);
 	StepMarchSounds(Dt);
+	StepBattleRoar(Dt);
 
 	// 1) think + move  2) push overlapping bodies apart  3) pose and place the actors
 	RebuildBuckets();
@@ -489,6 +490,46 @@ void USRBattleSubsystem::StepMarchSounds(float Dt)
 	}
 }
 
+void USRBattleSubsystem::StepBattleRoar(float Dt)
+{
+	USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this);
+	if (!Audio) { return; }
+	RoarPos = FMath::VInterpTo(RoarPos, RoarWant, Dt, 2.f);
+	if (UAudioComponent* C = RoarComp.Get()) { C->SetWorldLocation(RoarPos); }
+	RoarClock -= Dt;
+	if (RoarClock > 0.f) { return; }
+	RoarClock = 0.5f;
+	// troops fighting (seen) within earshot of the camera's focus
+	const FVector Ear = Audio->GetListener();
+	const float Reach = Audio->RangeOf(ESRSound::BattleLoop);
+	FVector Sum = FVector::ZeroVector;
+	int32 N = 0;
+	for (const ASRUnit* U : Units)
+	{
+		if (!U || !U->IsActive() || !U->IsEngaged() || !IsVisibleToPlayer(U)) { continue; }
+		if (FVector::DistSquared2D(U->GetSimPos(), Ear) > FMath::Square(Reach)) { continue; }
+		Sum += U->GetSimPos();
+		++N;
+	}
+	UAudioComponent* C = RoarComp.Get();
+	if (N < 6)
+	{
+		if (C) { C->FadeOut(2.f, 0.f); RoarComp = nullptr; }   // the fight dies down
+		return;
+	}
+	RoarWant = Sum / N + FVector(0.f, 0.f, 80.f);
+	const float Gain = FMath::Clamp((N - 4) / 16.f, 0.2f, 1.f);   // a skirmish murmurs, a battle roars
+	if (!C)
+	{
+		RoarPos = RoarWant;
+		RoarComp = Audio->PlayLoopAt(ESRSound::BattleLoop, RoarWant, Gain, 1.5f);
+	}
+	else
+	{
+		C->SetVolumeMultiplier(Audio->BaseVolume(ESRSound::BattleLoop) * Gain);
+	}
+}
+
 void USRBattleSubsystem::ResetBattle()
 {
 	UWorld* World = GetWorld();
@@ -497,6 +538,8 @@ void USRBattleSubsystem::ResetBattle()
 	Patrols.Reset();
 	for (FMarchVoice& V : MarchVoices) { if (UAudioComponent* C = V.Comp.Get()) { C->FadeOut(0.5f, 0.f); } }
 	MarchVoices.Reset();
+	if (UAudioComponent* C = RoarComp.Get()) { C->FadeOut(0.5f, 0.f); }
+	RoarComp = nullptr;
 	for (ASRUnit* Unit : Units) { if (Unit) { Unit->Destroy(); } }
 	for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->Destroy(); } }
 	for (AActor* Obstacle : Obstacles) { if (Obstacle) { Obstacle->Destroy(); } }

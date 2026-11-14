@@ -206,6 +206,15 @@ catapult bursts apart (recorded timber break). A Builder's mallet blows are reco
 seen) tramp with a recorded march loop that follows the group's middle and grows with its size (the nearest three
 groups; it fades in as they set off and away as they halt). A rider neighs leaving the stable and, often, as its
 charge lands. A troop falls with one of four recorded grunts.
+
+**Building voices and life** (CC0 sounds from Kenney and OpenGameArt; sources in
+`SourceArt/Audio/Recorded/cc0/CREDITS.md`): selecting one of your buildings plays its voice: the Citadel a heavy bell,
+a farm a sheep, a mine a pick on rock, a watchtower creaking timber, the barracks a drawn blade, the archery range an
+arrow into a target, the stable a neigh, the siege workshop a saw. Standing buildings have life every 6-15 s, heard
+close by: the farm's sheep and birds, the barracks' armourer at the anvil, the range's targets, the stable's snorts,
+the workshop's sawing and chopping, the odd creak of a tower. Sites going up mix saw strokes into the hammering. A
+catapult's arm groans as it winds back and its stone lands with a heavy crash. Six or more troops fighting near the
+camera raise a battle roar (a crowd loop) that follows the fight and swells with it. Zoomed far out, the wind rises.
 `USRAudioSubsystem` plays them positioned from a listener over the camera's focus (so screen-left is heard on the
 left) that rises with the zoom (`ListenerZoomHeight`), with a minimum gap and voice cap per sound so a big melee stays
 a clatter. **Hearing range**: every positioned sound has its own range (pickaxe 18 m, arrow whistle 20 m, sword 32 m,

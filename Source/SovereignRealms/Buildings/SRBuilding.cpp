@@ -179,6 +179,7 @@ void ASRBuilding::StepBuilding(float Dt)
 	StepRepair(Dt);
 	StepUpgrade(Dt);
 	StepFireSound(Dt);
+	StepLife(Dt);
 
 	if (BuildingType == ESRBuildingType::Farm || BuildingType == ESRBuildingType::Mine)
 	{
@@ -468,7 +469,7 @@ bool ASRBuilding::RayHit(const FVector& Origin, const FVector& Dir, float& OutAl
 
 void ASRBuilding::SetSelected(bool bInSelected)
 {
-	if (bInSelected && !bSelected) { RingPop = 1.f; }
+	if (bInSelected && !bSelected) { RingPop = 1.f; if (Team == ESRTeam::Player && !bDestroyed) { PlayVoice(); } }
 	bSelected = bInSelected;
 }
 
@@ -679,6 +680,48 @@ void ASRBuilding::CountBuilders()
 	BuildersWorking = FMath::Min(BuildersWorking, USRFeelSettings::Get().BuildersPerBuilding);
 }
 
+void ASRBuilding::PlayVoice()
+{
+	USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this);
+	if (!Audio) { return; }
+	ESRSound Voice = ESRSound::Select;
+	switch (BuildingType)
+	{
+	case ESRBuildingType::Castle: Voice = ESRSound::BellCastle; break;
+	case ESRBuildingType::Farm: Voice = ESRSound::Sheep; break;
+	case ESRBuildingType::Mine: Voice = ESRSound::Mining; break;
+	case ESRBuildingType::Tower: Voice = ESRSound::Creak; break;
+	case ESRBuildingType::Barracks: Voice = ESRSound::BladeDraw; break;
+	case ESRBuildingType::Range: Voice = ESRSound::TargetThunk; break;
+	case ESRBuildingType::Stable: Voice = ESRSound::HorseNeigh; break;
+	case ESRBuildingType::Workshop: Voice = ESRSound::Woodwork; break;
+	}
+	if (IsUnderConstruction()) { Voice = ESRSound::BuildHammer; }
+	Audio->PlayAt(Voice, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 200.f));
+}
+
+void ASRBuilding::StepLife(float Dt)
+{
+	LifeClock -= Dt;
+	if (LifeClock > 0.f) { return; }
+	LifeClock = FMath::FRandRange(6.f, 15.f);
+	if (State != ESRBuildingState::Complete || IsHidden()) { return; }   // a burning building has other sounds
+	ESRSound Life = ESRSound::Count;
+	switch (BuildingType)
+	{
+	case ESRBuildingType::Farm: Life = FMath::RandBool() ? ESRSound::Sheep : ESRSound::Birds; break;
+	case ESRBuildingType::Tower: if (FMath::FRand() < 0.4f) { Life = ESRSound::Creak; } break;
+	case ESRBuildingType::Barracks: Life = ESRSound::Anvil; break;
+	case ESRBuildingType::Range: Life = ESRSound::TargetThunk; break;
+	case ESRBuildingType::Stable: Life = ESRSound::HorseSnort; break;
+	case ESRBuildingType::Workshop: Life = ESRSound::Woodwork; break;
+	default: break;   // the castle and the mine have their own life (archers on the walls, the miners' picks)
+	}
+	if (Life == ESRSound::Count) { return; }
+	const FVector2D Yard = ToWorld2D(FVector2D(GateOffset.X, GateOffset.Y) * 0.6f);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(Life, FVector(Yard, GetActorLocation().Z + 120.f), FMath::FRandRange(0.5f, 0.85f)); }
+}
+
 void ASRBuilding::StepFireSound(float Dt)
 {
 	USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this);
@@ -742,7 +785,9 @@ void ASRBuilding::StepConstruction(float Dt)
 	if (HammerClock <= 0.f && BuildersWorking == 0)
 	{
 		HammerClock = FMath::FRandRange(0.45f, 0.8f);
-		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 150.f)); }
+		const bool bSaw = FMath::FRand() < 0.18f;   // a saw stroke now and then among the hammer blows
+		if (bSaw) { HammerClock += 0.8f; }
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(bSaw ? ESRSound::Woodwork : ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 150.f)); }
 	}
 
 	if (BuildProgress >= 1.f)
