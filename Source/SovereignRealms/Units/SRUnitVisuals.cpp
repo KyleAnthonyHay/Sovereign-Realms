@@ -339,6 +339,12 @@ void ASRUnit::StepVisual(float Dt)
 			const int32 Frames = Sheet.Anim(ESRSpriteAnim::Attack).Frames;
 			Anim = ESRSpriteAnim::Attack;
 			Frame = FMath::FloorToInt(FMath::Frac(WorkClock / FMath::Max(S.AttackInterval, 0.2f)) * Frames) % Frames;
+			// the mallet lands: the blow is heard right where this builder works
+			if (Frame == Sheet.StrikeFrame && LastWorkFrame != Frame)
+			{
+				if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, SimPos + FVector(GetFacingDir() * 40.f, 90.f)); }
+			}
+			LastWorkFrame = Frame;
 		}
 		else if (HitAnimClock < F.HitAnimTime && !bWalking)
 		{

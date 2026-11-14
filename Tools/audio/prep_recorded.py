@@ -8,6 +8,7 @@ venv: Tools/.venv/bin/python Tools/audio/prep_recorded.py, then import (Tools/ue
   sword_swing.wav      -> S_SwordSwing                       (melee wind-up)
   horse_snort_1/2.wav  -> S_HorseSnort, S_HorseSnort_2
   horse_pass_by.wav    -> S_GallopLoop                       (its loudest two seconds, cross-faded into a loop)
+  hammer_nail.wav      -> S_BuildHammer, S_BuildHammer_2..5  (its five blows, one take each; replaces the synthesised one)
 Uses macOS afconvert to read the 24-bit / 96 kHz / stereo originals.
 """
 import os
@@ -61,6 +62,18 @@ def loop(x, start, end, xfade):
     return np.concatenate([head, seg[f:-f]])
 
 
+def split_hits(x, threshold=0.5, min_gap=0.15):
+    """Cuts a run of separate blows into one clip per blow (each from its onset to just before the next)."""
+    env = np.abs(x)
+    onsets, last = [], -min_gap * SR
+    for i in np.nonzero(env > threshold)[0]:
+        if i - last >= min_gap * SR:
+            onsets.append(i)
+        last = i if i - last >= min_gap * SR else last
+    cuts = onsets + [len(x)]
+    return [x[max(cuts[k] - int(0.002 * SR), 0): cuts[k + 1] - int(0.01 * SR)] for k in range(len(onsets))]
+
+
 def main():
     write("BowRelease", trim(read("bow_release_1.wav")))
     write("BowRelease_2", trim(read("bow_release_2.wav")))
@@ -69,6 +82,8 @@ def main():
     write("HorseSnort", trim(read("horse_snort_1.wav")), peak=0.8)
     write("HorseSnort_2", trim(read("horse_snort_2.wav")), peak=0.8)
     write("GallopLoop", loop(read("horse_pass_by.wav"), 0.95, 3.15, 0.25), peak=0.8)
+    for k, hit in enumerate(split_hits(read("hammer_nail.wav"))[:6]):
+        write("BuildHammer" if k == 0 else "BuildHammer_%d" % (k + 1), trim(hit), peak=0.8)
 
 
 if __name__ == "__main__":

@@ -41,7 +41,7 @@ namespace
 		{ TEXT("CoinPayout"),      0.08f,  2.f, 0.55f, 0.06f, 3000.f },
 		{ TEXT("GrainPayout"),     0.08f,  2.f, 0.50f, 0.06f, 3000.f },
 		{ TEXT("BuildPlace"),      0.10f,  2.f, 0.80f, 0.04f, 4500.f },
-		{ TEXT("BuildHammer"),     0.18f,  3.f, 0.45f, 0.12f, 2800.f },
+		{ TEXT("BuildHammer"),     0.18f,  3.f, 0.40f, 0.08f, 2800.f },
 		{ TEXT("BuildComplete"),   0.30f,  1.f, 0.75f, 0.00f, 0.f },
 		{ TEXT("RecruitReady"),    0.30f,  1.f, 0.60f, 0.03f, 4500.f },
 		{ TEXT("BuildingHit"),     0.06f,  3.f, 0.55f, 0.10f, 4000.f },

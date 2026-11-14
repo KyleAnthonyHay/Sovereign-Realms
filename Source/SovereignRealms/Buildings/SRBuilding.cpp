@@ -621,7 +621,7 @@ void ASRBuilding::StepUpgrade(float Dt)
 	const float Rate = 1.f + F.BuilderExtraSpeed * BuildersWorking;
 	UpgradeProgress += Rate * Dt / FMath::Max(F.CastleUpgradeTime, 1.f);
 	HammerClock -= Dt;
-	if (HammerClock <= 0.f)
+	if (HammerClock <= 0.f && BuildersWorking == 0)
 	{
 		HammerClock = FMath::FRandRange(0.6f, 1.0f);
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 250.f)); }
@@ -678,12 +678,7 @@ void ASRBuilding::StepRepair(float Dt)
 	if (BuildersWorking <= 0 || Health >= GetMaxHealth()) { return; }
 	Health = FMath::Min(GetMaxHealth(), Health + BuildersWorking * F.BuilderRepairPerSecond * Dt);
 	if (State == ESRBuildingState::Damaged && GetHealthFrac() >= F.DamagedStateFraction) { SetState(ESRBuildingState::Complete); }
-	HammerClock -= Dt;
-	if (HammerClock <= 0.f)
-	{
-		HammerClock = FMath::FRandRange(0.5f, 0.9f);
-		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 150.f)); }
-	}
+	// (the builders' own mallet blows are the sound of the repair)
 }
 
 void ASRBuilding::StepConstruction(float Dt)
@@ -701,7 +696,7 @@ void ASRBuilding::StepConstruction(float Dt)
 	ApplyBuildVisual();
 
 	HammerClock -= Dt;
-	if (HammerClock <= 0.f)
+	if (HammerClock <= 0.f && BuildersWorking == 0)
 	{
 		HammerClock = FMath::FRandRange(0.45f, 0.8f);
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 150.f)); }

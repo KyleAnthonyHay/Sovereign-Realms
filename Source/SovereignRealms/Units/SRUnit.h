@@ -216,6 +216,7 @@ private:
 	bool bWorking = false;
 	float WorkClock = 0.f;
 	float JobSearchTimer = 0.f;
+	int32 LastWorkFrame = -1;
 
 	// combat
 	float Health = 1.f;
