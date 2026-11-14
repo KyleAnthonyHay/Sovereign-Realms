@@ -1,9 +1,9 @@
 # Visual contract — command & combat slice
 
 What the gameplay code builds, what it expects from art, and where the seam is.
-Gameplay owns behaviour and greybox shapes. The visual pass owns lighting, fog,
-post-process, terrain shape and materials, and can restyle everything below
-without touching C++.
+Gameplay owns behaviour and decides which sprite frame a troop shows. The visual
+pass owns lighting, fog, post-process, terrain shape, materials and the sprite
+sheets, and can restyle everything below without touching C++.
 
 ## Map and game mode
 
@@ -71,8 +71,8 @@ half in cool sky fill.
 
 | Class | What it is |
 | --- | --- |
-| `ASRUnit` | One troop. Origin at the feet. `VisualRoot` scene component carries all animated parts. |
-| `ASRProjectile` | Arrow, about 80 cm long (oversized for readability). |
+| `ASRUnit` | One troop: a pixel-art sprite on a camera-facing card, a hidden shadow card and a contact-shadow decal. Origin at the feet. See "Troop sprites". |
+| `ASRProjectile` | Arrow: a 44 x 9 px sprite, 77 cm long (oversized for readability), on a card along the flight direction. |
 | `ASROrderMarker` | Ground-click marker (two rings), lives 0.55 s. |
 | `USRRingComponent` | Flat procedural ring used for selection, hover, target flash and order markers. |
 | `ASRCameraPawn`, `ASRPlayerController`, `ASRHUD`, `ASRGameMode` | Camera, input, overlay (box select, health bars), rules. |
@@ -80,30 +80,29 @@ half in cool sky fill.
 
 ## Material contract
 
-Every greybox part gets its own dynamic material instance. The parent material
-is looked up **once per play session**:
+Parent materials are looked up **once per play session** by `USRBattleSubsystem`.
 
-### Units, arrows, test blocks: `/Game/SR/Materials/M_UnitGreybox`
+### Troops and arrows: `/Game/SR/Materials/M_UnitSprite` (+ `M_UnitSpriteShadow`, `M_UnitBlob`)
 
-If the asset exists it is used; otherwise the code falls back to
-`/Engine/BasicShapes/BasicShapeMaterial`.
+Described under "Troop sprites" below. Units and arrows own **no material instances**: the frame, team
+colour, hit flash and fade reach the material as custom primitive data on the card component.
 
-| Parameter | Type | Meaning |
+| Slot | Parameter | Meaning |
 | --- | --- | --- |
-| `Color` | vector | Albedo of this part (team colour for team-coloured parts, otherwise skin / steel / bronze / leather / wood). |
-| `TeamColor` | vector | The owning team's colour, set on **every** part, for accents, rim light or outlines. |
-| `HitFlash` | scalar 0..1 | 1 on the frame the unit is hit, fading to 0 over `HitFlashTime` (0.16 s). Blend toward white / emissive. |
-| `Fade` | scalar 1..0 | 1 while alive; goes 1 to 0 while a corpse sinks. Use for opacity / dither fade. |
+| 0 | `FrameCol` | Sheet column of the cell to show (0-23). |
+| 1 | `FrameRow` | Sheet row (0-15): animation block row + facing index. |
+| 2 | `HitFlash` | 1 on the frame the unit is hit, fading to 0 over `HitFlashTime` (0.16 s). The whole sprite goes toward `HitFlashColor`. |
+| 3 | `Fade` | 1 while alive; 1 to 0 while a corpse dissolves (dithered; the shadow dissolves texel by texel). |
+| 4-6 | `TeamColor` | The owning team's colour, applied through the sheet's team mask. |
 
-Notes:
+If the sprite assets are missing the log says so (`Missing sprite asset ...`) and units draw with the engine
+default material: run the import and material steps of the pipeline.
 
-- With the **fallback** material there is no `HitFlash` input, so the code fakes
-  the flash by lerping `Color` toward `HitFlashColor`. With `M_UnitGreybox`
-  present the code leaves `Color` alone and only drives `HitFlash`, so the
-  material must implement the flash itself.
-- The fallback is opaque, so `Fade` does nothing and corpses just sink.
-- Parts are engine basic shapes (`/Engine/BasicShapes/Cube|Sphere|Cylinder|Cone`),
-  one material slot each, all casting shadows.
+### Test blocks: `/Game/SR/Materials/M_UnitGreybox`
+
+Only the three optional grey obstacle blocks use it now (**Sovereign Feel > Scenario > Spawn Greybox
+Obstacles**, off). Parameters `Color`, `TeamColor`, `HitFlash`, `Fade`; falls back to
+`/Engine/BasicShapes/BasicShapeMaterial` if the asset is missing.
 
 ### Rings and markers: `/Game/SR/Materials/M_SelectionRing`
 
@@ -121,21 +120,18 @@ translucent or emissive material will read much better than the lit fallback.
 Rings are flat, so on steep slopes they clip; a decal-based ring would be the
 upgrade path.
 
-## Silhouettes (for when real meshes replace the greybox)
+## Troops
 
-- **Shieldbearer**: 44 cm radius, about 142 cm tall. Broad team-coloured torso,
-  steel helm with a fore-and-aft crest, large round shield on the left arm,
-  upright blade on the right (the tallest point, reads from above).
-- **Archer**: 36 cm radius, about 134 cm tall. Slim leather body, team-coloured
-  cape disc and pointed hood, tall bow in the left hand, quiver on the back.
+- **Shieldbearer**: 44 cm radius, about 142 cm tall. Bronze helmet with a team plume, scale cuirass, large
+  round team-coloured shield on the left arm, short bronze sword.
+- **Archer**: 36 cm radius, about 134 cm tall. Team headcloth, linen tunic with a team sash and hem, tall
+  bow in the left hand, quiver on the back.
 - Team colours: player `(0.05, 0.22, 0.80)`, enemy `(0.72, 0.07, 0.05)` (linear),
   editable under Sovereign Feel > Scenario.
 
-Animation is procedural (transforms on `VisualRoot` and `WeaponPivot`): spawn
-pop-in, breathing, walk bob / lean / waddle, melee raise-swing-lunge, bow
-draw-release, hit squash, order-acknowledge hop, death topple and sink.
-Damage lands on the frame the swing reaches full extension (melee) or when the
-arrow arrives (ranged).
+Both are sprite sheets rendered from Blender (`SourceArt/Characters/SPRITE_SPEC.md`). Radii, body heights,
+ring sizes and health bars are gameplay values and did not change with the art. How the sheets are shown and
+animated is under "Troop sprites" below.
 
 ## Visual pass (what exists now)
 
@@ -152,6 +148,9 @@ haze with light shafts past the focus point, bloom, and a tilt-shift band of sha
 | 3. Import | `Tools/ue_py.py Tools/import_world_assets.py` | `/Game/SR/Textures`, `/Game/SR/Meshes` (re-imports in place, deletes meshes the generator dropped). |
 | 4. Materials | `Tools/ue_py.py Tools/build_visual_materials.py` | `/Game/SR/Materials` (graphs cleared and rebuilt in place, references survive). |
 | 5. Level | `Tools/ue_py.py Tools/build_battlefield_visuals.py` | Rebuilds the outliner folders `Terrain`, `Props`, `Water`, `Lighting`. Anything placed by hand belongs in another folder. |
+| 6. Troop sheets | `Tools/blender/build_all.sh` | `SourceArt/Characters/<name>_color / _teammask / _normal.png`, `<name>.json` (see `SPRITE_SPEC.md`). |
+| 7. Cards, arrow | `Tools/.venv/bin/python Tools/sprites/gen_sprite_cards.py` | `SourceArt/Characters/cards.gltf` (`SM_UnitCard`, `SM_ArrowCard`), `arrow_color.png`, `arrow_teammask.png`. |
+| 8. Sprite import | `Tools/ue_py.py Tools/import_character_sprites.py` | `/Game/SR/Characters` (textures and the two card meshes). Then step 4 again, or only its sprite part: `ONLY=['sprite']`. |
 
 The offline steps need `python3 -m venv Tools/.venv && Tools/.venv/bin/pip install pillow numpy scipy shapely mapbox-earcut`
 (the venv is git-ignored). The editor steps need `Tools/ue_py_bridge.py` running in the editor (see its
@@ -161,8 +160,9 @@ edit `LOOK` in `Tools/build_battlefield_visuals.py` and run it with `PARTS=['lig
 
 ### Texel density: 4 cm per texel, everywhere
 
-Every world texture is authored for **4 cm per texel** (a 128 px tile covers 512 cm; a 140 cm troop is 35
-texels tall). The troop sprites are 4 cm per pixel, so they match one-to-one. Meshes carry UV0 in
+Every world texture is authored for **4 cm per texel** (a 128 px tile covers 512 cm). The troop sprites are
+finer, **1.75 cm per pixel** (a troop is about 80 px tall), because they are what the player looks at; at the
+default zoom a sprite pixel is about two screen pixels and a world texel about four and a half. Meshes carry UV0 in
 **centimetres** (or the material uses world XY) and the material divides by `TexelSize`, so there is no
 per-mesh UV scale to get wrong. Do not scale props non-uniformly, and keep uniform scale near 1.
 
@@ -189,7 +189,10 @@ does not crawl when the camera pans. `*_N` normal maps and `T_Splat` are linear 
 
 | Asset | Used for | Parameters worth knowing |
 | --- | --- | --- |
-| `M_UnitGreybox` | Units, arrows (contract above, unchanged) | Contract: `Color`, `TeamColor`, `HitFlash`, `Fade`. Look: `HitFlashColor`, `HitFlashGlow`, `RimStrength` / `RimExponent`, `ShadowLift`, `PaintSaturation`, `Roughness`. Masked with a temporal dither on `Fade`. |
+| `M_UnitSprite` + `MI_UnitSprite_Shieldbearer`, `MI_UnitSprite_Archer`, `MI_ArrowSprite` | Troop and arrow cards | See "Troop sprites". Per unit (custom primitive data): `FrameCol`, `FrameRow`, `HitFlash`, `Fade`, `TeamColor`. Sheet: `SpriteSheet`, `TeamMask`, `NormalSheet`, `SheetCells`, `CellPx`, `PivotV`. Look: `Relight`, `BakedLight`, `NormalStrength`, `EdgeSoftness`, `HitFlashColor` (these five are driven from Sovereign Feel at run time), `HitFlashMix`, `HitFlashGlow`. Billboard: `Billboard` (0 for the arrow), `GroundLift`. |
+| `M_UnitSpriteShadow` + `MI_UnitSpriteShadow_Shieldbearer`, `MI_UnitSpriteShadow_Archer`, `MI_ArrowShadow` | The hidden shadow cards | Masked, unlit: only the frame's alpha, point sampled. Same custom primitive data slots (`FrameCol`, `FrameRow`, `Fade`). |
+| `M_UnitBlob` | Contact shadow decal under each troop | Deferred decal, three flat bands on a grid of `Cells`; `Color`, `Strength`; the per-unit strength arrives in the decal colour's alpha. |
+| `M_UnitGreybox` | The optional grey test blocks only | `Color`, `TeamColor`, `HitFlash`, `Fade`; look: `HitFlashColor`, `HitFlashGlow`, `RimStrength` / `RimExponent`, `ShadowLift`, `PaintSaturation`, `Roughness`. |
 | `M_SelectionRing` | Rings and order markers (contract above, unchanged) | Contract: `Color`, `Opacity`. Look: `Glow`, `DarkEdge`. Unlit, translucent, two-sided, drawn after depth of field so it stays sharp; depth-tested. |
 | `M_Terrain` | Every `SM_T_*` mesh | Top faces (normal Z > 0.5): world-aligned turf, blended to moss / straw / earth / road stones texel by texel from `T_Splat` (never a soft blend). Side faces: `T_Cliff` by UV0 (u = distance along the outline, v = depth below the turf, cm), the turf lip over the top (`LipFraction` of the wall at most), darker at the foot (`FootShade`). World-space normal output from the `_N` maps (`NormalStrength`). `TexelSize`, `SplatRect`, `StoneRoughness`, `LipShadow`, `TintRange`, `Tint`. |
 | `M_Prop` + `MI_Prop_Rock`, `MI_Prop_Sandstone`, `MI_Prop_Wood`, `MI_Prop_Log` | Boulders, standing stones, the ruin, fences, logs, stumps | UV0 in cm. `TexA` / `SizeA` where vertex colour B = 1, `TexB` / `SizeB` where it is 0 (log: ends / bark). `Moss` + `MossSlope`: turf on up-facing facets, a whole facet at a time. `FootShade`, `Tint`, `Roughness`. |
@@ -246,10 +249,19 @@ Owned by `ASRCameraPawn::ApplyView`.
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `bTiltShift` | on | Master switch. Off removes the most expensive post pass. |
-| `TiltShiftBlur` | 1.6 | Blur when fully zoomed out: blur-disc diameter, in % of screen width, of something infinitely far behind the focus point. Low, so the whole tactical view reads. |
-| `TiltShiftBlurZoomedIn` | 1.5 | Same, fully zoomed in. With the close, low camera this gives strongly blurred foreground props and distance around a sharp band through the focus point. |
+| `TiltShiftBlur` | 0.6 | Blur when fully zoomed out: blur-disc diameter, in % of screen width, of something infinitely far behind the focus point. Low, so the whole tactical view reads. |
+| `TiltShiftBlurZoomedIn` | 0.8 | Same, fully zoomed in. Props between the camera and the bottom of the frame and the hazy distance still blur; the ground the troops stand on does not. |
 | `TiltShiftFocusOffset` | 0 | Moves the sharp plane nearer (-) or farther (+) than the focus point, cm. |
+| `TiltShiftFocusBias` | -0.04 | The same as a fraction of the camera-to-focus distance, so it holds at every zoom. Slightly nearer shares the sharp band with the troops in the bottom of the frame. |
 | `TiltShiftFstop` | 1.4 | Bokeh shape only. |
+
+These were 1.6 / 1.5 with no bias before the troops became sprites: at those values a troop in the bottom third of
+the default view was blurred by a disc about nine screen pixels wide, three to four of its own sprite pixels. The
+blur of a point at distance D is `Blur * |1 - S / D|` for focus distance S, so it grows fast toward the camera
+and levels off behind the focus point. At the current values a troop at the bottom edge of the default view is
+blurred by about 3 px (one sprite pixel) and one at the top edge by about 5 px, while a prop at half the focus
+distance still gets about 12 px and the far backdrop about 10 px plus the haze (computed from the formula for a
+1920 px wide view, then checked by eye in captures).
 
 The focal distance is the camera-to-focus distance, so the sharp band follows pan and zoom. Do not add
 depth-of-field overrides to a post-process volume: the camera's values win.
@@ -259,17 +271,116 @@ depth-of-field overrides to a post-process volume: the camera's values win.
 `r.VolumetricFog.GridPixelSize=6`, `r.VolumetricFog.GridSizeZ=128`, `r.VolumetricFog.HistoryWeight=0.92`.
 Do not set both `r.DOF.Scatter.*Compositing` cvars to 0: that removes the depth-of-field pass altogether.
 
-### For the troop sprites
+## Troop sprites (what is implemented)
 
-- **Density**: 4 cm per texel in the world; a sprite drawn at 4 cm per pixel needs no scaling.
-- **Camera**: yaw 0 always; pitch -30 (zoomed in) to -46 (zoomed out), -38 at the default zoom; FOV 50
-  horizontal. A card that faces -X and leans back about 38 degrees from vertical faces the default camera.
-- **Light**: key from screen left, slightly from behind the camera, 33 degrees up, warm; cool sky fill.
-  Shadows fall to screen right and a little up-screen, about 1.5 times the caster's height long.
-- **Recommended**: keep sprites in the opaque / masked pass (lit, masked, not translucent), so depth of
-  field, haze and cast shadows treat them like everything else, and give them a fixed world-space normal
-  (about halfway between up and toward the camera) so a whole sprite takes the warm key or the cool shade
-  evenly instead of shading as a flat card. Sample with the same anti-aliased texel filter (`SRPix.S`) to
-  avoid crawl. A camera-facing card is edge-on to this sun, so cast the shadow from a second, shadow-only
-  card turned to face the sun (yaw about -105), or use a blob. `M_UnitGreybox` and `M_SelectionRing` are
-  untouched and still honour the contract above.
+Source art, sheet layout and the animation rules are in `SourceArt/Characters/SPRITE_SPEC.md`. This is how
+the game shows them. Code: `Units/SRSprite.*` (sheet tables, facing), `Units/SRUnitVisuals.cpp` (state to
+frame, card placement), `USRBattleSubsystem::UpdateSpriteView` (camera and sun, once per frame).
+
+### Assets (`/Game/SR/Characters`, made by `Tools/import_character_sprites.py`)
+
+| Asset | Settings |
+| --- | --- |
+| `T_<Troop>_Color` (3840 x 2560), `T_Arrow_Color` (44 x 9) | sRGB, uncompressed BGRA8 (`UserInterface2D`), nearest, no mips, never streamed, group 2D Pixels, clamped. |
+| `T_<Troop>_TeamMask`, `T_Arrow_TeamMask` | Linear, 8-bit grey (`Grayscale`), otherwise the same. |
+| `T_<Troop>_Normal` | Linear, uncompressed BGRA8 (`VectorDisplacementmap`), **not** a normal map: BC5 would smear the pixel edges. R = screen right, G = screen down, B = toward the viewer; green is not flipped. |
+| `SM_UnitCard` | 280 x 280 cm quad in the plane X = 0, +Y = sprite right, +Z = sprite up, origin at the sprite pivot (the feet, UV v = 0.7375). Cut along the pivot row: three rows of vertices. Generated from the sheet metadata by `Tools/sprites/gen_sprite_cards.py`. |
+| `SM_ArrowCard` | 77 x 15.75 cm quad in the plane Z = 0, +X toward the arrowhead. |
+
+No mips: the sheets are not powers of two and a sprite pixel is never much smaller than a screen pixel (about
+3.8 px zoomed in, 2 at the default zoom, 1 zoomed out).
+
+### One troop on screen
+
+| Component | What it does |
+| --- | --- |
+| `SpriteCard` | `SM_UnitCard` with `MI_UnitSprite_<Troop>`, given the camera's rotation every frame, so it is parallel to the view plane and the sprite keeps its proportions anywhere on screen. Its world size is the sheet's (1.75 cm per pixel), so the figure stands at its gameplay height. Casts no shadow, receives no decals, is kept out of Lumen's scene and the distance fields. |
+| `ShadowCard` | The same mesh with `MI_UnitSpriteShadow_<Troop>`, hidden in game, `bCastHiddenShadow`. Shows the **frame as the sun sees it**: the facing row is chosen from the unit's yaw relative to the sun's yaw instead of the camera's (the sheets were rendered from 30 degrees above the horizon and the sun stands at 33, so that row is very nearly the true silhouette). |
+| `Blob` | `M_UnitBlob` decal projected straight down under the feet, for contact in shade. |
+| `Ring` | Unchanged (`USRRingComponent`). |
+
+**Depth.** A card parallel to the view plane leans back with the camera: its head would cut into a wall behind
+the unit and everything below the pivot would be under the ground. The material's world position offset slides
+each vertex along its own view ray (which does not move it on screen): the top row onto an upright plane
+through the feet, the pivot and bottom rows onto the ground, `GroundLift` (4 cm) above it. The picture is
+exactly the flat sprite; the depth is that of a standing figure with its feet, or a corpse, lying on the
+ground. Sorting against props, grass, other troops, received shadows, haze and depth of field all follow from
+that. `BoundsScale` is 2 because the offset is not in the mesh bounds.
+
+**Light.** Masked, lit, two-sided, specular 0, roughness 1. Colour = sheet colour with the team tint
+(`lerp(c, c * TeamColor * 2, mask)`), then the hit flash. `Relight` splits it: `colour * Relight` is the base
+colour, lit by the sun, sky and Lumen and shadowed by the world; `colour * (1 - Relight) * BakedLight` is
+emissive, the baked look that is always there. The normal is the sheet's per-pixel normal turned into world
+space through the view axes, blended toward one even normal (halfway between up and the viewer) by
+`NormalStrength`. Tuned by eye in the level (Sovereign Feel > Visuals > Sprites): `Relight` 0.6,
+`BakedLight` 3, `NormalStrength` 0.7. In full shade a troop is clearly darker and cooler than in the sun, but
+loses less than the turf around it (the emissive share), which keeps it readable.
+
+**Sampling.** `Sheet` is sampled bilinearly at a UV snapped to texel centres, each texel edge anti-aliased over
+`EdgeSoftness` (0.5) screen pixels; mask and normal are point sampled at the texel centre. The frame's cell is
+clamped, so a neighbouring frame never bleeds in.
+
+**Shadow.** The exact caster would be the sun-view frame on a card facing the sun. Sliding every point of
+that card along the light does not change the shadow it throws on flat ground, so the card may lie in any
+plane through the feet. `USRBattleSubsystem::UpdateSpriteView` lays it in a plane leaning
+`SpriteShadowLean` (78 degrees) from upright, away from the sun. Lying that low it cannot shade the troop's
+own sprite (an upright card through the feet would darken the sprite's sun-side half) and the shadow stays
+crisp along its whole length. The price: a troop's shadow only climbs about 20 cm up a neighbour or a wall.
+The card's shadow cache invalidation is `Always`, because the silhouette changes with the frame.
+
+### Frame selection
+
+Facing row: `index = round(((FacingYaw - ViewYaw + 180) mod 360) / 45) mod 8` into S, SW, W, NW, N, NE, E, SE,
+kept until the yaw is `FacingHysteresisDeg` (8) past a boundary. Frozen at death.
+
+| State (first that applies) | Frame |
+| --- | --- |
+| dead | `death`: `floor(DeathClock / DeathAnimTime * 8)`, holding frame 7 (the corpse). The body is carried `DeathKnockDistance` along the killing blow while it falls; after `CorpseLingerTime` it dissolves over `CorpseFadeTime`. |
+| not yet active | `spawn`: `floor(P * 6)` over `SpawnPopTime`, hidden before the unit's spawn delay; a scale pop (`SpawnPopAmount`) in the first half. The unit becomes active as the last (guard) frame ends. |
+| wind-up | `attack`: the last wind-up frame whose `windup_phase_map` value is at most `PhaseTime / WindupTime`. |
+| recovery | `attack`: the same with `recovery_phase_map`. `Strike()` runs on the frame recovery begins, whose frame is the authored strike (Shieldbearer 3) or release (Archer 5) frame; hit-stop holds it. Melee adds `MeleeLungeDistance` forward, easing back. |
+| hit less than `HitAnimTime` ago, standing | `hit`: three flinch frames. Never shown over an attack or while running, and it changes nothing in the simulation. |
+| moving faster than `WalkSpeedThreshold` | `walk`: `floor(frac(distance / WalkCycleDistance) * 8)`, where distance is the ground the unit actually covered since it started moving, so the feet do not slide. Each run starts on a contact frame, alternating feet. |
+| otherwise | `idle`: `floor(AnimTime * IdleFps) mod 8`, each unit starting at a random point. |
+
+On top: hit flash, hit squash (`HitSquash`), the acknowledge hop, hit-stop. The procedural breathing, walk bob,
+lean, waddle, weapon swing and death topple are gone: the frames do that.
+
+Because the card shows a 30 degree render at any camera pitch, a point at authored height H above the feet
+appears where a world point at `H * cos(30) / cos(pitch)` would. The arrow origin (62 cm forward, 98 up, from
+`archer.json`), the aim point and the pick capsule use that; health bars sit just above the sprite's top.
+
+### Arrows
+
+`ASRProjectile` draws `T_Arrow_Color` on `SM_ArrowCard`: the card's long axis is the flight direction and it
+turns about that axis to face the camera, so the arrow foreshortens like a real shaft. `MI_ArrowSprite` is
+`M_UnitSprite` with one 44 x 9 cell, the even normal and no billboard offset; the fletching takes the team
+colour. A second, hidden card turned toward the sun casts its shadow. An arrow that misses stands in the
+ground for 1.6 s and dissolves.
+
+### Knobs (Project Settings > Game > Sovereign Feel, saved in `Config/DefaultGame.ini`)
+
+| Where | Settings |
+| --- | --- |
+| Animation | `SpawnPopTime`, `SpawnStagger`, `SpawnPopAmount`, `IdleFps`, `WalkCycleDistance`, `WalkSpeedThreshold`, `FacingHysteresisDeg`, `MeleeLungeDistance` |
+| Combat > Hit Reaction | `HitFlashTime`, `HitFlashColor`, `HitSquash`, `HitAnimTime`, `KnockbackDecayTime` |
+| Combat > Death | `DeathAnimTime`, `DeathKnockDistance`, `CorpseLingerTime`, `CorpseFadeTime` |
+| Visuals > Sprites | `SpriteRelight`, `SpriteBakedLight`, `SpriteNormalStrength`, `SpriteEdgeSoftness`, `bSpriteShadows`, `SpriteShadowLean`, `SpriteBlobStrength` |
+| Units | `WindupTime`, `RecoveryTime` per troop: the attack frames follow them |
+
+### Debug
+
+`sr.Status` logs each unit's sprite cell (`sprite=attack:3:SE`). `sr.Fan [distance]` sends every player unit
+off in its own direction, 45 degrees apart, to see all eight facings at once. `sr.ShotOn <strike|hit|death>
+<name> [type] [team]` waits for that event, freezes the battle on that frame, centres the camera on the unit,
+lets the image settle and saves `Saved/Screenshots/SR/<name>.png`; the log line names the cell on screen.
+
+### Known limits
+
+- The image is temporally anti-aliased, so a running troop is a little softer than a standing one, and the
+  frame after a sprite frame change carries a trace of the previous one.
+- The sprites are a 30 degree render shown at every pitch. At the far zoom (46 degrees) the figures stand
+  slightly more upright than the ground they are on; judged acceptable at that size, so the sheets were not
+  re-rendered (`Tools/blender/build_all.sh --elev N` if the camera changes).
+- Shadows on other troops and on walls are short (see Shadow above).
+- The sprite's below-pivot part is laid on a flat plane at the unit's ground height; on a ledge it overhangs.

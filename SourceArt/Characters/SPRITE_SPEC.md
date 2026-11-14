@@ -131,11 +131,11 @@ this formula.
 ## Scale, camera and pivot
 
 - **Elevation**: rendered from 30 degrees above the horizon. The gameplay
-  camera in `SRFeelSettings.h` is now 30 degrees zoomed in and 46 zoomed out.
+  camera in `SRFeelSettings.h` is 30 degrees zoomed in and 46 zoomed out.
   30 matches the close view exactly, where the sprite is examined, and keeps
   the face, torso and legs readable; at 40 and above the helmet top takes over
-  the figure (`previews/elevation_compare.png`). Re-render with `--elev` if
-  the final camera settles elsewhere.
+  the figure (`previews/elevation_compare.png`). Checked in the engine at the
+  far zoom and kept. Re-render with `--elev` if the camera settles elsewhere.
 - **Scale**: 1.75 cm per pixel, measured in the camera plane. A cell is a
   280 x 280 cm quad facing the camera. The figure is rendered at its true
   height, so `GetBodyHeight()` (142 and 134 cm), health bars and aim points
@@ -223,137 +223,63 @@ mirrored, so the shield stays on the left arm.
 | `gameplay_reference` | the timings and sizes read from `SRFeelSettings` when the sheet was built |
 | `palette`, `palette_size` | the ramp colours actually used, and the count |
 
-## Integration notes for the Unreal phase
+## In the game
 
-Nothing below has been run in the editor. It is the intended setup.
+Implemented. The full description of the Unreal side (assets, material, card, shadow, frame selection,
+knobs) is `Docs/VISUAL_CONTRACT.md`, "Troop sprites"; this is the short version and what the sheets must
+keep true for it to work.
 
-### Textures
+### Import
 
-| Sheet | sRGB | Compression | Other |
+```
+Tools/.venv/bin/python Tools/sprites/gen_sprite_cards.py     # card meshes sized from <name>.json, the arrow sprite
+Tools/ue_py.py Tools/import_character_sprites.py             # /Game/SR/Characters
+Tools/ue_py.py -c "ONLY=['sprite']; exec(open('<repo>/Tools/build_visual_materials.py').read())"
+```
+
+| Sheet | Asset | sRGB | Compression |
 | --- | --- | --- | --- |
-| `_color` | on | `UserInterface2D (RGBA)` | filter `Nearest`, mip gen `NoMipmaps`, group `2D Pixels (unfiltered)`, never stream |
-| `_teammask` | off | `Grayscale` or `Masks` | same filter and mip settings |
-| `_normal` | off | `UserInterface2D` or `VectorDisplacementmap` (uncompressed), not `Normalmap` | same filter and mip settings |
+| `_color` | `T_<Name>_Color` | on | `UserInterface2D` (uncompressed BGRA8) |
+| `_teammask` | `T_<Name>_TeamMask` | off | `Grayscale` |
+| `_normal` | `T_<Name>_Normal` | off | `VectorDisplacementmap` (uncompressed), not `Normalmap`; green not flipped |
 
-The sheets are not powers of two, which is fine without mips. The normal
-sheet is stored for Unreal already: red is screen right, green is screen
-down, blue is toward the camera, so do not tick Flip Green Channel. BC5
-normal compression would smear the hard pixel edges, hence uncompressed;
-sample it as a colour and expand with `* 2 - 1`.
+All nearest, no mips, never streamed, group `2D Pixels`.
 
-### Material (one master, for example `M_UnitSprite`)
+### What the code takes from the metadata
 
-Masked, two-sided, default lit, tangent-space normal on.
+`Source/SovereignRealms/Units/SRSprite.cpp` holds the numbers it needs as constants, copied from the JSON:
+block origins and frame counts, `strike_frame`, `windup_phase_map`, `recovery_phase_map`, the figure's top
+row (for health bars and picking) and `projectile_origin_cm`. `Tools/sprites/gen_sprite_cards.py` reads
+`quad_size_cm` and `pivot_uv_in_cell` for the card mesh. The material instances carry `SheetCells` (24, 16),
+`CellPx` (160, 160) and `PivotV` (0.7375). **If a re-render changes the layout, the cell size, the pivot or
+the phase maps, update those three places.** A re-render that only changes the pixels needs the import alone.
 
-| Parameter | Type | Meaning |
-| --- | --- | --- |
-| `SpriteSheet`, `TeamMask`, `NormalSheet` | textures | per troop type |
-| `Frame` | vector | x = column (0-23), y = row (0-15) |
-| `TeamColor`, `HitFlash`, `Fade` | as in `Docs/VISUAL_CONTRACT.md` | unchanged contract |
-| `Relight` | scalar, start at 0.5 | how much of the look the scene lighting may change |
-| `BakedLightScale` | scalar | brightness of the baked share, tuned once against the sun |
+### How a frame is chosen
 
-- UV: `(uv + Frame) / (24, 16)`.
-- `tinted` = the team formula above, then lerp toward `HitFlashColor` by
-  `HitFlash`.
-- Base colour = `tinted * Relight`. Emissive = `tinted * (1 - Relight) *
-  BakedLightScale`. Normal = the normal sheet. Specular 0, roughness 1.
-  With `Relight` at 0 the sprite is exactly the baked preview; raising it lets
-  the golden-hour sun, tree shadows and cloud shadows move across the figure
-  while the baked ramps keep it readable. `BakedLightScale` has to be set by
-  eye against a lit white card, because emissive is absolute and the sun is
-  not. `previews/normal_check.png` shows the 50 percent case.
-- Opacity mask: sheet alpha, multiplied by the existing dither on `Fade`.
-- Sampling: point sampling is right at integer scale. The camera zooms
-  continuously, so at fractional scale it will shimmer as units move. If that
-  shows, sample bilinearly with the UV snapped to texel centres over one
-  screen pixel:
-  `uv_px = uv * size; uv = (floor(uv_px) + 0.5 + clamp((frac(uv_px) - 0.5) / fwidth(uv_px), -0.5, 0.5)) / size`.
-  At the far zoom a sprite pixel is smaller than a screen pixel; that formula
-  degrades to plain bilinear there, which is the wanted result.
-- Drive `Frame`, `HitFlash`, `Fade` and `TeamColor` through custom primitive
-  data so all units of a type share one material.
+As specified above ("Driven by"), in this order: death, spawn, attack (wind-up or recovery), hit (standing
+only), walk, idle. Checked in the running game with `sr.ShotOn`: the frame on screen when melee damage lands
+is attack frame 3, and when the arrow spawns it is attack frame 5.
 
-### Billboard
+- Walk uses the distance the unit actually moved, one cycle per `WalkCycleDistance` (124 cm, Sovereign
+  Feel > Animation). The old `StrideLength` setting is gone; if the run cycle is re-authored for another
+  `STEP`, change `WalkCycleDistance` to four times it.
+- Death takes `DeathAnimTime` (0.67 s = 8 frames at 12 fps), replacing `DeathToppleTime`.
+- Spawn takes `SpawnPopTime` (0.38 s) for its six frames, a little faster than the 14 fps it was authored at.
+- `MeleeLungeDistance` is 12 cm on top of the 13 cm the strike frame carries.
+- The strike smear in frame 3 is kept; the game adds no slash effect of its own.
 
-- One quad per unit, 280 x 280 cm, placed so the pivot UV sits on the actor
-  origin. Give it absolute rotation and set it to the camera's rotation each
-  frame (the same for every unit). The actor still turns with `FacingYaw` for
-  gameplay; the quad never does.
-- The quad leans back with the camera, so its top is behind its feet and can
-  cut into a wall behind the unit. Pull vertices toward the camera along the
-  view ray in world position offset, in proportion to height on the quad;
-  that does not move them on screen and gives the card the depth of an
-  upright one.
-- The sprite is rendered for 30 degrees. At other pitches it is shown as it
-  is, the usual convention for sprites in a 3D scene; at the far zoom the
-  16 degree difference is not visible at that size.
+### How it is shown
 
-### Shadows
-
-The visible quad does not cast. Add a second quad with the same material and
-frame parameters, hidden in game with `bCastHiddenShadow`, standing upright
-and yawed to face the sun's horizontal direction. The sun then throws the
-silhouette of the current frame on the ground. The previews fake this with a
-sheared copy of the alpha. Keep a soft blob under the feet for contact.
-
-### Facing
-
-Camera yaw is fixed at 0, so +X is up-screen and +Y is screen right.
-
-```
-rel   = FacingYaw - CameraYaw            (degrees)
-index = round(((rel + 180) mod 360) / 45) mod 8
-```
-
-into `[S, SW, W, NW, N, NE, E, SE]`. So a unit facing +X (rel 0) uses N, the
-back view; +Y (rel 90) uses E; -X (rel 180) uses S, the front view; -Y uses W.
-Keep the current index until the yaw is 8 degrees past a boundary, so units do
-not flicker between two rows.
-
-### Animation state and frame
-
-Pick the state in this order: dead, spawning, attack (wind-up or recovery),
-hit (only while not attacking, for `HitFlashTime`), walk (speed above a small
-threshold), idle.
-
-- **spawn**: `frame = min(5, floor((SpawnClock - SpawnDelay) / SpawnPopTime * 6))`.
-  Frame 5 is the guard stance and coincides with `bActive`.
-- **idle**: `frame = floor(AnimTime * 6) mod 8`. Offset `AnimTime` per unit so
-  a group does not breathe in step.
-- **walk**: `frame = floor(frac(WalkPhase / (2 * PI)) * 8)`. `WalkPhase`
-  already advances by PI per `StrideLength` (62 cm), so one cycle is 124 cm,
-  which is the distance the cycle was authored for. If `StrideLength` changes,
-  the feet will slide; re-author `STEP` in the two `char_*.py` files instead
-  (`STEP` = `StrideLength` / 4, in metres).
-- **attack**: with `w = PhaseTime / WindupTime` during wind-up, show the last
-  wind-up frame whose `windup_phase_map` value is at most `w`; during recovery
-  the same with `recovery_phase_map` and `RecoveryTime`. `Strike()` runs when
-  the wind-up ends, so damage and the arrow spawn land on the first frame of
-  recovery, which is `strike_frame`, and hit-stop holds that pose.
-- **hit**: `frame = min(2, floor(t / HitFlashTime * 3))`.
-- **death**: `frame = min(7, floor(DeathClock * 12))`, hold frame 7. That is
-  0.67 s, longer than `DeathToppleTime` (0.42 s); either raise it or let the
-  frames run on into the corpse linger. Freeze the facing index at the moment
-  of death. Then fade with `Fade`.
-
-### Expected changes in `ASRUnit`
-
-- `BuildVisuals`: replace the greybox parts, `WeaponPivot` and `NockedArrow`
-  with the sprite quad and the shadow quad under `VisualRoot`. Keep `Ring`.
-- A small per-type table (sheets, block origins, frame counts, strike frame,
-  phase maps); every number is in the JSON.
-- `StepVisual`: choose state, frame and facing index as above and write
-  `Frame`.
-- Remove what the sprite now does itself: breathing scale, walk bob, lean and
-  waddle, weapon rotation, the death topple rotation. Keep the spawn pop-in
-  scale, the acknowledge hop, hit flash and hit-stop.
-- Melee lunge: the strike frame already carries the body about 13 cm forward
-  and the blade to 125 cm from the pivot. `MeleeLungeDistance` (30 cm) on top
-  of that is probably too much; try 10 to 15.
-- `GetMuzzleLocation`: 62 cm forward and 98 cm up for the Archer
-  (`projectile_origin_cm`).
-- `GetBodyHeight`, radii, ring sizes and health bars need no change.
+- One camera-facing 280 x 280 cm card per unit with its pivot on the actor origin. A world position offset
+  gives it the depth of an upright figure with the part below the pivot lying on the ground.
+- `M_UnitSprite`: masked, lit. `colour * Relight` is lit by the scene through the normal sheet,
+  `colour * (1 - Relight) * BakedLight` is emissive. In the level `Relight` 0.6, `BakedLight` 3,
+  `NormalStrength` 0.7 (Sovereign Feel > Visuals > Sprites).
+- Shadow: a hidden shadow-only card showing the row for the unit's yaw **relative to the sun**, because the
+  sun's 33 degree elevation is almost the 30 the sheets were rendered from. Keep the render elevation near
+  the sun's if either changes.
+- Elevation: judged in the engine at all three zooms. The 30 degree render matches the close view and still
+  reads at the 46 degree far zoom, where the figures are about 80 px tall; the sheets were not re-rendered.
 
 ## Limits
 
@@ -369,3 +295,5 @@ threshold), idle.
   elevation its bob is no longer exactly one pixel.
 - The strike smear is baked into frame 3. If the game adds its own slash
   effect, remove the `smear` primitive in `char_shieldbearer.py`.
+- In the game the image is temporally anti-aliased: a running unit is a little
+  softer than a standing one.

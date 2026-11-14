@@ -5,17 +5,18 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Common/SRTypes.h"
+#include "Units/SRSprite.h"
 #include "SRUnit.generated.h"
 
 class USRBattleSubsystem;
 class USRRingComponent;
-class UStaticMesh;
 class UStaticMeshComponent;
-class UMaterialInstanceDynamic;
+class UDecalComponent;
 
 /**
- * One troop. Greybox body built from engine basic shapes, moved by lightweight
- * steering (seek + arrive + separation) and animated procedurally with transforms.
+ * One troop: a pixel-art sprite on a camera-facing card, moved by lightweight
+ * steering (seek + arrive + separation). The sprite frame is chosen from the
+ * simulation state every frame (see SRUnitVisuals.cpp and SPRITE_SPEC.md).
  *
  * The actor origin is at the unit's feet on the ground. Units have no collision
  * components: spacing, picking and ground-following are all done with maths and
@@ -72,7 +73,16 @@ public:
 	/** Standing its ground (idle, or committed to a swing) rather than travelling. */
 	bool IsPlanted() const;
 	float GetBodyHeight() const { return UnitType == ESRUnitType::Archer ? 134.f : 142.f; }
-	FVector GetAimPoint() const { return SimPos + FVector(0.f, 0.f, GetBodyHeight() * 0.55f); }
+	/** Mid-torso of the sprite as it appears on screen: where arrows land and what box selection tests. */
+	FVector GetAimPoint() const;
+	/** A point just above the sprite's head as it appears on screen (health bars). */
+	FVector GetOverheadPoint() const;
+	/** Feet-to-head segment of the sprite as it appears on screen, for cursor picking. */
+	void GetPickSegment(FVector& OutFeet, FVector& OutHead) const;
+	/** Sprite sheet cell currently shown (for the debug status log). */
+	ESRSpriteAnim GetSpriteAnim() const { return SpriteAnim; }
+	int32 GetSpriteFrame() const { return SpriteFrame; }
+	int32 GetSpriteFacing() const { return FacingIndex; }
 	float GetHealth() const { return Health; }
 	float GetHealthFrac() const;
 	double GetLastDamagedTime() const { return LastDamagedTime; }
@@ -104,20 +114,23 @@ private:
 
 	// --- visuals (SRUnitVisuals.cpp) ---
 	void BuildVisuals();
-	UStaticMeshComponent* AddPart(UStaticMesh* Mesh, USceneComponent* Parent, const FVector& Loc, const FRotator& Rot, const FVector& Scale, const FLinearColor& Color);
 	void StepDeathVisual(float Dt);
-	void UpdateFlash(float Dt);
 	void UpdateRing(float Dt);
+	/** Writes the sheet cell, flash and fade to the cards (custom primitive data) and places them for this frame. */
+	void ApplySprite(ESRSpriteAnim Anim, int32 Frame, float Fade, const FVector& Offset, const FVector2D& CardScale);
+	void SetSpriteShown(bool bShown);
 	FVector GetMuzzleLocation() const;
 
 	UPROPERTY(VisibleAnywhere, Category = "Unit") TObjectPtr<USceneComponent> Root;
-	/** Everything that bobs, leans, squashes and topples hangs off this. */
+	/** Carries the sprite card; offset by the lunge and the acknowledge hop (local +X is the unit's facing). */
 	UPROPERTY(VisibleAnywhere, Category = "Unit") TObjectPtr<USceneComponent> VisualRoot;
-	UPROPERTY(Transient) TObjectPtr<USceneComponent> WeaponPivot;
-	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> NockedArrow;
+	/** The visible sprite: SM_UnitCard, parallel to the view plane, pivot at the feet. Never casts a shadow. */
+	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> SpriteCard;
+	/** Hidden, shadow-only copy showing the frame as the sun sees it. */
+	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> ShadowCard;
+	/** Stepped contact shadow under the feet. */
+	UPROPERTY(Transient) TObjectPtr<UDecalComponent> Blob;
 	UPROPERTY(Transient) TObjectPtr<USRRingComponent> Ring;
-	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> PartMIDs;
-	TArray<FLinearColor> PartColors;
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
 
@@ -168,11 +181,23 @@ private:
 	float RingPop = 0.f;
 	float TargetFlash = 0.f;
 	float HitFlash = 0.f;
-	float LastAppliedFlash = -1.f;
 	float Squash = 0.f;
 	float AckClock = 1000.f;
 	float AnimTime = 0.f;
-	float WalkPhase = 0.f;
-	float SmoothedSpeedFrac = 0.f;
-	float SmoothedTurnLean = 0.f;
+	float HitAnimClock = 1000.f;
+
+	// sprite state
+	ESRSpriteAnim SpriteAnim = ESRSpriteAnim::Spawn;
+	int32 SpriteFrame = 0;
+	int32 FacingIndex = 0;        // row offset for the camera
+	int32 ShadowFacingIndex = 0;  // row offset for the sun
+	bool bWalking = false;
+	bool bNextStepRight = false;
+	float WalkDistance = 0.f;     // cm travelled in the current run; drives the walk cycle
+	FVector2D LastVisualPos = FVector2D::ZeroVector;
+	bool bSpriteShown = true;
+	bool bShadowCasting = true;
+	FVector4 AppliedSpriteData = FVector4(-1.f, -1.f, -1.f, -1.f);
+	FVector4 AppliedShadowData = FVector4(-1.f, -1.f, -1.f, -1.f);
+	float AppliedBlob = -1.f;
 };

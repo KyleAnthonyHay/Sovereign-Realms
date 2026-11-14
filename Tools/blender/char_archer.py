@@ -190,7 +190,7 @@ from srkit import pose_lerp, pose_merge  # noqa: E402
 
 WRIST_L = Vector(P["wrist"])
 GRIP = FIST_L + Vector((0, -0.01, 0))
-STEP = 0.155          # ground travelled per walk frame: 8 frames = 124 cm = 2 x StrideLength (62 cm)
+STEP = 0.155          # ground travelled per walk frame: 8 frames = 124 cm = WalkCycleDistance (Sovereign Feel > Animation)
 
 
 def blank():

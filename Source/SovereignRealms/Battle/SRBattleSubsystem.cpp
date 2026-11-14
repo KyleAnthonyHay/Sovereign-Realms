@@ -11,8 +11,11 @@
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/DirectionalLight.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "UnrealClient.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
@@ -23,6 +26,23 @@
 
 namespace
 {
+	/** A sprite asset made by Tools/import_character_sprites.py / build_visual_materials.py. Missing = the pipeline has not been run. */
+	template <typename T>
+	T* LoadSpriteAsset(const TCHAR* ObjectPath)
+	{
+		T* Asset = LoadObject<T>(nullptr, ObjectPath);
+		if (!Asset)
+		{
+			UE_LOG(LogSovereign, Error, TEXT("Missing sprite asset %s: run Tools/import_character_sprites.py and Tools/build_visual_materials.py (see Docs/VISUAL_CONTRACT.md)."), ObjectPath);
+		}
+		return Asset;
+	}
+
+	UMaterialInterface* OrDefault(UMaterialInterface* Material)
+	{
+		return Material ? Material : UMaterial::GetDefaultMaterial(MD_Surface);
+	}
+
 	/** Loads a project material if the visual pass has created it, otherwise the engine fallback. */
 	UMaterialInterface* LoadContractMaterial(const TCHAR* PackagePath, const TCHAR* ObjectPath, bool& bOutIsFallback)
 	{
@@ -59,15 +79,107 @@ void USRBattleSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
-	SphereMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-	CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	ConeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cone.Cone"));
+	// Troop sprites: see Docs/VISUAL_CONTRACT.md. One dynamic instance per troop type (not per unit), so the
+	// Sovereign Feel > Visuals > Sprites look values can be tuned live; per-unit values are custom primitive data.
+	UnitCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_UnitCard.SM_UnitCard"));
+	ArrowCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_ArrowCard.SM_ArrowCard"));
+	SpriteMaterials[0] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Shieldbearer.MI_UnitSprite_Shieldbearer"))), this);
+	SpriteMaterials[1] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Archer.MI_UnitSprite_Archer"))), this);
+	SpriteShadowMaterials[0] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Shieldbearer.MI_UnitSpriteShadow_Shieldbearer")));
+	SpriteShadowMaterials[1] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Archer.MI_UnitSpriteShadow_Archer")));
+	ArrowMaterial = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_ArrowSprite.MI_ArrowSprite"))), this);
+	ArrowShadowMaterial = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_ArrowShadow.MI_ArrowShadow")));
+	BlobMaterial = LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/M_UnitBlob.M_UnitBlob"));
 
-	// Material contract: see Docs/VISUAL_CONTRACT.md.
-	bool bRingFallback = true;
-	UnitMaterial = LoadContractMaterial(TEXT("/Game/SR/Materials/M_UnitGreybox"), TEXT("/Game/SR/Materials/M_UnitGreybox.M_UnitGreybox"), bUnitMaterialIsFallback);
-	RingMaterial = LoadContractMaterial(TEXT("/Game/SR/Materials/M_SelectionRing"), TEXT("/Game/SR/Materials/M_SelectionRing.M_SelectionRing"), bRingFallback);
+	bool bFallback = true;
+	RingMaterial = LoadContractMaterial(TEXT("/Game/SR/Materials/M_SelectionRing"), TEXT("/Game/SR/Materials/M_SelectionRing.M_SelectionRing"), bFallback);
+	CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	GreyboxMaterial = LoadContractMaterial(TEXT("/Game/SR/Materials/M_UnitGreybox"), TEXT("/Game/SR/Materials/M_UnitGreybox.M_UnitGreybox"), bFallback);
+}
+
+UMaterialInterface* USRBattleSubsystem::GetSpriteMaterial(ESRUnitType Type) const
+{
+	return SpriteMaterials[Type == ESRUnitType::Archer ? 1 : 0];
+}
+
+UMaterialInterface* USRBattleSubsystem::GetSpriteShadowMaterial(ESRUnitType Type) const
+{
+	return SpriteShadowMaterials[Type == ESRUnitType::Archer ? 1 : 0];
+}
+
+// ----------------------------------------------------------- sprite view
+
+void USRBattleSubsystem::UpdateSpriteView()
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	UWorld* World = GetWorld();
+
+	// The camera pawn has already ticked this frame (it ticks with the actors, this subsystem after them),
+	// so its rotation is the one the frame will be rendered with.
+	FRotator ViewRot(FMath::Lerp(F.PitchZoomedIn, F.PitchZoomedOut, F.ZoomDefault), F.CameraYaw, 0.f);
+	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	if (const ASRCameraPawn* Camera = PC ? Cast<ASRCameraPawn>(PC->GetPawn()) : nullptr)
+	{
+		ViewRot = Camera->GetViewRotation();
+	}
+	else if (PC && PC->PlayerCameraManager)
+	{
+		ViewRot = PC->PlayerCameraManager->GetCameraRotation();
+	}
+	const FRotationMatrix ViewAxes(ViewRot);
+	SpriteView.CardRotation = ViewRot.Quaternion();
+	SpriteView.ViewForward = ViewAxes.GetUnitAxis(EAxis::X);
+	SpriteView.ViewUp = ViewAxes.GetUnitAxis(EAxis::Z);
+	SpriteView.ViewYaw = ViewRot.Yaw;
+	const float PitchDown = FMath::Clamp(-ViewRot.Pitch, 5.f, 80.f);
+	SpriteView.HeightScale = FMath::Cos(FMath::DegreesToRadians(SRSprite::RenderElevationDeg)) / FMath::Cos(FMath::DegreesToRadians(PitchDown));
+
+	// The sun: the level's directional light, or the contract's direction if there is none.
+	if (!bSunSearched && World)
+	{
+		bSunSearched = true;
+		if (TActorIterator<ADirectionalLight> It(World); It) { Sun = *It; }
+	}
+	FVector SunDir = Sun.IsValid() ? Sun->GetActorForwardVector() : FVector(0.22f, 0.81f, -0.54f);
+	FVector2D Flat(SunDir.X, SunDir.Y);
+	if (!Flat.Normalize()) { Flat = FVector2D(0.f, 1.f); }
+	const float Elevation = FMath::DegreesToRadians(FMath::Clamp(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(-SunDir.Z, -1.f, 1.f))), 12.f, 80.f));
+	SpriteView.SunDir = FVector(Flat.X * FMath::Cos(Elevation), Flat.Y * FMath::Cos(Elevation), -FMath::Sin(Elevation));
+	SpriteView.SunYaw = FMath::RadiansToDegrees(FMath::Atan2(Flat.Y, Flat.X));
+
+	// Shadow card. The exact caster is the frame on a card facing the sun (the sheets were rendered from 30 degrees,
+	// the sun stands at 33, so the sun sees almost what the sheet's camera saw). Sliding every point of that card
+	// along the light does not change the shadow it throws, so the card can lie in any plane through the feet:
+	// here one leaning Lean degrees from upright, away from the sun. Card axes: Y = the sun-viewer's right,
+	// Z = "sprite up" slid onto that plane (longer than 1, hence the scale).
+	const float Lean = FMath::DegreesToRadians(FMath::Clamp(F.SpriteShadowLean, 0.f, 88.f));
+	const float Slide = FMath::Tan(Lean - Elevation);
+	const FVector FlatDir(Flat.X, Flat.Y, 0.f);
+	const FVector Up = FlatDir * (FMath::Sin(Elevation) + Slide * FMath::Cos(Elevation))
+		+ FVector::UpVector * (FMath::Cos(Elevation) - Slide * FMath::Sin(Elevation));
+	const FVector AxisY(-Flat.Y, Flat.X, 0.f);
+	const FVector AxisZ = Up.GetSafeNormal();
+	const FVector AxisX = FVector::CrossProduct(AxisY, AxisZ);
+	SpriteView.ShadowRotation = FMatrix(AxisX, AxisY, AxisZ, FVector::ZeroVector).ToQuat();
+	SpriteView.ShadowScale = FVector(1.f, 1.f, Up.Size());
+}
+
+void USRBattleSubsystem::UpdateSpriteLook()
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FVector4 Look(F.SpriteRelight, F.SpriteBakedLight, F.SpriteNormalStrength, F.SpriteEdgeSoftness);
+	if (Look.Equals(AppliedSpriteLook, 0.0005f) && F.HitFlashColor.Equals(AppliedFlashColor, 0.0005f)) { return; }
+	AppliedSpriteLook = Look;
+	AppliedFlashColor = F.HitFlashColor;
+	for (UMaterialInstanceDynamic* MID : { SpriteMaterials[0].Get(), SpriteMaterials[1].Get(), ArrowMaterial.Get() })
+	{
+		if (!MID) { continue; }
+		MID->SetScalarParameterValue(TEXT("Relight"), F.SpriteRelight);
+		MID->SetScalarParameterValue(TEXT("BakedLight"), F.SpriteBakedLight);
+		MID->SetScalarParameterValue(TEXT("EdgeSoftness"), F.SpriteEdgeSoftness);
+		MID->SetVectorParameterValue(TEXT("HitFlashColor"), F.HitFlashColor);
+		if (MID != ArrowMaterial) { MID->SetScalarParameterValue(TEXT("NormalStrength"), F.SpriteNormalStrength); }
+	}
 }
 
 // ------------------------------------------------------------------ frame
@@ -76,8 +188,29 @@ void USRBattleSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	PollCommandInbox(DeltaTime);
+	UpdateSpriteView();
+	UpdateSpriteLook();
 
 	if (!bBattleStarted) { return; }
+
+	if (FreezeFramesLeft > 0)
+	{
+		// Debug capture (sr.ShotOn): hold the battle on the frame of the event until the image has settled
+		// (temporal upscaling, Lumen, depth of field all need a few frames after the camera jump), then shoot.
+		--FreezeFramesLeft;
+		for (ASRUnit* Unit : Units) { if (Unit) { Unit->StepVisual(0.f); } }
+		for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->StepVisual(0.f); } }
+		if (bShotPending && FreezeFramesLeft <= 4)
+		{
+			bShotPending = false;
+			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots/SR") / (ArmedShotName + TEXT(".png")));
+			FScreenshotRequest::RequestScreenshot(Path, true, false);
+			const ASRUnit* Unit = ArmedUnit.Get();
+			UE_LOG(LogSovereign, Log, TEXT("sr.ShotOn -> %s  (%s shows cell anim=%d frame=%d facing=%d)"), *Path,
+				Unit ? *Unit->GetLabel() : TEXT("?"), Unit ? int32(Unit->GetSpriteAnim()) : -1, Unit ? Unit->GetSpriteFrame() : -1, Unit ? Unit->GetSpriteFacing() : -1);
+		}
+		return;
+	}
 
 	// Clamp so a hitch cannot teleport units through each other.
 	const float Dt = FMath::Min(DeltaTime, 0.05f);
@@ -195,7 +328,12 @@ void USRBattleSubsystem::ResetBattle()
 	Result = ESRBattleResult::Ongoing;
 	TimeSinceResult = 0.f;
 	BattleClock = 0.f;
+	FreezeFramesLeft = 0;
+	bShotPending = false;
+	ArmedEvent = ESRShotEvent::None;
 
+	UpdateSpriteView(); // units pose themselves as they spawn
+	UpdateSpriteLook();
 	SpawnObstacles();
 	SpawnScenario();
 	bBattleStarted = true;
@@ -286,7 +424,7 @@ void USRBattleSubsystem::SpawnObstacles()
 		Mesh->SetWorldScale3D(Block.Size / 100.f);
 		Mesh->SetCollisionProfileName(TEXT("BlockAll"));
 		Mesh->SetCollisionObjectType(ECC_WorldStatic); // units and ground traces only look at WorldStatic
-		UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(UnitMaterial, Mesh);
+		UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(GreyboxMaterial, Mesh);
 		MID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.33f, 0.31f, 0.28f));
 		MID->SetVectorParameterValue(TEXT("TeamColor"), FLinearColor(0.33f, 0.31f, 0.28f));
 		Mesh->SetMaterial(0, MID);
@@ -341,9 +479,9 @@ ASRUnit* USRBattleSubsystem::PickUnit(const FVector& RayOrigin, const FVector& R
 	for (ASRUnit* Unit : Units)
 	{
 		if (!Unit || !Unit->IsActive()) { continue; }
-		// Treat the unit as a fat vertical capsule from feet to head.
-		const FVector Feet = Unit->GetSimPos() + FVector(0, 0, Unit->GetRadius() * 0.5f);
-		const FVector Head = Unit->GetSimPos() + FVector(0, 0, Unit->GetBodyHeight() - Unit->GetRadius() * 0.5f);
+		// Treat the unit as a fat capsule from feet to head, standing where its sprite is drawn.
+		FVector Feet, Head;
+		Unit->GetPickSegment(Feet, Head);
 		FVector OnRay, OnUnit;
 		FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, Feet, Head, OnRay, OnUnit);
 		if (FVector::DistSquared(OnRay, OnUnit) <= FMath::Square(Unit->GetRadius() + Padding))
@@ -421,6 +559,33 @@ void USRBattleSubsystem::NotifyUnitDied(ASRUnit* Unit, const ASRUnit* Killer)
 {
 	UE_LOG(LogSovereign, Log, TEXT("DEATH %s  killed by %s  (remaining: player=%d enemy=%d)"),
 		*Unit->GetLabel(), Killer ? *Killer->GetLabel() : TEXT("?"), CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy));
+	OnShotEvent(ESRShotEvent::Death, Unit);
+}
+
+void USRBattleSubsystem::ArmShot(ESRShotEvent Event, const FString& Name, int32 UnitType, int32 Team)
+{
+	ArmedEvent = Event;
+	ArmedShotName = Name;
+	ArmedUnitType = UnitType;
+	ArmedTeam = Team;
+}
+
+void USRBattleSubsystem::OnShotEvent(ESRShotEvent Event, ASRUnit* Unit)
+{
+	if (Event != ArmedEvent || !Unit) { return; }
+	if (ArmedUnitType >= 0 && int32(Unit->GetUnitType()) != ArmedUnitType) { return; }
+	if (ArmedTeam >= 0 && int32(Unit->GetTeam()) != ArmedTeam) { return; }
+
+	ArmedEvent = ESRShotEvent::None;
+	ArmedUnit = Unit;
+	FreezeFramesLeft = 24;
+	bShotPending = true;
+	UE_LOG(LogSovereign, Log, TEXT("sr.ShotOn: %s at (%.0f, %.0f), freezing"), *Unit->GetLabel(), Unit->GetSimPos().X, Unit->GetSimPos().Y);
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (ASRCameraPawn* Camera = PC ? Cast<ASRCameraPawn>(PC->GetPawn()) : nullptr)
+	{
+		Camera->FocusOn(Unit->GetPos2D(), true);
+	}
 }
 
 void USRBattleSubsystem::AddCameraTrauma(const FVector& WorldLocation, float Amount) const
@@ -484,10 +649,13 @@ void USRBattleSubsystem::LogStatus() const
 	for (const ASRUnit* Unit : Units)
 	{
 		if (!Unit) { continue; }
-		UE_LOG(LogSovereign, Log, TEXT("  %-20s pos=(%7.0f,%7.0f,%5.0f) vel=%4.0f hp=%3.0f order=%d sel=%d target=%s"),
+		static const TCHAR* AnimNames[] = { TEXT("spawn"), TEXT("idle"), TEXT("walk"), TEXT("attack"), TEXT("hit"), TEXT("death") };
+		static const TCHAR* FacingNames[] = { TEXT("S"), TEXT("SW"), TEXT("W"), TEXT("NW"), TEXT("N"), TEXT("NE"), TEXT("E"), TEXT("SE") };
+		UE_LOG(LogSovereign, Log, TEXT("  %-20s pos=(%7.0f,%7.0f,%5.0f) vel=%4.0f hp=%3.0f order=%d sel=%d target=%s sprite=%s:%d:%s"),
 			*Unit->GetLabel(), Unit->GetSimPos().X, Unit->GetSimPos().Y, Unit->GetSimPos().Z, Unit->GetVelocity2D().Size(),
 			Unit->GetHealth(), int32(Unit->GetOrder()), Unit->IsSelected() ? 1 : 0,
-			Unit->GetTarget() ? *Unit->GetTarget()->GetLabel() : TEXT("-"));
+			Unit->GetTarget() ? *Unit->GetTarget()->GetLabel() : TEXT("-"),
+			AnimNames[int32(Unit->GetSpriteAnim())], Unit->GetSpriteFrame(), FacingNames[Unit->GetSpriteFacing() % 8]);
 	}
 }
 

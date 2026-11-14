@@ -213,7 +213,7 @@ WRIST_L = Vector(P["wrist"])
 WRIST_R = Vector((-WRIST_L.x, WRIST_L.y, WRIST_L.z))
 SHIELD_C = FIST_L + Vector((0, -0.085, 0))
 FIST_R = Vector((-FIST_L.x, FIST_L.y, FIST_L.z))
-STEP = 0.155          # ground travelled per walk frame: 8 frames = 124 cm = 2 x StrideLength (62 cm)
+STEP = 0.155          # ground travelled per walk frame: 8 frames = 124 cm = WalkCycleDistance (Sovereign Feel > Animation)
 
 
 def sword(d, edge=(0, 0, -1)):

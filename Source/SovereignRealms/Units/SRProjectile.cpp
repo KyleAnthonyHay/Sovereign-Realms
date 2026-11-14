@@ -3,6 +3,7 @@
 #include "Units/SRProjectile.h"
 #include "Units/SRUnit.h"
 #include "Battle/SRBattleSubsystem.h"
+#include "Units/SRSprite.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/World.h"
@@ -38,38 +39,80 @@ void ASRProjectile::BuildVisuals(ASRUnit* Shooter)
 	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
 	if (!Battle) { return; }
 
-	auto AddPart = [&](UStaticMesh* Mesh, const FVector& Loc, const FRotator& Rot, const FVector& Scale, const FLinearColor& Color)
+	auto MakeCard = [&](UMaterialInterface* Material, bool bShadowOnly)
 	{
 		UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this);
 		Part->SetMobility(EComponentMobility::Movable);
-		Part->SetStaticMesh(Mesh);
+		Part->SetStaticMesh(Battle->ArrowCardMesh);
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Part->SetGenerateOverlapEvents(false);
+		Part->bReceivesDecals = false;
+		Part->bAffectDynamicIndirectLighting = false;
+		Part->bAffectDistanceFieldLighting = false;
+		Part->bVisibleInRayTracing = false;
+		Part->SetUsingAbsoluteRotation(true);
+		Part->SetCastShadow(bShadowOnly);
+		if (bShadowOnly)
+		{
+			Part->bCastHiddenShadow = true;
+			Part->SetHiddenInGame(true);
+		}
 		Part->SetupAttachment(GetRootComponent());
 		Part->RegisterComponent();
-		Part->SetRelativeLocationAndRotation(Loc, Rot);
-		Part->SetRelativeScale3D(Scale);
-		UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Battle->UnitMaterial, Part);
-		MID->SetVectorParameterValue(TEXT("Color"), Color);
-		MID->SetVectorParameterValue(TEXT("TeamColor"), Battle->TeamColor(Shooter->GetTeam()));
-		Part->SetMaterial(0, MID);
+		Part->SetMaterial(0, Material);
+		// Same custom primitive data layout as the troops: one frame (0, 0), no flash, fully faded in; then the team colour.
+		Part->SetCustomPrimitiveDataVector4(SRSprite::DataFrame, FVector4(0.f, 0.f, 0.f, 1.f));
+		return Part;
 	};
 
-	// Oversized on purpose so the shot reads at tactical zoom. Shaft along +X, head at the front, team-coloured fletching.
-	AddPart(Battle->CylinderMesh, FVector::ZeroVector, FRotator(90, 0, 0), FVector(0.035f, 0.035f, 0.78f), FLinearColor(0.75f, 0.62f, 0.42f));
-	AddPart(Battle->ConeMesh, FVector(43, 0, 0), FRotator(-90, 0, 0), FVector(0.10f, 0.10f, 0.18f), FLinearColor(0.8f, 0.82f, 0.86f));
-	AddPart(Battle->CubeMesh, FVector(-33, 0, 0), FRotator::ZeroRotator, FVector(0.16f, 0.015f, 0.11f), Battle->TeamColor(Shooter->GetTeam()));
-	AddPart(Battle->CubeMesh, FVector(-33, 0, 0), FRotator::ZeroRotator, FVector(0.16f, 0.11f, 0.015f), Battle->TeamColor(Shooter->GetTeam()));
+	Card = MakeCard(Battle->ArrowMaterial, false);
+	ShadowCard = MakeCard(Battle->ArrowShadowMaterial, true);
+	const FLinearColor TeamCol = Battle->TeamColor(Shooter->GetTeam());
+	Card->SetCustomPrimitiveDataVector4(SRSprite::DataTeamColor, FVector4(TeamCol.R, TeamCol.G, TeamCol.B, 1.f));
+}
+
+void ASRProjectile::OrientCards(const FVector& Direction)
+{
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || !Card || Direction.IsNearlyZero()) { return; }
+
+	// The card's X axis is the shaft. Turn it about the shaft until its face looks as nearly as it can at the viewer.
+	auto Facing = [&Direction](const FVector& TowardViewer)
+	{
+		FVector Normal = TowardViewer - Direction * FVector::DotProduct(TowardViewer, Direction);
+		if (!Normal.Normalize())
+		{
+			// Flying straight at the viewer: any face will do.
+			Normal = FVector::CrossProduct(Direction, FVector::UpVector).GetSafeNormal();
+			if (Normal.IsNearlyZero()) { Normal = FVector::RightVector; }
+		}
+		return FMatrix(Direction, FVector::CrossProduct(Normal, Direction), Normal, FVector::ZeroVector).ToQuat();
+	};
+	const FSRSpriteView& View = Battle->GetSpriteView();
+	Card->SetWorldRotation(Facing(-View.ViewForward));
+	ShadowCard->SetWorldRotation(Facing(-View.SunDir));
 }
 
 void ASRProjectile::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this); Battle && Battle->IsFrozen())
+	{
+		return; // a debug capture is holding the battle still
+	}
+
 	if (bStuck)
 	{
-		// Quiver to a stop in the ground, then go.
+		// Stand in the ground for a moment, then dissolve.
 		StuckTime += DeltaSeconds;
+		const float Fade = FMath::Clamp((1.6f - StuckTime) / 0.4f, 0.f, 1.f);
+		if (Card && !FMath::IsNearlyEqual(Fade, AppliedFade, 0.01f))
+		{
+			AppliedFade = Fade;
+			Card->SetCustomPrimitiveDataVector4(SRSprite::DataFrame, FVector4(0.f, 0.f, 0.f, Fade));
+			ShadowCard->SetCustomPrimitiveDataVector4(SRSprite::DataFrame, FVector4(0.f, 0.f, 0.f, Fade));
+		}
 		if (StuckTime > 1.6f) { Destroy(); }
 		return;
 	}
@@ -102,7 +145,8 @@ void ASRProjectile::Tick(float DeltaSeconds)
 
 	const FVector Pos = ArcAt(T);
 	const FVector Ahead = ArcAt(FMath::Min(T + 0.03f, 1.03f));
-	SetActorLocationAndRotation(Pos, (Ahead - Pos).GetSafeNormal().Rotation());
+	SetActorLocation(Pos);
+	OrientCards((Ahead - Pos).GetSafeNormal());
 
 	if (T >= 1.f)
 	{

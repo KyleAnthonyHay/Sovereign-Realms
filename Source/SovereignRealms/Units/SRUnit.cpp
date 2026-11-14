@@ -44,7 +44,7 @@ void ASRUnit::InitUnit(ESRUnitType InType, ESRTeam InTeam, float InSpawnDelay, c
 	SimPos = GetActorLocation();
 	FacingYaw = GetActorRotation().Yaw;
 	Home = GetPos2D();
-	// Desynchronise idle breathing and retargeting between units.
+	// Desynchronise the idle cycle and retargeting between units.
 	AnimTime = FMath::FRandRange(0.f, 10.f);
 	RetargetTimer = FMath::FRandRange(0.f, 0.3f);
 
@@ -360,10 +360,11 @@ void ASRUnit::Strike(ASRUnit* T)
 	const FSRUnitStats& S = Stats();
 	const FVector2D To = T->GetPos2D() - GetPos2D();
 	const FVector2D Dir = To.GetSafeNormal();
+	Battle->NotifyStrike(this);
 
 	if (S.bRanged)
 	{
-		// Damage is applied by the arrow when it lands, not here.
+		// Damage is applied by the arrow when it lands, not here. The sprite shows its release frame from this frame on.
 		ASRProjectile::Launch(this, T, GetMuzzleLocation(), S);
 		return;
 	}
@@ -391,9 +392,11 @@ void ASRUnit::ReceiveDamage(float Amount, ASRUnit* From, const FVector2D& HitDir
 	Health = FMath::Max(0.f, Health - Amount);
 	LastDamagedTime = Now;
 
-	// Reaction is purely additive (flash, squash, a small shove). It never cancels the unit's order or attack.
+	// Reaction is purely additive (flash, squash, flinch frames, a small shove). It never cancels the unit's order or attack.
 	HitFlash = 1.f;
 	Squash = 1.f;
+	HitAnimClock = 0.f;
+	Battle->NotifyHit(this);
 	KnockVel += HitDir * (Knockback / FMath::Max(Stats().Mass, 0.1f));
 	if (bHeavy && F.bHitStop) { HitStopLeft = FMath::Max(HitStopLeft, F.HitStopTime); }
 

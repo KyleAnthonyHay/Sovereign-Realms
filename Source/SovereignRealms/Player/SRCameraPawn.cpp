@@ -52,6 +52,11 @@ void ASRCameraPawn::BeginPlay()
 	ApplyView(0.f);
 }
 
+FRotator ASRCameraPawn::GetViewRotation() const
+{
+	return Camera->GetComponentRotation();
+}
+
 float ASRCameraPawn::GetZoomDistance() const
 {
 	return DistanceForZoom(USRFeelSettings::Get(), Zoom);
@@ -238,7 +243,7 @@ void ASRCameraPawn::ApplyView(float DeltaSeconds)
 	PP.bOverride_DepthOfFieldSensorWidth = bDof;
 	if (bDof)
 	{
-		const float FocusDistance = FMath::Max(Distance + F.TiltShiftFocusOffset, 50.f);
+		const float FocusDistance = FMath::Max(Distance * (1.f + F.TiltShiftFocusBias) + F.TiltShiftFocusOffset, 50.f);
 		const float FocalPerSensor = 0.5f / FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(F.CameraFOV, 5.f, 170.f) * 0.5f));
 		// Blur disc at infinity (fraction of sensor width) = FocalPerSensor / Fstop * f / (S - f). Solve for f.
 		const float Ratio = Blur * 0.01f * F.TiltShiftFstop / FocalPerSensor;

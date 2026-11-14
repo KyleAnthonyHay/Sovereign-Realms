@@ -57,7 +57,7 @@ void ASRHUD::DrawHealthBars()
 		const bool bRecentlyHurt = Unit->GetHealthFrac() < 1.f && (Now - Unit->GetLastDamagedTime()) < F.HealthBarLingerTime;
 		if (!Unit->IsSelected() && !bRecentlyHurt) { continue; }
 
-		const FVector Screen = Canvas->Project(Unit->GetSimPos() + FVector(0, 0, Unit->GetBodyHeight() + 34.f));
+		const FVector Screen = Canvas->Project(Unit->GetOverheadPoint());
 		if (Screen.Z <= 0.f) { continue; }
 
 		const float UI = UIScale();

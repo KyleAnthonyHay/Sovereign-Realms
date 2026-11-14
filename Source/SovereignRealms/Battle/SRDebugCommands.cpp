@@ -223,6 +223,35 @@ namespace
 			}
 		}));
 
+	FAutoConsoleCommandWithWorldAndArgs CmdShotOn(TEXT("sr.ShotOn"),
+		TEXT("sr.ShotOn <strike|hit|death> <name> [type 0=Shieldbearer 1=Archer -1=any] [team 0=player 1=enemy -1=any]: the next time it happens, freeze the battle on that frame, centre the camera on the unit and save Saved/Screenshots/SR/<name>.png."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!Battle || Args.Num() < 2) { return; }
+			const ESRShotEvent Event = Args[0].Equals(TEXT("strike"), ESearchCase::IgnoreCase) ? ESRShotEvent::Strike
+				: Args[0].Equals(TEXT("hit"), ESearchCase::IgnoreCase) ? ESRShotEvent::Hit
+				: Args[0].Equals(TEXT("death"), ESearchCase::IgnoreCase) ? ESRShotEvent::Death : ESRShotEvent::None;
+			Battle->ArmShot(Event, Args[1], Args.Num() > 2 ? FCString::Atoi(*Args[2]) : -1, Args.Num() > 3 ? FCString::Atoi(*Args[3]) : -1);
+			UE_LOG(LogSovereign, Log, TEXT("sr.ShotOn armed: %s -> %s"), *Args[0], *Args[1]);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdFan(TEXT("sr.Fan"), TEXT("sr.Fan [distance]: every player unit runs outward in its own direction (unit i heads i * 45 degrees), to check all eight sprite facings at once."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!Battle) { return; }
+			const float Distance = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 700.f;
+			int32 Index = 0;
+			for (ASRUnit* Unit : Battle->GetUnits())
+			{
+				if (!Unit || !Unit->IsActive() || Unit->GetTeam() != ESRTeam::Player) { continue; }
+				const float Yaw = FMath::DegreesToRadians(45.f * Index++);
+				Unit->OrderMove(Unit->GetPos2D() + FVector2D(FMath::Cos(Yaw), FMath::Sin(Yaw)) * Distance);
+			}
+			UE_LOG(LogSovereign, Log, TEXT("sr.Fan: %d units"), Index);
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs CmdShot(TEXT("sr.Shot"), TEXT("sr.Shot <name>: save a screenshot of the game view (with HUD) to Saved/Screenshots/SR/<name>.png."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld*)
 		{

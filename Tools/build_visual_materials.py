@@ -59,11 +59,21 @@ class G:
             e.set_editor_property(k, v)
         return e
 
-    def scalar(self, name, default, group="SR"):
-        return self.node(unreal.MaterialExpressionScalarParameter, parameter_name=name, default_value=default, group=group)
+    def scalar(self, name, default, group="SR", cpd=None):
+        """cpd: custom primitive data index. The value then comes from the component (one float per primitive),
+        so every unit shares one material instance; the default is used where the component sets nothing."""
+        e = self.node(unreal.MaterialExpressionScalarParameter, parameter_name=name, default_value=default, group=group)
+        if cpd is not None:
+            e.set_editor_property("use_custom_primitive_data", True)
+            e.set_editor_property("primitive_data_index", cpd)
+        return e
 
-    def vector(self, name, default, group="SR"):
-        return self.node(unreal.MaterialExpressionVectorParameter, parameter_name=name, default_value=default, group=group)
+    def vector(self, name, default, group="SR", cpd=None):
+        e = self.node(unreal.MaterialExpressionVectorParameter, parameter_name=name, default_value=default, group=group)
+        if cpd is not None:                       # occupies cpd .. cpd + 3
+            e.set_editor_property("use_custom_primitive_data", True)
+            e.set_editor_property("primitive_data_index", cpd)
+        return e
 
     def const(self, v):
         return self.node(unreal.MaterialExpressionConstant, r=v)
@@ -76,12 +86,13 @@ class G:
         if not ok:
             raise RuntimeError("connect failed: %s -> %s.%s" % (src.get_name(), dst.get_name(), dst_in))
 
-    def tex(self, name, asset, linear=False, group="Textures"):
-        """Texture object parameter, for sampling inside a Custom node."""
-        t = unreal.EditorAssetLibrary.load_asset(TEX + asset)
+    def tex(self, name, asset, linear=False, group="Textures", sampler=None):
+        """Texture object parameter, for sampling inside a Custom node. `asset` is a name under /Game/SR/Textures or a full path."""
+        path = asset if asset.startswith("/") else TEX + asset
+        t = unreal.EditorAssetLibrary.load_asset(path)
         if t is None:
-            raise RuntimeError("missing texture " + TEX + asset + " (run Tools/import_world_assets.py first)")
-        st = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR if linear else unreal.MaterialSamplerType.SAMPLERTYPE_COLOR
+            raise RuntimeError("missing texture " + path + " (run Tools/import_world_assets.py / import_character_sprites.py first)")
+        st = sampler or (unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR if linear else unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
         return self.node(unreal.MaterialExpressionTextureObjectParameter, parameter_name=name, texture=t, sampler_type=st, group=group)
 
     def custom(self, code, out_type, inputs, desc, outputs=None):
@@ -141,7 +152,9 @@ SRPix px;
 """
 
 
-# ----------------------------------------------------------------------------- units
+# ----------------------------------------------------------------------------- grey test blocks
+# M_UnitGreybox was the troops' material while they were primitives. Only the optional obstacle blocks use it now
+# (Sovereign Feel > Scenario > Spawn Greybox Obstacles); the troops are build_sprite() below.
 def build_unit():
     mat = get_material("M_UnitGreybox")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
@@ -507,6 +520,173 @@ def build_water():
     g.finish()
 
 
+# ----------------------------------------------------------------------------- troop sprites
+# Custom primitive data layout shared by M_UnitSprite and M_UnitSpriteShadow (set by ASRUnit / ASRProjectile):
+#   0 FrameCol   1 FrameRow   2 HitFlash   3 Fade   4..7 TeamColor
+CHAR = "/Game/SR/Characters/"
+
+SPRITE_CODE = r"""
+float2 cell = CellPx.xy;
+float2 size = SheetCells.xy * cell;
+float2 origin = float2(FrameCol, FrameRow) * cell;
+float2 uv = UV * cell;                                          // texels inside this frame's cell
+// crisp texels, each edge anti-aliased over EdgeSoftness screen pixels (SRPix.S uses one; a sprite texel is only about
+// two pixels wide at the default zoom and temporal AA already integrates the edge, so less keeps the pixels harder).
+// No mips: the sheets are never minified far.
+float2 fw = max(fwidth(uv) * EdgeSoftness, 1e-5);
+float2 seam = floor(uv + 0.5);
+float2 p = clamp(seam + clamp((uv - seam) / fw, -0.5, 0.5), 0.5, cell - 0.5);
+float4 c = Sheet.SampleLevel(View.SharedBilinearClampedSampler, (origin + p) / size, 0);
+float2 tc = (origin + clamp(floor(uv) + 0.5, 0.5, cell - 0.5)) / size;      // this texel's centre: mask and normal are never blended
+float m = Mask.SampleLevel(View.SharedPointClampedSampler, tc, 0).r;
+float3 n = Nrm.SampleLevel(View.SharedPointClampedSampler, tc, 0).xyz * 2.0 - 1.0;
+float3 rgb = lerp(c.rgb, c.rgb * Team.rgb * 2.0, m);           // SPRITE_SPEC.md, Team colour
+float f = saturate(Flash);
+rgb = lerp(rgb, FlashCol.rgb, f * FlashMix);
+// Normal: sheet space (x screen right, y screen down, z toward the viewer) -> world, through the view axes (the card
+// is parallel to the view plane). NormalStrength 0 = one even normal for the whole figure, halfway between up and the viewer.
+float3 even = normalize(float3(0.0, -0.45, 0.9));
+n = normalize(lerp(even, n, NormalStrength));
+OutNormal = normalize(n.x * View.ViewRight - n.y * View.ViewUp - n.z * View.ViewForward);
+// Relight splits the baked look between an emissive share (always there) and a share the scene lights and shadows.
+OutEmissive = rgb * (1.0 - Relight) * Baked + FlashCol.rgb * f * Glow;
+float dn = InterleavedGradientNoise(Parameters.SvPosition.xy, View.StateFrameIndexMod8);
+OutMask = c.a * ((Fade > dn * 0.98 + 0.01) ? 1.0 : 0.0);        // dithered death fade; stays in the opaque pass
+return rgb * Relight;
+"""
+
+# The card is parallel to the view plane, so it leans back with the camera: its head would sink into a wall behind
+# the unit and its feet into the ground. Each vertex slides along its own view ray, which does not move it on screen:
+# the top row onto an upright plane through the feet, the pivot and bottom rows onto the ground. The card then has the
+# depth of a standing figure (sorting, shadows received, depth of field) and still looks exactly like the flat sprite.
+SPRITE_WPO = r"""
+float3 F = normalize(float3(View.ViewForward.xy, 0.0));
+float3 R = P - C;
+float s;
+if (UV.y < PivotV - 0.001) s = dot(O - C, F) / max(dot(R, F), 1.0);
+else s = (O.z + Lift - C.z) / min(R.z, -1.0);
+return R * (clamp(s, 0.25, 4.0) - 1.0) * Billboard;
+"""
+
+SPRITE_SHADOW_CODE = r"""
+float2 cell = CellPx.xy;
+float2 size = SheetCells.xy * cell;
+float2 t = clamp(floor(UV * cell) + 0.5, 0.5, cell - 0.5);
+float a = Sheet.SampleLevel(View.SharedPointClampedSampler, (float2(FrameCol, FrameRow) * cell + t) / size, 0).a;
+// the corpse's shadow dissolves texel by texel (a temporal dither would boil in the shadow map)
+float h = frac(sin(dot(floor(t), float2(12.9898, 78.233))) * 43758.5453);
+return a * ((Fade > h * 0.98 + 0.01) ? 1.0 : 0.0);
+"""
+
+BLOB_CODE = r"""
+float2 d = (UV - 0.5) * 2.0;
+float2 q = (floor(d * Cells) + 0.5) / Cells;                   // chunky cells that travel with the unit
+float r = length(q);
+float a = r < 0.5 ? 1.0 : (r < 0.76 ? 0.72 : (r < 0.98 ? 0.4 : 0.0));     // three flat bands
+return a * saturate(Strength) * saturate(Fade);
+"""
+
+
+def build_sprite():
+    """M_UnitSprite (troops and arrows), M_UnitSpriteShadow (their hidden shadow cards), M_UnitBlob (contact shadow decal)."""
+    G1 = unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE
+    mat = get_material("M_UnitSprite")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("tangent_space_normal", False)
+    mat.set_editor_property("opacity_mask_clip_value", 0.5)
+    mat.set_editor_property("dithered_lod_transition", False)
+    g = G(mat)
+    uv = g.node(unreal.MaterialExpressionTextureCoordinate)
+    col = g.scalar("FrameCol", 8.0, "Per unit (custom primitive data)", cpd=0)
+    row = g.scalar("FrameRow", 0.0, "Per unit (custom primitive data)", cpd=1)
+    flash = g.scalar("HitFlash", 0.0, "Per unit (custom primitive data)", cpd=2)
+    fade = g.scalar("Fade", 1.0, "Per unit (custom primitive data)", cpd=3)
+    team = g.vector("TeamColor", lin(0.05, 0.22, 0.8), "Per unit (custom primitive data)", cpd=4)
+    cells = g.vector("SheetCells", lin(24.0, 16.0, 0.0, 0.0), "Sheet")
+    cellpx = g.vector("CellPx", lin(160.0, 160.0, 0.0, 0.0), "Sheet")
+    colour = g.custom(SPRITE_CODE, F3, [
+        ("UV", uv), ("FrameCol", col), ("FrameRow", row), ("Flash", flash), ("Fade", fade), ("Team", team),
+        ("SheetCells", cells, "RGBA"), ("CellPx", cellpx, "RGBA"),
+        ("Sheet", g.tex("SpriteSheet", CHAR + "T_Shieldbearer_Color", group="Sheet")),
+        ("Mask", g.tex("TeamMask", CHAR + "T_Shieldbearer_TeamMask", group="Sheet", sampler=G1)),
+        ("Nrm", g.tex("NormalSheet", CHAR + "T_Shieldbearer_Normal", linear=True, group="Sheet")),
+        ("Relight", g.scalar("Relight", 0.6, "Look")),
+        ("Baked", g.scalar("BakedLight", 3.0, "Look")),
+        ("NormalStrength", g.scalar("NormalStrength", 0.7, "Look")),
+        ("EdgeSoftness", g.scalar("EdgeSoftness", 0.5, "Look")),
+        ("FlashCol", g.vector("HitFlashColor", lin(1.0, 0.92, 0.85), "Look")),
+        ("FlashMix", g.scalar("HitFlashMix", 0.65, "Look")),
+        ("Glow", g.scalar("HitFlashGlow", 0.9, "Look")),
+    ], "Sprite frame: colour, team tint, flash, relight split", outputs=[("OutEmissive", F3), ("OutNormal", F3), ("OutMask", F1)])
+    origin = g.node(unreal.MaterialExpressionTransformPosition,
+                    transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL,
+                    transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD)
+    g.link(g.const3(0.0, 0.0, 0.0), origin, "")
+    wpo = g.custom(SPRITE_WPO, F3, [
+        ("P", g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)),
+        ("C", g.node(unreal.MaterialExpressionCameraPositionWS)), ("O", origin), ("UV", uv),
+        ("PivotV", g.scalar("PivotV", 0.7375, "Sheet")),
+        ("Lift", g.scalar("GroundLift", 4.0, "Billboard")),
+        ("Billboard", g.scalar("Billboard", 1.0, "Billboard")),
+    ], "Billboard: upright depth, feet on the ground")
+    g.out(colour, MP.MP_BASE_COLOR)
+    g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
+    g.out(colour, MP.MP_NORMAL, "OutNormal")
+    g.out(colour, MP.MP_OPACITY_MASK, "OutMask")
+    g.out(wpo, MP.MP_WORLD_POSITION_OFFSET)
+    g.out(g.const(1.0), MP.MP_ROUGHNESS)
+    g.out(g.const(0.0), MP.MP_SPECULAR)
+    g.finish()
+
+    sh = get_material("M_UnitSpriteShadow")
+    sh.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    sh.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    sh.set_editor_property("two_sided", True)
+    sh.set_editor_property("opacity_mask_clip_value", 0.5)
+    g = G(sh)
+    alpha = g.custom(SPRITE_SHADOW_CODE, F1, [
+        ("UV", g.node(unreal.MaterialExpressionTextureCoordinate)),
+        ("FrameCol", g.scalar("FrameCol", 8.0, "Per unit (custom primitive data)", cpd=0)),
+        ("FrameRow", g.scalar("FrameRow", 0.0, "Per unit (custom primitive data)", cpd=1)),
+        ("Fade", g.scalar("Fade", 1.0, "Per unit (custom primitive data)", cpd=3)),
+        ("SheetCells", g.vector("SheetCells", lin(24.0, 16.0, 0.0, 0.0), "Sheet"), "RGBA"),
+        ("CellPx", g.vector("CellPx", lin(160.0, 160.0, 0.0, 0.0), "Sheet"), "RGBA"),
+        ("Sheet", g.tex("SpriteSheet", CHAR + "T_Shieldbearer_Color", group="Sheet")),
+    ], "Sprite silhouette for the shadow pass")
+    g.out(alpha, MP.MP_OPACITY_MASK)
+    g.out(g.const3(0.0, 0.0, 0.0), MP.MP_EMISSIVE_COLOR)
+    g.finish()
+
+    blob = get_material("M_UnitBlob")
+    blob.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)        # before the domain: decals reject opaque
+    blob.set_editor_property("material_domain", unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    g = G(blob)
+    dcol = g.node(unreal.MaterialExpressionDecalColor)
+    a = g.custom(BLOB_CODE, F1, [
+        ("UV", g.node(unreal.MaterialExpressionTextureCoordinate)),
+        ("Cells", g.scalar("Cells", 9.0, "Look")),
+        ("Strength", g.scalar("Strength", 1.0, "Look")),          # the per-unit strength arrives in the decal colour's alpha
+        ("Fade", dcol, "A"),
+    ], "Stepped contact shadow")
+    g.out(g.vector("Color", lin(0.012, 0.014, 0.03), "Look"), MP.MP_BASE_COLOR)
+    g.out(a, MP.MP_OPACITY)
+    g.finish()
+    return mat, sh
+
+
+def make_sprite_instances(sprite, shadow):
+    for troop in ("Shieldbearer", "Archer"):
+        make_instance("MI_UnitSprite_" + troop, sprite, textures={
+            "SpriteSheet": CHAR + "T_%s_Color" % troop, "TeamMask": CHAR + "T_%s_TeamMask" % troop, "NormalSheet": CHAR + "T_%s_Normal" % troop})
+        make_instance("MI_UnitSpriteShadow_" + troop, shadow, textures={"SpriteSheet": CHAR + "T_%s_Color" % troop})
+    # the arrow: one 44 x 9 frame, no normal sheet (one even normal), no billboard correction (the code orients its card)
+    arrow = {"SheetCells": lin(1, 1, 0, 0), "CellPx": lin(44, 9, 0, 0)}
+    make_instance("MI_ArrowSprite", sprite, scalars={"NormalStrength": 0.0, "Billboard": 0.0}, vectors=arrow,
+                  textures={"SpriteSheet": CHAR + "T_Arrow_Color", "TeamMask": CHAR + "T_Arrow_TeamMask"})
+    make_instance("MI_ArrowShadow", shadow, vectors=arrow, textures={"SpriteSheet": CHAR + "T_Arrow_Color"})
+
+
 def make_instance(name, parent, scalars=None, vectors=None, textures=None):
     path = DIR + "/" + name
     if eal.does_asset_exist(path):
@@ -520,7 +700,7 @@ def make_instance(name, parent, scalars=None, vectors=None, textures=None):
     for k, v in (vectors or {}).items():
         mel.set_material_instance_vector_parameter_value(mi, k, v)
     for k, v in (textures or {}).items():
-        mel.set_material_instance_texture_parameter_value(mi, k, eal.load_asset(TEX + v))
+        mel.set_material_instance_texture_parameter_value(mi, k, eal.load_asset(v if v.startswith("/") else TEX + v))
     mel.update_material_instance(mi)
     eal.save_loaded_asset(mi, False)
     print("built", path)
@@ -555,3 +735,6 @@ if not ONLY or "card" in ONLY:
     cardm = build_card()
     make_instance("MI_Card_Banner", cardm, scalars={"RootShade": 1.0, "SwayAmount": 5.0, "SwaySpeed": 2.2},
                   vectors={"Size": lin(16, 40, 0, 0), "Tint": lin(1, 1, 1)}, textures={"Tex": "T_Banner"})
+if not ONLY or "sprite" in ONLY:
+    sprite_m, sprite_shadow_m = build_sprite()
+    make_sprite_instances(sprite_m, sprite_shadow_m)

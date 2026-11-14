@@ -239,12 +239,17 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Hit Reaction", meta = (ClampMin = "0.01"))
 	float HitFlashTime = 0.16f;
 
+	/** Colour the whole sprite flashes toward when hit (M_UnitSprite: HitFlashMix and HitFlashGlow set how hard). */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Hit Reaction")
 	FLinearColor HitFlashColor = FLinearColor(1.f, 0.92f, 0.85f);
 
-	/** Squash amount on hit (0.2 = 20% shorter, slightly wider). */
+	/** Squash of the sprite card on hit (0.1 = 10% shorter, slightly wider), on top of the authored flinch frames. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Hit Reaction", meta = (ClampMin = "0", ClampMax = "0.6"))
-	float HitSquash = 0.2f;
+	float HitSquash = 0.1f;
+
+	/** Seconds the three flinch frames take. Shown only on a unit that is standing and not mid-attack; it never interrupts anything. */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|Hit Reaction", meta = (ClampMin = "0.03"))
+	float HitAnimTime = 0.17f;
 
 	/** Time constant (s) of knockback decay. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Hit Reaction", meta = (ClampMin = "0.01"))
@@ -283,20 +288,26 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Health Bars", meta = (ClampMin = "0.25"))
 	float HUDScale = 1.f;
 
-	/** Seconds for the body to topple over. */
+	/** Seconds the eight death frames take (authored for 12 fps = 0.67 s). The last frame is the corpse and is held. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Death", meta = (ClampMin = "0.05"))
-	float DeathToppleTime = 0.42f;
+	float DeathAnimTime = 0.67f;
 
-	/** Seconds the corpse lies there before it starts sinking. */
+	/** The dying body is carried this far (cm) along the direction of the killing blow while it falls. */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|Death", meta = (ClampMin = "0"))
+	float DeathKnockDistance = 16.f;
+
+	/** Seconds the corpse lies there before it starts to fade. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Death", meta = (ClampMin = "0"))
 	float CorpseLingerTime = 2.2f;
 
-	/** Seconds the corpse takes to sink / fade before removal. */
+	/** Seconds the corpse (and its shadow) takes to dissolve before removal. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Death", meta = (ClampMin = "0.05"))
-	float CorpseSinkTime = 1.3f;
+	float CorpseFadeTime = 1.3f;
 
 	// ------------------------------------------------------------- Animation
-	/** Seconds of the spawn pop-in. Units are not selectable or active until it ends. */
+	// The troops are sprite sheets (SourceArt/Characters/SPRITE_SPEC.md). Frames are chosen from gameplay state:
+	// walk by distance travelled, attack by the wind-up / recovery phase, the rest by time.
+	/** Seconds of the spawn animation (rise from a crouch, with a scale pop). Units are not selectable or active until it ends, on the guard frame. */
 	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0.01"))
 	float SpawnPopTime = 0.38f;
 
@@ -304,28 +315,29 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0"))
 	float SpawnStagger = 0.5f;
 
-	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0"))
-	float BreathAmount = 0.022f;
+	/** How far the spawn scale pop starts below full size (0 = no pop, 0.5 = starts at half size). It overshoots a little and settles in the first half of the spawn. */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0", ClampMax = "0.95"))
+	float SpawnPopAmount = 0.45f;
 
-	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0"))
-	float BreathRate = 2.3f;
+	/** Frames per second of the eight-frame idle (authored for 6). Each unit starts at a random point in it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0.1"))
+	float IdleFps = 6.f;
 
-	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0"))
-	float WalkBobHeight = 8.f;
+	/** Ground distance (cm) covered by one eight-frame run cycle (two steps). The frames were authored for 124; any other value makes the feet slide. */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "10"))
+	float WalkCycleDistance = 124.f;
 
-	/** Ground distance (cm) per step; sets the bob / waddle cadence. */
-	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "5"))
-	float StrideLength = 62.f;
+	/** A unit shows the run cycle above this speed (cm/s) and drops back to idle below half of it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "1"))
+	float WalkSpeedThreshold = 40.f;
 
-	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0"))
-	float WalkLeanDeg = 9.f;
+	/** The sprite keeps its facing row until the unit has turned this many degrees past the boundary between two of the eight rows. */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0", ClampMax = "20"))
+	float FacingHysteresisDeg = 8.f;
 
+	/** Extra forward shove (cm) of the whole sprite on the strike frame, easing back during recovery. The frame itself already lunges about 13 cm. */
 	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0"))
-	float WalkWaddleDeg = 5.f;
-
-	/** Forward lunge distance (cm) of a melee strike. */
-	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0"))
-	float MeleeLungeDistance = 30.f;
+	float MeleeLungeDistance = 12.f;
 
 	// ----------------------------------------------------------------- Units
 	UPROPERTY(EditAnywhere, Config, Category = "Units")
@@ -366,21 +378,56 @@ public:
 	bool bSpawnGreyboxObstacles = true;
 
 	// --------------------------------------------------------------- Visuals
+	// Troop sprites: /Game/SR/Materials/M_UnitSprite on a camera-facing card. The three look values below are pushed
+	// into the shared material instances every frame, so they can be tuned while PIE runs.
+	/** How much of the sprite the scene lights and shadows (0 = the baked look only, unaffected by sun or shade; 1 = fully lit like the world). */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Sprites", meta = (ClampMin = "0", ClampMax = "1"))
+	float SpriteRelight = 0.6f;
+
+	/** Brightness of the baked (emissive) share. Balanced by eye against the sun: too high and troops glow in shade, too low and they go muddy. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Sprites", meta = (ClampMin = "0"))
+	float SpriteBakedLight = 3.f;
+
+	/** 1 = the sprite's own per-pixel normals shape the scene light; 0 = one even normal for the whole figure (halfway between up and the camera). */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Sprites", meta = (ClampMin = "0", ClampMax = "1"))
+	float SpriteNormalStrength = 0.7f;
+
+	/** Width, in screen pixels, over which each sprite texel edge is anti-aliased. 0 = hard point sampling (crawls a little as units move), 1 = as soft as the world textures. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Sprites", meta = (ClampMin = "0", ClampMax = "2"))
+	float SpriteEdgeSoftness = 0.5f;
+
+	/** Each troop casts the silhouette of its current frame from the sun, through a hidden shadow-only card. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Sprites")
+	bool bSpriteShadows = true;
+
+	/** How far the shadow card leans away from the sun, degrees from upright. The cast shadow on flat ground is the same at any value; a card lying
+	 *  nearly flat (the default) cannot shade the troop's own sprite and keeps the shadow crisp, an upright one also falls across neighbours. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Sprites", meta = (ClampMin = "0", ClampMax = "88"))
+	float SpriteShadowLean = 78.f;
+
+	/** Strength of the stepped contact shadow under each troop (0 = off). */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Sprites", meta = (ClampMin = "0", ClampMax = "1"))
+	float SpriteBlobStrength = 0.75f;
+
 	/** Miniature / tilt-shift depth of field on the game camera. The focus plane is locked to the camera's focus point, so it follows pan and zoom. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift")
 	bool bTiltShift = true;
 
-	/** Blur strength when fully zoomed OUT: the blur-disc diameter, as a percentage of screen width, of something infinitely far behind the focus point. Kept low so the whole tactical view stays readable; the default zoom sits between this and the zoomed-in value. */
+	/** Blur strength when fully zoomed OUT: the blur-disc diameter, as a percentage of screen width, of something infinitely far behind the focus point. Kept low enough that a troop standing at the top or bottom edge of the view is blurred by no more than about one of its own sprite pixels; the default zoom sits between this and the zoomed-in value. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "0", ClampMax = "20"))
-	float TiltShiftBlur = 1.6f;
+	float TiltShiftBlur = 0.6f;
 
 	/** Blur strength when fully zoomed IN (same unit). The close, low camera sees a deep slice of the field, so this is what sets how soft the foreground props and the hazy distance get in the cinematic view. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "0", ClampMax = "20"))
-	float TiltShiftBlurZoomedIn = 1.5f;
+	float TiltShiftBlurZoomedIn = 0.8f;
 
 	/** Moves the sharp plane (cm) nearer (-) or farther (+) than the camera focus point. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift")
 	float TiltShiftFocusOffset = 0.f;
+
+	/** Same, as a fraction of the camera-to-focus distance so it holds at every zoom (-0.05 = 5% nearer). Slightly negative shares the sharp band between the focus point and the troops in the bottom of the frame. */
+	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "-0.5", ClampMax = "0.5"))
+	float TiltShiftFocusBias = -0.04f;
 
 	/** Aperture used for the bokeh shape only (blur size is set by Tilt Shift Blur). */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Tilt Shift", meta = (ClampMin = "1", ClampMax = "22"))

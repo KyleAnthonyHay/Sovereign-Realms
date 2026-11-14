@@ -1,104 +1,91 @@
 // Copyright Sovereign Realms.
 //
-// Greybox body construction and procedural animation for ASRUnit.
+// Sprite presentation for ASRUnit: which sheet cell to show, and where the cards stand.
 // Everything here is presentation only: it reads simulation state and never changes it.
-// Local axes: +X forward, +Y right, +Z up. Positive pitch tips the top of a part backwards.
+//
+// A unit is three things on screen (Docs/VISUAL_CONTRACT.md, SourceArt/Characters/SPRITE_SPEC.md):
+//   SpriteCard  the visible frame on a card parallel to the view plane, pivot at the feet. The material
+//               gives it the depth of an upright figure, so it does not sink into walls or the ground.
+//   ShadowCard  hidden, shadow-only: the same frame as the sun sees it, so the sun throws a true silhouette.
+//   Blob        a small stepped decal under the feet, for contact in shade.
+// The frame comes from gameplay, not from a free-running clock, wherever the two must agree:
+//   walk    distance actually travelled (one cycle per WalkCycleDistance), so feet do not slide
+//   attack  the wind-up / recovery phase, so the authored strike frame is on screen when Strike() runs
+//   spawn   the spawn clock, ending on the guard frame as the unit becomes active
+//   death   the death clock, holding the corpse frame
+// Idle and the hit flinch run on time. Feel layers on top: spawn scale pop, acknowledge hop, hit squash,
+// strike lunge, hit-stop (which simply holds whatever frame is up).
 
 #include "Units/SRUnit.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "Common/SRRingComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Materials/MaterialInstanceDynamic.h"
+#include "Components/DecalComponent.h"
 
 namespace
 {
-	const FLinearColor Skin(0.80f, 0.56f, 0.40f);
-	const FLinearColor Steel(0.55f, 0.57f, 0.62f);
-	const FLinearColor BrightSteel(0.82f, 0.84f, 0.88f);
-	const FLinearColor Bronze(0.70f, 0.47f, 0.16f);
-	const FLinearColor Leather(0.26f, 0.20f, 0.12f);
-	const FLinearColor Wood(0.42f, 0.26f, 0.11f);
-	const FLinearColor String(0.85f, 0.82f, 0.72f);
-
 	float EaseOutCubic(float T) { const float U = 1.f - T; return 1.f - U * U * U; }
 	float EaseOutBack(float T) { const float C1 = 1.70158f, C3 = C1 + 1.f; const float U = T - 1.f; return 1.f + C3 * U * U * U + C1 * U * U; }
 	float Saturate(float T) { return FMath::Clamp(T, 0.f, 1.f); }
-}
 
-UStaticMeshComponent* ASRUnit::AddPart(UStaticMesh* Mesh, USceneComponent* Parent, const FVector& Loc, const FRotator& Rot, const FVector& Scale, const FLinearColor& Color)
-{
-	UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this);
-	Part->SetMobility(EComponentMobility::Movable);
-	Part->SetStaticMesh(Mesh);
-	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Part->SetGenerateOverlapEvents(false);
-	Part->SetCanEverAffectNavigation(false);
-	Part->SetupAttachment(Parent);
-	Part->RegisterComponent();
-	Part->SetRelativeLocationAndRotation(Loc, Rot);
-	Part->SetRelativeScale3D(Scale);
+	/** Height of the shadow card's foot above the unit's ground point, so it never z-fights in the shadow map. */
+	const float ShadowCardLift = 1.f;
 
-	// Material contract (Docs/VISUAL_CONTRACT.md): Color, TeamColor, HitFlash, Fade.
-	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Battle->UnitMaterial, Part);
-	MID->SetVectorParameterValue(TEXT("Color"), Color);
-	MID->SetVectorParameterValue(TEXT("TeamColor"), Battle->TeamColor(Team));
-	MID->SetScalarParameterValue(TEXT("HitFlash"), 0.f);
-	MID->SetScalarParameterValue(TEXT("Fade"), 1.f);
-	Part->SetMaterial(0, MID);
-	PartMIDs.Add(MID);
-	PartColors.Add(Color);
-	return Part;
+	UStaticMeshComponent* MakeCard(AActor* Owner, USceneComponent* Parent, UStaticMesh* Mesh, UMaterialInterface* Material, bool bShadowOnly)
+	{
+		UStaticMeshComponent* Card = NewObject<UStaticMeshComponent>(Owner);
+		Card->SetMobility(EComponentMobility::Movable);
+		Card->SetStaticMesh(Mesh);
+		Card->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Card->SetGenerateOverlapEvents(false);
+		Card->SetCanEverAffectNavigation(false);
+		Card->bReceivesDecals = false;
+		// A flat card must not enter Lumen's scene or the distance fields: it would light and occlude like a wall.
+		Card->bAffectDynamicIndirectLighting = false;
+		Card->bAffectDistanceFieldLighting = false;
+		Card->bVisibleInRayTracing = false;
+		Card->SetUsingAbsoluteRotation(true);
+		Card->SetUsingAbsoluteScale(true);
+		if (bShadowOnly)
+		{
+			Card->SetCastShadow(true);
+			Card->bCastHiddenShadow = true;
+			Card->SetHiddenInGame(true);
+			// The silhouette changes with the frame (custom primitive data), which the shadow cache cannot see.
+			Card->ShadowCacheInvalidationBehavior = EShadowCacheInvalidationBehavior::Always;
+		}
+		else
+		{
+			Card->SetCastShadow(false);
+			// The material slides vertices along the view ray (up to about 1.5 m), which the mesh bounds do not know about.
+			Card->SetBoundsScale(2.f);
+		}
+		Card->SetupAttachment(Parent);
+		Card->RegisterComponent();
+		Card->SetMaterial(0, Material);
+		return Card;
+	}
 }
 
 void ASRUnit::BuildVisuals()
 {
-	UStaticMesh* Cube = Battle->CubeMesh;
-	UStaticMesh* Sphere = Battle->SphereMesh;
-	UStaticMesh* Cylinder = Battle->CylinderMesh;
-	UStaticMesh* Cone = Battle->ConeMesh;
+	SpriteCard = MakeCard(this, VisualRoot, Battle->UnitCardMesh, Battle->GetSpriteMaterial(UnitType), false);
+	ShadowCard = MakeCard(this, Root, Battle->UnitCardMesh, Battle->GetSpriteShadowMaterial(UnitType), true);
 
 	const FLinearColor TeamCol = Battle->TeamColor(Team);
-	const FLinearColor TeamLight = FMath::Lerp(TeamCol, FLinearColor::White, 0.28f);
+	SpriteCard->SetCustomPrimitiveDataVector4(SRSprite::DataTeamColor, FVector4(TeamCol.R, TeamCol.G, TeamCol.B, 1.f));
 
-	WeaponPivot = NewObject<USceneComponent>(this);
-	WeaponPivot->SetupAttachment(VisualRoot);
-	WeaponPivot->RegisterComponent();
-
-	if (UnitType == ESRUnitType::Shieldbearer)
-	{
-		// Broad, squat silhouette: team-coloured torso, steel helm with a crest that shows facing,
-		// a big round shield on the left arm and an upright blade on the right.
-		AddPart(Cylinder, VisualRoot, FVector(0, 0, 54), FRotator::ZeroRotator, FVector(0.68f, 0.68f, 0.84f), TeamCol);
-		AddPart(Sphere, VisualRoot, FVector(3, 0, 111), FRotator::ZeroRotator, FVector(0.36f), Skin);
-		AddPart(Sphere, VisualRoot, FVector(0, 0, 119), FRotator::ZeroRotator, FVector(0.43f, 0.43f, 0.31f), Steel);
-		AddPart(Cube, VisualRoot, FVector(-2, 0, 135), FRotator::ZeroRotator, FVector(0.34f, 0.06f, 0.10f), TeamLight);
-		AddPart(Cylinder, VisualRoot, FVector(36, -18, 62), FRotator(90, 0, 0), FVector(0.80f, 0.80f, 0.07f), TeamLight);
-		AddPart(Sphere, VisualRoot, FVector(41, -18, 62), FRotator::ZeroRotator, FVector(0.17f), Bronze);
-
-		WeaponPivot->SetRelativeLocation(FVector(8, 36, 86));
-		AddPart(Cube, WeaponPivot, FVector(0, 0, 36), FRotator::ZeroRotator, FVector(0.05f, 0.11f, 0.68f), BrightSteel);
-		AddPart(Cube, WeaponPivot, FVector(0, 0, 4), FRotator::ZeroRotator, FVector(0.07f, 0.26f, 0.05f), Bronze);
-	}
-	else
-	{
-		// Slim silhouette: leather body, team-coloured cape disc and pointed hood (readable from above),
-		// tall bow in the left hand, quiver on the back.
-		AddPart(Cylinder, VisualRoot, FVector(0, 0, 50), FRotator::ZeroRotator, FVector(0.50f, 0.50f, 0.78f), Leather);
-		AddPart(Cylinder, VisualRoot, FVector(-2, 0, 91), FRotator::ZeroRotator, FVector(0.62f, 0.62f, 0.07f), TeamCol);
-		AddPart(Sphere, VisualRoot, FVector(4, 0, 104), FRotator::ZeroRotator, FVector(0.33f), Skin);
-		AddPart(Cone, VisualRoot, FVector(-1, 0, 120), FRotator::ZeroRotator, FVector(0.44f, 0.44f, 0.44f), TeamLight);
-		AddPart(Cylinder, VisualRoot, FVector(-25, 13, 80), FRotator(18, 0, 0), FVector(0.13f, 0.13f, 0.50f), Wood);
-
-		WeaponPivot->SetRelativeLocation(FVector(27, -22, 78));
-		AddPart(Cube, WeaponPivot, FVector(-4, 0, 25), FRotator(13, 0, 0), FVector(0.045f, 0.055f, 0.52f), Wood);
-		AddPart(Cube, WeaponPivot, FVector(-4, 0, -25), FRotator(-13, 0, 0), FVector(0.045f, 0.055f, 0.52f), Wood);
-		AddPart(Cylinder, WeaponPivot, FVector(-10, 0, 0), FRotator::ZeroRotator, FVector(0.012f, 0.012f, 0.98f), String);
-
-		// Arrow on the string; only shown while drawing.
-		NockedArrow = AddPart(Cylinder, VisualRoot, FVector(20, -22, 92), FRotator(90, 0, 0), FVector(0.025f, 0.025f, 0.62f), Wood);
-		NockedArrow->SetVisibility(false);
-	}
+	Blob = NewObject<UDecalComponent>(this);
+	Blob->SetUsingAbsoluteRotation(true);
+	Blob->SetupAttachment(Root);
+	Blob->RegisterComponent();
+	Blob->SetDecalMaterial(Battle->BlobMaterial);
+	// Projects straight down. Wider across the screen than in depth, like a figure's footprint seen from the camera.
+	Blob->SetWorldRotation(FRotator(-90.f, 0.f, 0.f));
+	Blob->DecalSize = FVector(40.f, GetRadius() * 1.3f, GetRadius() * 0.95f);
+	Blob->SetFadeScreenSize(0.f);
+	Blob->SetRelativeLocation(FVector(0.f, 0.f, 10.f));
 
 	Ring = NewObject<USRRingComponent>(this);
 	Ring->SetupAttachment(Root);
@@ -106,12 +93,41 @@ void ASRUnit::BuildVisuals()
 	Ring->SetRelativeLocation(FVector(0, 0, 3));
 	Ring->BuildRing(GetRadius() * 1.12f, GetRadius() * 1.42f);
 	Ring->SetVisibility(false);
+
+	LastVisualPos = GetPos2D();
+	const FSRSpriteView& View = Battle->GetSpriteView();
+	FacingIndex = SRSprite::FacingIndex(FacingYaw, View.ViewYaw);
+	ShadowFacingIndex = SRSprite::FacingIndex(FacingYaw, View.SunYaw);
 }
 
 FVector ASRUnit::GetMuzzleLocation() const
 {
+	// Authored in character space (forward, right, up from the feet); the height is scaled so the arrow leaves
+	// the bow where the sprite shows it at the current camera pitch.
+	const FVector& Muzzle = FSRSpriteSheet::For(UnitType).MuzzleCm;
 	const FVector2D Fwd = GetFacingDir();
-	return SimPos + FVector(Fwd.X * 34.f, Fwd.Y * 34.f, 92.f);
+	const FVector2D Right(-Fwd.Y, Fwd.X);
+	const FVector2D Flat = Fwd * Muzzle.X + Right * Muzzle.Y;
+	return SimPos + FVector(Flat.X, Flat.Y, Muzzle.Z * Battle->GetSpriteView().HeightScale);
+}
+
+FVector ASRUnit::GetAimPoint() const
+{
+	return SimPos + FVector(0.f, 0.f, GetBodyHeight() * 0.55f * Battle->GetSpriteView().HeightScale);
+}
+
+FVector ASRUnit::GetOverheadPoint() const
+{
+	return SimPos + Battle->GetSpriteView().ViewUp * (FSRSpriteSheet::For(UnitType).TopCm + 14.f);
+}
+
+void ASRUnit::GetPickSegment(FVector& OutFeet, FVector& OutHead) const
+{
+	// The sprite stands on the card through the feet, parallel to the view plane.
+	const FVector Up = Battle->GetSpriteView().ViewUp;
+	const float Top = FSRSpriteSheet::For(UnitType).TopCm;
+	OutFeet = SimPos + Up * (GetRadius() * 0.5f);
+	OutHead = SimPos + Up * FMath::Max(Top - GetRadius() * 0.5f, GetRadius());
 }
 
 void ASRUnit::SetSelected(bool bInSelected)
@@ -128,15 +144,75 @@ void ASRUnit::Acknowledge(float Delay)
 bool ASRUnit::IsCorpseExpired() const
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
-	return bDead && DeathClock > F.DeathToppleTime + F.CorpseLingerTime + F.CorpseSinkTime;
+	return bDead && DeathClock > F.DeathAnimTime + F.CorpseLingerTime + F.CorpseFadeTime;
+}
+
+void ASRUnit::SetSpriteShown(bool bShown)
+{
+	if (bShown == bSpriteShown) { return; }
+	bSpriteShown = bShown;
+	SpriteCard->SetVisibility(bShown);
+	Blob->SetVisibility(bShown);
+}
+
+void ASRUnit::ApplySprite(ESRSpriteAnim Anim, int32 Frame, float Fade, const FVector& Offset, const FVector2D& CardScale)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRSpriteView& View = Battle->GetSpriteView();
+	const FSRSpriteSheet::FAnim& Block = FSRSpriteSheet::For(UnitType).Anim(Anim);
+	SpriteAnim = Anim;
+	SpriteFrame = FMath::Clamp(Frame, 0, Block.Frames - 1);
+
+	// --- which cell: per-primitive data, so every unit of a type shares one material ---
+	const float Col = float(Block.Col + SpriteFrame);
+	const FVector4 SpriteData(Col, float(Block.Row + FacingIndex), HitFlash, Fade);
+	if (!SpriteData.Equals(AppliedSpriteData, 0.001f))
+	{
+		AppliedSpriteData = SpriteData;
+		SpriteCard->SetCustomPrimitiveDataVector4(SRSprite::DataFrame, SpriteData);
+	}
+	const FVector4 ShadowData(Col, float(Block.Row + ShadowFacingIndex), 0.f, Fade);
+	if (!ShadowData.Equals(AppliedShadowData, 0.001f))
+	{
+		AppliedShadowData = ShadowData;
+		ShadowCard->SetCustomPrimitiveDataVector4(SRSprite::DataFrame, ShadowData);
+	}
+
+	// --- where the cards stand ---
+	VisualRoot->SetRelativeLocation(Offset);
+	SpriteCard->SetWorldRotation(View.CardRotation);
+	SpriteCard->SetRelativeScale3D(FVector(1.f, CardScale.X, CardScale.Y));
+
+	const bool bCast = F.bSpriteShadows && bSpriteShown && Fade > 0.02f;
+	if (bCast != bShadowCasting)
+	{
+		bShadowCasting = bCast;
+		ShadowCard->SetCastShadow(bCast);
+	}
+	if (bCast)
+	{
+		// The shadow follows the lunge but stays on the ground through a hop.
+		ShadowCard->SetRelativeLocation(FVector(Offset.X, Offset.Y, ShadowCardLift));
+		ShadowCard->SetWorldRotation(View.ShadowRotation);
+		ShadowCard->SetRelativeScale3D(View.ShadowScale * FVector(1.f, CardScale.X, CardScale.Y));
+	}
+
+	const float BlobAlpha = F.SpriteBlobStrength * Fade;
+	if (!FMath::IsNearlyEqual(BlobAlpha, AppliedBlob, 0.004f))
+	{
+		AppliedBlob = BlobAlpha;
+		Blob->SetDecalColor(FLinearColor(1.f, 1.f, 1.f, BlobAlpha));
+	}
 }
 
 void ASRUnit::StepVisual(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const FSRUnitStats& S = Stats();
+	const FSRSpriteSheet& Sheet = FSRSpriteSheet::For(UnitType);
+	const FSRSpriteView& View = Battle->GetSpriteView();
 
-	UpdateFlash(Dt);
+	HitFlash = FMath::Max(0.f, HitFlash - Dt / FMath::Max(F.HitFlashTime, 0.01f));
 
 	if (bDead)
 	{
@@ -152,93 +228,86 @@ void ASRUnit::StepVisual(float Dt)
 	{
 		AnimTime += Dt;
 		AckClock += Dt;
+		HitAnimClock += Dt;
 		Squash = FMath::Max(0.f, Squash - Dt / 0.2f);
 	}
 
-	FVector Offset = FVector::ZeroVector;
-	float Pitch = 0.f, Roll = 0.f;
-	FVector Scale = FVector::OneVector;
+	// --- facing rows: one for the camera, one for the sun ---
+	FacingIndex = SRSprite::FacingIndexSticky(FacingIndex, FacingYaw, View.ViewYaw, F.FacingHysteresisDeg);
+	ShadowFacingIndex = SRSprite::FacingIndexSticky(ShadowFacingIndex, FacingYaw, View.SunYaw, F.FacingHysteresisDeg);
 
-	// --- locomotion: bob, forward lean, waddle, bank into turns ---
+	// --- locomotion: the run cycle advances with the ground actually covered ---
+	const FVector2D Pos = GetPos2D();
+	const float Moved = FVector2D::Distance(Pos, LastVisualPos);
+	LastVisualPos = Pos;
 	const float Speed = Velocity.Size();
-	const float SpeedFrac = Saturate(Speed / FMath::Max(S.MaxSpeed, 1.f));
-	SmoothedSpeedFrac = FMath::FInterpTo(SmoothedSpeedFrac, SpeedFrac, Dt, 12.f);
-	if (!bFrozen) { WalkPhase += Speed * Dt / FMath::Max(F.StrideLength, 1.f) * PI; }
-	if (SmoothedSpeedFrac < 0.02f) { WalkPhase = 0.f; }
-
-	Offset.Z += FMath::Abs(FMath::Sin(WalkPhase)) * F.WalkBobHeight * FMath::Sqrt(SmoothedSpeedFrac);
-	Pitch -= F.WalkLeanDeg * SmoothedSpeedFrac;
-	Roll += FMath::Sin(WalkPhase) * F.WalkWaddleDeg * SmoothedSpeedFrac;
-	SmoothedTurnLean = FMath::FInterpTo(SmoothedTurnLean, FMath::Clamp(YawRate / 360.f, -1.f, 1.f) * 7.f * SmoothedSpeedFrac, Dt, 10.f);
-	Roll += SmoothedTurnLean;
-
-	// --- idle breathing (fades out while moving) ---
-	const float Breath = FMath::Sin(AnimTime * F.BreathRate) * F.BreathAmount * (1.f - SmoothedSpeedFrac);
-	Scale.Z *= 1.f + Breath;
-	Scale.X *= 1.f - Breath * 0.5f;
-	Scale.Y *= 1.f - Breath * 0.5f;
-
-	// --- attack ---
-	// Windup:   0..0.7 raise / draw (telegraph), 0.7..1 swing down so contact lands exactly on the strike frame.
-	// Recovery: ease back to the rest pose.
-	FRotator WeaponRot = S.bRanged ? FRotator(-8.f, 0.f, 28.f) : FRotator(-10.f, 0.f, 0.f);
-	FVector WeaponOffset = FVector::ZeroVector;
-	bool bShowArrow = false;
-	float ArrowPull = 0.f;
-
-	if (AttackPhase == ESRAttackPhase::Windup)
+	const bool bWasWalking = bWalking;
+	bWalking = bActive && Speed > (bWalking ? F.WalkSpeedThreshold * 0.5f : F.WalkSpeedThreshold);
+	if (bWalking && !bWasWalking)
 	{
-		const float W = Saturate(PhaseTime / FMath::Max(S.WindupTime, 0.01f));
-		if (S.bRanged)
+		// Start on a contact frame, alternating the leading foot from one run to the next.
+		WalkDistance = bNextStepRight ? F.WalkCycleDistance * 0.5f : 0.f;
+		bNextStepRight = !bNextStepRight;
+	}
+	if (bWalking) { WalkDistance += Moved; }
+
+	// --- state -> sheet cell ---
+	ESRSpriteAnim Anim = ESRSpriteAnim::Idle;
+	int32 Frame = 0;
+	FVector Offset = FVector::ZeroVector;   // VisualRoot space: +X is the unit's facing
+	FVector2D Scale(1.f, 1.f);              // card width, height (about the feet)
+
+	if (!bActive)
+	{
+		// Rises from a crouch with a scale pop; the last frame is the guard stance, reached as the unit becomes active.
+		const float P = (SpawnClock - SpawnDelay) / FMath::Max(F.SpawnPopTime, 0.01f);
+		SetSpriteShown(P > 0.f);
+		const int32 Frames = Sheet.Anim(ESRSpriteAnim::Spawn).Frames;
+		Anim = ESRSpriteAnim::Spawn;
+		Frame = FMath::Clamp(FMath::FloorToInt(P * Frames), 0, Frames - 1);
+		const float Pop = (1.f - F.SpawnPopAmount) + F.SpawnPopAmount * EaseOutBack(Saturate(P / 0.5f));
+		Scale *= FMath::Max(Pop, 0.01f);
+	}
+	else
+	{
+		SetSpriteShown(true);
+		if (AttackPhase == ESRAttackPhase::Windup)
 		{
-			const float Draw = EaseOutCubic(W);
-			WeaponRot = FMath::Lerp(WeaponRot, FRotator(0.f, 0.f, 0.f), Saturate(W * 3.f));
-			WeaponOffset = FVector(6.f, 0.f, 14.f) * Saturate(W * 3.f);
-			Pitch += 7.f * Draw;
-			Offset.X -= 5.f * Draw;
-			bShowArrow = true;
-			ArrowPull = 20.f * Draw;
+			Anim = ESRSpriteAnim::Attack;
+			Frame = Sheet.AttackFrame(AttackPhase, Saturate(PhaseTime / FMath::Max(S.WindupTime, 0.01f)));
 		}
-		else if (W < 0.7f)
+		else if (AttackPhase == ESRAttackPhase::Recovery)
 		{
-			const float Raise = EaseOutCubic(W / 0.7f);
-			WeaponRot.Pitch = FMath::Lerp(-10.f, 62.f, Raise);
-			Pitch += 11.f * Raise;
-			Offset.X -= 9.f * Raise;
+			// Strike() ran on the frame this phase began, so its first frame is the authored strike / release frame.
+			const float R = Saturate(PhaseTime / FMath::Max(S.RecoveryTime, 0.01f));
+			Anim = ESRSpriteAnim::Attack;
+			Frame = Sheet.AttackFrame(AttackPhase, R);
+			if (!S.bRanged) { Offset.X += F.MeleeLungeDistance * (1.f - EaseOutCubic(R)); }
+		}
+		else if (HitAnimClock < F.HitAnimTime && !bWalking)
+		{
+			// Flinch: only while standing and not attacking, so it never hides a strike or makes feet slide.
+			const int32 Frames = Sheet.Anim(ESRSpriteAnim::Hit).Frames;
+			Anim = ESRSpriteAnim::Hit;
+			Frame = FMath::Min(FMath::FloorToInt(HitAnimClock / F.HitAnimTime * Frames), Frames - 1);
+		}
+		else if (bWalking)
+		{
+			const int32 Frames = Sheet.Anim(ESRSpriteAnim::Walk).Frames;
+			Anim = ESRSpriteAnim::Walk;
+			Frame = FMath::FloorToInt(FMath::Frac(WalkDistance / FMath::Max(F.WalkCycleDistance, 1.f)) * Frames) % Frames;
 		}
 		else
 		{
-			const float Swing = (W - 0.7f) / 0.3f;
-			const float SwingE = Swing * Swing;
-			WeaponRot.Pitch = FMath::Lerp(62.f, -100.f, SwingE);
-			Pitch += FMath::Lerp(11.f, -17.f, SwingE);
-			Offset.X += FMath::Lerp(-9.f, F.MeleeLungeDistance, SwingE);
-		}
-	}
-	else if (AttackPhase == ESRAttackPhase::Recovery)
-	{
-		const float R = EaseOutCubic(Saturate(PhaseTime / FMath::Max(S.RecoveryTime, 0.01f)));
-		if (S.bRanged)
-		{
-			// Release kick: bow jolts forward, body rocks back, then settle.
-			WeaponRot = FMath::Lerp(FRotator(-14.f, 0.f, 0.f), WeaponRot, R);
-			WeaponOffset = FVector(6.f, 0.f, 14.f) * (1.f - R);
-			Pitch += 7.f * (1.f - R);
-			Offset.X -= 8.f * (1.f - R);
-		}
-		else
-		{
-			WeaponRot.Pitch = FMath::Lerp(-100.f, -10.f, R);
-			Pitch += -17.f * (1.f - R);
-			Offset.X += F.MeleeLungeDistance * (1.f - R);
+			const int32 Frames = Sheet.Anim(ESRSpriteAnim::Idle).Frames;
+			Frame = FMath::FloorToInt(AnimTime * F.IdleFps) % Frames;
 		}
 	}
 
-	// --- hit reaction: quick squash, no pose interruption ---
+	// --- hit reaction: quick squash on top of the frame, no pose interruption ---
 	const float Sq = Squash * Squash * F.HitSquash;
-	Scale.Z *= 1.f - Sq;
+	Scale.Y *= 1.f - Sq;
 	Scale.X *= 1.f + Sq * 0.6f;
-	Scale.Y *= 1.f + Sq * 0.6f;
 
 	// --- order acknowledged: hop with a little stretch ---
 	if (AckClock >= 0.f && AckClock < F.AckHopTime)
@@ -246,83 +315,35 @@ void ASRUnit::StepVisual(float Dt)
 		const float H = AckClock / F.AckHopTime;
 		const float Arc = 4.f * H * (1.f - H);
 		Offset.Z += F.AckHopHeight * Arc;
-		Scale.Z *= 1.f + 0.10f * Arc;
+		Scale.Y *= 1.f + 0.10f * Arc;
 		Scale.X *= 1.f - 0.05f * Arc;
-		Scale.Y *= 1.f - 0.05f * Arc;
 	}
 
-	// --- spawn pop-in (overshoots, then settles). Unit becomes active exactly when it finishes. ---
-	if (!bActive)
-	{
-		const float P = Saturate((SpawnClock - SpawnDelay) / FMath::Max(F.SpawnPopTime, 0.01f));
-		Scale *= FMath::Max(P <= 0.f ? 0.001f : EaseOutBack(P), 0.001f);
-	}
-
-	VisualRoot->SetRelativeLocationAndRotation(Offset, FRotator(Pitch, 0.f, Roll));
-	VisualRoot->SetRelativeScale3D(Scale);
-
-	const FVector PivotBase = S.bRanged ? FVector(27, -22, 78) : FVector(8, 36, 86);
-	WeaponPivot->SetRelativeLocationAndRotation(PivotBase + WeaponOffset, WeaponRot);
-
-	if (NockedArrow)
-	{
-		if (NockedArrow->IsVisible() != bShowArrow) { NockedArrow->SetVisibility(bShowArrow); }
-		if (bShowArrow) { NockedArrow->SetRelativeLocation(FVector(26.f - ArrowPull, -22.f, 92.f)); }
-	}
+	ApplySprite(Anim, Frame, 1.f, Offset, Scale);
 }
 
 void ASRUnit::StepDeathVisual(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRSpriteSheet& Sheet = FSRSpriteSheet::For(UnitType);
 	DeathClock += Dt;
 
 	if (bRingVisible) { Ring->SetVisibility(false); bRingVisible = false; }
-	if (NockedArrow && NockedArrow->IsVisible()) { NockedArrow->SetVisibility(false); }
+	SetSpriteShown(true);
 
-	// Topple away from the blow, accelerating like a fall, with a small settle bounce at the end.
-	const float T = Saturate(DeathClock / FMath::Max(F.DeathToppleTime, 0.01f));
-	float Fall = T * T;
-	const float After = DeathClock - F.DeathToppleTime;
-	if (After > 0.f && After < 0.25f) { Fall -= 0.06f * FMath::Sin(After / 0.25f * PI); }
+	// The facing rows are frozen from the moment of death (they are simply no longer updated).
+	const float AnimTimeTotal = FMath::Max(F.DeathAnimTime, 0.05f);
+	const int32 Frames = Sheet.Anim(ESRSpriteAnim::Death).Frames;
+	const int32 Frame = FMath::Min(FMath::FloorToInt(DeathClock / AnimTimeTotal * Frames), Frames - 1); // holds the corpse
 
-	const FVector Dir3(DeathDir.X, DeathDir.Y, 0.f);
-	const FVector Axis = FVector::CrossProduct(FVector::UpVector, Dir3).GetSafeNormal();
-	const FQuat Topple(Axis, FMath::DegreesToRadians(88.f * Fall));
+	// Carried a little way by the blow while falling, then still.
+	const float Knock = EaseOutCubic(Saturate(DeathClock / (AnimTimeTotal * 0.6f))) * F.DeathKnockDistance;
+	SetActorLocationAndRotation(SimPos + FVector(DeathDir.X, DeathDir.Y, 0.f) * Knock, FRotator(0.f, FacingYaw, 0.f));
 
-	// Then lie still, then sink into the ground and fade (Fade is honoured by M_UnitGreybox if it supports it).
-	const float Sink = Saturate((After - F.CorpseLingerTime) / FMath::Max(F.CorpseSinkTime, 0.01f));
-	const float SinkE = Sink * Sink;
-
-	SetActorLocationAndRotation(SimPos, FRotator(0.f, FacingYaw, 0.f));
-	VisualRoot->SetWorldRotation(Topple * FQuat(FRotator(0.f, FacingYaw, 0.f)));
-	VisualRoot->SetRelativeLocation(FVector(0.f, 0.f, GetRadius() * 0.7f * Fall - 95.f * SinkE));
-	VisualRoot->SetRelativeScale3D(FVector(1.f));
-
-	if (Sink > 0.f)
-	{
-		for (UMaterialInstanceDynamic* MID : PartMIDs)
-		{
-			MID->SetScalarParameterValue(TEXT("Fade"), 1.f - Sink);
-		}
-	}
-}
-
-void ASRUnit::UpdateFlash(float Dt)
-{
-	const USRFeelSettings& F = USRFeelSettings::Get();
-	HitFlash = FMath::Max(0.f, HitFlash - Dt / FMath::Max(F.HitFlashTime, 0.01f));
-	if (FMath::IsNearlyEqual(HitFlash, LastAppliedFlash, 0.001f)) { return; }
-	LastAppliedFlash = HitFlash;
-
-	for (int32 i = 0; i < PartMIDs.Num(); ++i)
-	{
-		PartMIDs[i]->SetScalarParameterValue(TEXT("HitFlash"), HitFlash);
-		if (Battle->bUnitMaterialIsFallback)
-		{
-			// The engine fallback material has no HitFlash input, so fake it by driving Color.
-			PartMIDs[i]->SetVectorParameterValue(TEXT("Color"), FMath::Lerp(PartColors[i], F.HitFlashColor, HitFlash));
-		}
-	}
+	// Lie there, then dissolve (dithered in the sprite, texel by texel in its shadow).
+	const float After = DeathClock - AnimTimeTotal - F.CorpseLingerTime;
+	const float Fade = 1.f - Saturate(After / FMath::Max(F.CorpseFadeTime, 0.01f));
+	ApplySprite(ESRSpriteAnim::Death, Frame, Fade, FVector::ZeroVector, FVector2D(1.f, 1.f));
 }
 
 void ASRUnit::UpdateRing(float Dt)

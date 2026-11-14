@@ -42,6 +42,8 @@ public:
 	void AddTrauma(float Amount);
 
 	FVector GetFocusPoint() const { return FVector(Focus.X, Focus.Y, FocusZ); }
+	/** Rotation the view is rendered with this frame. Sprite cards copy it (see USRBattleSubsystem::UpdateSpriteView). */
+	FRotator GetViewRotation() const;
 	float GetZoomDistance() const;
 
 private:
