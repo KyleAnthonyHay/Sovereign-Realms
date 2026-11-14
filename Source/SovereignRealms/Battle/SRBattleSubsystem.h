@@ -91,7 +91,9 @@ public:
 	 * search finds every member's way round lakes, cliffs, woods and buildings.
 	 */
 	void CommandMove(const TArray<ASRUnit*>& Group, const FVector2D& Goal, bool bAttackMove, ESRFormationShape Shape = ESRFormationShape::Line,
-		bool bAcknowledge = true, const FVector2D* Facing = nullptr);
+		bool bAcknowledge = true, const FVector2D* Facing = nullptr, bool bKeepPace = true);
+	/** Deep water at a point (a hard wall for everyone without water privileges). */
+	bool IsDeepWater(const FVector2D& Point) const;
 	void CommandAttack(const TArray<ASRUnit*>& Group, ASRUnit* Target);
 	void CommandAttackBuilding(const TArray<ASRUnit*>& Group, ASRBuilding* Target);
 

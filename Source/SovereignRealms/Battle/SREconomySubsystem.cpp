@@ -111,10 +111,12 @@ void USREconomySubsystem::Step(float Dt)
 
 // ------------------------------------------------------------------ resources
 
-void USREconomySubsystem::AddResource(ESRTeam Team, ESRResource Resource, int32 Amount)
+void USREconomySubsystem::AddResource(ESRTeam Team, ESRResource Resource, int32 Amount, bool bIgnoreStorage)
 {
 	int32& Value = Stock[int32(Team)][int32(Resource)];
-	Value = FMath::Clamp(Value + Amount, 0, 999999);
+	// the stores hold only so much (the castle's level); what does not fit is lost
+	const int32 Cap = bIgnoreStorage ? 999999 : FMath::Max(GetStorage(Team, Resource), Value);
+	Value = FMath::Clamp(Value + Amount, 0, Cap);
 	if (Team == ESRTeam::Player && Amount > 0) { Pulse[int32(Resource)] = 1.f; }
 }
 
@@ -152,7 +154,9 @@ float USREconomySubsystem::GetIncomePerMinute(ESRTeam Team, ESRResource Resource
 	{
 		return CountFinished(ESRBuildingType::Farm, Team) * F.FarmFoodPerPayout * 60.f / FMath::Max(F.FarmPayoutInterval, 0.2f);
 	}
-	return CountFinished(ESRBuildingType::Mine, Team) * F.MineGoldPerPayout * 60.f / FMath::Max(F.MinePayoutInterval, 0.2f);
+	int32 PerRound = 0;   // each mine at its level
+	for (const ASRBuilding* B : Buildings) { if (B && B->Team == Team && B->BuildingType == ESRBuildingType::Mine && B->IsFinished()) { PerRound += B->GetPayoutAmount(); } }
+	return PerRound * 60.f / FMath::Max(F.MinePayoutInterval, 0.2f);
 }
 
 void USREconomySubsystem::AddPopup(const FVector& Origin, int32 Amount, ESRResource Resource)
@@ -331,7 +335,30 @@ int32 USREconomySubsystem::GetPopulationCap(ESRTeam Team) const
 	{
 		if (B && B->Team == Team) { Cap += B->GetPopProvided(); }
 	}
-	return FMath::Min(Cap, USRFeelSettings::Get().MaxPopulation);
+	return FMath::Min(Cap, GetPopulationCeiling(Team));
+}
+
+int32 USREconomySubsystem::GetCastleLevel(ESRTeam Team) const
+{
+	const ASRBuilding* Castle = GetCastle(Team);
+	return Castle ? Castle->GetLevel() : 1;
+}
+
+int32 USREconomySubsystem::GetPopulationCeiling(ESRTeam Team) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return GetCastle(Team) ? F.CastleLevel(GetCastleLevel(Team)).PopulationCeiling : F.MaxPopulation;
+}
+
+int32 USREconomySubsystem::GetMaxBuilders(ESRTeam Team) const
+{
+	return USRFeelSettings::Get().CastleLevel(GetCastleLevel(Team)).Builders;
+}
+
+int32 USREconomySubsystem::GetStorage(ESRTeam Team, ESRResource Resource) const
+{
+	const FSRCost& S = USRFeelSettings::Get().CastleLevel(GetCastleLevel(Team)).Storage;
+	return Resource == ESRResource::Gold ? S.Gold : S.Food;
 }
 
 void USREconomySubsystem::NotifyPopulationCapped(ESRTeam Team)
@@ -434,7 +461,24 @@ void USREconomySubsystem::NotifyBuildingAttacked(ASRBuilding* Building, ASRUnit*
 	Last = Now;
 	const FVector2D At = Building->GetFootprintCentre();
 	PushAlert(ESRAlertKind::UnderAttack, FText::Format(NSLOCTEXT("SREconomy", "Attacked", "Your {0} is under attack!"), FText::FromString(Building->GetDisplayName())), &At);
-	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::WarHorn, 0.6f); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackAlert); }
+}
+
+void USREconomySubsystem::NotifyUnitAttacked(const ASRUnit* Victim)
+{
+	// Troops hit somewhere the player is not looking: one alert (and click to go there), at most every 15 s, and not on
+	// top of a building alert from the same fight.
+	if (!Victim || Victim->GetTeam() != ESRTeam::Player) { return; }
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || FVector2D::DistSquared(Victim->GetPos2D(), Battle->GetSpriteView().FocusXY) < FMath::Square(2600.f)) { return; }
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastUnitAttackAlert < 15.0) { return; }
+	const int32 T = int32(ESRTeam::Player);
+	if (Now - LastAttackTime[T] < 6.0 && FVector2D::DistSquared(LastAttackLocation[T], Victim->GetPos2D()) < FMath::Square(3000.f)) { return; }
+	LastUnitAttackAlert = Now;
+	const FVector2D At = Victim->GetPos2D();
+	PushAlert(ESRAlertKind::UnderAttack, NSLOCTEXT("SREconomy", "TroopsAttacked", "Your troops are under attack!"), &At);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackAlert); }
 }
 
 void USREconomySubsystem::NotifyBuildingDestroyed(ASRBuilding* Building)

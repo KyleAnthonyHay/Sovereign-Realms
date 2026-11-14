@@ -90,6 +90,74 @@ struct FSRCost
 	FSRCost(int32 InGold, int32 InFood) : Gold(InGold), Food(InFood) {}
 };
 
+/**
+ * One level of the castle (Sovereign Feel > Buildings > CastleLevels; index 0 is level 1). Raising the castle is how a
+ * kingdom grows: more housing and a higher troop ceiling, more builders, a wider building zone, stronger walls and
+ * bigger stores.
+ */
+USTRUCT()
+struct FSRCastleLevel
+{
+	GENERATED_BODY()
+
+	/** Price of raising the castle to this level (level 1: none). */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle")
+	FSRCost UpgradeCost = FSRCost(0, 0);
+
+	/** Seconds the raising takes (builders at the walls speed it up). */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "1"))
+	float UpgradeTime = 40.f;
+
+	/** Troops the castle itself houses. */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "0"))
+	int32 Housing = 8;
+
+	/** The most troops the kingdom may field, however many farms it builds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "1"))
+	int32 PopulationCeiling = 36;
+
+	/** Builders it may have. */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "0"))
+	int32 Builders = 2;
+
+	/** Radius (cm) of the building zone round it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "0"))
+	float BuildZone = 4200.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "1"))
+	float Health = 12000.f;
+
+	/** The most gold / food the kingdom can hold; income beyond it is lost. */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle")
+	FSRCost Storage = FSRCost(600, 600);
+};
+
+/** One level of a watchtower (Sovereign Feel > Buildings > TowerLevels; index 0 is level 1). */
+USTRUCT()
+struct FSRTowerLevel
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Tower") FSRCost UpgradeCost = FSRCost(0, 0);
+	UPROPERTY(EditAnywhere, Config, Category = "Tower", meta = (ClampMin = "1")) float UpgradeTime = 30.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Tower", meta = (ClampMin = "0")) float Damage = 50.f;
+	/** Seconds between shots. */
+	UPROPERTY(EditAnywhere, Config, Category = "Tower", meta = (ClampMin = "0.1")) float Interval = 1.2f;
+	UPROPERTY(EditAnywhere, Config, Category = "Tower", meta = (ClampMin = "0")) float Range = 2400.f;
+	UPROPERTY(EditAnywhere, Config, Category = "Tower", meta = (ClampMin = "1")) float Health = 1800.f;
+};
+
+/** One level of a gold mine (Sovereign Feel > Buildings > MineLevels; index 0 is level 1). */
+USTRUCT()
+struct FSRMineLevel
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Mine") FSRCost UpgradeCost = FSRCost(0, 0);
+	UPROPERTY(EditAnywhere, Config, Category = "Mine", meta = (ClampMin = "1")) float UpgradeTime = 30.f;
+	/** Gold each delivery brings (deliveries come every MinePayoutInterval). */
+	UPROPERTY(EditAnywhere, Config, Category = "Mine", meta = (ClampMin = "0")) int32 GoldPerPayout = 10;
+	UPROPERTY(EditAnywhere, Config, Category = "Mine", meta = (ClampMin = "1")) float Health = 1250.f;
+};
+
 UENUM()
 enum class ESRUnitType : uint8
 {
@@ -336,6 +404,10 @@ struct FSRUnitStats
 	/** How far it sees (fog of war, cm). 0 = its AcquireRange. */
 	UPROPERTY(EditAnywhere, Config, Category = "Unit", meta = (ClampMin = "0"))
 	float SightRange = 0.f;
+
+	/** May walk into deep water (none do yet). Everyone else meets it as a hard wall, even when shoved. */
+	UPROPERTY(EditAnywhere, Config, Category = "Movement")
+	bool bWaterWalker = false;
 
 	float Sight() const { return SightRange > 0.f ? SightRange : AcquireRange; }
 };

@@ -896,10 +896,14 @@ int32 USRBattleSubsystem::CountBuilders(ESRTeam Team) const
 
 void USRBattleSubsystem::LogStatus() const
 {
-	int32 Selected = 0;
-	for (const ASRUnit* Unit : Units) { Selected += (Unit && Unit->IsSelected()) ? 1 : 0; }
-	UE_LOG(LogSovereign, Log, TEXT("STATUS t=%.1f player=%d enemy=%d selected=%d result=%d autobattle=%d"),
-		BattleClock, CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy), Selected, int32(Result), bAutoBattle ? 1 : 0);
+	int32 Selected = 0, InWater = 0;
+	for (const ASRUnit* Unit : Units)
+	{
+		Selected += (Unit && Unit->IsSelected()) ? 1 : 0;
+		InWater += (Unit && Unit->IsAlive() && IsDeepWater(Unit->GetPos2D())) ? 1 : 0;   // should stay 0 (water is a wall)
+	}
+	UE_LOG(LogSovereign, Log, TEXT("STATUS t=%.1f player=%d enemy=%d selected=%d result=%d autobattle=%d inwater=%d"),
+		BattleClock, CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy), Selected, int32(Result), bAutoBattle ? 1 : 0, InWater);
 	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (const ASRCameraPawn* Camera = PC ? Cast<ASRCameraPawn>(PC->GetPawn()) : nullptr)
 	{
@@ -968,8 +972,15 @@ ASRBuilding* USRBattleSubsystem::FindNearestEnemyBuilding(const ASRUnit* For, fl
 	return Best;
 }
 
+bool USRBattleSubsystem::IsDeepWater(const FVector2D& Point) const
+{
+	const USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	FIntPoint C;
+	return Grid && Grid->ToCell(Point, C) && Grid->IsWater(C);
+}
+
 void USRBattleSubsystem::CommandMove(const TArray<ASRUnit*>& Group, const FVector2D& Goal, bool bAttackMove, ESRFormationShape Shape, bool bAcknowledge,
-	const FVector2D* Facing)
+	const FVector2D* Facing, bool bKeepPace)
 {
 	TArray<ASRUnit*> Units2;
 	for (ASRUnit* U : Group) { if (U && U->IsAlive()) { Units2.Add(U); } }
@@ -995,6 +1006,14 @@ void USRBattleSubsystem::CommandMove(const TArray<ASRUnit*>& Group, const FVecto
 		Units2[i]->OrderMovePath(Path, bAttackMove);
 		Units2[i]->SetHome(Slot);
 		if (bAcknowledge) { Units2[i]->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay)); }
+	}
+	// March together: the column keeps to its slowest member's pace (riders do not leave the shields behind). Only
+	// the march: a fight met on the way is fought at full speed.
+	if (bKeepPace && Units2.Num() > 1)
+	{
+		float Slowest = TNumericLimits<float>::Max();
+		for (const ASRUnit* U : Units2) { Slowest = FMath::Min(Slowest, U->Stats().MaxSpeed); }
+		for (ASRUnit* U : Units2) { U->SetPace(Slowest < U->Stats().MaxSpeed - 1.f ? Slowest : 0.f); }
 	}
 }
 

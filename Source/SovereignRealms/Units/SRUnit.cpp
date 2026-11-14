@@ -90,6 +90,7 @@ bool ASRUnit::IsPlanted() const
 void ASRUnit::OrderMove(const FVector2D& Dest)
 {
 	if (!IsAlive()) { return; }
+	PaceSpeed = 0.f;
 	Order = ESROrder::Move;
 	Destination = Dest;
 	Waypoints.Reset();
@@ -103,6 +104,7 @@ void ASRUnit::OrderMove(const FVector2D& Dest)
 void ASRUnit::OrderAttackMove(const FVector2D& Dest)
 {
 	if (!IsAlive()) { return; }
+	PaceSpeed = 0.f;
 	Order = ESROrder::AttackMove;
 	Destination = Dest;
 	Waypoints.Reset();
@@ -304,6 +306,7 @@ void ASRUnit::StepSim(float Dt)
 	}
 	else if (Order == ESROrder::Move || Order == ESROrder::AttackMove)
 	{
+		const float Top = PaceSpeed > 0.f ? FMath::Min(PaceSpeed, S.MaxSpeed) : S.MaxSpeed;   // a group keeps its slowest pace
 		const FVector2D To = Destination - Pos;
 		const float Dist = To.Size();
 
@@ -321,7 +324,7 @@ void ASRUnit::StepSim(float Dt)
 				Waypoints.RemoveAt(0);
 				ResetProgress();
 			}
-			Desired = (Destination - Pos).GetSafeNormal() * S.MaxSpeed;
+			Desired = (Destination - Pos).GetSafeNormal() * Top;
 		}
 		else if (Dist <= F.ArriveTolerance || bGiveUp)
 		{
@@ -330,7 +333,7 @@ void ASRUnit::StepSim(float Dt)
 		else
 		{
 			// Arrive: speed limit falls with sqrt(distance) so braking is smooth and never overshoots.
-			Desired = (To / Dist) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Dist));
+			Desired = (To / Dist) * FMath::Min(Top, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Dist));
 		}
 	}
 
@@ -652,6 +655,10 @@ void ASRUnit::ReceiveDamage(float Amount, ASRUnit* From, const FVector2D& HitDir
 
 	Health = FMath::Max(0.f, Health - Amount);
 	LastDamagedTime = Now;
+	if (Team == ESRTeam::Player && From)
+	{
+		if (USREconomySubsystem* Eco = USREconomySubsystem::Get(this)) { Eco->NotifyUnitAttacked(this); }
+	}
 
 	// Reaction is purely additive (flash, squash, flinch frames, a small shove). It never cancels the unit's order or attack.
 	HitFlash = 1.f;
@@ -806,6 +813,8 @@ bool ASRUnit::CanStep(const FVector2D& Step) const
 	// Probe a body-radius ahead: walls / rocks / trunks, then ledges and drops in the ground itself.
 	const FVector2D Probe = Pos + Step + Dir * GetRadius() * 0.8f;
 	if (Battle->IsPathBlocked(SimPos, FVector(Probe.X, Probe.Y, SimPos.Z))) { return false; }
+	// deep water is a wall (one already in it may always step out)
+	if (!Stats().bWaterWalker && Battle->IsDeepWater(Probe) && !Battle->IsDeepWater(Pos)) { return false; }
 
 	float ProbeZ = SimPos.Z;
 	if (!Battle->SampleGround(Probe, SimPos.Z, ProbeZ)) { return false; } // off the edge of the world
@@ -852,6 +861,9 @@ void ASRUnit::Nudge(const FVector2D& Delta)
 {
 	if (bDead || Delta.SizeSquared() < 1e-6f) { return; }
 	const FVector To(SimPos.X + Delta.X, SimPos.Y + Delta.Y, SimPos.Z);
+	// a shove never pushes anyone into deep water
+	const FVector2D Edge = FVector2D(To) + Delta.GetSafeNormal() * GetRadius() * 0.6f;
+	if (!Stats().bWaterWalker && Battle->IsDeepWater(Edge) && !Battle->IsDeepWater(GetPos2D())) { return; }
 	if (!Battle->IsPathBlocked(SimPos, To))
 	{
 		SimPos.X = To.X;

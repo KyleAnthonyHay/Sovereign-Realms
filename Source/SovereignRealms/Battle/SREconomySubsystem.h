@@ -70,7 +70,16 @@ public:
 
 	// ---- resources ----
 	int32 GetResource(ESRTeam Team, ESRResource Resource) const { return Stock[int32(Team)][int32(Resource)]; }
-	void AddResource(ESRTeam Team, ESRResource Resource, int32 Amount);
+	/** Adds (or takes) resources; income beyond the stores' capacity (GetStorage) is lost unless bIgnoreStorage. */
+	void AddResource(ESRTeam Team, ESRResource Resource, int32 Amount, bool bIgnoreStorage = false);
+	/** The castle's level (1 without one). */
+	int32 GetCastleLevel(ESRTeam Team) const;
+	/** The most gold / food the kingdom can hold at its castle's level. */
+	int32 GetStorage(ESRTeam Team, ESRResource Resource) const;
+	/** The most troops it may field at its castle's level, however many farms. */
+	int32 GetPopulationCeiling(ESRTeam Team) const;
+	/** Builders it may have at its castle's level. */
+	int32 GetMaxBuilders(ESRTeam Team) const;
 	/** Saved games. */
 	void SetStock(ESRTeam Team, ESRResource Resource, int32 Amount) { Stock[int32(Team)][int32(Resource)] = FMath::Max(0, Amount); }
 	bool CanAfford(ESRTeam Team, const FSRCost& Cost) const;
@@ -87,7 +96,7 @@ public:
 	int32 GetPopulation(ESRTeam Team) const;
 	/** Troops waiting in recruit queues. */
 	int32 GetQueuedPopulation(ESRTeam Team) const;
-	/** What the team's finished buildings house, capped at Sovereign Feel > Economy > MaxPopulation. */
+	/** What the team's finished buildings house, capped at the castle level's troop ceiling. */
 	int32 GetPopulationCap(ESRTeam Team) const;
 	void NotifyPopulationCapped(ESRTeam Team);
 	float GetPopulationFlash() const { return PopFlash; }
@@ -100,12 +109,14 @@ public:
 	ASRBuilding* PlaceBuilding(ESRBuildingType Type, ESRTeam Team, const FVector2D& Want, FText* OutReason = nullptr);
 	void NotifyBuildingFinished(ASRBuilding* Building);
 	void NotifyBuildingAttacked(ASRBuilding* Building, ASRUnit* Attacker);
+	/** One of the player's troops was hit: an alert if it is out of view (throttled). */
+	void NotifyUnitAttacked(const ASRUnit* Victim);
 	void NotifyBuildingDestroyed(ASRBuilding* Building);
 	/** The team's castle, if it still stands. */
 	ASRBuilding* GetCastle(ESRTeam Team) const;
 	/** Inside one of the kingdom's building zones (its castle's TerritoryRadius): buildings there raise themselves. */
 	bool IsInBuildZone(ESRTeam Team, const FVector2D& At) const;
-	/** Builders alive and builders in training at the castle (the cap is Sovereign Feel > Builders > MaxBuilders). */
+	/** Builders alive and builders in training at the castle (the cap is GetMaxBuilders: the castle level). */
 	int32 GetBuilderCount(ESRTeam Team, int32* OutQueued = nullptr) const;
 	/** Finished, standing buildings of a type. */
 	int32 CountFinished(ESRBuildingType Type, ESRTeam Team) const;
@@ -152,5 +163,6 @@ private:
 	double LastAttackTime[2] = { -100.0, -100.0 };
 	FVector2D LastAttackLocation[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
 	TMap<TWeakObjectPtr<ASRBuilding>, double> LastAttackAlert;
+	double LastUnitAttackAlert = -100.0;
 	bool bStarted = false;
 };

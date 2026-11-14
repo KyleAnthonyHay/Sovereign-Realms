@@ -134,7 +134,7 @@ void USRFogSubsystem::Recompute()
 		{
 			if (!B || !B->IsAlive() || B->Team != ESRTeam::Player) { continue; }
 			const FSRBuildingStats& S = B->Stats();
-			Stamp(B->GetFootprintCentre(), FMath::Max3(1400.f, S.AttackRange + 300.f, S.TerritoryRadius * 0.5f));
+			Stamp(B->GetFootprintCentre(), FMath::Max3(1400.f, B->GetAttackRange() + 300.f, S.TerritoryRadius * 0.5f));
 		}
 		// An enemy building is known once any part of it has been in sight.
 		for (ASRBuilding* B : Eco->GetBuildings())

@@ -53,6 +53,7 @@ namespace SRId
 		Slot = 100,       // + platoon * 5 + {0 row, 1 formation, 2 stance, 3 recruits, 4 disband}
 		Menu = 300,       // + entry
 		Screen = 340,     // + control on a sub-screen
-		Setting = 400     // + row
+		Setting = 400,    // + row
+		BuilderRow = 200  // + builder in the top bar's list
 	};
 }

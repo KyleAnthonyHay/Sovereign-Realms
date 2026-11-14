@@ -54,6 +54,9 @@ public:
 	/** Move (or attack-move) through waypoints to the last point: how recruits and group moves get round buildings. */
 	void OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove);
 	int32 GetWaypointsLeft() const { return Waypoints.Num(); }
+	/** Marching in a group: travel no faster than this (cm/s; 0 = own top speed). Set by a group move, cleared by
+	 * any new order. */
+	void SetPace(float Speed) { PaceSpeed = Speed; }
 
 	/** Little hop that says "order received". */
 	void Acknowledge(float Delay);
@@ -212,6 +215,7 @@ private:
 	float NoProgressTime = 0.f;
 	bool bReturnHomeWhenDone = false;
 	double LastProvokedTime = -100.0;
+	float PaceSpeed = 0.f;
 	TWeakObjectPtr<ASRBuilding> BuildTarget;
 	bool bWorking = false;
 	float WorkClock = 0.f;

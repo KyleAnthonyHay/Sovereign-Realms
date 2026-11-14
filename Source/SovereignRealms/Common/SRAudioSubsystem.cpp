@@ -74,6 +74,7 @@ namespace
 		{ TEXT("StoneImpact"),     0.05f,  4.f, 0.90f, 0.08f, 5000.f },
 		{ TEXT("BattleLoop"),      0.00f,  1.f, 0.45f, 0.00f, 4500.f },
 		{ TEXT("WindLoop"),        0.00f,  1.f, 0.50f, 0.00f, 0.f },
+		{ TEXT("AttackAlert"),     1.00f,  1.f, 0.65f, 0.00f, 0.f },
 	};
 }
 
@@ -236,7 +237,7 @@ bool USRAudioSubsystem::IsUISound(ESRSound Sound) const
 	switch (Sound)
 	{
 	case ESRSound::Select: case ESRSound::Acknowledge: case ESRSound::AttackOrder: case ESRSound::UIClick: case ESRSound::UIError:
-	case ESRSound::BuildPlace: case ESRSound::Victory: case ESRSound::Defeat: case ESRSound::WarHorn: case ESRSound::RecruitReady:
+	case ESRSound::BuildPlace: case ESRSound::Victory: case ESRSound::Defeat: case ESRSound::WarHorn: case ESRSound::RecruitReady: case ESRSound::AttackAlert:
 		return true;
 	default:
 		return false;

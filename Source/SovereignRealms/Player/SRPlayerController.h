@@ -75,7 +75,10 @@ public:
 	ASRBuilding* GetSelectedBuilding() const { return SelectedBuilding.Get(); }
 	ASRBuilding* GetHoveredBuilding() const { return HoveredBuilding.Get(); }
 	/** Queue a recruit at the selected barracks / range if it trains that type, else at the player's least busy one. */
-	bool RecruitTroop(ESRUnitType Type);
+	/** Queues Count recruits of Type (as many as can be paid for and housed; a refusal of the first gives feedback). */
+	bool RecruitTroop(ESRUnitType Type, int32 Count = 1);
+	/** How many a recruit press queues with the modifiers held now: 1, Shift = RecruitBatch, Ctrl / Option = RecruitBatchLarge. */
+	int32 RecruitCountFromModifiers() const;
 	/** The selected (or else the first) barracks / range the player owns gets this rally point. */
 	void SetRallyFor(const FVector& GroundPoint);
 	/** The player's finished building that would train Type (least busy first), or null. */
@@ -105,6 +108,10 @@ public:
 	ESRFormationShape GetLooseFormation() const { return LooseFormation; }
 	/** The formation the current selection would move in. */
 	ESRFormationShape GetSelectionFormation() const;
+	/** Does the selection march at its slowest member's pace (its platoon's setting, or the loose-selection one)? */
+	bool GetSelectionMarchTogether() const;
+	/** M, or the March button: toggle marching together for the selected platoon (or for loose selections). */
+	void ToggleMarchCommand();
 
 	// ---- build menu ----
 	void ToggleBuildMenu();
@@ -147,8 +154,10 @@ public:
 	void SendBuildersTo(ASRBuilding* Building);
 	/** The selected builders go to the nearest of our buildings that needs work (X, or the Repair button). */
 	void RepairCommand();
-	/** Raise the castle a level (U, or its Upgrade button). */
+	/** U: upgrade the selected building if it has levels, otherwise the castle. */
 	void UpgradeCastleCommand();
+	/** Upgrade one of our buildings a level (its Upgrade button). */
+	void UpgradeBuildingCommand(ASRBuilding* Building);
 	bool SelectionHasBuilders() const;
 	ASRBuilding* PickBuildingUnderCursor() const;
 	void IssueStop();
@@ -277,6 +286,8 @@ private:
 	bool bBuildMenuOpen = false;
 	ESRBuildCategory BuildMenuTab = ESRBuildCategory::Economy;
 	ESRFormationShape LooseFormation = ESRFormationShape::Line;
+	bool bLooseMarchTogether = true;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> MarchAction;
 
 	bool bCursorOverride = false;
 	FVector2D CursorOverride = FVector2D(0.5f, 0.5f);

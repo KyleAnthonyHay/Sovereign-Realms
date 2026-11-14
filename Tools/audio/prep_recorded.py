@@ -202,7 +202,8 @@ def main_replace():
     takes("ArrowHitFlesh", [trim(cc0("impactPunch_medium_00%d.ogg" % k)) for k in range(5)])
     takes("ArrowHitWood", [trim(cc0("impactWood_light_00%d.ogg" % k)) for k in range(5)])
     takes("ArrowHitGround", [trim(cc0("impactSoft_medium_00%d.ogg" % k)) for k in range(5)], peak=0.7)
-    takes("Select", [trim(cc0(n)) for n in ("clothBelt.ogg", "clothBelt2.ogg", "beltHandle1.ogg", "beltHandle2.ogg")], peak=0.7)
+    takes("Select", [trim(cc0(n)) for n in ("ui_click1.ogg", "ui_click2.ogg")], peak=0.7)   # a crisp click
+    takes("AttackAlert", [trim(cc0("question_002.ogg"))], peak=0.75)   # under attack: a short notification, no horn
     takes("Acknowledge", [trim(cc0("chain_0%d.ogg" % k)) for k in (1, 2, 3)], peak=0.7)
     takes("AttackOrder", [trim(cc0("blade_0%d.ogg" % k)) for k in (1, 2, 3)], peak=0.75)
     takes("UIClick", [trim(cc0("click_001.ogg"))], peak=0.7)   # (the pack's other clicks are only ~10 ms)

@@ -221,7 +221,7 @@ void ASRBuilding::Deliver()
 	if (!IsFinished() || !Economy) { return; }
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const bool bFarm = BuildingType == ESRBuildingType::Farm;
-	int32 Amount = bFarm ? F.FarmFoodPerPayout : F.MineGoldPerPayout;
+	int32 Amount = GetPayoutAmount();
 	// An easier commander gets only a share of its output (USRAISubsystem::Profile).
 	if (const USRAISubsystem* AI = USRAISubsystem::Get(this)) { Amount = FMath::RoundToInt(Amount * AI->IncomeScale(Team)); }
 	if (Amount <= 0 || (BuildingType != ESRBuildingType::Farm && BuildingType != ESRBuildingType::Mine)) { return; }
@@ -247,7 +247,7 @@ bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s cannot recruit"), *GetActorNameOrLabel());
 		return false;
 	}
-	if (Queue.Num() >= F.MaxRecruitQueue)
+	if (F.MaxRecruitQueue > 0 && Queue.Num() >= F.MaxRecruitQueue)
 	{
 		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s queue full (%d)"), Name, Queue.Num());
 		Economy->NotifyRefused();
@@ -257,19 +257,20 @@ bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 	{
 		int32 Queued = 0;
 		const int32 Alive = Economy->GetBuilderCount(Team, &Queued);
-		if (Alive + Queued >= F.MaxBuilders)
+		const int32 MaxB = Economy->GetMaxBuilders(Team);
+		if (Alive + Queued >= MaxB)
 		{
-			UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: Builder limit %d reached"), F.MaxBuilders);
+			UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: Builder limit %d reached"), MaxB);
 			if (Team == ESRTeam::Player)
 			{
-				Economy->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRBuilding", "BuilderCap", "You can have at most {0} Builders"), FText::AsNumber(F.MaxBuilders)));
+				Economy->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRBuilding", "BuilderCap", "You can have at most {0} Builders (raise the Citadel for more)"), FText::AsNumber(MaxB)));
 			}
 			Economy->NotifyRefused();
 			return false;
 		}
 	}
 	const int32 PopNeeded = Economy->GetPopulation(Team) + Economy->GetQueuedPopulation(Team) + F.StatsFor(Type).PopCost;
-	if (PopNeeded > Economy->GetPopulationCap(Team))
+	if (F.StatsFor(Type).PopCost > 0 && PopNeeded > Economy->GetPopulationCap(Team))
 	{
 		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s, population %d/%d (build farms to house more troops)"), Name, PopNeeded - F.StatsFor(Type).PopCost, Economy->GetPopulationCap(Team));
 		Economy->NotifyPopulationCapped(Team);
@@ -581,30 +582,91 @@ float ASRBuilding::GetHealthFrac() const
 int32 ASRBuilding::GetPopProvided() const
 {
 	if (!IsFinished()) { return 0; }
-	return Stats().PopProvided + (IsCastle() ? (Level - 1) * USRFeelSettings::Get().CastleUpgradePop : 0);
+	return IsCastle() ? USRFeelSettings::Get().CastleLevel(Level).Housing : Stats().PopProvided;
 }
 
 float ASRBuilding::GetMaxHealth() const
 {
-	return Stats().MaxHealth + (IsCastle() ? (Level - 1) * USRFeelSettings::Get().CastleUpgradeHealth : 0.f);
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	switch (BuildingType)
+	{
+	case ESRBuildingType::Castle: return F.CastleLevel(Level).Health;
+	case ESRBuildingType::Tower: return F.TowerLevels.Num() > 0 ? F.TowerLevel(Level).Health : Stats().MaxHealth;
+	case ESRBuildingType::Mine: return F.MineLevels.Num() > 0 ? F.MineLevel(Level).Health : Stats().MaxHealth;
+	default: return Stats().MaxHealth;
+	}
+}
+
+int32 ASRBuilding::GetMaxLevel() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	switch (BuildingType)
+	{
+	case ESRBuildingType::Castle: return F.CastleMaxLevel();
+	case ESRBuildingType::Tower: return FMath::Max(1, F.TowerLevels.Num());
+	case ESRBuildingType::Mine: return FMath::Max(1, F.MineLevels.Num());
+	default: return 1;
+	}
+}
+
+float ASRBuilding::GetAttackRange() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return BuildingType == ESRBuildingType::Tower && F.TowerLevels.Num() > 0 ? F.TowerLevel(Level).Range : Stats().AttackRange;
+}
+
+float ASRBuilding::GetAttackDamage() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return BuildingType == ESRBuildingType::Tower && F.TowerLevels.Num() > 0 ? F.TowerLevel(Level).Damage : Stats().AttackDamage;
+}
+
+float ASRBuilding::GetAttackInterval() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return BuildingType == ESRBuildingType::Tower && F.TowerLevels.Num() > 0 ? F.TowerLevel(Level).Interval : Stats().AttackInterval;
+}
+
+int32 ASRBuilding::GetPayoutAmount() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (BuildingType == ESRBuildingType::Farm) { return F.FarmFoodPerPayout; }
+	if (BuildingType == ESRBuildingType::Mine) { return F.MineLevels.Num() > 0 ? F.MineLevel(Level).GoldPerPayout : F.MineGoldPerPayout; }
+	return 0;
+}
+
+float ASRBuilding::GetUpgradeTime() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	switch (BuildingType)
+	{
+	case ESRBuildingType::Castle: return F.CastleLevel(Level + 1).UpgradeTime;
+	case ESRBuildingType::Tower: return F.TowerLevel(Level + 1).UpgradeTime;
+	case ESRBuildingType::Mine: return F.MineLevel(Level + 1).UpgradeTime;
+	default: return 30.f;
+	}
 }
 
 float ASRBuilding::GetBuildZoneRadius() const
 {
-	const float R = Stats().TerritoryRadius;
-	return R > 0.f ? R + (IsCastle() ? (Level - 1) * USRFeelSettings::Get().CastleUpgradeZone : 0.f) : 0.f;
+	return IsCastle() ? USRFeelSettings::Get().CastleLevel(Level).BuildZone : Stats().TerritoryRadius;
 }
 
 bool ASRBuilding::CanUpgrade() const
 {
-	return IsCastle() && IsFinished() && !IsUpgrading() && Level < USRFeelSettings::Get().CastleMaxLevel;
+	return IsUpgradable() && IsFinished() && !IsUpgrading() && Level < GetMaxLevel();
 }
 
 FSRCost ASRBuilding::GetUpgradeCost() const
 {
-	// each level dearer than the last: level 2 costs the base price, level 3 twice it, ...
-	const FSRCost& Base = USRFeelSettings::Get().CastleUpgradeCost;
-	return FSRCost(Base.Gold * Level, Base.Food * Level);
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	switch (BuildingType)
+	{
+	case ESRBuildingType::Castle: return F.CastleLevel(Level + 1).UpgradeCost;
+	case ESRBuildingType::Tower: return F.TowerLevel(Level + 1).UpgradeCost;
+	case ESRBuildingType::Mine: return F.MineLevel(Level + 1).UpgradeCost;
+	default: return FSRCost(0, 0);
+	}
 }
 
 bool ASRBuilding::StartUpgrade()
@@ -627,7 +689,7 @@ void ASRBuilding::StepUpgrade(float Dt)
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	// builders at the walls speed it up, as they do a site
 	const float Rate = 1.f + F.BuilderExtraSpeed * BuildersWorking;
-	UpgradeProgress += Rate * Dt / FMath::Max(F.CastleUpgradeTime, 1.f);
+	UpgradeProgress += Rate * Dt / FMath::Max(GetUpgradeTime(), 1.f);
 	HammerClock -= Dt;
 	if (HammerClock <= 0.f && BuildersWorking == 0)
 	{
@@ -645,14 +707,17 @@ void ASRBuilding::StepUpgrade(float Dt)
 	{
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::BuildComplete); }
 		const FVector2D At = GetFootprintCentre();
-		Economy->PushAlert(ESRAlertKind::BuildingDone, FText::Format(NSLOCTEXT("SRBuilding", "Upgraded", "{0} raised to level {1}: houses {2} troops"),
-			FText::FromString(GetDisplayName()), FText::AsNumber(Level), FText::AsNumber(GetPopProvided())), &At);
+		const FText Msg = IsCastle()
+			? FText::Format(NSLOCTEXT("SRBuilding", "Upgraded", "{0} raised to level {1}: troops up to {2}"), FText::FromString(GetDisplayName()), FText::AsNumber(Level),
+				FText::AsNumber(USRFeelSettings::Get().CastleLevel(Level).PopulationCeiling))
+			: FText::Format(NSLOCTEXT("SRBuilding", "UpgradedOther", "{0} upgraded to level {1}"), FText::FromString(GetDisplayName()), FText::AsNumber(Level));
+		Economy->PushAlert(ESRAlertKind::BuildingDone, Msg, &At);
 	}
 }
 
 void ASRBuilding::SetLevelForLoad(int32 InLevel, float InUpgradeProgress)
 {
-	Level = FMath::Clamp(InLevel, 1, FMath::Max(1, USRFeelSettings::Get().CastleMaxLevel));
+	Level = FMath::Clamp(InLevel, 1, GetMaxLevel());
 	UpgradeProgress = InUpgradeProgress;
 }
 
@@ -822,7 +887,7 @@ void ASRBuilding::ApplyBuildVisual()
 void ASRBuilding::StepDefence(float Dt)
 {
 	const FSRBuildingStats& S = Stats();
-	if (S.AttackRange <= 0.f || S.AttackDamage <= 0.f) { return; }
+	if (GetAttackRange() <= 0.f || GetAttackDamage() <= 0.f) { return; }
 	DefenceCooldown -= Dt;
 	if (DefenceCooldown > 0.f) { return; }
 
@@ -830,7 +895,7 @@ void ASRBuilding::StepDefence(float Dt)
 	if (!Battle) { return; }
 	const FVector2D C = GetFootprintCentre();
 	ASRUnit* Best = nullptr;
-	float BestD = FMath::Square(S.AttackRange);
+	float BestD = FMath::Square(GetAttackRange());
 	for (ASRUnit* U : Battle->GetUnits())
 	{
 		if (!U || !U->IsActive() || U->GetTeam() == Team) { continue; }
@@ -839,9 +904,9 @@ void ASRBuilding::StepDefence(float Dt)
 	}
 	if (!Best) { DefenceCooldown = 0.25f; return; }
 
-	DefenceCooldown = S.AttackInterval * FMath::FRandRange(0.9f, 1.1f);
+	DefenceCooldown = GetAttackInterval() * FMath::FRandRange(0.9f, 1.1f);
 	const FVector Muzzle = FVector(C.X, C.Y, GetActorLocation().Z + S.MuzzleHeight) + FVector((Best->GetPos2D() - C).GetSafeNormal() * 120.f, 0.f);
-	ASRProjectile::LaunchArrow(GetWorld(), Team, nullptr, Best, nullptr, Muzzle, S.AttackDamage, 60.f, 2200.f, 0.1f);
+	ASRProjectile::LaunchArrow(GetWorld(), Team, nullptr, Best, nullptr, Muzzle, GetAttackDamage(), 60.f, 2200.f, 0.1f);
 }
 
 void ASRBuilding::ReceiveDamage(float Amount, ASRUnit* From)

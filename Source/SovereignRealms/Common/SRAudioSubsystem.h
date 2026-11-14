@@ -63,6 +63,7 @@ enum class ESRSound : uint8
 	StoneImpact,   // a catapult stone lands
 	BattleLoop,    // the roar over a big fight (looping)
 	WindLoop,      // high wind when zoomed far out (looping, not positioned)
+	AttackAlert,   // something of yours is under attack (a short notification)
 	Count UMETA(Hidden)
 };
 

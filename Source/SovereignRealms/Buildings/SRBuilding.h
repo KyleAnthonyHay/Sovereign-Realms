@@ -186,14 +186,25 @@ public:
 	int32 GetLevel() const { return Level; }
 	bool IsUpgrading() const { return UpgradeProgress >= 0.f; }
 	float GetUpgradeFraction() const { return FMath::Max(UpgradeProgress, 0.f); }
-	/** A finished castle below the top level, not already being upgraded. */
+	/** The castle, watchtowers and gold mines have levels (Sovereign Feel > Buildings > *Levels); others have one. */
+	int32 GetMaxLevel() const;
+	bool IsUpgradable() const { return GetMaxLevel() > 1; }
+	/** Finished, below its top level and not already being upgraded. */
 	bool CanUpgrade() const;
 	/** The price of the next level. */
 	FSRCost GetUpgradeCost() const;
 	/** Pays and starts the next level; false (with feedback) if it cannot. */
 	bool StartUpgrade();
-	/** Health with the castle's levels counted. */
+	/** Health with the building's level counted. */
 	float GetMaxHealth() const;
+	/** Its shooting at its level (towers; the castle's walls use its stats). 0 range = it does not shoot. */
+	float GetAttackRange() const;
+	float GetAttackDamage() const;
+	float GetAttackInterval() const;
+	/** What one delivery brings (a farm's food, a mine's gold at its level). */
+	int32 GetPayoutAmount() const;
+	/** Seconds the next level takes to build. */
+	float GetUpgradeTime() const;
 	/** The building zone round it (the castle's TerritoryRadius, wider with each level). */
 	float GetBuildZoneRadius() const;
 	/** Saved games. */

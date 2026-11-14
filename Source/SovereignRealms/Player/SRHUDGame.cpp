@@ -125,7 +125,7 @@ void ASRHUD::DrawTopBar()
 	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
 	if (!Economy || !Battle) { return; }
 
-	const float W = U(880.f), H = U(54.f);
+	const float W = U(940.f), H = U(54.f);
 	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = U(10.f);
 	const FBox2D Bar(FVector2D(X, Y), FVector2D(X + W, Y + H));
 	HudPanel(Bar);
@@ -143,15 +143,20 @@ void ASRHUD::DrawTopBar()
 		const float IS = U(30.f) + (Pulse > 0.5f ? U(4.f) : 0.f);
 		Icon(i == 0 ? ESRIcon::Coin : ESRIcon::Food, CX + Shake - (IS - U(30.f)) * 0.5f, Y + (H - IS) * 0.5f, IS);
 		const FLinearColor Base = i == 0 ? GoldBright : FoodColor;
-		const FLinearColor Color = FMath::Lerp(FMath::Lerp(Parchment, Base, 0.35f + 0.65f * Pulse), Refuse, FMath::Clamp(Flash * 1.4f, 0.f, 1.f));
-		const float AW = TextIn(Row(CX + Shake + U(38.f)), FString::FromInt(Economy->GetResource(ESRTeam::Player, Resource)), U(25.f), Color, AlignLeft, Bold);
-		TextIn(Row(CX + U(46.f) + AW), FString::Printf(TEXT("+%.0f/min"), Economy->GetIncomePerMinute(ESRTeam::Player, Resource)), U(15.f), Dim, AlignLeft);
+		// the stores' limit (the castle's level): shown beside the amount, amber when full (income is being lost)
+		const int32 Have = Economy->GetResource(ESRTeam::Player, Resource), Store = Economy->GetStorage(ESRTeam::Player, Resource);
+		const bool bFull = Have >= Store;
+		const FLinearColor Color = FMath::Lerp(FMath::Lerp(bFull ? Amber : Parchment, Base, bFull ? 0.f : 0.35f + 0.65f * Pulse), Refuse, FMath::Clamp(Flash * 1.4f, 0.f, 1.f));
+		const float AW = TextIn(Row(CX + Shake + U(38.f)), FString::FromInt(Have), U(25.f), Color, AlignLeft, Bold);
+		const float SW = TextIn(Row(CX + U(40.f) + AW), FString::Printf(TEXT("/%d"), Store), U(14.f), bFull ? Amber : Dim, AlignLeft);
+		TextIn(Row(CX + U(48.f) + AW + SW), FString::Printf(TEXT("+%.0f/min"), Economy->GetIncomePerMinute(ESRTeam::Player, Resource)), U(14.f), Dim, AlignLeft);
 		if (bInputOpen && bMouse && FBox2D(FVector2D(CX - U(8.f), Y), FVector2D(CX + U(200.f), Y + H)).IsInside(Mouse))
 		{
 			SetTooltip(FBox2D(FVector2D(CX, Y), FVector2D(CX, Y + H + U(4.f))), i == 0 ? TEXT("Gold") : TEXT("Food"),
-				{ i == 0 ? TEXT("Pays for buildings. Dug by Gold Mines.") : TEXT("Pays for troops. Grown by Farms.") });
+				{ i == 0 ? TEXT("Pays for buildings. Dug by Gold Mines.") : TEXT("Pays for troops. Grown by Farms."),
+				  FString::Printf(TEXT("Your stores hold %d; income beyond that is lost. Raise the Citadel to hold more."), Store) });
 		}
-		CX += U(222.f);
+		CX += U(252.f);
 		Divider(CX - U(12.f));
 	}
 
@@ -181,23 +186,20 @@ void ASRHUD::DrawTopBar()
 		const FBtn BB = Button(Seg, SRId::Builders);
 		if (BB.Hot > 0.f) { Fill(Seg.Min.X, Seg.Min.Y + U(6.f), Seg.Max.X - Seg.Min.X, H - U(12.f), A(ButtonHot, 0.5f * BB.Hot)); }
 		Icon(ESRIcon::PortraitBuilder, CX, Y + (H - U(30.f)) * 0.5f, U(30.f));
-		const FLinearColor Color = Alive == 0 ? Dim : (Alive + Queued >= F.MaxBuilders ? Amber : Parchment);
-		const float BW = TextIn(Row(CX + U(38.f)), FString::Printf(TEXT("%d/%d"), Alive, F.MaxBuilders), U(23.f), Color, AlignLeft, Bold);
+		const int32 MaxB = Economy->GetMaxBuilders(ESRTeam::Player);
+		const FLinearColor Color = Alive == 0 ? Dim : (Alive + Queued >= MaxB ? Amber : Parchment);
+		const float BW = TextIn(Row(CX + U(38.f)), FString::Printf(TEXT("%d/%d"), Alive, MaxB), U(23.f), Color, AlignLeft, Bold);
 		if (Queued > 0) { TextIn(Row(CX + U(45.f) + BW), FString::Printf(TEXT("+%d"), Queued), U(15.f), Dim, AlignLeft); }
-		if (BB.bHover)
+		if (BB.bHover && !bBuilderList)   // (the list itself is open: no tooltip over it)
 		{
 			const FSRCost& Cost = F.CostFor(ESRUnitType::Builder);
 			SetTooltip(FBox2D(FVector2D(CX, Y), FVector2D(CX, Y + H + U(4.f))), TEXT("Builders"),
-				{ FString::Printf(TEXT("Builders / most you may have (%d)."), F.MaxBuilders), TEXT("They raise buildings outside the castle's zone and repair damage."),
-				  FString::Printf(TEXT("Trained at the Citadel [Y]: %d gold + %d food."), Cost.Gold, Cost.Food), TEXT("Click to select them.") });
+				{ FString::Printf(TEXT("Builders / most you may have (%d; raising the Citadel allows more)."), MaxB), TEXT("They raise buildings outside the castle's zone and repair damage."),
+				  FString::Printf(TEXT("Trained at the Citadel [Y]: %d gold + %d food. They do not count against housing."), Cost.Gold, Cost.Food),
+				  TEXT("Click for the list: find one, or select them all.") });
 		}
-		if (BB.bClicked)
-		{
-			Click();
-			TArray<ASRUnit*> Builders;
-			for (ASRUnit* U2 : Battle->GetUnits()) { if (U2 && U2->IsActive() && U2->GetTeam() == ESRTeam::Player && U2->IsBuilder()) { Builders.Add(U2); } }
-			if (Builders.Num() > 0) { PC->SelectBuilding(nullptr); PC->SelectUnits(Builders, false); }
-		}
+		if (BB.bClicked) { Click(); bBuilderList = !bBuilderList; }   // the list of builders, under the counter
+		if (bBuilderList) { DrawBuilderList(Seg); }
 		CX += U(142.f);
 		Divider(CX - U(12.f));
 	}
@@ -221,6 +223,145 @@ void ASRHUD::DrawTopBar()
 		Click();
 		if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this)) { Flow->SetPaused(true); }
 	}
+}
+
+void ASRHUD::DrawUpgradeButton(const FBox2D& R, ASRBuilding* Building)
+{
+	// One button for every building with levels (the castle, watchtowers, gold mines): next level, its price, progress.
+	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
+	if (!Economy || !Building) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const int32 L = Building->GetLevel();
+	const bool bTop = L >= Building->GetMaxLevel();
+	const bool bBusy = Building->IsUpgrading();
+	const FSRCost Cost = Building->GetUpgradeCost();
+	const bool bGold = Economy->GetResource(ESRTeam::Player, ESRResource::Gold) >= Cost.Gold;
+	const bool bFood = Economy->GetResource(ESRTeam::Player, ESRResource::Food) >= Cost.Food;
+	const bool bEnabled = Building->CanUpgrade() && bGold && bFood;
+	FBtn B = Button(R, SRId::Upgrade);
+	if (!bEnabled) { B.Hot *= 0.3f; }
+	ButtonFrame(R, B, bEnabled || bBusy);
+	Icon(Building->IsCastle() ? ESRIcon::Crown : BuildingIcon(Building->BuildingType), R.Min.X + U(9.f), R.Min.Y + U(12.f), U(44.f),
+		bEnabled || bBusy ? FLinearColor::White : FLinearColor(0.45f, 0.45f, 0.5f, 0.85f));
+	const float TX = R.Min.X + U(62.f);
+	const FString Title = bTop ? FString::Printf(TEXT("Level %d (top)"), L) : FString::Printf(TEXT("Upgrade to level %d"), L + 1);
+	Text(Title, TX, R.Min.Y + U(30.f), U(14.f), bEnabled || bBusy ? Parchment : Dim, AlignLeft, Bold);
+	KeyCap(TEXT("U"), R.Max.X - U(6.f), R.Min.Y + U(6.f), bEnabled);
+	// what the next level brings, in a few words (and in full in the tooltip)
+	FString Gain;
+	TArray<FString> Lines;
+	switch (Building->BuildingType)
+	{
+	case ESRBuildingType::Castle:
+	{
+		const FSRCastleLevel& A = F.CastleLevel(L), &N = F.CastleLevel(L + 1);
+		Gain = FString::Printf(TEXT("troops %d > %d"), A.PopulationCeiling, N.PopulationCeiling);
+		Lines.Add(FString::Printf(TEXT("Troop ceiling %d > %d   ·   the Citadel houses %d > %d"), A.PopulationCeiling, N.PopulationCeiling, A.Housing, N.Housing));
+		Lines.Add(FString::Printf(TEXT("Builders %d > %d   ·   building zone %.0f > %.0f m"), A.Builders, N.Builders, A.BuildZone / 100.f, N.BuildZone / 100.f));
+		Lines.Add(FString::Printf(TEXT("Stores %d > %d gold and food   ·   walls %.0f > %.0f"), A.Storage.Gold, N.Storage.Gold, A.Health, N.Health));
+		break;
+	}
+	case ESRBuildingType::Tower:
+	{
+		const FSRTowerLevel& A = F.TowerLevel(L), &N = F.TowerLevel(L + 1);
+		Gain = FString::Printf(TEXT("damage %.0f > %.0f"), A.Damage, N.Damage);
+		Lines.Add(FString::Printf(TEXT("Damage %.0f > %.0f   ·   a shot every %.2f > %.2f s"), A.Damage, N.Damage, A.Interval, N.Interval));
+		Lines.Add(FString::Printf(TEXT("Reach %.0f > %.0f m   ·   health %.0f > %.0f"), A.Range / 100.f, N.Range / 100.f, A.Health, N.Health));
+		break;
+	}
+	case ESRBuildingType::Mine:
+	{
+		const FSRMineLevel& A = F.MineLevel(L), &N = F.MineLevel(L + 1);
+		Gain = FString::Printf(TEXT("+%d > +%d gold"), A.GoldPerPayout, N.GoldPerPayout);
+		Lines.Add(FString::Printf(TEXT("Each delivery %d > %d gold (every %.0f s)   ·   health %.0f > %.0f"), A.GoldPerPayout, N.GoldPerPayout, F.MinePayoutInterval, A.Health, N.Health));
+		break;
+	}
+	default: break;
+	}
+	if (bBusy)
+	{
+		Meter(TX, R.Min.Y + U(58.f), R.Max.X - TX - U(12.f), U(8.f), Building->GetUpgradeFraction(), GoldBright);
+		Text(FString::Printf(TEXT("Upgrading...  %d%%"), FMath::RoundToInt(Building->GetUpgradeFraction() * 100.f)), R.Min.X + U(10.f), R.Max.Y - U(26.f), U(13.f), Dim);
+	}
+	else if (!bTop)
+	{
+		Icon(ESRIcon::Coin, TX, R.Min.Y + U(53.f), U(17.f));
+		Text(FString::FromInt(Cost.Gold), TX + U(21.f), R.Min.Y + U(52.f), U(16.f), bGold ? GoldBright : Refuse, AlignLeft, Bold);
+		if (Cost.Food > 0)
+		{
+			const float FX = TX + U(25.f) + TextSize(FString::FromInt(Cost.Gold), U(16.f), Bold).X + U(8.f);
+			Icon(ESRIcon::Food, FX, R.Min.Y + U(53.f), U(17.f));
+			Text(FString::FromInt(Cost.Food), FX + U(21.f), R.Min.Y + U(52.f), U(16.f), bFood ? FoodColor : Refuse, AlignLeft, Bold);
+		}
+		Text(Gain, R.Min.X + U(10.f), R.Max.Y - U(26.f), U(13.f), Dim);
+	}
+	if (B.bHover)
+	{
+		if (bTop) { Lines.Reset(); Lines.Add(TEXT("At its highest level.")); }
+		else
+		{
+			Lines.Add(Cost.Food > 0 ? FString::Printf(TEXT("Cost %d gold + %d food   ·   %.0f s (Builders at its walls speed it up)."), Cost.Gold, Cost.Food, Building->GetUpgradeTime())
+				: FString::Printf(TEXT("Cost %d gold   ·   %.0f s (Builders at its walls speed it up)."), Cost.Gold, Building->GetUpgradeTime()));
+		}
+		SetTooltip(R, FString::Printf(TEXT("Upgrade the %s   [U]"), *Building->GetDisplayName()), Lines);
+	}
+	if (B.bClicked) { PC->UpgradeBuildingCommand(Building); if (bEnabled) { Click(); } }
+}
+
+void ASRHUD::DrawBuilderList(const FBox2D& Anchor)
+{
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || !PC) { bBuilderList = false; return; }
+	TArray<ASRUnit*> Builders;
+	for (ASRUnit* U2 : Battle->GetUnits()) { if (U2 && U2->IsActive() && U2->GetTeam() == ESRTeam::Player && U2->IsBuilder()) { Builders.Add(U2); } }
+	const float W = U(330.f), RowH = U(40.f), Pad = U(8.f);
+	const int32 Rows = Builders.Num() + 1;   // "select all" first
+	const FBox2D Panel(FVector2D(Anchor.Min.X, Anchor.Max.Y + U(4.f)), FVector2D(Anchor.Min.X + W, Anchor.Max.Y + U(4.f) + Pad * 2.f + Rows * RowH));
+	Block(Panel);
+	HudPanel(Panel);
+	auto Status = [](const ASRUnit* B) -> FString
+	{
+		if (const ASRBuilding* T = B->GetBuildTarget())
+		{
+			const FString Name = T->GetDisplayName();
+			const bool bAtWork = B->IsWorkingOn(T);
+			if (T->IsUnderConstruction()) { return bAtWork ? FString::Printf(TEXT("Building the %s"), *Name) : FString::Printf(TEXT("Going to build the %s"), *Name); }
+			return bAtWork ? FString::Printf(TEXT("Repairing the %s"), *Name) : FString::Printf(TEXT("Going to repair the %s"), *Name);
+		}
+		if (B->IsEngaged()) { return TEXT("Fighting!"); }
+		return B->GetVelocity2D().SizeSquared() > 400.f ? FString(TEXT("Walking")) : FString(TEXT("Idle"));
+	};
+	float RY = Panel.Min.Y + Pad;
+	for (int32 i = 0; i < Rows; ++i, RY += RowH)
+	{
+		const FBox2D Row(FVector2D(Panel.Min.X + Pad, RY), FVector2D(Panel.Max.X - Pad, RY + RowH - U(3.f)));
+		const FBtn RB = Button(Row, SRId::BuilderRow + i);
+		Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, Row.Max.Y - Row.Min.Y, FMath::Lerp(Inset, ButtonHot, RB.Hot * 0.8f));
+		if (i == 0)
+		{
+			TextIn(FBox2D(Row.Min + FVector2D(U(10.f), 0.f), Row.Max), Builders.Num() > 0 ? FString::Printf(TEXT("Select all %d Builders"), Builders.Num())
+				: FString(TEXT("No Builders yet: train them at the Citadel [Y]")), U(14.f), Builders.Num() > 0 ? GoldBright : Dim, AlignLeft, Bold);
+			if (RB.bClicked && Builders.Num() > 0) { Click(); PC->SelectBuilding(nullptr); PC->SelectUnits(Builders, false); bBuilderList = false; }
+			continue;
+		}
+		ASRUnit* B = Builders[i - 1];
+		Icon(ESRIcon::PortraitBuilder, Row.Min.X + U(6.f), Row.Min.Y + (RowH - U(34.f)) * 0.5f, U(30.f));
+		const FString St = Status(B);
+		Text(FString::Printf(TEXT("Builder %d"), i), Row.Min.X + U(44.f), Row.Min.Y + U(3.f), U(14.f), B->IsSelected() ? GoldBright : Parchment, AlignLeft, Bold);
+		Text(St, Row.Min.X + U(44.f), Row.Min.Y + U(19.f), U(12.f), St == TEXT("Idle") ? Amber : (St == TEXT("Fighting!") ? Refuse : Dim));
+		Meter(Row.Max.X - U(70.f), Row.Min.Y + U(15.f), U(60.f), U(6.f), B->GetHealthFrac(), Health(B->GetHealthFrac()));
+		if (RB.bClicked)
+		{
+			// select it and fly the camera there
+			Click();
+			PC->SelectBuilding(nullptr);
+			PC->SelectUnits({ B }, false);
+			if (ASRCameraPawn* Cam = Cast<ASRCameraPawn>(PC->GetPawn())) { Cam->FocusOn(B->GetPos2D(), false); }
+			B->FlashTargeted();
+		}
+	}
+	// a click anywhere else closes it
+	if (bMouse && !Panel.IsInside(Mouse) && !Anchor.IsInside(Mouse) && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton)) { bBuilderList = false; }
 }
 
 // ---------------------------------------------------------------------------- hints and alerts
@@ -570,7 +711,7 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 	const FString Sub = bEnemy ? TEXT("Enemy troops: right-click to attack")
 		: (Info.bExists ? FString::Printf(TEXT("Platoon %d  ·  %s  ·  %s  ·  %s"), Platoon + 1, *USRPlatoonSubsystem::KindName(Info.Kind).ToString(),
 			*USRPlatoonSubsystem::FormationName(Info.Formation).ToString(), *USRPlatoonSubsystem::StanceName(Info.Stance).ToString())
-			: (Count[4] > 0 ? FString(TEXT("Builders: B to lay a building anywhere, right-click a site or damaged building to work on it"))
+			: (Count[4] > 0 ? FString(TEXT("B: build anywhere   ·   X: repair"))
 			: FString::Printf(TEXT("Stance: %s   ·   Ctrl+1-6 forms a platoon"), *USRPlatoonSubsystem::StanceName(Stance).ToString())));
 	Text(Sub, X, Y + U(29.f), U(14.f), Dim);
 
@@ -614,7 +755,7 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 	}
 
 	// command buttons, right-aligned
-	enum ECmd { CmdAttack, CmdStop, CmdHold, CmdPatrol, CmdStance, CmdForm, CmdDisband, CmdRepair };
+	enum ECmd { CmdAttack, CmdStop, CmdHold, CmdPatrol, CmdStance, CmdForm, CmdMarch, CmdDisband, CmdRepair };
 	struct FCommand { ECmd Kind; ESRIcon Which; const TCHAR* Key; const TCHAR* Label; const TCHAR* Title; const TCHAR* Line; bool bActive; };
 	const ESRFormationShape Shape = PC->GetSelectionFormation();
 	TArray<FCommand, TInlineAllocator<8>> Commands;
@@ -624,6 +765,10 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 	Commands.Add({ CmdPatrol, ESRIcon::Patrol, TEXT("P"), TEXT("Patrol"), TEXT("Patrol   [P]"), TEXT("Then click: walk between here and there, fighting what you meet, until given another order."), PC->IsPatrolArmed() });
 	Commands.Add({ CmdStance, StanceIcon(Stance), TEXT("G"), TEXT("Stance"), TEXT("Stance   [G]"), TEXT("Aggressive > Defensive > Hold Ground."), false });
 	Commands.Add({ CmdForm, FormationIcon(Shape), TEXT("F"), TEXT("Form"), TEXT("Formation   [F]"), TEXT("Line > Column > Wedge > Square. They re-form where they stand."), false });
+	const bool bTogether = PC->GetSelectionMarchTogether();
+	if (Total > 1) { Commands.Add({ CmdMarch, ESRIcon::Pop, TEXT("M"), bTogether ? TEXT("Together") : TEXT("Free"), TEXT("March together   [M]"),
+		bTogether ? TEXT("On: on the march everyone keeps the slowest troop's pace, so they arrive together. Click for each at its own speed.")
+			: TEXT("Off: each marches at its own speed. Click to keep them together at the slowest troop's pace."), bTogether }); }
 	if (Count[4] > 0) { Commands.Add({ CmdRepair, ESRIcon::Hammer, TEXT("X"), TEXT("Repair"), TEXT("Repair   [X]"), TEXT("The selected Builders go to the nearest damaged building (or unfinished site) and mend it. Or right-click one."), false }); }
 	if (Info.bExists) { Commands.Add({ CmdDisband, ESRIcon::Disband, TEXT("Del"), TEXT("Disband"), TEXT("Disband platoon   [Delete]"), TEXT("Break up the platoon. The troops stay selected."), false }); }
 	const float BS = U(52.f), Gap = U(6.f);
@@ -654,6 +799,7 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 		case CmdForm: PC->CycleFormationCommand(); break;
 		case CmdDisband: PC->DisbandPlatoonCommand(); break;
 		case CmdRepair: PC->RepairCommand(); break;
+		case CmdMarch: PC->ToggleMarchCommand(); break;
 		}
 	}
 }
@@ -673,7 +819,7 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 	Text(Building->GetDisplayName(), X + U(52.f), Y - U(2.f), U(22.f), bPlayer ? GoldBright : FLinearColor(1.f, 0.55f, 0.45f, 1.f), AlignLeft, Bold);
 	{
 		FString Sub = bPlayer ? TEXT("Your kingdom") : TEXT("Enemy kingdom");
-		if (Building->IsCastle()) { Sub += FString::Printf(TEXT("  ·  level %d of %d  ·  houses %d"), Building->GetLevel(), F.CastleMaxLevel, Building->GetPopProvided()); }
+		if (Building->IsCastle()) { Sub += FString::Printf(TEXT("  ·  level %d of %d  ·  houses %d"), Building->GetLevel(), F.CastleMaxLevel(), Building->GetPopProvided()); }
 		if (Building->GetState() == ESRBuildingState::Damaged) { Sub += TEXT("  ·  badly damaged"); }
 		Text(Sub, X + U(52.f), Y + U(25.f), U(14.f), bPlayer ? Dim : Refuse);
 	}
@@ -722,16 +868,26 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 	{
 		const bool bFarm = Building->BuildingType == ESRBuildingType::Farm;
 		Icon(bFarm ? ESRIcon::Food : ESRIcon::Coin, X, LY, U(20.f));
-		Text(FString::Printf(TEXT("+%d %s every %.0f s"), bFarm ? F.FarmFoodPerPayout : F.MineGoldPerPayout, bFarm ? TEXT("food") : TEXT("gold"), bFarm ? F.FarmPayoutInterval : F.MinePayoutInterval),
+		Text(FString::Printf(TEXT("+%d %s every %.0f s"), Building->GetPayoutAmount(), bFarm ? TEXT("food") : TEXT("gold"), bFarm ? F.FarmPayoutInterval : F.MinePayoutInterval),
 			X + U(27.f), LY, U(15.f), Parchment);
+		if (bPlayer && Building->IsUpgradable())
+		{
+			const float RW2 = U(190.f), RX = Box.Max.X - U(16.f) - RW2;
+			DrawUpgradeButton(FBox2D(FVector2D(RX, Box.Min.Y + U(16.f)), FVector2D(RX + RW2, Box.Max.Y - U(16.f))), Building);
+		}
 		Meter(X, LY + U(28.f), MeterW, U(8.f), Building->GetPayoutFraction(), bFarm ? FoodColor : Gold);
 		if (Stats.PopProvided > 0) { Text(FString::Printf(TEXT("Houses %d troops"), Stats.PopProvided), X + MeterW + U(14.f), LY + U(22.f), U(14.f), Dim); }
 		return;
 	}
 	if (Building->BuildingType == ESRBuildingType::Tower)
 	{
-		Text(FString::Printf(TEXT("Shoots enemies in range: %.0f damage every %.1f s"), Stats.AttackDamage, Stats.AttackInterval), X, LY, U(15.f), Parchment);
-		Text(FString::Printf(TEXT("Reach %.0f m (the orange circle)"), Stats.AttackRange / 100.f), X, LY + U(22.f), U(14.f), Dim);
+		Text(FString::Printf(TEXT("Level %d: %.0f damage every %.2f s"), Building->GetLevel(), Building->GetAttackDamage(), Building->GetAttackInterval()), X, LY, U(15.f), Parchment);
+		Text(FString::Printf(TEXT("Reach %.0f m (the orange circle)"), Building->GetAttackRange() / 100.f), X, LY + U(22.f), U(14.f), Dim);
+		if (bPlayer && Building->IsUpgradable())
+		{
+			const float RW2 = U(190.f), RX = Box.Max.X - U(16.f) - RW2;
+			DrawUpgradeButton(FBox2D(FVector2D(RX, Box.Min.Y + U(16.f)), FVector2D(RX + RW2, Box.Max.Y - U(16.f))), Building);
+		}
 		return;
 	}
 	if (!bRecruits)
@@ -745,19 +901,21 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 	const TArray<ESRUnitType>& Queue = Building->GetQueue();
 	if (Queue.Num() == 0)
 	{
-		Text(Building->IsCastle() ? TEXT("Builders raise buildings beyond the castle's zone.") : TEXT("Recruit troops for food."), X, LY, U(15.f), Parchment);
+		Text(Building->IsCastle() ? TEXT("Trains Builders [Y].") : TEXT("Recruit troops for food."), X, LY, U(15.f), Parchment);
 		Text(TEXT("RMB on the ground: rally point"), X, LY + U(22.f), U(14.f), Dim);
 	}
 	else
 	{
 		float QX = X + Text(TEXT("Training"), X, LY + U(3.f), U(14.f), Dim) + U(8.f);
-		for (int32 i = 0; i < Queue.Num(); ++i)
+		const int32 Shown = FMath::Min(Queue.Num(), 7);   // a long queue: the first few, then +N
+		for (int32 i = 0; i < Shown; ++i)
 		{
 			// the one in training is drawn larger and bright, the ones waiting smaller and dimmer
 			const float S = U(i == 0 ? 26.f : 20.f);
 			Icon(SRUnitIcon(Queue[i]), QX, LY + (i == 0 ? -U(2.f) : U(2.f)), S, FLinearColor(1.f, 1.f, 1.f, i == 0 ? 1.f : 0.7f));
 			QX += S + U(3.f);
 		}
+		if (Queue.Num() > Shown) { Text(FString::Printf(TEXT("+%d"), Queue.Num() - Shown), QX + U(2.f), LY, U(15.f), Parchment, AlignLeft, Bold); }
 		Meter(X, LY + U(30.f), U(240.f), U(8.f), Building->GetBuildFraction(), GoldBright);
 	}
 
@@ -767,43 +925,8 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 	// the castle: raise it a level (more housing, stronger walls, a wider building zone), left of the Builder button
 	if (Building->IsCastle())
 	{
-		const bool bTop = Building->GetLevel() >= F.CastleMaxLevel;
-		const bool bBusy = Building->IsUpgrading();
-		const FSRCost Cost = Building->GetUpgradeCost();
-		const bool bGold = Economy->GetResource(ESRTeam::Player, ESRResource::Gold) >= Cost.Gold;
-		const bool bEnabled = Building->CanUpgrade() && bGold;
 		const float RX = Box.Max.X - U(16.f) - RW * 2.f - U(10.f);
-		const FBox2D R(FVector2D(RX, Box.Min.Y + U(16.f)), FVector2D(RX + RW, Box.Max.Y - U(16.f)));
-		FBtn B = Button(R, SRId::Upgrade);
-		if (!bEnabled) { B.Hot *= 0.3f; }
-		ButtonFrame(R, B, bEnabled || bBusy);
-		Icon(ESRIcon::Crown, R.Min.X + U(9.f), R.Min.Y + U(12.f), U(44.f), bEnabled || bBusy ? FLinearColor::White : FLinearColor(0.45f, 0.45f, 0.5f, 0.85f));
-		const float TX = R.Min.X + U(62.f);
-		Text(bTop ? TEXT("Fully raised") : FString::Printf(TEXT("Raise to level %d"), Building->GetLevel() + 1), TX, R.Min.Y + U(30.f), U(14.f), bEnabled || bBusy ? Parchment : Dim, AlignLeft, Bold);
-		KeyCap(TEXT("U"), R.Max.X - U(6.f), R.Min.Y + U(6.f), bEnabled);
-		if (bBusy)
-		{
-			Meter(TX, R.Min.Y + U(58.f), R.Max.X - TX - U(12.f), U(8.f), Building->GetUpgradeFraction(), GoldBright);
-			Text(FString::Printf(TEXT("Raising...  %d%%"), FMath::RoundToInt(Building->GetUpgradeFraction() * 100.f)), R.Min.X + U(10.f), R.Max.Y - U(26.f), U(13.f), Dim);
-		}
-		else if (!bTop)
-		{
-			Icon(ESRIcon::Coin, TX, R.Min.Y + U(53.f), U(17.f));
-			Text(FString::FromInt(Cost.Gold), TX + U(21.f), R.Min.Y + U(52.f), U(16.f), bGold ? GoldBright : Refuse, AlignLeft, Bold);
-			Text(FString::Printf(TEXT("+%d housing"), F.CastleUpgradePop), R.Min.X + U(10.f), R.Max.Y - U(26.f), U(13.f), Dim);
-		}
-		if (B.bHover)
-		{
-			TArray<FString> Lines;
-			if (bTop) { Lines.Add(TEXT("The Citadel is at its highest level.")); }
-			else
-			{
-				Lines.Add(FString::Printf(TEXT("+%d housing, +%.0f health, building zone +%.0f m."), F.CastleUpgradePop, F.CastleUpgradeHealth, F.CastleUpgradeZone / 100.f));
-				Lines.Add(FString::Printf(TEXT("Cost %d gold   ·   %.0f s (Builders at the walls speed it up)."), Cost.Gold, F.CastleUpgradeTime));
-			}
-			SetTooltip(R, FString::Printf(TEXT("Raise the Citadel   [U]")), Lines);
-		}
-		if (B.bClicked) { PC->UpgradeCastleCommand(); if (bEnabled) { Click(); } }
+		DrawUpgradeButton(FBox2D(FVector2D(RX, Box.Min.Y + U(16.f)), FVector2D(RX + RW, Box.Max.Y - U(16.f))), Building);
 	}
 	for (const ESRUnitType Type : SRAllUnitTypes())
 	{
@@ -813,10 +936,10 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 		const FSRCost& Cost = F.CostFor(Type);
 		const bool bGold = Economy->GetResource(ESRTeam::Player, ESRResource::Gold) >= Cost.Gold;
 		const bool bFood = Economy->GetResource(ESRTeam::Player, ESRResource::Food) >= Cost.Food;
-		const bool bRoom = Queue.Num() < F.MaxRecruitQueue;
-		const bool bHoused = Pop + Unit.PopCost <= Cap;
+		const bool bRoom = F.MaxRecruitQueue <= 0 || Queue.Num() < F.MaxRecruitQueue;
+		const bool bHoused = Unit.PopCost <= 0 || Pop + Unit.PopCost <= Cap;
 		int32 BQueued = 0;
-		const bool bCapped = Type == ESRUnitType::Builder && Economy->GetBuilderCount(ESRTeam::Player, &BQueued) + BQueued >= F.MaxBuilders;
+		const bool bCapped = Type == ESRUnitType::Builder && Economy->GetBuilderCount(ESRTeam::Player, &BQueued) + BQueued >= Economy->GetMaxBuilders(ESRTeam::Player);
 		const bool bEnabled = bGold && bFood && bRoom && bHoused && !bCapped;
 		const float RX = Box.Max.X - U(16.f) - RW;
 		const FBox2D R(FVector2D(RX, Box.Min.Y + U(16.f)), FVector2D(RX + RW, Box.Max.Y - U(16.f)));
@@ -845,9 +968,9 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 		}
 		Icon(ESRIcon::Food, CX, CY + U(1.f), U(17.f));
 		Text(FString::FromInt(Cost.Food), CX + U(21.f), CY, U(16.f), bFood ? FoodColor : Refuse, AlignLeft, Bold);
-		const FString Status = bCapped ? FString::Printf(TEXT("Limit %d reached"), F.MaxBuilders) : (!bHoused ? TEXT("Housing full") : (!bRoom ? TEXT("Queue full") : FString::Printf(TEXT("Trains in %.0f s"), F.BuildTimeFor(Type))));
+		const FString Status = bCapped ? FString::Printf(TEXT("Limit %d reached"), Economy->GetMaxBuilders(ESRTeam::Player)) : (!bHoused ? TEXT("Housing full") : (!bRoom ? TEXT("Queue full") : FString::Printf(TEXT("Trains in %.0f s"), F.BuildTimeFor(Type))));
 		Text(Status, R.Min.X + U(10.f), R.Max.Y - U(26.f) + Lift, U(13.f), (!bHoused || !bRoom || bCapped) ? Refuse : Dim);
-		if (B.bClicked) { PC->RecruitTroop(Type); if (bEnabled) { Click(); } }
+		if (B.bClicked) { PC->RecruitTroop(Type, PC->RecruitCountFromModifiers()); if (bEnabled) { Click(); } }
 		if (B.bHover)
 		{
 			TArray<FString> Lines;
@@ -858,6 +981,7 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 			Lines.Add(Cost.Gold > 0
 				? FString::Printf(TEXT("Cost %d food + %d gold   ·   trains in %.0f s   ·   %d housing"), Cost.Food, Cost.Gold, F.BuildTimeFor(Type), Unit.PopCost)
 				: FString::Printf(TEXT("Cost %d food   ·   trains in %.0f s   ·   %d housing"), Cost.Food, F.BuildTimeFor(Type), Unit.PopCost));
+			Lines.Add(FString::Printf(TEXT("Shift+click: %d at once   ·   Ctrl / Option+click: %d"), F.RecruitBatch, F.RecruitBatchLarge));
 			if (!bHoused) { Lines.Add(TEXT("Housing is full: build more farms.")); }
 			SetTooltip(R, FString::Printf(TEXT("%s   [%s]"), *Unit.DisplayName, SRUnitKey(Type)), Lines);
 		}

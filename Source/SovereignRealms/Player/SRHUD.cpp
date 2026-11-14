@@ -642,7 +642,7 @@ void ASRHUD::DrawRangeCircles()
 		else if (const ASRBuilding* B = PC->GetSelectedBuilding(); B && B->IsFinished())
 		{
 			Centre = B->GetFootprintCentre();
-			Reach = B->Stats().AttackRange;
+			Reach = B->GetAttackRange();
 			RefZ = B->GetActorLocation().Z;
 			bEnemy = B->Team == ESRTeam::Enemy;
 		}
@@ -796,9 +796,44 @@ void ASRHUD::DrawRouteLines()
 
 void ASRHUD::DrawTrainingBars()
 {
-	// A castle at work shows its progress over the gatehouse even when nothing is selected.
+	// A building at work shows its progress over the roof even when nothing is selected: training (below), and
+	// for your own buildings construction, the castle being raised, and repairs. Several stack upward.
 	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
 	if (!Economy) { return; }
+	for (const ASRBuilding* Building : Economy->GetBuildings())
+	{
+		if (!Building || !Building->IsAlive() || Building->Team != ESRTeam::Player || Building->IsHidden()) { continue; }
+		struct FRow { ESRIcon Icon; float Frac; FLinearColor Col; FString Label; };
+		TArray<FRow, TInlineAllocator<3>> Rows;
+		if (Building->IsUnderConstruction())
+		{
+			const bool bWaiting = Building->NeedsBuilder() && Building->GetBuildersWorking() == 0;
+			Rows.Add({ ESRIcon::Hammer, Building->GetBuildProgress(), bWaiting ? Refuse : Amber,
+				bWaiting ? FString(TEXT("needs a Builder")) : FString::Printf(TEXT("%d%%"), FMath::RoundToInt(Building->GetBuildProgress() * 100.f)) });
+		}
+		if (Building->IsUpgrading())
+		{
+			Rows.Add({ ESRIcon::Crown, Building->GetUpgradeFraction(), GoldBright, FString::Printf(TEXT("level %d"), Building->GetLevel() + 1) });
+		}
+		if (!Building->IsUnderConstruction() && Building->GetBuildersWorking() > 0 && Building->NeedsWork())
+		{
+			Rows.Add({ ESRIcon::Hammer, Building->GetHealthFrac(), Health(Building->GetHealthFrac()), TEXT("repairing") });
+		}
+		if (Rows.Num() == 0) { continue; }
+		const FVector S = Canvas->Project(Building->GetLabelPoint());
+		if (S.Z <= 0.f) { continue; }
+		const float W = U(110.f), H = U(9.f), IS = U(24.f), Step = U(26.f);
+		// above the training bar when the building is also training
+		const float Base = S.Y - (Building->GetQueue().Num() > 0 ? Step : 0.f);
+		for (int32 r = 0; r < Rows.Num(); ++r)
+		{
+			const FRow& Row = Rows[r];
+			const float X = FMath::RoundToFloat(S.X - W * 0.5f + IS * 0.5f), Y = FMath::RoundToFloat(Base - r * Step);
+			Icon(Row.Icon, X - IS - U(5.f), Y + H * 0.5f - IS * 0.5f, IS);
+			Meter(X, Y, W, H, Row.Frac, Row.Col);
+			Text(Row.Label, X + W + U(6.f), Y - U(5.f), U(14.f), Row.Col == Refuse ? Refuse : Parchment, AlignLeft, Bold);
+		}
+	}
 	for (const ASRBuilding* Building : Economy->GetBuildings())
 	{
 		if (!Building || Building->GetQueue().Num() == 0) { continue; }

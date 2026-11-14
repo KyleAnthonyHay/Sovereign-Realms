@@ -168,13 +168,12 @@ float USRAISubsystem::UnitPower(const ASRUnit* Unit)
 float USRAISubsystem::BuildingPower(const ASRBuilding* Building)
 {
 	if (!Building || !Building->IsFinished()) { return 0.f; }
-	const FSRBuildingStats& S = Building->Stats();
-	if (S.AttackRange <= 0.f || S.AttackDamage <= 0.f) { return 0.f; }
+	if (Building->GetAttackRange() <= 0.f || Building->GetAttackDamage() <= 0.f) { return 0.f; }
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const FSRUnitStats& Ref = F.Shieldbearer;
 	const float RefRaw = FMath::Sqrt(Ref.MaxHealth * Ref.Damage / FMath::Max(Ref.AttackInterval, 0.1f));
 	// A building cannot be ignored and does not die quickly, but it never advances: count its health at a third.
-	const float Raw = FMath::Sqrt(S.MaxHealth * 0.33f * S.AttackDamage / FMath::Max(S.AttackInterval, 0.1f));
+	const float Raw = FMath::Sqrt(Building->GetMaxHealth() * 0.33f * Building->GetAttackDamage() / FMath::Max(Building->GetAttackInterval(), 0.1f));
 	return Raw / FMath::Max(RefRaw, 1.f) * (0.5f + 0.5f * Building->GetHealthFrac());
 }
 
@@ -200,8 +199,8 @@ float USRAISubsystem::LocalFoePower(const FSRCommander& C, const FVector2D& At, 
 	{
 		for (const ASRBuilding* B : Eco->GetBuildings())
 		{
-			if (B && B->Team != C.Team && B->IsFinished() && B->Stats().AttackRange > 0.f
-				&& FVector2D::Distance(B->GetFootprintCentre(), At) < B->Stats().AttackRange + 300.f)
+			if (B && B->Team != C.Team && B->IsFinished() && B->GetAttackRange() > 0.f
+				&& FVector2D::Distance(B->GetFootprintCentre(), At) < B->GetAttackRange() + 300.f)
 			{
 				P += BuildingPower(B);
 			}
@@ -233,8 +232,8 @@ float USRAISubsystem::ExpectedDefence(const FSRCommander& C, const FVector2D& At
 	{
 		for (const ASRBuilding* B : Eco->GetBuildings())
 		{
-			if (B && B->Team != C.Team && B->IsFinished() && B->Stats().AttackRange > 0.f
-				&& FVector2D::Distance(B->GetFootprintCentre(), At) < B->Stats().AttackRange + 400.f)
+			if (B && B->Team != C.Team && B->IsFinished() && B->GetAttackRange() > 0.f
+				&& FVector2D::Distance(B->GetFootprintCentre(), At) < B->GetAttackRange() + 400.f)
 			{
 				D += BuildingPower(B);
 			}
@@ -522,7 +521,7 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		if (!bPastOrder) { Want(F.AIBuildOrder[C.BuildStep], true); }
 		else
 		{
-			if (Cap < F.MaxPopulation && Pop >= Cap - 2 && Farms < Prof.MaxFarms) { Want(ESRBuildingType::Farm); }
+			if (Cap < Eco->GetPopulationCeiling(C.Team) && Pop >= Cap - 2 && Farms < Prof.MaxFarms) { Want(ESRBuildingType::Farm); }
 			if (Food < 200.f && Gold > 300.f && Farms < Prof.MaxFarms) { Want(ESRBuildingType::Farm); }   // food is what troops cost
 			if (Farms > Mines * 2 + 1 || Gold < 150.f) { Want(ESRBuildingType::Mine); }
 			if (Towers < FMath::Min(1 + Mines / 2 + FMath::Min(C.FoeAttacks, 2), Prof.MaxTowers)) { Want(ESRBuildingType::Tower); }
@@ -552,12 +551,25 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		C.NextBuildTry = FMath::Max(C.NextBuildTry, Clock + 1.f);
 	}
 
-	// housing short and gold to spare: raise the castle a level (houses more, stronger walls)
+	// housing short (or stores filling) and the price to hand: raise the castle a level
 	if (ASRBuilding* Castle = Eco->GetCastle(C.Team); Castle && Castle->CanUpgrade())
 	{
 		const int32 Pop = Eco->GetPopulation(C.Team) + Eco->GetQueuedPopulation(C.Team);
 		const FSRCost Cost = Castle->GetUpgradeCost();
-		if (Pop + 3 >= Eco->GetPopulationCap(C.Team) && Eco->GetResource(C.Team, ESRResource::Gold) >= Cost.Gold + 60) { Castle->StartUpgrade(); }
+		const bool bCrowded = Pop + 3 >= Eco->GetPopulationCap(C.Team);
+		const bool bStoresFull = Eco->GetResource(C.Team, ESRResource::Gold) >= Eco->GetStorage(C.Team, ESRResource::Gold) * 0.85f;
+		if ((bCrowded || bStoresFull) && Eco->GetResource(C.Team, ESRResource::Gold) >= Cost.Gold + 60 && Eco->GetResource(C.Team, ESRResource::Food) >= Cost.Food) { Castle->StartUpgrade(); }
+	}
+	// gold piling up (Normal and Hard): a mine first (more gold), then a tower (where the foe has struck before)
+	if (Profile().AdaptWeight > 0.f && Eco->GetResource(C.Team, ESRResource::Gold) >= Eco->GetStorage(C.Team, ESRResource::Gold) * 0.7f)
+	{
+		ASRBuilding* Best = nullptr;
+		for (ASRBuilding* B : Eco->GetBuildings())
+		{
+			if (!B || B->Team != C.Team || !B->CanUpgrade() || B->IsCastle() || !Eco->CanAfford(C.Team, B->GetUpgradeCost())) { continue; }
+			if (!Best || (B->BuildingType == ESRBuildingType::Mine && Best->BuildingType != ESRBuildingType::Mine) || (B->BuildingType == Best->BuildingType && B->GetLevel() < Best->GetLevel())) { Best = B; }
+		}
+		if (Best) { Best->StartUpgrade(); }
 	}
 
 	Recruit(C, Mine);
@@ -596,7 +608,7 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 	const int32 WantRiders = Prof.AdaptWeight <= 0.f ? 0 : FMath::RoundToInt(Total * (0.12f + (C.FoeArcherShare > 0.5f ? 0.12f : 0.f)));
 	TArray<ESRUnitType, TInlineAllocator<6>> Order;
 	// a builder first if it is short of them (the first one once it has a barracks going, so troops come first)
-	if (Builders < FMath::Min(Prof.Builders, F.MaxBuilders) && (Builders > 0 || Total >= 4 || Eco->CountBuildings(ESRBuildingType::Barracks, C.Team) > 0)) { Order.Add(ESRUnitType::Builder); }
+	if (Builders < FMath::Min(Prof.Builders, Eco->GetMaxBuilders(C.Team)) && (Builders > 0 || Total >= 4 || Eco->CountBuildings(ESRBuildingType::Barracks, C.Team) > 0)) { Order.Add(ESRUnitType::Builder); }
 	if (Count[3] < WantCatapults) { Order.Add(ESRUnitType::Catapult); }
 	if (Count[2] < WantRiders) { Order.Add(ESRUnitType::Horseman); }
 	const int32 Core = Count[0] + Count[1];
@@ -665,7 +677,7 @@ void USRAISubsystem::ManageDefence(FSRCommander& C, TArray<ASRUnit*>& Home)
 	float TowerHelp = 0.f;
 	for (const ASRBuilding* B : Eco->GetBuildings())
 	{
-		if (B && B->Team == C.Team && B->Stats().AttackRange > 0.f && FVector2D::Distance(B->GetFootprintCentre(), ThreatAt) < B->Stats().AttackRange + 300.f) { TowerHelp += BuildingPower(B); }
+		if (B && B->Team == C.Team && B->GetAttackRange() > 0.f && FVector2D::Distance(B->GetFootprintCentre(), ThreatAt) < B->GetAttackRange() + 300.f) { TowerHelp += BuildingPower(B); }
 	}
 	// Send the nearest troops until we have clearly more than they do (everyone if that is what it takes).
 	const float Need = FMath::Max(0.f, ThreatPower * 1.6f - TowerHelp);
@@ -791,12 +803,7 @@ void USRAISubsystem::ManageAttack(FSRCommander& C, TArray<ASRUnit*>& Home)
 	Battle->CommandMove(Free, C.Main.Goal, true, ESRFormationShape::Line, false);
 	UE_LOG(LogSovereign, Log, TEXT("AI %s attacks (#%d): %d troops, power %.1f vs expected %.1f at %s (%.0f, %.0f)%s"), Side(C), C.WavesSent, Free.Num(),
 		FreePower, Defence, *Target->GetDisplayName(), C.Main.Goal.X, C.Main.Goal.Y, bGood ? TEXT("") : (bMaxed ? TEXT(" [maxed]") : TEXT(" [impatient]")));
-	if (C.Team == ESRTeam::Enemy)
-	{
-		const FVector2D At = From;
-		Eco->PushAlert(ESRAlertKind::EnemyWave, FText::Format(LOCTEXT("Wave", "The enemy marches on your {0} with {1} troops!"), FText::FromString(Target->GetDisplayName()), FText::AsNumber(Free.Num())), &At);
-		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::WarHorn); }
-	}
+	// (the player is not warned when the enemy sets off: they find out when it arrives, through the under-attack alerts)
 }
 
 void USRAISubsystem::ManageRaid(FSRCommander& C, TArray<ASRUnit*>& Home)

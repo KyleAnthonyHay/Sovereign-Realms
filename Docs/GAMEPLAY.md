@@ -40,18 +40,22 @@ Sovereign Feel** (`Source/SovereignRealms/Common/SRFeelSettings.{h,cpp}`, overri
 | Shieldbearer | 100 food | 9 s at a Barracks | 280 | melee, 27 dmg / 1.15 s, heavy hits |
 | Archer | 85 food | 8 s at an Archery Range | 125 | ranged, 18 dmg / 1.5 s; 0.35x damage to buildings |
 | Farm | 90 gold | 14 s | 1000 | 14 food / 6 s, houses 4 |
-| Gold Mine | 140 gold | 16 s | 1250 | 10 gold / 6 s; only on a free gold vein |
+| Gold Mine | 140 gold | 16 s | 1250 | 10 gold / 6 s; only on a free gold vein; upgradable to level 3 |
 | Barracks | 110 gold | 16 s | 1600 | trains Shieldbearers; own rally point |
 | Archery Range | 125 gold | 16 s | 1400 | trains Archers; own rally point |
 | Horse Rider | 110 food + 40 gold | 11 s at a Stable | 230 | fast (6.4 m/s); the first blow after 4 s without striking is a charge, 2.2x; 2 housing |
 | Catapult | 120 food + 120 gold | 18 s at a Siege Workshop | 260 | 17 m range (none under 4.5 m), 70 dmg stones with 2.3 m splash, 3x vs buildings, goes for buildings first; 2.8 m/s; 3 housing |
 | Stable | 150 gold | 20 s | 1500 | trains Horse Riders |
 | Siege Workshop | 200 gold | 24 s | 1600 | builds Catapults |
-| Watchtower | 160 gold | 18 s | 1800 | shoots 40 dmg / 1.2 s at 14 m |
+| Watchtower | 160 gold | 18 s | 1800 | shoots 50 dmg / 1.2 s at 24 m; upgradable to level 3 |
 | Builder | 120 gold + 80 food | 14 s at the Citadel (Y) | 110 | builds outside the castle's zone and repairs (28 HP/s each); never starts a fight; at most 2 per kingdom |
-| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8 (+8 per level); trains Builders; if it falls, the kingdom falls |
+| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8 (more per level, see Raising the Citadel); trains Builders; if it falls, the kingdom falls |
 
 Starting stock: 320 gold, 200 food, 3 Shieldbearers + 2 Archers each side.
+
+**Recruiting**: a barracks, range, stable, workshop or the Citadel has no queue limit (`MaxRecruitQueue` 0); each
+recruit is paid for and housed when queued. Click (or Q / E / R / T / Y) queues one, Shift queues 5 (`RecruitBatch`),
+Ctrl or Option queues 10 (`RecruitBatchLarge`); a batch takes as many as can be paid for and housed.
 
 **Building states** (`ESRBuildingState`; meshes `SM_Bld_<Name>_Site / _Damaged / _Ruin` from the Blender scripts): a
 construction site (scaffold, footings, stone and timber stacks) with the walls rising course by course inside it;
@@ -72,22 +76,55 @@ kingdom must have a Builder: the building is laid as a bare site and only rises 
 (the selected Builders go to it, or else the nearest free one; each extra Builder adds 50% speed, up to 4). Builders
 also speed up sites inside the zone and repair damaged buildings (a building brought back above half health loses
 its fire and damaged look). An idle Builder of yours goes to work on its own on a site or a badly damaged building
-within 26 m; right-click one of your sites or damaged buildings with Builders selected to send them. Builders are
-dear (120 gold + 80 food, 14 s), capped at 2 per kingdom (`MaxBuilders`; shown in the top bar, click it to select
+within 26 m; right-click one of your sites or damaged buildings with Builders selected to send them. Builders do not take housing (their own limit is the castle's level). The top bar's Builder counter opens a list of
+them with what each is doing; click one to select it and fly there. Builders are
+dear (120 gold + 80 food, 14 s), capped by the castle's level (2 at level 1, up to 6; shown in the top bar, click it to select
 them), never join platoons from recruitment, and never pick fights. The enemy commander keeps 1 (Easy) or 2 Builders
 and uses them the same way. **Repair**: X (or the Repair button) sends the selected Builders to the nearest damaged
 building; hovering one of your damaged buildings with Builders selected shows "RMB: repair it".
 
-**Raising the Citadel** (U, or the Upgrade button on the castle): levels 1 to 3 (`CastleMaxLevel`). Each level costs
-300 gold x the current level (300, then 600), takes 40 s (Builders at the walls speed it up) and adds 8 housing,
-3000 health (the new walls come up whole) and 6 m to the building zone. The enemy commander raises its castle when
-its housing runs short and it has the gold. Saved games keep the level. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
+**Raising the Citadel** (U, or the Upgrade button on the castle; `CastleLevels`, 7 levels): the castle is how a kingdom
+grows. Each level raises the castle's own housing, the kingdom's troop ceiling (however many farms it builds), the
+Builder limit, the building zone, the walls and the stores (gold and food beyond them are lost; the top bar shows
+"have / hold", amber when full). The stores always hold the next level's price.
+
+| Level | Price | Time | Castle houses | Troop ceiling | Builders | Zone | Walls | Stores (each) |
+|---|---|---|---|---|---|---|---|---|
+| 1 | - | - | 8 | 36 | 2 | 42 m | 12000 | 600 |
+| 2 | 300 g | 40 s | 16 | 48 | 3 | 47 m | 15000 | 1000 |
+| 3 | 550 g + 150 f | 45 s | 24 | 60 | 3 | 52 m | 18000 | 1500 |
+| 4 | 850 g + 300 f | 55 s | 32 | 75 | 4 | 57 m | 21000 | 2200 |
+| 5 | 1200 g + 450 f | 65 s | 42 | 90 | 4 | 62 m | 24000 | 3000 |
+| 6 | 1650 g + 650 f | 75 s | 52 | 105 | 5 | 67 m | 27000 | 4000 |
+| 7 | 2200 g + 900 f | 90 s | 64 | 120 | 6 | 72 m | 30000 | 5500 |
+
+**Watchtowers and gold mines have levels too** (`TowerLevels`, `MineLevels`; the Upgrade button on their panel, or U
+with one selected). Towers follow Kingdom Rush's archer towers (by level 3 about 3.5x the damage per second, a quarter
+more reach, each upgrade dearer than the last); each mine level pays for itself in four or five minutes.
+
+| Watchtower | Price | Time | Damage | Every | Reach | Health |
+|---|---|---|---|---|---|---|
+| 1 | - | - | 50 | 1.2 s | 24 m | 1800 |
+| 2 | 250 g | 30 s | 85 | 0.95 s | 27 m | 2300 |
+| 3 | 370 g | 40 s | 120 | 0.8 s | 30 m | 2800 |
+
+| Gold mine | Price | Time | Gold per delivery | Health |
+|---|---|---|---|---|
+| 1 | - | - | 10 | 1250 |
+| 2 | 220 g | 30 s | 16 | 1600 |
+| 3 | 360 g + 100 f | 40 s | 23 | 2000 |
+
+Builders at the walls speed the raising up; the new walls come up whole. The enemy commander raises its castle when its
+housing runs short or its gold stores are nearly full, and it can pay. Saved games keep the level. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
 Defence (watchtower); 1-6 picks, Tab changes tab. Placing pays the gold; the building rises course by
 course over its build time with hammering, and works when done. Delete / Backspace cancels a building under
 construction for 75% of its price. Destroyed buildings slump into rubble (runtime ones clear away; the level's own
 stand again on restart).
 
 ## Movement and orders
+
+Deep water is a hard wall: no step, shove or knock-back takes a troop into it (`bWaterWalker` would let one wade;
+none does yet); the river is crossed at its fords.
 
 Every order goes through `USRBattleSubsystem::CommandMove / CommandAttack / CommandAttackBuilding`. A group move lays
 out formation slots at the goal (`SRFormation::ComputeSlots`: Line, Column, Wedge, Square) and asks the grid for paths:
@@ -112,7 +149,9 @@ most 9 m from the post, then return), Hold Ground (never move to fight; H gives 
 ## Platoons
 
 `USRPlatoonSubsystem`: six slots. Ctrl+N makes the selection platoon N, N selects it (twice: centre the camera),
-Shift+N adds to it. Each platoon slot has its own colour (gold, cyan, magenta, orange, white, violet...): a ring under
+Shift+N adds to it. **March together** (M, or the March button; on by default, per platoon and for loose selections):
+on the march every member keeps the slowest member's pace, so riders do not leave the shields behind; a fight met on the
+way is fought at full speed. Each platoon slot has its own colour (gold, cyan, magenta, orange, white, violet...): a ring under
 every member, a numbered tag over the platoon, its pips when zoomed far out, and its badge in the panel
 (`bShowPlatoonColors`). A platoon has a name, a kind judged from its members (Shield Wall, Archer Company, Mixed Host), a
 formation (F cycles) used whenever it is moved, a stance pushed to its members, and an optional "recruits join here"
@@ -200,7 +239,7 @@ and `Tools/import_audio.py` brings them into `/Game/SR/Audio`. The old synthesis
 retired. Combat: six sword clashes, six shield blocks, punchy flesh hits, wood and dirt arrow hits; orders: a belt and
 leather creak on select, a chain rattle on a move order, a blade on an attack order; Kenney interface click / error;
 coins and grain-sack payouts; timber set down for a new site, a gate opening for a recruit, a pizzicato rise when a
-building is done, wood and stone hits and a layered timber-and-rubble collapse for buildings; a long war horn; picks
+building is done, wood and stone hits and a layered timber-and-rubble collapse for buildings; picks
 and soil for the workers; a fanfare for victory and a falling steel phrase for defeat; a 63 s morning-countryside
 ambience loop.
 Recorded sounds (`SourceArt/Audio/Recorded`, turned into game sounds by `Tools/audio/prep_recorded.py`): two bow
@@ -228,7 +267,13 @@ a clatter. **Hearing range**: every positioned sound has its own range (pickaxe 
 building hit 40 m, a collapse 90 m; `SoundRangeScale` scales them all). Inside a fifth of it a sound is at full
 volume, then it fades on a smooth curve to silence exactly at the range, so nothing cuts off as the camera moves away:
 a playing sound (a gallop, a hammer) fades out as you pass its edge, and zoomed far out only the big sounds carry.
-Sounds wholly out of range are not started. Volumes: Sovereign Feel > Audio and the settings menu.
+Sounds wholly out of range are not started.
+
+**Alerts**: the player is not told when the enemy sets off; they learn of an attack when it lands: "Your <building> is
+under attack!" (each building at most every 10 s) and "Your troops are under attack!" when troops are hit out of view
+(at most every 15 s, not on top of a building alert from the same fight), each with a short notification tone (no
+horn). Clicking the alert goes there. Over each of your buildings at work a bar shows its progress: construction (red
+"needs a Builder" while a site outside the castle's zone waits), the castle being raised, repairs, and training. Volumes: Sovereign Feel > Audio and the settings menu.
 
 ## Shadow flicker
 

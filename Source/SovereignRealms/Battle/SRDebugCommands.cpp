@@ -286,7 +286,7 @@ namespace
 			USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
 			if (!Economy || Args.Num() < 2) { return; }
 			const ESRResource Resource = Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? ESRResource::Food : ESRResource::Gold;
-			Economy->AddResource(ESRTeam::Player, Resource, FCString::Atoi(*Args[1]));
+			Economy->AddResource(ESRTeam::Player, Resource, FCString::Atoi(*Args[1]), true);   // (a test: past the stores' limit)
 			UE_LOG(LogSovereign, Log, TEXT("sr.Give: player gold=%d food=%d"), Economy->GetResource(ESRTeam::Player, ESRResource::Gold), Economy->GetResource(ESRTeam::Player, ESRResource::Food));
 		}));
 

@@ -24,3 +24,5 @@
 | war_horn | ["They're coming" generic horn sound](https://opengameart.org/content/their-coming-generic-horn-sound) | OpenGameArt | CC0 |
 | fanfare | [Classic fanfare lick](https://opengameart.org/content/classic-fanfare-lick) | OpenGameArt | CC0 |
 | amb_morning | [Amb morning sounds (perfect loop)](https://opengameart.org/content/amb-morning-sounds-perfect-loop) | OpenGameArt | CC0 |
+| ui_click1, ui_click2 | [UI Audio](https://kenney.nl/assets/ui-audio) | Kenney | CC0 |
+| question_002 | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | Kenney | CC0 |

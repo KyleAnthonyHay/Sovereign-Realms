@@ -95,6 +95,7 @@ void ASRPlayerController::BuildInput()
 	RecruitActions[3] = MakeAction(TEXT("IA_RecruitCatapult"), EInputActionValueType::Boolean);
 	RecruitActions[4] = MakeAction(TEXT("IA_RecruitBuilder"), EInputActionValueType::Boolean);
 	RepairAction = MakeAction(TEXT("IA_Repair"), EInputActionValueType::Boolean);
+	MarchAction = MakeAction(TEXT("IA_March"), EInputActionValueType::Boolean);
 	UpgradeAction = MakeAction(TEXT("IA_UpgradeCastle"), EInputActionValueType::Boolean);
 
 	// A key gives +X. Swizzle moves it onto Y (up/down keys), Negate flips it (left/down keys).
@@ -144,6 +145,7 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(RecruitActions[3], EKeys::T);
 	MappingContext->MapKey(RecruitActions[4], EKeys::Y);
 	MappingContext->MapKey(RepairAction, EKeys::X);
+	MappingContext->MapKey(MarchAction, EKeys::M);
 	MappingContext->MapKey(UpgradeAction, EKeys::U);
 }
 
@@ -192,6 +194,7 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(RecruitActions[3], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitCatapult);
 	Input->BindAction(RecruitActions[4], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitBuilder);
 	Input->BindAction(RepairAction, ETriggerEvent::Started, this, &ASRPlayerController::RepairCommand);
+	Input->BindAction(MarchAction, ETriggerEvent::Started, this, &ASRPlayerController::ToggleMarchCommand);
 	Input->BindAction(UpgradeAction, ETriggerEvent::Started, this, &ASRPlayerController::UpgradeCastleCommand);
 }
 
@@ -598,13 +601,42 @@ ASRBuilding* ASRPlayerController::FindTrainer(ESRUnitType Type) const
 	return Best;
 }
 
-bool ASRPlayerController::RecruitTroop(ESRUnitType Type)
+int32 ASRPlayerController::RecruitCountFromModifiers() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	// (not Cmd: Cmd+Q quits a Mac app)
+	if (IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl) || IsInputKeyDown(EKeys::LeftAlt) || IsInputKeyDown(EKeys::RightAlt))
+	{
+		return FMath::Max(1, F.RecruitBatchLarge);
+	}
+	return IsShiftDown() ? FMath::Max(1, F.RecruitBatch) : 1;
+}
+
+bool ASRPlayerController::RecruitTroop(ESRUnitType Type, int32 Count)
 {
 	ASRBuilding* Trainer = SelectedBuilding.Get();
 	if (!Trainer || !Trainer->CanRecruit() || !Trainer->Trains(Type) || Trainer->Team != ESRTeam::Player) { Trainer = FindTrainer(Type); }
 	LastRecruitButton = int32(Type);
 	LastRecruitTime = GetWorld()->GetRealTimeSeconds();
 	bLastRecruitAccepted = Trainer && Trainer->QueueRecruit(Type);
+	// a batch: the rest go in while they can be paid for and housed (quietly stopping at the first that cannot)
+	if (bLastRecruitAccepted && Count > 1)
+	{
+		const USRFeelSettings& F = USRFeelSettings::Get();
+		USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+		int32 Queued = 1;
+		while (Eco && Queued < Count)
+		{
+			const bool bRoom = F.StatsFor(Type).PopCost <= 0 || Eco->GetPopulation(ESRTeam::Player) + Eco->GetQueuedPopulation(ESRTeam::Player) + F.StatsFor(Type).PopCost <= Eco->GetPopulationCap(ESRTeam::Player);
+			int32 BQueued = 0;
+			const bool bBuilderCap = Type == ESRUnitType::Builder && Eco->GetBuilderCount(ESRTeam::Player, &BQueued) + BQueued >= Eco->GetMaxBuilders(ESRTeam::Player);
+			const bool bQueueCap = F.MaxRecruitQueue > 0 && Trainer->GetQueue().Num() >= F.MaxRecruitQueue;
+			if (!bRoom || bBuilderCap || bQueueCap || !Eco->CanAfford(ESRTeam::Player, F.CostFor(Type))) { break; }
+			if (!Trainer->QueueRecruit(Type)) { break; }
+			++Queued;
+		}
+		UE_LOG(LogSovereign, Log, TEXT("RECRUIT batch: %d of %d %s queued"), Queued, Count, *F.StatsFor(Type).DisplayName);
+	}
 	if (!Trainer)
 	{
 		if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this))
@@ -621,7 +653,7 @@ bool ASRPlayerController::RecruitTroop(ESRUnitType Type)
 
 void ASRPlayerController::RecruitHotkey(ESRUnitType Type)
 {
-	RecruitTroop(Type);
+	RecruitTroop(Type, RecruitCountFromModifiers());
 }
 
 void ASRPlayerController::SetRallyFor(const FVector& GroundPoint)
@@ -652,7 +684,7 @@ void ASRPlayerController::IssueMove(const FVector& GroundPoint, bool bAttackMove
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const FVector2D Dest(GroundPoint.X, GroundPoint.Y);
 	Battle->ClearPatrol(Units);
-	Battle->CommandMove(Units, Dest, bAttackMove, Shape, true);
+	Battle->CommandMove(Units, Dest, bAttackMove, Shape, true, nullptr, GetSelectionMarchTogether());
 	ASROrderMarker::SpawnMarker(GetWorld(), GroundPoint, bAttackMove ? F.AttackMarkerColor : F.MoveMarkerColor);
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(bAttackMove ? ESRSound::AttackOrder : ESRSound::Acknowledge); }
 }
@@ -730,13 +762,20 @@ void ASRPlayerController::RepairCommand()
 
 void ASRPlayerController::UpgradeCastleCommand()
 {
+	ASRBuilding* Sel = SelectedBuilding.Get();
+	if (Sel && Sel->Team == ESRTeam::Player && Sel->IsAlive() && Sel->IsUpgradable()) { UpgradeBuildingCommand(Sel); return; }
 	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
-	ASRBuilding* Castle = Eco ? Eco->GetCastle(ESRTeam::Player) : nullptr;
-	if (!Castle) { return; }
-	const USRFeelSettings& F = USRFeelSettings::Get();
-	if (Castle->GetLevel() >= F.CastleMaxLevel) { Eco->PushAlert(ESRAlertKind::Info, NSLOCTEXT("SRPC", "TopLevel", "The Citadel is at its highest level")); return; }
-	if (Castle->IsUpgrading()) { Eco->PushAlert(ESRAlertKind::Info, NSLOCTEXT("SRPC", "Upgrading", "The Citadel is already being raised")); return; }
-	if (!Castle->StartUpgrade())
+	UpgradeBuildingCommand(Eco ? Eco->GetCastle(ESRTeam::Player) : nullptr);
+}
+
+void ASRPlayerController::UpgradeBuildingCommand(ASRBuilding* Building)
+{
+	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (!Eco || !Building || Building->Team != ESRTeam::Player || !Building->IsUpgradable()) { return; }
+	if (Building->GetLevel() >= Building->GetMaxLevel()) { Eco->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "TopLevel", "The {0} is at its highest level"), FText::FromString(Building->GetDisplayName()))); return; }
+	if (Building->IsUpgrading()) { Eco->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "Upgrading", "The {0} is already being upgraded"), FText::FromString(Building->GetDisplayName()))); return; }
+	if (Building->IsUnderConstruction()) { return; }
+	if (!Building->StartUpgrade())
 	{
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
 	}
@@ -808,6 +847,42 @@ ESRFormationShape ASRPlayerController::GetSelectionFormation() const
 		if (const FSRPlatoon* P = Platoons->Find(Platoons->PlatoonOf(Units))) { return P->Formation; }
 	}
 	return LooseFormation;
+}
+
+bool ASRPlayerController::GetSelectionMarchTogether() const
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	if (const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
+	{
+		if (const FSRPlatoon* P = Platoons->Find(Platoons->PlatoonOf(Units))) { return P->bMarchTogether; }
+	}
+	return bLooseMarchTogether;
+}
+
+void ASRPlayerController::ToggleMarchCommand()
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	const int32 P = GetSelectedPlatoon();
+	bool bNow;
+	if (Platoons && P != INDEX_NONE) { Platoons->ToggleMarchTogether(P); bNow = Platoons->Find(P) && Platoons->Find(P)->bMarchTogether; }
+	else { bLooseMarchTogether = !bLooseMarchTogether; bNow = bLooseMarchTogether; }
+	// a march under way follows the change at once
+	if (bNow && Units.Num() > 1)
+	{
+		float Slowest = TNumericLimits<float>::Max();
+		for (const ASRUnit* U : Units) { Slowest = FMath::Min(Slowest, U->Stats().MaxSpeed); }
+		for (ASRUnit* U : Units) { U->SetPace(Slowest < U->Stats().MaxSpeed - 1.f ? Slowest : 0.f); }
+	}
+	else { for (ASRUnit* U : Units) { U->SetPace(0.f); } }
+	if (USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
+	{
+		Eco->PushAlert(ESRAlertKind::Info, bNow ? NSLOCTEXT("SRPC", "MarchOn", "March together: the slowest sets the pace")
+			: NSLOCTEXT("SRPC", "MarchOff", "March freely: each at its own speed"));
+	}
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
 }
 
 void ASRPlayerController::ReformInPlace(const TArray<ASRUnit*>& Units, ESRFormationShape Shape)

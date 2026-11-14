@@ -32,6 +32,8 @@ struct FSRPlatoon
 	ESRStance Stance = ESRStance::Aggressive;
 	/** New recruits from the castle join this platoon and march to it. */
 	bool bReceivesRecruits = false;
+	/** On the march every member keeps the slowest member's pace, so the platoon arrives together. */
+	bool bMarchTogether = true;
 };
 
 /** A summary of one platoon for the HUD (computed on demand). */
@@ -89,6 +91,7 @@ public:
 	/** Re-forms the platoon where it stands in its current formation. */
 	void Reform(int32 Index);
 	void CycleStance(int32 Index);
+	void ToggleMarchTogether(int32 Index);
 	/** Only one platoon receives recruits at a time; pass INDEX_NONE to stop. */
 	void SetRecruitTarget(int32 Index);
 	int32 GetRecruitTarget() const;

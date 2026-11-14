@@ -119,7 +119,7 @@ USRFeelSettings::USRFeelSettings()
 	Builder.RecoveryTime = 0.45f;
 	Builder.KnockbackImpulse = 60.f;
 	Builder.BuildingDamageScale = 0.5f;
-	Builder.PopCost = 1;
+	Builder.PopCost = 0;   // builders have their own limit (the castle's level), not the troops' housing
 	Builder.bBuilder = true;
 
 	// ---- buildings (shapes from SourceArt/Buildings/<type>.json; the tower is SM_Bld_Tower) ----
@@ -192,8 +192,8 @@ USRFeelSettings::USRFeelSettings()
 	TowerStats.GateOffset = FVector(-280.f, 0.f, 0.f);
 	TowerStats.LabelOffset = FVector(0.f, 0.f, 1050.f);
 	TowerStats.PopupOffset = FVector(0.f, 0.f, 700.f);
-	TowerStats.AttackRange = 1400.f;
-	TowerStats.AttackDamage = 40.f;
+	TowerStats.AttackRange = 2400.f;   // a long reach: archers on a height
+	TowerStats.AttackDamage = 50.f;   // (level 1 of TowerLevels below)
 	TowerStats.AttackInterval = 1.2f;
 	TowerStats.MuzzleHeight = 860.f;
 
@@ -260,6 +260,43 @@ USRFeelSettings::USRFeelSettings()
 	WorkshopStats.GateOffset = FVector(-570.f, 0.f, 0.f);
 	WorkshopStats.LabelOffset = FVector(200.f, 0.f, 680.f);
 	WorkshopStats.PopupOffset = FVector(0.f, 0.f, 460.f);
+
+	// Castle levels. Level 1 matches CastleStats above. Each level: price, time, castle housing, troop ceiling,
+	// builders, building zone (cm), health, storage (gold, food). The stores always hold the next level's price; the
+	// troop ceiling stops at 120 a side; the zone stays well short of halfway to the enemy (the castles are ~148 m apart).
+	auto Lv = [](int32 G, int32 Fd, float Time, int32 House, int32 Ceil, int32 Bld, float Zone, float Hp, int32 SG, int32 SF)
+	{
+		FSRCastleLevel L;
+		L.UpgradeCost = FSRCost(G, Fd); L.UpgradeTime = Time; L.Housing = House; L.PopulationCeiling = Ceil; L.Builders = Bld;
+		L.BuildZone = Zone; L.Health = Hp; L.Storage = FSRCost(SG, SF);
+		return L;
+	};
+	CastleLevels = {
+		Lv(0,    0,   0.f,  8,  36,  2, 4200.f, 12000.f,  600,  600),
+		Lv(300,  0,   40.f, 16, 48,  3, 4700.f, 15000.f, 1000, 1000),
+		Lv(550,  150, 45.f, 24, 60,  3, 5200.f, 18000.f, 1500, 1500),
+		Lv(850,  300, 55.f, 32, 75,  4, 5700.f, 21000.f, 2200, 2200),
+		Lv(1200, 450, 65.f, 42, 90,  4, 6200.f, 24000.f, 3000, 3000),
+		Lv(1650, 650, 75.f, 52, 105, 5, 6700.f, 27000.f, 4000, 4000),
+		Lv(2200, 900, 90.f, 64, 120, 6, 7200.f, 30000.f, 5500, 5500),
+	};
+
+	// Watchtower levels (after Kingdom Rush's archer towers: by level 3 about 3.5x the damage per second and a quarter
+	// more reach; each upgrade dearer than the last).
+	auto TL = [](int32 G, float Time, float Dmg, float Iv, float Range, float Hp)
+	{
+		FSRTowerLevel L; L.UpgradeCost = FSRCost(G, 0); L.UpgradeTime = Time; L.Damage = Dmg; L.Interval = Iv; L.Range = Range; L.Health = Hp;
+		return L;
+	};
+	TowerLevels = { TL(0, 0.f, 50.f, 1.2f, 2400.f, 1800.f), TL(250, 30.f, 85.f, 0.95f, 2700.f, 2300.f), TL(370, 40.f, 120.f, 0.8f, 3000.f, 2800.f) };
+
+	// Gold mine levels: each upgrade pays for itself in four or five minutes.
+	auto ML = [](int32 G, int32 Fd, float Time, int32 Gold, float Hp)
+	{
+		FSRMineLevel L; L.UpgradeCost = FSRCost(G, Fd); L.UpgradeTime = Time; L.GoldPerPayout = Gold; L.Health = Hp;
+		return L;
+	};
+	MineLevels = { ML(0, 0, 0.f, 10, 1250.f), ML(220, 0, 30.f, 16, 1600.f), ML(360, 100, 40.f, 23, 2000.f) };
 
 	AIBuildOrder = { ESRBuildingType::Barracks, ESRBuildingType::Farm, ESRBuildingType::Range, ESRBuildingType::Mine, ESRBuildingType::Farm,
 		ESRBuildingType::Tower, ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Farm };

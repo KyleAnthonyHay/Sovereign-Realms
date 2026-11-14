@@ -386,34 +386,38 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0"))
 	float BuilderExtraSpeed = 0.5f;
 
-	// -------------------------------------------------------- Castle upgrades
-	/** The castle's top level (it starts at 1). */
-	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "1", ClampMax = "6"))
-	int32 CastleMaxLevel = 3;
+	// -------------------------------------------------------- Castle levels
+	/** The castle's levels, 1 first (it starts at 1; the last is the top). See FSRCastleLevel. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Levels")
+	TArray<FSRCastleLevel> CastleLevels;
 
-	/** Price of level 2; each level after costs this times the level it is raised from (level 3 = 2x). */
-	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades")
-	FSRCost CastleUpgradeCost = FSRCost(300, 0);
+	int32 CastleMaxLevel() const { return FMath::Max(1, CastleLevels.Num()); }
 
-	/** Seconds each level takes (builders at the walls speed it up). */
-	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "1"))
-	float CastleUpgradeTime = 40.f;
+	/** Watchtower levels, 1 first (upgraded like the castle; Kingdom Rush's archer towers were the model: damage and
+	 * rate of fire up steeply, reach a little). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Tower Levels")
+	TArray<FSRTowerLevel> TowerLevels;
 
-	/** Housing each level adds. */
-	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "0"))
-	int32 CastleUpgradePop = 8;
+	/** Gold mine levels, 1 first: richer deliveries. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Mine Levels")
+	TArray<FSRMineLevel> MineLevels;
 
-	/** Health each level adds. */
-	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "0"))
-	float CastleUpgradeHealth = 3000.f;
-
-	/** How much wider (cm) the building zone gets with each level. */
-	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "0"))
-	float CastleUpgradeZone = 600.f;
-
-	/** Most builders a kingdom may have (alive and in training). */
-	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0", ClampMax = "20"))
-	int32 MaxBuilders = 2;
+	const FSRTowerLevel& TowerLevel(int32 L) const
+	{
+		static const FSRTowerLevel Default;
+		return TowerLevels.Num() > 0 ? TowerLevels[FMath::Clamp(L, 1, TowerLevels.Num()) - 1] : Default;
+	}
+	const FSRMineLevel& MineLevel(int32 L) const
+	{
+		static const FSRMineLevel Default;
+		return MineLevels.Num() > 0 ? MineLevels[FMath::Clamp(L, 1, MineLevels.Num()) - 1] : Default;
+	}
+	/** Level L (1-based, clamped). */
+	const FSRCastleLevel& CastleLevel(int32 L) const
+	{
+		static const FSRCastleLevel Default;
+		return CastleLevels.Num() > 0 ? CastleLevels[FMath::Clamp(L, 1, CastleLevels.Num()) - 1] : Default;
+	}
 
 	/** Most builders that count on one building. */
 	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "1"))
@@ -518,9 +522,17 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
 	float ArcherBuildTime = 8.f;
 
-	/** Recruits a barracks or range can have waiting (including the one in training). */
-	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "1", ClampMax = "12"))
-	int32 MaxRecruitQueue = 5;
+	/** Recruits a barracks or range can have waiting (including the one in training). 0 = no limit (housing and the
+	 * price still are: each recruit is paid for and housed when queued). */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0", ClampMax = "50"))
+	int32 MaxRecruitQueue = 0;
+
+	/** Shift+click (or Shift+hotkey) queues this many at once; Ctrl / Option + click queues RecruitBatchLarge. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "1", ClampMax = "50"))
+	int32 RecruitBatch = 5;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "1", ClampMax = "50"))
+	int32 RecruitBatchLarge = 10;
 
 	/** Clearance (cm) recruits and move orders keep from a building's footprint when they are routed round it. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "20"))
@@ -544,7 +556,8 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Feedback", meta = (ClampMin = "0"))
 	float BuildingRingGap = 34.f;
 
-	/** Hard ceiling on a kingdom's population, however many buildings it has. */
+	/** Hard ceiling on a kingdom's population before its castle's level is counted (CastleLevels[].PopulationCeiling
+	 * sets it per level; this is only used without a castle). */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Population", meta = (ClampMin = "1"))
 	int32 MaxPopulation = 36;
 

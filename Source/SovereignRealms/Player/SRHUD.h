@@ -162,6 +162,11 @@ private:
 	FRangeCircle BuildZone;
 	void DrawBuildZone();
 	void DrawPlatoonTags();
+	/** The top bar's Builders list (open after a click on the counter): each builder and what it is doing. */
+	bool bBuilderList = false;
+	void DrawBuilderList(const FBox2D& Anchor);
+	/** The Upgrade button of a building with levels (castle, watchtower, gold mine). */
+	void DrawUpgradeButton(const FBox2D& Box, class ASRBuilding* Building);
 
 	// ---- in-game HUD (SRHUDGame.cpp) ----
 	void DrawGameHUD();

@@ -250,6 +250,12 @@ FString USRPlatoonSubsystem::DefaultName(int32 Index, ESRPlatoonKind Kind) const
 	return FString::Printf(TEXT("%s %s"), Ordinals[FMath::Clamp(Index, 0, 8)], *KindName(Kind).ToString());
 }
 
+void USRPlatoonSubsystem::ToggleMarchTogether(int32 Index)
+{
+	if (!Platoons.IsValidIndex(Index) || !Platoons[Index].bExists) { return; }
+	Platoons[Index].bMarchTogether = !Platoons[Index].bMarchTogether;
+}
+
 FText USRPlatoonSubsystem::KindName(ESRPlatoonKind Kind)
 {
 	switch (Kind)
