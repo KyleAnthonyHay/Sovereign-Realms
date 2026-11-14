@@ -126,7 +126,11 @@ private:
 	/** The soundtrack: /Game/SR/Audio/S_Music_1, _2, ... (from SourceArt/Audio/Music). Played in turn, each song
 	 * cross-fading into the next; with none imported, the synthesised S_MusicLoop loops instead. */
 	UPROPERTY(Transient) TArray<TObjectPtr<USoundBase>> MusicTracks;
-	int32 MusicIndex = 0;
+	int32 MusicIndex = INDEX_NONE;
+	/** Shuffle bag: the songs still to play this round, in order. Every song plays once before any repeats, and a
+	 * new round never opens with the song that just ended. */
+	TArray<int32> MusicBag;
+	int32 NextTrack();
 	double MusicStarted = 0.0;   // real time the current song began
 	float MusicLength = 0.f;
 	/** Starts song Index (fading in over Fade s) and lets the one playing fade out under it. */

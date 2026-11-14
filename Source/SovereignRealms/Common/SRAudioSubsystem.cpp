@@ -158,7 +158,7 @@ void USRAudioSubsystem::Tick(float DeltaTime)
 		const float Crossfade = FMath::Min(6.f, MusicLength * 0.25f);
 		if (GetWorld()->GetRealTimeSeconds() - MusicStarted >= MusicLength - Crossfade)
 		{
-			PlayTrack((MusicIndex + 1) % MusicTracks.Num(), Crossfade);
+			PlayTrack(NextTrack(), Crossfade);
 		}
 	}
 	Loops.RemoveAll([](const TWeakObjectPtr<UAudioComponent>& C) { return !C.IsValid() || !C->IsPlaying(); });
@@ -315,13 +315,29 @@ void USRAudioSubsystem::StartLoops()
 	}
 	if (!MusicComp && MusicTracks.Num() > 0)
 	{
-		PlayTrack(FMath::RandRange(0, MusicTracks.Num() - 1), 4.f);   // the soundtrack, starting with either song
+		PlayTrack(NextTrack(), 4.f);   // the soundtrack, in a shuffled order
 	}
 	else if (!MusicComp && GetSound(ESRSound::MusicLoop))
 	{
 		MusicComp = UGameplayStatics::CreateSound2D(this, GetSound(ESRSound::MusicLoop), F.MasterVolume * F.MusicVolume, 1.f, 0.f, nullptr, true, false);
 		if (MusicComp) { MusicComp->FadeIn(4.f, F.MasterVolume * F.MusicVolume); }
 	}
+}
+
+int32 USRAudioSubsystem::NextTrack()
+{
+	if (MusicTracks.Num() == 0) { return INDEX_NONE; }
+	if (MusicBag.Num() == 0)
+	{
+		// a new round: every song once, shuffled
+		for (int32 i = 0; i < MusicTracks.Num(); ++i) { MusicBag.Add(i); }
+		for (int32 i = MusicBag.Num() - 1; i > 0; --i) { MusicBag.Swap(i, FMath::RandRange(0, i)); }
+		// never the song that just ended again straight away
+		if (MusicBag.Num() > 1 && MusicBag[0] == MusicIndex) { MusicBag.Swap(0, FMath::RandRange(1, MusicBag.Num() - 1)); }
+	}
+	const int32 Next = MusicBag[0];
+	MusicBag.RemoveAt(0);
+	return Next;
 }
 
 void USRAudioSubsystem::PlayTrack(int32 Index, float Fade)
