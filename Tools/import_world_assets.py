@@ -7,7 +7,8 @@
   SourceArt/Meshes/battlefield.gltf  -> /Game/SR/Meshes     (one static mesh per glTF node)
 
 Re-running re-imports in place, so references in the level and in materials survive. Meshes that
-the generator no longer produces are deleted. Set PARTS = ["textures"] or ["meshes"] to do one half.
+the generator no longer produces are deleted. Set PARTS = ["textures"] or ["meshes"] to do one half, and
+TEX_PREFIX = "T_Bld_" to touch only the building textures.
 Materials are assigned to the meshes afterwards by Tools/build_battlefield_visuals.py (they may not
 exist yet on a first run).
 """
@@ -16,6 +17,7 @@ import os
 import unreal
 
 PARTS = globals().get("PARTS", ["textures", "meshes"])
+TEX_PREFIX = globals().get("TEX_PREFIX", "")        # e.g. "T_Bld_": only (re)import textures whose name starts with it
 ROOT = os.path.abspath(unreal.Paths.project_dir())
 TEX_SRC = os.path.join(ROOT, "SourceArt", "Textures")
 TEX_DST = "/Game/SR/Textures"
@@ -27,7 +29,8 @@ tools = unreal.AssetToolsHelpers.get_asset_tools()
 
 def import_textures():
     tasks = []
-    for path in sorted(glob.glob(os.path.join(TEX_SRC, "*.png"))):
+    sources = sorted(glob.glob(os.path.join(TEX_SRC, TEX_PREFIX + "*.png")))
+    for path in sources:
         t = unreal.AssetImportTask()
         t.filename = path
         t.destination_path = TEX_DST
@@ -38,7 +41,7 @@ def import_textures():
         tasks.append(t)
     tools.import_asset_tasks(tasks)
     n = 0
-    for path in sorted(glob.glob(os.path.join(TEX_SRC, "*.png"))):
+    for path in sources:
         name = os.path.splitext(os.path.basename(path))[0]
         tex = eal.load_asset(TEX_DST + "/" + name)
         if tex is None:

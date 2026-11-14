@@ -214,7 +214,7 @@ def plaster(seed, brick):
             if rng.random() < 0.45:
                 x += int(rng.choice([-1, 1]))
     blob = value_noise(rng, W, H, 32) * 0.7 + value_noise(rng, W, H, 8) * 0.3
-    hole = blob > 0.69                                       # where the render has fallen off
+    hole = blob > 0.765                                      # where the render has fallen off
     for y in range(H):
         for x in range(W):
             if hole[y, x]:
@@ -463,7 +463,7 @@ def wheat(seed):
                 put_a(t, x, y, WHEAT[0] if y > H - 3 else WHEAT[1])
     x = 0
     while x < W:
-        hgt = int(rng.integers(19, 28))
+        hgt = int(rng.integers(14, 22))
         lean = float(rng.uniform(-0.12, 0.12))
         fx = float(x)
         for i in range(hgt):
@@ -660,6 +660,32 @@ def ore(seed):
     return t
 
 
+def gold(seed):
+    """A heap of washed gold: nuggets shingled over a dark ground, 32 x 32 RGBA mask (alpha TEAM = glint)."""
+    rng = np.random.default_rng(seed)
+    W = H = 32
+    t = Tile(W, H, GOLD[0], alpha=True)
+    t.a[:] = 255
+    for y in range(H):
+        for x in range(W):
+            t.c[y, x] = BRONZE[0] if rng.random() < 0.6 else BRONZE[1]
+    shapes = [[".43.", "4322", "3221", ".11."], ["43.", "322", "211"], [".4.", "432", "321", ".1."], ["433.", "3221", ".11."], ["43", "21"]]
+    for gy in range(H // 4):
+        for gx in range(W // 4):
+            if rng.random() < 0.08:
+                continue
+            x = gx * 4 + int(rng.integers(0, 3)) + (2 if gy % 2 else 0); y = gy * 4 + int(rng.integers(0, 2))
+            shp = shapes[int(rng.integers(len(shapes)))]
+            dull = rng.random() < 0.25
+            for j, row in enumerate(shp):
+                for i, ch in enumerate(row):
+                    if ch == ".":
+                        continue
+                    k = max(int(ch) - (1 if dull else 0), 0)
+                    put_a(t, x + i, y + j, GOLD[k], TEAM if k >= 3 else 255, wrap_y=True)
+    return t
+
+
 def pot(seed):
     """Storage jar skin, 32 x 32: u runs round the jar, v from the rim down. A painted zigzag band on the shoulder."""
     rng = np.random.default_rng(seed)
@@ -698,16 +724,16 @@ def leaves(seed):
     t = Tile(W, H, OLIVE[0], alpha=True)
     for y in range(H):
         for x in range(W):
-            t.c[y, x] = OLIVE[0] if rng.random() < 0.7 else OLIVE[1]
+            t.c[y, x] = OLIVE[1] if rng.random() < 0.7 else OLIVE[0]
     strokes = [((0, 0), (1, -1), (2, -2)), ((0, 0), (1, 0), (2, -1), (3, -1)), ((0, 0), (0, -1), (1, -2)),
                ((0, 0), (-1, -1), (-2, -2)), ((0, 0), (1, 0), (2, 0)), ((0, 0), (-1, -1), (-1, -2), (-2, -3))]
     for gy in range(H // 3):
         for gx in range(W // 3):
-            if rng.random() < 0.18:
+            if rng.random() < 0.1:
                 continue
             x = gx * 3 + int(rng.integers(0, 3)); y = gy * 3 + int(rng.integers(0, 3))
             s = strokes[int(rng.integers(len(strokes)))]
-            base = int(rng.choice([1, 2, 2, 3, 3, 4]))
+            base = int(rng.choice([2, 2, 3, 3, 3, 4]))
             for i, (dx, dy) in enumerate(s):
                 k = min(base + (1 if i == len(s) - 1 else 0), 5)
                 put_a(t, x + dx, y + dy, OLIVE[k], 255, wrap_y=True)
@@ -776,6 +802,7 @@ def build():
         "T_Bld_Frieze": frieze(143),
         "T_Bld_Bronze": bronze(144),
         "T_Bld_Ore": ore(151),
+        "T_Bld_Gold": gold(156),
         "T_Bld_Pot": pot(152),
         "T_Bld_Leaves": leaves(153),
         "T_Bld_Flame": flame(154),

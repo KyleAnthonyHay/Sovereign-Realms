@@ -1,0 +1,69 @@
+{
+ "name": "mine",
+ "mesh": "SM_Bld_Mine",
+ "triangles": 2651,
+ "bounds": {
+  "min": [
+   -408.9,
+   -420.1,
+   -25.5
+  ],
+  "max": [
+   418.0,
+   428.1,
+   686.0
+  ]
+ },
+ "colliders": [
+  {
+   "centre": [
+    10.0,
+    0.0,
+    210.0
+   ],
+   "size": [
+    820.0,
+    840.0,
+    420
+   ],
+   "yaw": 0.0
+  }
+ ],
+ "sockets": {
+  "label": [
+   120.0,
+   0.0,
+   620.0
+  ],
+  "popup": [
+   -214.0,
+   0.0,
+   200.0
+  ]
+ },
+ "footprint": [
+  -400.0,
+  -420.0,
+  420.0,
+  420.0
+ ],
+ "ring_radius": 580.0,
+ "slots": [
+  "Bld_Awning",
+  "Bld_Banner",
+  "Bld_Beam",
+  "Bld_Bronze",
+  "Bld_Cliff",
+  "Bld_Dark",
+  "Bld_Dirt",
+  "Bld_Flame",
+  "Bld_Gold",
+  "Bld_LeafCore",
+  "Bld_Leaves",
+  "Bld_Ore",
+  "Bld_Planks",
+  "Bld_Rock",
+  "Bld_Thatch",
+  "Bld_Turf"
+ ]
+}

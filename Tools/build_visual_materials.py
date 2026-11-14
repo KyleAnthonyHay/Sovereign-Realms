@@ -687,6 +687,209 @@ def make_sprite_instances(sprite, shadow):
     make_instance("MI_ArrowShadow", shadow, vectors=arrow, textures={"SpriteSheet": CHAR + "T_Arrow_Color"})
 
 
+# ----------------------------------------------------------------------------- buildings (castle, farm, mine)
+# One opaque and one masked material serve every surface of the buildings; each mesh slot is an instance
+# (MI_Bld_<slot>, table BUILDING_SLOTS below, mirrored in Tools/blender/bldkit.py MATERIALS).
+# Vertex contract (bldkit.py): UV0 in cm; UV1.x = cm below the head of the wall (opaque) or sway weight (cards);
+# vertex colour R = baked shade. Custom primitive data 0..2 = the owning team's colour.
+# Texture alpha is a mask on the opaque slots: 0.6 = team-coloured (TeamMask 1) or glinting (GlowMask 1) texel.
+BUILDING_CODE = PIX + r"""
+float T = max(Texel, 0.5);
+float2 uv = WorldTop > 0.5 ? float2(P.y, -P.x) / T : UV0 / T;
+float4 c = px.S(Tex, uv, Size.xy);
+float4 ct = px.Texel(Tex, uv, Size.xy);
+float mask = abs(ct.a - 0.6) < 0.12 ? 1.0 : 0.0;
+float3 col = lerp(c.rgb, c.rgb * Team.rgb * TeamBoost, mask * TeamMask);
+// Weathering is drawn in whole texels: a hash per texel dithers three or four flat steps, a slow blotch moves the
+// boundaries so they never run level along a wall.
+float2 tc = floor(uv);
+float hx = px.h(tc);
+float2 q = tc / 26.0;
+float2 qi = floor(q);
+float2 qf = q - qi;
+qf = qf * qf * (3.0 - 2.0 * qf);
+float bl = lerp(lerp(px.h(qi), px.h(qi + float2(1, 0)), qf.x), lerp(px.h(qi + float2(0, 1)), px.h(qi + float2(1, 1)), qf.x), qf.y);
+float h = P.z - PivotZ;                                            // height above the building's ground line
+// damp, dirty foot
+float d = saturate(1.0 - h / max(DampHeight * (0.55 + 0.9 * bl), 1.0));
+d = floor(d * 3.0 + hx * 0.999) / 3.0;
+col *= lerp(float3(1, 1, 1), DampTint.rgb, d * Damp);
+// sun-bleached heads (UV1.x = cm below the top of the wall this face belongs to)
+float b = saturate(1.0 - UV1.x / max(BleachDepth * (0.5 + bl), 1.0));
+b = floor(b * 2.0 + hx * 0.999) / 2.0;
+col = lerp(col, col * BleachTint.rgb, b * Bleach);
+// moss creeping up from the turf, joints first
+if (Moss > 0.0)
+{
+	float joint = 1.0 - saturate((px.lum(ct.rgb) - 0.05) / 0.22);
+	float mh = MossHeight * (0.2 + 1.6 * bl * bl);
+	if (h < mh && hx < Moss * (1.0 - h / mh) * (0.5 + joint * 0.9)) col = px.Texel(MossTex, uv, 128).rgb * 0.85;
+}
+// turf settling on up-facing facets of rock, a whole facet at a time
+if (MossTop > 0.0 && N.z > MossSlope) col = px.S(MossTex, float2(P.y, -P.x) / T, 128).rgb;
+col *= VCr;
+// normal map through the face's own UV frame (flat-shaded pieces: no tangents needed)
+float3 nrm = N;
+float3 tn = px.S(NormalTex, uv, Size.xy).xyz * 2.0 - 1.0;
+float3 dpx = ddx(P); float3 dpy = ddy(P);
+float2 dux = ddx(UV0); float2 duy = ddy(UV0);
+float det = dux.x * duy.y - dux.y * duy.x;
+if (abs(det) > 1e-10 && NormalStrength > 0.0 && WorldTop < 0.5)
+{
+	float sgn = det < 0.0 ? -1.0 : 1.0;
+	float3 Tu = (dpx * duy.y - dpy * dux.y) * sgn;
+	float3 Tv = (dpy * dux.x - dpx * duy.x) * sgn;
+	Tu = normalize(Tu - N * dot(Tu, N));
+	Tv = normalize(Tv - N * dot(Tv, N));
+	nrm = normalize(Tu * tn.x * NormalStrength + Tv * tn.y * NormalStrength + N * max(tn.z, 0.2));
+}
+OutNormal = nrm;
+OutEmissive = c.rgb * mask * GlowMask * Glow;
+return col * Tint.rgb;
+"""
+
+BUILDING_CARD_CODE = PIX + r"""
+float T = max(Texel, 0.5);
+float2 uv = UV0 / T;
+float4 c = px.S(Tex, uv, Size.xy);
+float4 ct = px.Texel(Tex, uv, Size.xy);
+float mask = abs(ct.a - 0.6) < 0.12 ? 1.0 : 0.0;
+float3 col = lerp(c.rgb, c.rgb * Team.rgb * TeamBoost, mask * TeamMask);
+col *= lerp(RootShade, 1.0, saturate(UV1.x * 1.6)) * VCr;          // crops sink into shade at the root
+OutAlpha = c.a;
+float3 n = N * Side;
+OutNormal = normalize(lerp(n, float3(0, 0, 1), UpNormal));
+float flick = 0.85 + 0.15 * sin(Time * 17.0 + P.x * 0.05) * sin(Time * 11.0 + P.y * 0.07);
+OutEmissive = c.rgb * Glow * flick;
+return col * Tint.rgb * (Glow > 0.0 ? 0.0 : 1.0);
+"""
+
+BUILDING_SWAY = r"""
+float t = Time * Speed;
+float w = Weight * Weight;
+return float3(sin(t + P.y * 0.011 + P.x * 0.004), cos(t * 0.83 + P.x * 0.009), 0.0) * Amount * w;
+"""
+
+# slot -> (kind, texture, (w, h), normal map or None, scalar overrides, vector overrides)
+_STONE = {"Damp": 0.55, "Bleach": 0.3, "Moss": 0.5}
+BUILDING_SLOTS = {
+    "Ashlar": ("opaque", "T_Bld_Ashlar", (128, 128), "T_Bld_Ashlar_N", dict(_STONE), {}),
+    "AshlarLarge": ("opaque", "T_Bld_AshlarLarge", (128, 128), "T_Bld_AshlarLarge_N", dict(_STONE, Moss=0.65), {}),
+    "Trim": ("opaque", "T_Bld_Trim", (64, 16), "T_Bld_Trim_N", {"Damp": 0.3, "Bleach": 0.0, "Moss": 0.0}, {}),
+    "Mudbrick": ("opaque", "T_Bld_Mudbrick", (128, 128), "T_Bld_Mudbrick_N", {"Damp": 0.5, "Bleach": 0.2, "Moss": 0.3}, {}),
+    "Plaster": ("opaque", "T_Bld_Plaster", (128, 128), "T_Bld_Plaster_N", {"Damp": 0.45, "Bleach": 0.2, "Moss": 0.15}, {}),
+    "RoofClay": ("opaque", "T_Bld_RoofClay", (128, 128), "T_Bld_RoofClay_N", {"Damp": 0.0, "Bleach": 0.0}, {}),
+    "Beam": ("opaque", "T_Bld_Beam", (64, 16), None, {"Damp": 0.35, "Bleach": 0.0, "Roughness": 0.8}, {}),
+    "Planks": ("opaque", "T_Bld_Planks", (64, 64), None, {"Damp": 0.35, "Bleach": 0.0, "Roughness": 0.8}, {}),
+    "Door": ("opaque", "T_Bld_Door", (64, 64), None, {"Damp": 0.0, "Bleach": 0.0, "Roughness": 0.7}, {}),
+    "Shutter": ("opaque", "T_Bld_Shutter", (16, 16), None, {"Damp": 0.0, "Bleach": 0.0}, {}),
+    "Thatch": ("opaque", "T_Bld_Thatch", (64, 64), "T_Bld_Thatch_N", {"Damp": 0.3, "Bleach": 0.0, "Roughness": 0.95}, {}),
+    "Soil": ("opaque", "T_Bld_Soil", (64, 64), "T_Bld_Soil_N", {"Damp": 0.0, "Bleach": 0.0, "Roughness": 0.95}, {}),
+    "Frieze": ("opaque", "T_Bld_Frieze", (64, 16), None, {"Damp": 0.0, "Bleach": 0.0, "TeamMask": 1.0, "Roughness": 0.45, "Specular": 0.5}, {}),
+    "Bronze": ("opaque", "T_Bld_Bronze", (32, 32), None, {"Damp": 0.0, "Bleach": 0.0, "Roughness": 0.38, "Specular": 0.7}, {}),
+    "Ore": ("opaque", "T_Bld_Ore", (64, 64), None, {"Damp": 0.0, "Bleach": 0.0, "GlowMask": 1.0, "Glow": 2.5, "Roughness": 0.6}, {}),
+    "Gold": ("opaque", "T_Bld_Gold", (32, 32), None, {"Damp": 0.0, "Bleach": 0.0, "GlowMask": 1.0, "Glow": 3.0, "Roughness": 0.35, "Specular": 0.8}, {}),
+    "Pot": ("opaque", "T_Bld_Pot", (32, 32), None, {"Damp": 0.25, "Bleach": 0.0, "Roughness": 0.6}, {}),
+    "Dark": ("opaque", "T_Bld_Dark", (16, 16), None, {"Damp": 0.0, "Bleach": 0.0, "Roughness": 1.0, "Specular": 0.0}, {}),
+    "Dirt": ("opaque", "T_Dirt", (128, 128), "T_Dirt_N", {"Damp": 0.0, "Bleach": 0.0, "Roughness": 0.95}, {}),
+    "Cobble": ("opaque", "T_Cobble", (128, 128), "T_Cobble_N", {"Damp": 0.0, "Bleach": 0.0}, {}),
+    "Bark": ("opaque", "T_Bark", (32, 64), None, {"Damp": 0.3, "Bleach": 0.0, "Roughness": 0.9}, {}),
+    "LeafCore": ("opaque", "T_Bld_Leaves", (64, 64), None, {"Damp": 0.0, "Bleach": 0.0, "Roughness": 0.9, "Specular": 0.1}, {"Tint": lin(0.8, 0.8, 0.8)}),
+    "Rock": ("opaque", "T_Rock", (64, 64), "T_Rock_N", {"Damp": 0.4, "Bleach": 0.0, "MossTop": 1.0, "MossSlope": 0.84, "Roughness": 0.86},
+             {"Tint": lin(0.8, 0.78, 0.72)}),
+    "Cliff": ("opaque", "T_Cliff", (128, 128), "T_Cliff_N", {"Damp": 0.3, "Bleach": 0.0, "Roughness": 0.82}, {}),
+    "Turf": ("opaque", "T_Grass", (128, 128), None, {"Damp": 0.0, "Bleach": 0.0, "WorldTop": 1.0, "Roughness": 0.95}, {}),
+    "Leaves": ("card", "T_Bld_Leaves", (64, 64), None, {"UpNormal": 0.6, "SwayAmount": 1.2, "SwaySpeed": 1.4}, {}),
+    "Wheat": ("card", "T_Bld_Wheat", (64, 32), None, {"UpNormal": 1.0, "RootShade": 0.5, "SwayAmount": 5.0, "SwaySpeed": 1.5}, {}),
+    "Banner": ("card", "T_Bld_Banner", (16, 64), None, {"TeamMask": 1.0, "UpNormal": 0.35, "SwayAmount": 5.0, "SwaySpeed": 2.2}, {}),
+    "Awning": ("card", "T_Bld_Awning", (32, 32), None, {"TeamMask": 1.0, "UpNormal": 0.0, "SwayAmount": 1.5, "SwaySpeed": 1.8}, {}),
+    "Flame": ("card", "T_Bld_Flame", (16, 16), None, {"Glow": 9.0, "UpNormal": 1.0, "SwayAmount": 2.5, "SwaySpeed": 9.0}, {}),
+}
+
+
+def build_building():
+    """M_Building (opaque) and M_BuildingCard (masked, two-sided), then one instance per mesh slot."""
+    mat = get_material("M_Building")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("tangent_space_normal", False)
+    g = G(mat)
+    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    obj = g.node(unreal.MaterialExpressionObjectPositionWS)
+    pivot_z = g.node(unreal.MaterialExpressionComponentMask, r=False, g=False, b=True, a=False)
+    g.link(obj, pivot_z, "")
+    team = g.vector("TeamColor", lin(0.05, 0.22, 0.8), "Per building (custom primitive data)", cpd=0)
+    colour = g.custom(BUILDING_CODE, F3, [
+        ("P", P), ("N", g.node(unreal.MaterialExpressionVertexNormalWS)),
+        ("UV0", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)),
+        ("UV1", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)),
+        ("VCr", g.node(unreal.MaterialExpressionVertexColor), "R"), ("PivotZ", pivot_z), ("Team", team),
+        ("Tex", g.tex("Tex", "T_Bld_Ashlar")), ("NormalTex", g.tex("NormalTex", "T_Bld_Flat_N", True)), ("MossTex", g.tex("MossTex", "T_GrassMoss")),
+        ("Size", g.vector("Size", lin(128.0, 128.0, 0.0, 0.0), "Textures"), "RGBA"),
+        ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
+        ("WorldTop", g.scalar("WorldTop", 0.0, "Textures")),
+        ("TeamMask", g.scalar("TeamMask", 0.0, "Team")), ("TeamBoost", g.scalar("TeamBoost", 2.0, "Team")),
+        ("GlowMask", g.scalar("GlowMask", 0.0, "Glow")), ("Glow", g.scalar("Glow", 0.0, "Glow")),
+        ("Damp", g.scalar("Damp", 0.5, "Weathering")), ("DampHeight", g.scalar("DampHeight", 150.0, "Weathering")),
+        ("DampTint", g.vector("DampTint", lin(0.52, 0.5, 0.5), "Weathering"), "RGBA"),
+        ("Bleach", g.scalar("Bleach", 0.3, "Weathering")), ("BleachDepth", g.scalar("BleachDepth", 110.0, "Weathering")),
+        ("BleachTint", g.vector("BleachTint", lin(1.3, 1.26, 1.16), "Weathering"), "RGBA"),
+        ("Moss", g.scalar("Moss", 0.0, "Weathering")), ("MossHeight", g.scalar("MossHeight", 90.0, "Weathering")),
+        ("MossTop", g.scalar("MossTop", 0.0, "Weathering")), ("MossSlope", g.scalar("MossSlope", 0.84, "Weathering")),
+        ("NormalStrength", g.scalar("NormalStrength", 1.0, "Surface")),
+        ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Surface"), "RGBA"),
+    ], "Building surface: cm UVs, team / glow mask, texel-stepped weathering, normal map in the face's UV frame",
+        outputs=[("OutNormal", F3), ("OutEmissive", F3)])
+    g.out(colour, MP.MP_BASE_COLOR)
+    g.out(colour, MP.MP_NORMAL, "OutNormal")
+    g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
+    g.out(g.scalar("Roughness", 0.84, "Surface"), MP.MP_ROUGHNESS)
+    g.out(g.scalar("Specular", 0.3, "Surface"), MP.MP_SPECULAR)
+    g.finish()
+
+    card = get_material("M_BuildingCard")
+    card.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    card.set_editor_property("two_sided", True)
+    card.set_editor_property("tangent_space_normal", False)
+    card.set_editor_property("opacity_mask_clip_value", 0.3)
+    g = G(card)
+    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    uv1 = g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)
+    team = g.vector("TeamColor", lin(0.05, 0.22, 0.8), "Per building (custom primitive data)", cpd=0)
+    time = g.node(unreal.MaterialExpressionTime)
+    colour = g.custom(BUILDING_CARD_CODE, F3, [
+        ("P", P), ("N", g.node(unreal.MaterialExpressionVertexNormalWS)), ("Side", g.node(unreal.MaterialExpressionTwoSidedSign)),
+        ("UV0", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)), ("UV1", uv1),
+        ("VCr", g.node(unreal.MaterialExpressionVertexColor), "R"), ("Team", team), ("Time", time),
+        ("Tex", g.tex("Tex", "T_Bld_Wheat")),
+        ("Size", g.vector("Size", lin(64.0, 32.0, 0.0, 0.0), "Textures"), "RGBA"),
+        ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
+        ("TeamMask", g.scalar("TeamMask", 0.0, "Team")), ("TeamBoost", g.scalar("TeamBoost", 2.0, "Team")),
+        ("Glow", g.scalar("Glow", 0.0, "Glow")),
+        ("RootShade", g.scalar("RootShade", 1.0, "Colour")), ("UpNormal", g.scalar("UpNormal", 0.0, "Colour")),
+        ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Colour"), "RGBA"),
+    ], "Building card: cloth, crops, leaves, flame", outputs=[("OutAlpha", F1), ("OutNormal", F3), ("OutEmissive", F3)])
+    weight = g.node(unreal.MaterialExpressionComponentMask, r=True, g=False, b=False, a=False)
+    g.link(uv1, weight, "")
+    sway = g.custom(BUILDING_SWAY, F3, [("P", P), ("Time", time), ("Weight", weight),
+                                        ("Speed", g.scalar("SwaySpeed", 1.6, "Sway")), ("Amount", g.scalar("SwayAmount", 3.0, "Sway"))], "Wind sway")
+    g.out(colour, MP.MP_BASE_COLOR)
+    g.out(colour, MP.MP_OPACITY_MASK, "OutAlpha")
+    g.out(colour, MP.MP_NORMAL, "OutNormal")
+    g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
+    g.out(sway, MP.MP_WORLD_POSITION_OFFSET)
+    g.out(g.scalar("Roughness", 0.9, "Surface"), MP.MP_ROUGHNESS)
+    g.out(g.const(0.12), MP.MP_SPECULAR)
+    g.finish()
+
+    for slot, (kind, tex, size, nrm, scalars, vectors) in BUILDING_SLOTS.items():
+        textures = {"Tex": tex}
+        if nrm:
+            textures["NormalTex"] = nrm
+        v = {"Size": lin(size[0], size[1], 0, 0)}
+        v.update(vectors)
+        make_instance("MI_Bld_" + slot, mat if kind == "opaque" else card, scalars=scalars, vectors=v, textures=textures)
+
+
 def make_instance(name, parent, scalars=None, vectors=None, textures=None):
     path = DIR + "/" + name
     if eal.does_asset_exist(path):
@@ -735,6 +938,8 @@ if not ONLY or "card" in ONLY:
     cardm = build_card()
     make_instance("MI_Card_Banner", cardm, scalars={"RootShade": 1.0, "SwayAmount": 5.0, "SwaySpeed": 2.2},
                   vectors={"Size": lin(16, 40, 0, 0), "Tint": lin(1, 1, 1)}, textures={"Tex": "T_Banner"})
+if not ONLY or "building" in ONLY:
+    build_building()
 if not ONLY or "sprite" in ONLY:
     sprite_m, sprite_shadow_m = build_sprite()
     make_sprite_instances(sprite_m, sprite_shadow_m)

@@ -31,8 +31,13 @@ start() {
         i=$((i + 1)); [ $i -gt 240 ] && { echo "editor did not start"; return 1; }
         sleep 1
     done
-    sleep 6
-    echo "editor up after ${i}s"
+    # the port opens before the editor ticks: wait until the Python bridge (Content/Python/init_unreal.py) answers
+    j=0
+    until python3 "$ROOT/Tools/ue_py.py" -c "print('ok')" 15 >/dev/null 2>&1; do
+        rm -f "$ROOT"/Saved/PyInbox/*.py 2>/dev/null
+        j=$((j + 1)); [ $j -gt 30 ] && { echo "bridge did not answer"; return 1; }
+    done
+    echo "editor up (port after ${i}s, bridge after $((j * 15))s more)"
 }
 case "$1" in
     quit) quit ;;
