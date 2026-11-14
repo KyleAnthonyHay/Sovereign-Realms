@@ -9,7 +9,7 @@ Pipeline (see Docs/VISUAL_CONTRACT.md):
   Tools/ue_py.py Tools/build_visual_materials.py                  # /Game/SR/Materials
   Tools/ue_py.py Tools/build_battlefield_visuals.py               # this file: the level
 One part only:  Tools/ue_py.py -c "PARTS=['lighting']; exec(open('<abs path to this file>').read())"
-Parts: world (terrain + props + water), lighting.
+Parts: world (terrain + props + water + buildings), buildings (only re-place the buildings), lighting.
 
 Gameplay rules honoured (enforced by the generator): the +/-3000 cm play area keeps both spawn
 areas and the lane flat; terraces inside it step <= 40 cm; blocking rocks and ruin pieces are single
@@ -95,12 +95,69 @@ def add_ism(owner, mesh, name, shadow=True):
     return comp
 
 
+# ------------------------------------------------------------------ buildings
+TEAM_COLORS = {0: (0.05, 0.22, 0.80), 1: (0.72, 0.07, 0.05)}      # the Sovereign Feel defaults; ASRBuilding re-applies the live ones
+BLD = "/Game/SR/Buildings/"
+
+
+def build_buildings(layout):
+    """Places the kingdoms' buildings (layout.json "buildings", from BUILDINGS in gen_battlefield.py) in the folder
+    Buildings. With the game module's ASRBuilding class available each is one actor that knows its type, team,
+    footprint and sockets and builds its own blocking boxes; otherwise a static mesh plus invisible blocker boxes."""
+    clear_folder("Buildings")
+    cls = None
+    try:
+        cls = unreal.load_class(None, "/Script/SovereignRealms.SRBuilding")
+    except Exception:
+        cls = None
+    for b in layout.get("buildings", []):
+        mesh = load(BLD + b["mesh"])
+        if mesh is None:
+            print("missing building mesh", b["mesh"], "(run Tools/import_buildings.py)")
+            continue
+        loc, rot = unreal.Vector(*b["pos"]), unreal.Rotator(0, 0, b["yaw"])
+        team = TEAM_COLORS[b["team"]]
+        if cls is not None:
+            a = eas.spawn_actor_from_class(cls, loc, rot)
+            a.set_actor_label(b["label"])
+            a.set_folder_path("Buildings")
+            a.set_editor_property("building_type", getattr(unreal.SRBuildingType, b["type"].upper()))
+            a.set_editor_property("team", unreal.SRTeam.PLAYER if b["team"] == 0 else unreal.SRTeam.ENEMY)
+            a.set_editor_property("building_mesh", mesh)
+            fp = b["footprint"]
+            a.set_editor_property("footprint_min", unreal.Vector2D(fp[0], fp[1]))
+            a.set_editor_property("footprint_max", unreal.Vector2D(fp[2], fp[3]))
+            a.set_editor_property("block_height", b["colliders"][0]["size"][2])
+            a.set_editor_property("ring_radius", b["ring_radius"])
+            sk = b["sockets"]
+            for prop, key in (("gate_offset", "gate"), ("rally_offset", "rally"), ("label_offset", "label"), ("popup_offset", "popup")):
+                if key in sk:
+                    a.set_editor_property(prop, unreal.Vector(*sk[key]))
+            a.call_method("RefreshBuilding")
+            continue
+        a = mesh_actor(mesh, b["pos"], b["yaw"], b["label"], "Buildings", collide=False)
+        a.static_mesh_component.set_default_custom_primitive_data_vector4(0, unreal.Vector4(team[0], team[1], team[2], 1.0))
+        for i, c in enumerate(b["colliders"]):
+            box = eas.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+            box.set_actor_label("%s_Collision%s" % (b["label"], "" if i == 0 else "_%d" % i))
+            box.set_folder_path("Buildings")
+            box.static_mesh_component.set_static_mesh(CUBE)
+            box.attach_to_actor(a, "", unreal.AttachmentRule.KEEP_RELATIVE, unreal.AttachmentRule.KEEP_RELATIVE, unreal.AttachmentRule.KEEP_WORLD, False)
+            box.set_actor_relative_location(unreal.Vector(*c["centre"]), False, False)
+            box.set_actor_relative_rotation(unreal.Rotator(0, 0, c["yaw"]), False, False)
+            box.set_actor_scale3d(unreal.Vector(c["size"][0] / 100.0, c["size"][1] / 100.0, c["size"][2] / 100.0))
+            box.static_mesh_component.set_editor_property("visible", False)
+            box.static_mesh_component.set_editor_property("cast_shadow", False)
+            box.tags = ["SRBlocker"]
+    print("buildings placed:", len(layout.get("buildings", [])), "as", "ASRBuilding" if cls is not None else "static meshes")
+
+
 # ------------------------------------------------------------------ world
 def build_world():
     with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
         layout = json.load(f)
     assign_materials()
-    for folder in ("Greybox", "Terrain", "Props", "Water"):
+    for folder in ("Greybox", "Terrain", "Props", "Water", "Buildings"):
         clear_folder(folder)
 
     # terrain: WorldStatic, complex-as-simple collision set on the assets at import
@@ -139,6 +196,7 @@ def build_world():
             xfs = [unreal.Transform(unreal.Vector(x, y, z), unreal.Rotator(0, 0, yaw), unreal.Vector(s, s, s)) for x, y, z, yaw, s in items]
             comp.add_instances(xfs, False, True)
             total += len(xfs)
+    build_buildings(layout)
     print("terrain actors %d, single actors %d, blockers %d, instances %d" % (len(layout["terrain"]), len(layout["actors"]), len(layout["blockers"]), total))
 
 
@@ -251,6 +309,9 @@ def build_lighting():
 # ------------------------------------------------------------------ run
 if "world" in PARTS:
     build_world()
+elif "buildings" in PARTS:
+    with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
+        build_buildings(json.load(f))
 if "lighting" in PARTS:
     build_lighting()
 les.save_current_level()

@@ -9,7 +9,7 @@
 
 Writes
     SourceArt/Buildings/blender/<name>.blend     the model, with preview materials, the game camera and sun
-    SourceArt/Buildings/<name>.gltf + .bin       what Unreal imports (Tools/import_buildings.py)
+    SourceArt/Buildings/<MESH>.gltf + .bin       what Unreal imports (Tools/import_buildings.py)
     SourceArt/Buildings/<name>.json              footprint, collision boxes, sockets, bounds, triangle count
     Saved/BuildingPreview/<name>_z<zoom>.png     renders from the game camera (quick look only: judge in engine)
 The building modules are Tools/blender/bld_<name>.py: each has build(kit) and NAME / MESH.
@@ -57,7 +57,7 @@ def main():
     os.makedirs(os.path.join(OUT, "blender"), exist_ok=True)
     with open(os.path.join(OUT, name + ".json"), "w") as f:
         json.dump(meta, f, indent=1)
-    K.export_gltf(ob, os.path.join(OUT, name + ".gltf"))
+    K.export_gltf(ob, os.path.join(OUT, mod.MESH + ".gltf"))      # the file name becomes the asset name
 
     focus = getattr(mod, "PREVIEW_FOCUS", (0.0, 0.0, 0.0))
     K.setup_preview(scene, focus=focus, zoom=zooms[0])

@@ -2,7 +2,7 @@
 
     Tools/ue_py.py Tools/import_buildings.py
 
-  SourceArt/Buildings/<name>.gltf  -> /Game/SR/Buildings/SM_Bld_<Name>   (Tools/blender/build_building.py writes them)
+  SourceArt/Buildings/SM_Bld_<Name>.gltf  -> /Game/SR/Buildings/SM_Bld_<Name>   (Tools/blender/build_building.py writes them)
 
 Each mesh slot is named after its surface ("Bld_Ashlar", ...) and gets /Game/SR/Materials/MI_Bld_<slot>
 (Tools/build_visual_materials.py, part "building"). The meshes carry no collision: a building blocks movement
@@ -33,7 +33,6 @@ def pipeline():
     me.set_editor_property("collision", False)
     me.set_editor_property("build_nanite", False)
     me.set_editor_property("generate_lightmap_u_vs", False)
-    me.set_editor_property("combine_static_meshes", True)
     cm = pipe.get_editor_property("common_meshes_properties")
     cm.set_editor_property("recompute_normals", False)
     cm.set_editor_property("recompute_tangents", True)
@@ -45,10 +44,13 @@ def pipeline():
     return override
 
 
+for stale in ("castle", "farm", "mine"):
+    if eal.does_asset_exist(DST + "/" + stale):
+        eal.delete_asset(DST + "/" + stale)
 n = 0
-for path in sorted(glob.glob(os.path.join(SRC, "*.gltf"))):
+for path in sorted(glob.glob(os.path.join(SRC, "SM_Bld_*.gltf"))):
     name = os.path.splitext(os.path.basename(path))[0]
-    if ONLY and name not in ONLY:
+    if ONLY and name[7:].lower() not in ONLY:
         continue
     task = unreal.AssetImportTask()
     task.filename = path

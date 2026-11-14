@@ -709,14 +709,14 @@ float2 qi = floor(q);
 float2 qf = q - qi;
 qf = qf * qf * (3.0 - 2.0 * qf);
 float bl = lerp(lerp(px.h(qi), px.h(qi + float2(1, 0)), qf.x), lerp(px.h(qi + float2(0, 1)), px.h(qi + float2(1, 1)), qf.x), qf.y);
-float h = P.z - PivotZ;                                            // height above the building's ground line
+float h = LocalZ;                                                  // height above the building's ground line (its origin)
 // damp, dirty foot
 float d = saturate(1.0 - h / max(DampHeight * (0.55 + 0.9 * bl), 1.0));
-d = floor(d * 3.0 + hx * 0.999) / 3.0;
+d = floor(d * 3.0 + 0.5 + (hx - 0.5) * 0.4) / 3.0;                  // three flat steps, a narrow dithered seam between them
 col *= lerp(float3(1, 1, 1), DampTint.rgb, d * Damp);
 // sun-bleached heads (UV1.x = cm below the top of the wall this face belongs to)
 float b = saturate(1.0 - UV1.x / max(BleachDepth * (0.5 + bl), 1.0));
-b = floor(b * 2.0 + hx * 0.999) / 2.0;
+b = floor(b * 2.0 + 0.5 + (hx - 0.5) * 0.4) / 2.0;
 col = lerp(col, col * BleachTint.rgb, b * Bleach);
 // moss creeping up from the turf, joints first
 if (Moss > 0.0)
@@ -771,10 +771,10 @@ return float3(sin(t + P.y * 0.011 + P.x * 0.004), cos(t * 0.83 + P.x * 0.009), 0
 """
 
 # slot -> (kind, texture, (w, h), normal map or None, scalar overrides, vector overrides)
-_STONE = {"Damp": 0.55, "Bleach": 0.3, "Moss": 0.5}
+_STONE = {"Damp": 0.55, "Bleach": 0.3, "Moss": 0.35}
 BUILDING_SLOTS = {
     "Ashlar": ("opaque", "T_Bld_Ashlar", (128, 128), "T_Bld_Ashlar_N", dict(_STONE), {}),
-    "AshlarLarge": ("opaque", "T_Bld_AshlarLarge", (128, 128), "T_Bld_AshlarLarge_N", dict(_STONE, Moss=0.65), {}),
+    "AshlarLarge": ("opaque", "T_Bld_AshlarLarge", (128, 128), "T_Bld_AshlarLarge_N", dict(_STONE, Moss=0.42), {}),
     "Trim": ("opaque", "T_Bld_Trim", (64, 16), "T_Bld_Trim_N", {"Damp": 0.3, "Bleach": 0.0, "Moss": 0.0}, {}),
     "Mudbrick": ("opaque", "T_Bld_Mudbrick", (128, 128), "T_Bld_Mudbrick_N", {"Damp": 0.5, "Bleach": 0.2, "Moss": 0.3}, {}),
     "Plaster": ("opaque", "T_Bld_Plaster", (128, 128), "T_Bld_Plaster_N", {"Damp": 0.45, "Bleach": 0.2, "Moss": 0.15}, {}),
@@ -798,7 +798,7 @@ BUILDING_SLOTS = {
     "Rock": ("opaque", "T_Rock", (64, 64), "T_Rock_N", {"Damp": 0.4, "Bleach": 0.0, "MossTop": 1.0, "MossSlope": 0.84, "Roughness": 0.86},
              {"Tint": lin(0.8, 0.78, 0.72)}),
     "Cliff": ("opaque", "T_Cliff", (128, 128), "T_Cliff_N", {"Damp": 0.3, "Bleach": 0.0, "Roughness": 0.82}, {}),
-    "Turf": ("opaque", "T_Grass", (128, 128), None, {"Damp": 0.0, "Bleach": 0.0, "WorldTop": 1.0, "Roughness": 0.95}, {}),
+    "Turf": ("opaque", "T_Grass", (128, 128), None, {"Damp": 0.0, "Bleach": 0.0, "WorldTop": 1.0, "Roughness": 0.95}, {"Tint": lin(0.9, 0.9, 0.86)}),
     "Leaves": ("card", "T_Bld_Leaves", (64, 64), None, {"UpNormal": 0.6, "SwayAmount": 1.2, "SwaySpeed": 1.4}, {}),
     "Wheat": ("card", "T_Bld_Wheat", (64, 32), None, {"UpNormal": 1.0, "RootShade": 0.5, "SwayAmount": 5.0, "SwaySpeed": 1.5}, {}),
     "Banner": ("card", "T_Bld_Banner", (16, 64), None, {"TeamMask": 1.0, "UpNormal": 0.35, "SwayAmount": 5.0, "SwaySpeed": 2.2}, {}),
@@ -814,15 +814,19 @@ def build_building():
     mat.set_editor_property("tangent_space_normal", False)
     g = G(mat)
     P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
-    obj = g.node(unreal.MaterialExpressionObjectPositionWS)
+    # height above the building's own origin (ObjectPositionWS is the bounds centre, no use for a ground line)
+    local = g.node(unreal.MaterialExpressionTransformPosition,
+                   transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
+                   transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    g.link(P, local, "")
     pivot_z = g.node(unreal.MaterialExpressionComponentMask, r=False, g=False, b=True, a=False)
-    g.link(obj, pivot_z, "")
+    g.link(local, pivot_z, "")
     team = g.vector("TeamColor", lin(0.05, 0.22, 0.8), "Per building (custom primitive data)", cpd=0)
     colour = g.custom(BUILDING_CODE, F3, [
         ("P", P), ("N", g.node(unreal.MaterialExpressionVertexNormalWS)),
         ("UV0", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)),
         ("UV1", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)),
-        ("VCr", g.node(unreal.MaterialExpressionVertexColor), "R"), ("PivotZ", pivot_z), ("Team", team),
+        ("VCr", g.node(unreal.MaterialExpressionVertexColor), "R"), ("LocalZ", pivot_z), ("Team", team),
         ("Tex", g.tex("Tex", "T_Bld_Ashlar")), ("NormalTex", g.tex("NormalTex", "T_Bld_Flat_N", True)), ("MossTex", g.tex("MossTex", "T_GrassMoss")),
         ("Size", g.vector("Size", lin(128.0, 128.0, 0.0, 0.0), "Textures"), "RGBA"),
         ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),

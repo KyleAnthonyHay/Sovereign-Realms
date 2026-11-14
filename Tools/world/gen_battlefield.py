@@ -3,7 +3,8 @@
 the placement list. Deterministic. Unreal only imports and places what this writes.
 
   Tools/.venv/bin/python Tools/world/gen_battlefield.py
-  -> SourceArt/Meshes/battlefield.gltf (+ .bin)   every static mesh, Unreal axes, cm
+  -> SourceArt/Meshes/battlefield.gltf (+ .bin)   every static mesh, Unreal axes, cm (the buildings are separate:
+                                                   Tools/blender/build_building.py; BUILDINGS below places them)
      SourceArt/Textures/T_Splat.png               ground blend map (see SPLAT below)
      SourceArt/World/layout.json                  where everything goes
      Saved/WorldPreview/map.png                   top-down preview (+X up, like the game camera)
@@ -843,6 +844,138 @@ def place_props(keep, road_poly, rock_clear):
     print("tufts %d, cliff-foot props %d, trees %d" % (n, feet, len(trees)))
 
 
+# ============================================================================================ kingdoms
+# Buildings on the field: (type, x, y, yaw, team 0 player / 1 enemy, label). Types are the models under
+# SourceArt/Buildings (Tools/blender/build_building.py); <type>.json gives the blocking footprint and the sockets.
+# A building's front (gate, adit, yard) faces -X at yaw 0, toward the game camera.
+BUILDINGS = [
+    ("castle", -2000.0, -1300.0, 0.0, 0, "Castle_Player"),
+    ("mine", -2570.0, -2550.0, 0.0, 0, "Mine_Player"),
+    ("farm", -2500.0, 620.0, 0.0, 0, "Farm_Player"),
+    ("castle", 2250.0, -1100.0, 0.0, 1, "Castle_Enemy"),
+]
+# Terrain that stood where a kingdom now is. It is still generated (so every random draw downstream is unchanged and
+# the rest of the world stays exactly as it was) and removed afterwards by apply_kingdoms().
+KINGDOM_REMOVES = {"SM_T_Field_02", "SM_T_Field_03", "SM_T_Knoll_03", "SM_T_Knoll_08", "SM_T_Knoll_09"}
+KINGDOM_REMOVE_ROCKS = {"Rock_SW"}
+# footpaths (bare earth), world polylines: the castle court to the road, the road to the farm yard, the court to the mine
+KINGDOM_PATHS = [
+    [(-2760, -1300), (-2800, -900), (-2740, -520), (-2640, -240)],
+    [(-2960, -250), (-3010, 60), (-2960, 380)],
+    [(-2800, -1560), (-2960, -1900), (-3010, -2330), (-2960, -2550)],
+    [(1420, -1100), (1280, -600), (1330, -60)],
+]
+_META = {}
+
+
+def building_meta(kind):
+    if kind not in _META:
+        with open(os.path.join(ROOT, "SourceArt", "Buildings", kind + ".json")) as f:
+            _META[kind] = json.load(f)
+    return _META[kind]
+
+
+def to_world(x, y, yaw, p):
+    c, s = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    return (x + p[0] * c - p[1] * s, y + p[0] * s + p[1] * c)
+
+
+def footprint_poly(kind, x, y, yaw, pad=0.0):
+    x0, y0, x1, y1 = building_meta(kind)["footprint"]
+    b = box(x0 - pad, y0 - pad, x1 + pad, y1 + pad)
+    return affinity.translate(affinity.rotate(b, yaw, origin=(0, 0)), x, y)
+
+
+def court_poly(kind, x, y, yaw):
+    """The paved court before a castle gate (local x in front of the footprint)."""
+    x0, y0, x1, y1 = building_meta(kind)["footprint"]
+    b = box(x0 - 400, -340, x0 + 10, 340)
+    return affinity.translate(affinity.rotate(b, yaw, origin=(0, 0)), x, y)
+
+
+def apply_kingdoms():
+    """Clears the ground for the buildings after the world has been generated: removes / trims terraces, re-seats or
+    drops the dressing that stood there, and returns the placements for the level builder."""
+    global HM
+    from shapely.prepared import prep
+    feet = [footprint_poly(k, x, y, yaw) for k, x, y, yaw, team, label in BUILDINGS]
+    courts = [court_poly(k, x, y, yaw) for k, x, y, yaw, team, label in BUILDINGS if k == "castle"]
+    paths = [LineString(p).buffer(95) for p in KINGDOM_PATHS]
+    flat = unary_union([f.buffer(230, 3) for f in feet] + [c.buffer(120, 3) for c in courts])     # no ledges this close
+    clear = unary_union([f.buffer(70, 3) for f in feet] + [c.buffer(20, 3) for c in courts] + paths)  # no dressing here
+    old = HM
+    kept = []
+    for t in TIERS:
+        if t["group"] in KINGDOM_REMOVES:
+            continue
+        if t["poly"].intersects(flat) and not t["poly"].interiors:
+            for p in clean(t["poly"].difference(flat), 20000.0):
+                if not p.interiors:
+                    kept.append(dict(t, poly=p))
+            continue
+        kept.append(t)
+    TIERS[:] = kept
+    live = set(t["group"] for t in TIERS)
+    for g in list(GROUPS):
+        if g not in live:
+            del GROUPS[g]
+    HM = rasterize_heights()
+
+    def old_h(x, y):
+        r, c = int((x - WX0) / HM_RES), int((y - WY0) / HM_RES)
+        return float(old[r, c]) if 0 <= r < old.shape[0] and 0 <= c < old.shape[1] else 0.0
+
+    inside = prep(clear)
+    dropped = moved = 0
+    gone_trees = []
+    for mesh, lst in INSTANCES.items():
+        out = []
+        for it in lst:
+            x, y = it[0], it[1]
+            dz = old_h(x, y) - height_at(x, y)
+            if inside.contains(Point(x, y)) or (abs(dz) > 0.5 and mesh.startswith("SM_Conifer")):
+                dropped += 1
+                if mesh.startswith("SM_Conifer"):
+                    gone_trees.append((x, y))
+                continue
+            if abs(dz) > 0.5:
+                it[2] = round(it[2] - dz, 1)
+                moved += 1
+            out.append(it)
+        lst[:] = out
+    for lst, key in ((ACTORS, "label"), (BLOCKERS, "label")):
+        out = []
+        for a in lst:
+            x, y = a["pos"][0], a["pos"][1]
+            name = a[key].replace("_Collision", "")
+            if inside.contains(Point(x, y)) or name in KINGDOM_REMOVE_ROCKS:
+                dropped += 1
+                continue
+            if name.startswith("Fir_") and any(abs(x - tx) < 1 and abs(y - ty) < 1 for tx, ty in gone_trees):
+                continue
+            dz = old_h(x, y) - height_at(x, y)
+            if abs(dz) > 0.5:
+                a["pos"][2] = round(a["pos"][2] - dz, 1)
+            out.append(a)
+        lst[:] = out
+    placed = []
+    for kind, x, y, yaw, team, label in BUILDINGS:
+        meta = building_meta(kind)
+        worst = max(height_at(px, py) for px, py in footprint_poly(kind, x, y, yaw, 40.0).exterior.coords)
+        if worst > 0.5:
+            print("WARNING: ground under %s is not flat (%.0f cm)" % (label, worst))
+        placed.append({"type": kind, "mesh": meta["mesh"], "label": label, "team": team, "pos": [x, y, 0.0], "yaw": yaw,
+                       "footprint": meta["footprint"], "ring_radius": meta["ring_radius"],
+                       "colliders": meta["colliders"], "sockets": meta["sockets"]})
+    # two firs to frame the opening view again, where the knolls behind the player's start used to carry them
+    for (x, y, kind) in ((-2360.0, -420.0, "B"), (-1960.0, 1250.0, "D"), (-2740.0, -640.0, "A")):
+        if not inside.contains(Point(x, y)):
+            inst("SM_Conifer_" + kind, x, y, yaw=37.0, scale=1.0, sink=6.0)
+            BLOCKERS.append({"label": "Fir_K%d_Collision" % int(abs(x + y)), "pos": [x, y, height_at(x, y) + 90.0], "size": [46, 46, 200], "yaw": 0})
+    print("kingdoms: %d buildings, dressing dropped %d, re-seated %d" % (len(placed), dropped, moved))
+    return placed
+
+
 # ============================================================================================ splat map
 def splat_grid():
     px = SPLAT_SIZE / SPLAT_RES
@@ -891,6 +1024,26 @@ def build_splat_fields():
         dd = np.hypot(X - cx, Y - cy)
         R = np.maximum(R, np.clip((rad - dd) / rad, 0, 1) * (0.25 + worn * 0.45))      # trampled ground at camps and ruins
     R = np.maximum(R, np.clip((worn - 0.83) * 4.0, 0, 0.5))                           # a few bare scuffs
+    # kingdoms: packed earth under and round each building, a cobbled court before a castle gate, footpaths
+    wob2 = wob * 0.35
+    paved2 = np.clip((smooth_noise(shape, 12, 9) - 0.22) * 4.0, 0.0, 1.0)
+    for kind, bx, by, yaw, team, label in BUILDINGS:
+        x0, y0, x1, y1 = building_meta(kind)["footprint"]
+        c, sn = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+        lx, ly = (X - bx) * c + (Y - by) * sn, -(X - bx) * sn + (Y - by) * c
+
+        def rect_d(ax0, ay0, ax1, ay1):
+            dx = np.maximum(np.maximum(ax0 - lx, lx - ax1), 0.0)
+            dy = np.maximum(np.maximum(ay0 - ly, ly - ay1), 0.0)
+            return np.hypot(dx, dy) + wob2
+
+        R = np.maximum(R, band(rect_d(x0, y0, x1, y1), 30.0, 150.0) * (0.5 + worn * 0.08))
+        if kind == "castle":
+            R = np.maximum(R, band(rect_d(x0 - 380, -300, x0 + 20, 300), 0.0, 70.0) * (0.56 + 0.44 * paved2))
+        elif kind == "mine":
+            R = np.maximum(R, band(rect_d(x0 - 60, -150, x0 + 300, 150), 0.0, 60.0) * (0.56 + 0.3 * paved2))
+    for pts in KINGDOM_PATHS:
+        R = np.maximum(R, band(dist_to_polyline(X, Y, pts) + wob2, 34.0, 100.0) * 0.56)
     moss = smooth_noise(shape, 50, 4) * 0.75 + smooth_noise(shape, 14, 5) * 0.25
     dry = smooth_noise(shape, 60, 6) * 0.7 + smooth_noise(shape, 18, 7) * 0.3
     return X, Y, R, moss, dry, road_d
@@ -961,6 +1114,8 @@ def write_preview(splat, path):
     for a in ACTORS:
         cx, cy = P(a["pos"][0], a["pos"][1])
         d.rectangle([cx - 3, cy - 3, cx + 3, cy + 3], outline=(255, 220, 90))
+    for kind, bx, by, yaw, team, label in BUILDINGS:
+        d.polygon([P(x, y) for x, y in footprint_poly(kind, bx, by, yaw).exterior.coords], outline=(90, 150, 255) if team == 0 else (255, 90, 70))
     for (x, y), c in ((PLAYER_START, (80, 140, 255)), (ENEMY_START, (255, 80, 60))):
         cx, cy = P(x, y)
         d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], outline=c, width=3)
@@ -984,6 +1139,7 @@ def main():
     SPLAT_DRY = lambda x, y: sample(dry_amt, x, y, 0.0)
 
     build_layout()
+    buildings = apply_kingdoms()
 
     # ---- meshes
     meshes = []
@@ -1020,6 +1176,8 @@ def main():
     meshes.append(water)
 
     for name, x, y, size, yaw in BLOCK_ROCKS:                 # unique boulders over the collision boxes
+        if name in KINGDOM_REMOVE_ROCKS:
+            continue
         m = Mesh("SM_" + name)
         hull_rock(None, (size[0] * 1.22, size[1] * 1.22, size[2] * 1.15), 17, seed=zlib.crc32(name.encode()) % 1000, into=m, yaw=yaw)
         r2 = np.random.default_rng(zlib.crc32(name.encode()) % 977)
@@ -1046,7 +1204,7 @@ def main():
         "splat": {"origin": list(SPLAT_ORIGIN), "size": SPLAT_SIZE},
         "terrain": layout_terrain,
         "water": {"mesh": "SM_Water", "pos": list(wpivot), "surface": LAKE_SURFACE},
-        "instances": INSTANCES, "actors": ACTORS, "blockers": BLOCKERS,
+        "instances": INSTANCES, "actors": ACTORS, "blockers": BLOCKERS, "buildings": buildings,
     }
     os.makedirs(os.path.join(ROOT, "SourceArt", "World"), exist_ok=True)
     with open(os.path.join(ROOT, "SourceArt", "World", "layout.json"), "w") as f:

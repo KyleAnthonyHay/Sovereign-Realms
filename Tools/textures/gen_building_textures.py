@@ -214,7 +214,7 @@ def plaster(seed, brick):
             if rng.random() < 0.45:
                 x += int(rng.choice([-1, 1]))
     blob = value_noise(rng, W, H, 32) * 0.7 + value_noise(rng, W, H, 8) * 0.3
-    hole = blob > 0.765                                      # where the render has fallen off
+    hole = blob > 0.81                                       # where the render has fallen off
     for y in range(H):
         for x in range(W):
             if hole[y, x]:

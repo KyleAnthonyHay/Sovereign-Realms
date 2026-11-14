@@ -180,13 +180,16 @@ def windlass(k):
 
 
 def spoil(k):
-    k.blob("Bld_Dirt", (-296, 318, 0), (220, 200, 170), points=22, squash=0.35)
-    k.blob("Bld_Dirt", (-214, 372, -6), (150, 120, 110), points=16, squash=0.35)
-    k.blob("Bld_Dirt", (-360, 256, -8), (110, 120, 90), points=14, squash=0.35)
-    for (x, y, z, s) in ((-330, 270, 40, 44), (-262, 300, 58, 36), (-300, 372, 46, 40), (-226, 344, 34, 30), (-352, 330, 20, 34)):
-        k.blob("Bld_Rock" if s > 34 else "Bld_Ore", (x, y, z), (s, s, s * 0.8), points=8)
-    # a barrow plank up the heap
-    k.obox("Bld_Planks", (-232, 280, 34), (150, 26, 5), yaw=26, pitch=-20)
+    """Waste rock tipped beside the shaft: a low earth mound under a litter of broken stone, a barrow plank up it."""
+    k.blob("Bld_Dirt", (-292, 316, 0), (250, 220, 120), points=26, squash=0.25)
+    k.blob("Bld_Dirt", (-212, 372, -4), (150, 120, 76), points=18, squash=0.25)
+    for i in range(16):
+        a, d = k.U(0, 2 * math.pi), k.U(0, 1) ** 0.6 * 100
+        x, y = -292 + math.cos(a) * d * 1.1, 316 + math.sin(a) * d
+        z = 56 * max(0.0, 1.0 - d / 118) + 2
+        s = k.U(22, 44)
+        k.blob("Bld_Ore" if i % 5 == 0 else "Bld_Rock", (x, y, z), (s, s * k.U(0.7, 1.0), s * 0.7), points=8)
+    k.obox("Bld_Planks", (-226, 262, 26), (150, 26, 5), yaw=30, pitch=-16)
 
 
 def build(k):
