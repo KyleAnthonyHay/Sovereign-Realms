@@ -69,3 +69,4 @@ $RECYCLE.BIN/
 *.key
 *.p12
 *.pfx
+Builds/
