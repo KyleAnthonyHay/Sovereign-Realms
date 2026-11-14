@@ -202,7 +202,10 @@ swing on every melee wind-up, two horse snorts (idle riders, now and then) and a
 plays under riders at speed (three at most at once) and fades in and out as they start and stop. A burning (damaged)
 building roars with a fire loop (built from a recorded crackle: shaped low noise plus crackle grains, seamless) that
 fades in when it catches and out when it is repaired or falls, with a recorded flare-up every few seconds. A destroyed
-catapult bursts apart (recorded timber break). A Builder's mallet blows are recorded hammer strikes.
+catapult bursts apart (recorded timber break). A Builder's mallet blows are recorded hammer strikes. Foot troops on the move (three or more walking together, and
+seen) tramp with a recorded march loop that follows the group's middle and grows with its size (the nearest three
+groups; it fades in as they set off and away as they halt). A rider neighs leaving the stable and, often, as its
+charge lands. A troop falls with one of four recorded grunts.
 `USRAudioSubsystem` plays them positioned from a listener over the camera's focus (so screen-left is heard on the
 left) that rises with the zoom (`ListenerZoomHeight`), with a minimum gap and voice cap per sound so a big melee stays
 a clatter. **Hearing range**: every positioned sound has its own range (pickaxe 18 m, arrow whistle 20 m, sword 32 m,

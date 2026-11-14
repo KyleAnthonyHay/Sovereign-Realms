@@ -60,6 +60,8 @@ namespace
 		{ TEXT("CatapultBreak"),   0.20f,  2.f, 0.90f, 0.06f, 5000.f },
 		{ TEXT("FireLoop"),        0.00f,  4.f, 0.50f, 0.05f, 2600.f },
 		{ TEXT("FireCrackle"),     0.40f,  2.f, 0.55f, 0.10f, 3000.f },
+		{ TEXT("MarchLoop"),       0.00f,  3.f, 0.50f, 0.00f, 3200.f },
+		{ TEXT("HorseNeigh"),      1.50f,  2.f, 0.70f, 0.08f, 4000.f },
 	};
 }
 
@@ -210,6 +212,28 @@ bool USRAudioSubsystem::Allow(ESRSound Sound)
 	LastPlayed[I] = Now;
 	VoiceLoad[I] += 1.f;
 	return true;
+}
+
+float USRAudioSubsystem::BaseVolume(ESRSound Sound) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return F.MasterVolume * F.EffectsVolume * Rules[FMath::Clamp(int32(Sound), 0, int32(ESRSound::Count) - 1)].Volume;
+}
+
+UAudioComponent* USRAudioSubsystem::PlayLoopAt(ESRSound Sound, const FVector& Location, float VolumeScale, float FadeIn)
+{
+	USoundBase* S = GetSound(Sound);
+	const int32 I = int32(Sound);
+	if (!S || !IsInRange(Sound, Location)) { return nullptr; }
+	int32 Running = 0;
+	for (const TWeakObjectPtr<UAudioComponent>& C : Loops) { Running += (C.IsValid() && C->Sound && C->IsPlaying() && Variants[I].Contains(C->Sound.Get())) ? 1 : 0; }
+	if (Running >= FMath::RoundToInt(Rules[I].MaxLoad)) { return nullptr; }
+	const float Vol = BaseVolume(Sound) * VolumeScale;
+	UAudioComponent* C = UGameplayStatics::SpawnSoundAtLocation(this, S, Location, FRotator::ZeroRotator, FadeIn > 0.f ? 0.f : Vol, 1.f,
+		FMath::FRandRange(0.f, 6.f), Attenuations[I], nullptr, true);
+	if (C && FadeIn > 0.f) { C->FadeIn(FadeIn, Vol, FMath::FRandRange(0.f, 6.f)); }
+	if (C) { Loops.Add(C); }
+	return C;
 }
 
 void USRAudioSubsystem::PlayAt(ESRSound Sound, const FVector& Location, float VolumeScale, float PitchScale)

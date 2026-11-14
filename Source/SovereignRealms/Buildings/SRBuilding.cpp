@@ -302,6 +302,10 @@ void ASRBuilding::SpawnRecruit(ESRUnitType Type)
 	ASRUnit* Unit = Battle->SpawnUnit(Type, Team, Gate2D, Yaw, 0.f);
 	Battle->NoteRecruit(Team);
 	if (!Unit) { return; }
+	if (Type == ESRUnitType::Horseman)
+	{
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::HorseNeigh, FVector(Gate2D, GetActorLocation().Z + 150.f)); }
+	}
 
 	// Step clear of the gate, then round the buildings to the rally point. Recruits fan out a little so a batch does
 	// not pile onto one spot.

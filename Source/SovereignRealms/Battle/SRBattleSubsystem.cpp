@@ -33,6 +33,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "Components/AudioComponent.h"
 
 namespace
 {
@@ -266,6 +267,7 @@ void USRBattleSubsystem::StepFrame(float Dt)
 	if (USRAISubsystem* AI = USRAISubsystem::Get(this)) { AI->Step(Dt); }
 	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Step(Dt); }
 	StepPatrols(Dt);
+	StepMarchSounds(Dt);
 
 	// 1) think + move  2) push overlapping bodies apart  3) pose and place the actors
 	RebuildBuckets();
@@ -416,12 +418,85 @@ void USRBattleSubsystem::CheckResult()
 
 // --------------------------------------------------------------- scenario
 
+void USRBattleSubsystem::StepMarchSounds(float Dt)
+{
+	USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this);
+	if (!Audio) { return; }
+	// Glide each march toward its group's middle every frame (the groups themselves are re-found twice a second).
+	for (FMarchVoice& V : MarchVoices)
+	{
+		V.Pos = FMath::VInterpTo(V.Pos, V.Want, Dt, 3.f);
+		if (UAudioComponent* C = V.Comp.Get()) { C->SetWorldLocation(V.Pos); }
+	}
+	MarchClock -= Dt;
+	if (MarchClock > 0.f) { return; }
+	MarchClock = 0.5f;
+
+	// Foot troops walking (not riders or engines, which have their own sounds), heard only where the player can see.
+	struct FGroup { FVector Sum = FVector::ZeroVector; int32 N = 0; FVector Mid() const { return Sum / FMath::Max(N, 1); } };
+	TArray<FGroup> Groups;
+	for (const ASRUnit* U : Units)
+	{
+		if (!U || !U->IsActive()) { continue; }
+		const ESRUnitType T = U->GetUnitType();
+		if (T == ESRUnitType::Horseman || T == ESRUnitType::Catapult) { continue; }
+		if (U->GetVelocity2D().SizeSquared() < FMath::Square(150.f) || !IsVisibleToPlayer(U)) { continue; }
+		FGroup* Into = nullptr;
+		for (FGroup& G : Groups) { if (FVector::DistSquared2D(G.Mid(), U->GetSimPos()) < FMath::Square(1300.f)) { Into = &G; break; } }
+		if (!Into) { Into = &Groups.AddDefaulted_GetRef(); }
+		Into->Sum += U->GetSimPos();
+		++Into->N;
+	}
+	// a body of three or more, the nearest ones first
+	Groups.RemoveAll([](const FGroup& G) { return G.N < 3; });
+	const FVector Ear = Audio->GetListener();
+	Groups.Sort([&Ear](const FGroup& A, const FGroup& B) { return FVector::DistSquared(A.Mid(), Ear) < FVector::DistSquared(B.Mid(), Ear); });
+	if (Groups.Num() > 3) { Groups.SetNum(3); }
+
+	for (FMarchVoice& V : MarchVoices) { V.bSeen = false; }
+	for (const FGroup& G : Groups)
+	{
+		const FVector Mid = G.Mid() + FVector(0.f, 0.f, 60.f);
+		const float Gain = FMath::Clamp(FMath::Sqrt(G.N / 6.f), 0.6f, 1.5f);    // a bigger body tramps louder
+		FMarchVoice* Best = nullptr;
+		for (FMarchVoice& V : MarchVoices)
+		{
+			if (!V.bSeen && V.Comp.IsValid() && FVector::DistSquared2D(V.Want, Mid) < FMath::Square(2200.f) && (!Best || FVector::DistSquared2D(V.Want, Mid) < FVector::DistSquared2D(Best->Want, Mid))) { Best = &V; }
+		}
+		if (!Best)
+		{
+			UAudioComponent* C = Audio->PlayLoopAt(ESRSound::MarchLoop, Mid, Gain, 0.8f);
+			if (!C) { continue; }
+			Best = &MarchVoices.AddDefaulted_GetRef();
+			Best->Comp = C;
+			Best->Pos = Mid;
+		}
+		Best->Want = Mid;
+		Best->bSeen = true;
+		if (!FMath::IsNearlyEqual(Best->Gain, Gain, 0.05f))
+		{
+			Best->Gain = Gain;
+			if (UAudioComponent* C = Best->Comp.Get()) { C->SetVolumeMultiplier(Audio->BaseVolume(ESRSound::MarchLoop) * Gain); }
+		}
+	}
+	// a body that halted (or left earshot / sight): its tramp dies away
+	for (int32 i = MarchVoices.Num() - 1; i >= 0; --i)
+	{
+		FMarchVoice& V = MarchVoices[i];
+		if (V.bSeen && V.Comp.IsValid()) { continue; }
+		if (UAudioComponent* C = V.Comp.Get()) { C->FadeOut(1.f, 0.f); }
+		MarchVoices.RemoveAt(i);
+	}
+}
+
 void USRBattleSubsystem::ResetBattle()
 {
 	UWorld* World = GetWorld();
 	if (!World) { return; }
 
 	Patrols.Reset();
+	for (FMarchVoice& V : MarchVoices) { if (UAudioComponent* C = V.Comp.Get()) { C->FadeOut(0.5f, 0.f); } }
+	MarchVoices.Reset();
 	for (ASRUnit* Unit : Units) { if (Unit) { Unit->Destroy(); } }
 	for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->Destroy(); } }
 	for (AActor* Obstacle : Obstacles) { if (Obstacle) { Obstacle->Destroy(); } }

@@ -212,6 +212,11 @@ private:
 
 	void StepFrame(float Dt);
 	void StepPatrols(float Dt);
+	/** One marching loop under each body of foot troops on the move (the nearest few), following its middle. */
+	void StepMarchSounds(float Dt);
+	struct FMarchVoice { TWeakObjectPtr<class UAudioComponent> Comp; FVector Pos = FVector::ZeroVector; FVector Want = FVector::ZeroVector; float Gain = 1.f; bool bSeen = false; };
+	TArray<FMarchVoice> MarchVoices;
+	float MarchClock = 0.f;
 	void RebuildBuckets();
 
 	struct FPatrol

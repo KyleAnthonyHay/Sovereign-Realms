@@ -12,6 +12,9 @@ venv: Tools/.venv/bin/python Tools/audio/prep_recorded.py, then import (Tools/ue
                        -> S_FireLoop                         (a steady burn: a low flame roar from shaped noise with
                                                               crackle grains cut from the recording scattered through
                                                               it; built circular, so it loops without a seam)
+  death_grunt_1..4.wav -> S_Death, S_Death_2..4             (a troop falls; replaces the synthesised cry)
+  horse_neigh.wav      -> S_HorseNeigh                       (a rider leaves the stable; a charge lands)
+  marching.wav         -> S_MarchLoop                        (twelve steady seconds - twelve paces - cross-faded)
   catapult_break.wav   -> S_CatapultBreak                    (a catapult destroyed: timber bursting apart)
   hammer_nail.wav      -> S_BuildHammer, S_BuildHammer_2..5  (its five blows, one take each; replaces the synthesised one)
 Uses macOS afconvert to read the 24-bit / 96 kHz / stereo originals.
@@ -115,6 +118,10 @@ def main():
     write("HorseSnort_2", trim(read("horse_snort_2.wav")), peak=0.8)
     write("GallopLoop", loop(read("horse_pass_by.wav"), 0.95, 3.15, 0.25), peak=0.8)
     write("CatapultBreak", trim(read("catapult_break.wav")))
+    for k in range(4):
+        write("Death" if k == 0 else "Death_%d" % (k + 1), trim(read("death_grunt_%d.wav" % (k + 1))), peak=0.85)
+    write("HorseNeigh", trim(read("horse_neigh.wav")), peak=0.85)
+    write("MarchLoop", loop(read("marching.wav"), 1.5, 13.8, 0.3), peak=0.8)
     fire = read("fire_crackle.wav")
     write("FireCrackle", trim(fire), peak=0.8)
     write("FireLoop", fire_loop(fire / max(np.abs(fire).max(), 1e-6)), peak=0.7)

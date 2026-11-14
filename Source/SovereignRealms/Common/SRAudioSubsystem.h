@@ -48,6 +48,8 @@ enum class ESRSound : uint8
 	CatapultBreak, // a catapult destroyed
 	FireLoop,      // a burning building's steady fire (looping, attached)
 	FireCrackle,   // a flare-up of the fire
+	MarchLoop,     // a body of foot troops on the move (looping, one per group)
+	HorseNeigh,    // a rider leaves the stable, a charge lands
 	Count UMETA(Hidden)
 };
 
@@ -75,6 +77,12 @@ public:
 	/** A battle sound that moves with a component (an arrow in flight, a galloping rider). A looping one keeps
 	 * playing until the caller fades it out; returns null if it was not started (out of range, too many voices). */
 	class UAudioComponent* PlayAttached(ESRSound Sound, USceneComponent* AttachTo, float VolumeScale = 1.f, float PitchScale = 1.f, float FadeIn = 0.f);
+	/** A looping sound at a point (the caller moves it, changes its volume and fades it out). */
+	class UAudioComponent* PlayLoopAt(ESRSound Sound, const FVector& Location, float VolumeScale = 1.f, float FadeIn = 0.f);
+	/** Where sounds are heard from (over the camera's focus, raised with the zoom). */
+	const FVector& GetListener() const { return Listener; }
+	/** The volume a sound plays at with the current settings (its rule x the effects bus). */
+	float BaseVolume(ESRSound Sound) const;
 	/** How far (cm) a sound carries (its range x SoundRangeScale). */
 	float RangeOf(ESRSound Sound) const;
 	/** Within that range of the listener (worth starting a loop for). */

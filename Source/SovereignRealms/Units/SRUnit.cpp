@@ -624,7 +624,11 @@ void ASRUnit::Strike(ASRUnit* T)
 		LastStrikeTime = Now;
 		const float Dmg = S.Damage * (bCharge ? S.ChargeMultiplier : 1.f);
 		T->ReceiveDamage(Dmg, this, Dir, S.KnockbackImpulse * (bCharge ? 1.6f : 1.f), S.bHeavyHits);
-		if (bCharge) { Battle->AddCameraTrauma(T->GetSimPos(), F.ShakeTraumaHeavyHit * 1.3f); }
+		if (bCharge)
+		{
+			Battle->AddCameraTrauma(T->GetSimPos(), F.ShakeTraumaHeavyHit * 1.3f);
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this); Audio && FMath::FRand() < 0.6f) { Audio->PlayAt(ESRSound::HorseNeigh, SimPos + FVector(0.f, 0.f, 150.f)); }
+		}
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(S.bHeavyHits ? ESRSound::ShieldBash : ESRSound::SwordHit, T->GetSimPos()); }
 		if (S.bHeavyHits)
 		{
