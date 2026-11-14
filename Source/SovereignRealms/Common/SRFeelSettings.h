@@ -354,16 +354,16 @@ public:
 	FLinearColor EnemyTeamColor = FLinearColor(0.72f, 0.07f, 0.05f);
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
-	int32 PlayerShieldbearers = 4;
+	int32 PlayerShieldbearers = 3;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
-	int32 PlayerArchers = 3;
+	int32 PlayerArchers = 2;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
-	int32 EnemyShieldbearers = 4;
+	int32 EnemyShieldbearers = 3;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
-	int32 EnemyArchers = 3;
+	int32 EnemyArchers = 2;
 
 	/** Centre of the player's starting formation (world XY, cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
@@ -378,16 +378,16 @@ public:
 	bool bSpawnGreyboxObstacles = false;
 
 	// --------------------------------------------------------------- Economy
-	// Farms make food, mines make gold. The castle turns food into troops; gold is for buildings. No workers: buildings pay out on a timer.
+	// Farms make food, mines make gold. The barracks and archery range turn food into troops; gold is for buildings.
 	UPROPERTY(EditAnywhere, Config, Category = "Economy", meta = (ClampMin = "0"))
-	int32 StartingGold = 250;
+	int32 StartingGold = 320;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy", meta = (ClampMin = "0"))
-	int32 StartingFood = 150;
+	int32 StartingFood = 200;
 
 	/** Food each farm adds per payout. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0"))
-	int32 FarmFoodPerPayout = 7;
+	int32 FarmFoodPerPayout = 9;
 
 	/** Seconds between a farm's payouts. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0.2"))
@@ -403,20 +403,20 @@ public:
 
 	/** Troops are paid for in food only; gold is kept for buildings. (The cost struct still carries a gold field, left at 0.) */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
-	FSRCost ShieldbearerCost = FSRCost(0, 50);
+	FSRCost ShieldbearerCost = FSRCost(0, 100);
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
-	FSRCost ArcherCost = FSRCost(0, 40);
+	FSRCost ArcherCost = FSRCost(0, 85);
 
-	/** Seconds the castle takes to train one Shieldbearer. */
+	/** Seconds the barracks takes to train one Shieldbearer. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
-	float ShieldbearerBuildTime = 5.f;
+	float ShieldbearerBuildTime = 9.f;
 
-	/** Seconds the castle takes to train one Archer. */
+	/** Seconds the archery range takes to train one Archer. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
-	float ArcherBuildTime = 4.5f;
+	float ArcherBuildTime = 8.f;
 
-	/** Recruits a castle can have waiting (including the one in training). */
+	/** Recruits a barracks or range can have waiting (including the one in training). */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "1", ClampMax = "12"))
 	int32 MaxRecruitQueue = 5;
 
@@ -444,7 +444,7 @@ public:
 
 	/** Hard ceiling on a kingdom's population, however many buildings it has. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Population", meta = (ClampMin = "1"))
-	int32 MaxPopulation = 60;
+	int32 MaxPopulation = 36;
 
 	// ------------------------------------------------------------- Buildings
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
@@ -458,6 +458,20 @@ public:
 
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
 	FSRBuildingStats TowerStats;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats BarracksStats;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats RangeStats;
+
+	/** A finished building shows its battle-damaged model below this fraction of its health. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
+	float DamagedStateFraction = 0.5f;
+
+	/** Seconds the ruin of a building raised during the match lingers before it sinks away (the level's own stay until restart). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "1"))
+	float RuinLingerTime = 40.f;
 
 	/** Gold refunded when a building is cancelled while still under construction (fraction of its cost). */
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
@@ -482,9 +496,22 @@ public:
 		case ESRBuildingType::Castle: return CastleStats;
 		case ESRBuildingType::Farm: return FarmStats;
 		case ESRBuildingType::Mine: return MineStats;
+		case ESRBuildingType::Barracks: return BarracksStats;
+		case ESRBuildingType::Range: return RangeStats;
 		default: return TowerStats;
 		}
 	}
+
+	/** Every building type, in build-menu order. */
+	static const TArray<ESRBuildingType>& AllBuildingTypes()
+	{
+		static const TArray<ESRBuildingType> Types = { ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Barracks, ESRBuildingType::Range,
+			ESRBuildingType::Tower, ESRBuildingType::Castle };
+		return Types;
+	}
+
+	/** The building that trains a unit type. */
+	static ESRBuildingType TrainerOf(ESRUnitType Type) { return Type == ESRUnitType::Archer ? ESRBuildingType::Range : ESRBuildingType::Barracks; }
 
 	// ------------------------------------------------------------------ Grid
 	/** Build grid cell size (cm). Buildings snap to it; the pathfinder walks it. */
@@ -520,13 +547,13 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0.1"))
 	float AIThinkInterval = 0.75f;
 
-	/** The first attack wave leaves no earlier than this (seconds into the match), at Normal. */
+	/** The first main attack leaves no earlier than this (seconds into the match), at Normal (Easy x1.45, Hard x0.72). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0"))
-	float AIFirstWaveTime = 210.f;
+	float AIFirstWaveTime = 150.f;
 
-	/** Seconds between waves after the first, at Normal. */
+	/** Seconds the commander regroups after an attack ends before it may launch the next, at Normal. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "10"))
-	float AIWaveInterval = 150.f;
+	float AIWaveInterval = 50.f;
 
 	/** Troops in the first wave, growth per wave, and the most a wave will ever wait for. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
@@ -536,7 +563,7 @@ public:
 	int32 AIWaveGrowth = 3;
 
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
-	int32 AIWaveSizeMax = 26;
+	int32 AIWaveSizeMax = 30;
 
 	/** Share of the army kept home as a garrison when a wave leaves. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "0.9"))
@@ -553,6 +580,28 @@ public:
 	/** Share of Shieldbearers the commander aims for (the rest are Archers). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "1"))
 	float AIShieldRatio = 0.55f;
+
+	/** The commander attacks once its free army is this many times stronger than what it expects to meet at the target (Normal; Easy x1.3, Hard x0.85). */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0.5"))
+	float AIAttackAdvantage = 1.3f;
+
+	/** Smallest force (troops) it sends on a main attack, and on a raid of an undefended farm or mine. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
+	int32 AIMinAttackSize = 4;
+
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
+	int32 AIRaidSize = 3;
+
+	/** Seconds between raids (Normal). */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "10"))
+	float AIRaidInterval = 75.f;
+
+	/** How far (cm) the commander's troops and buildings see. It only knows what it has seen (and remembers it for AIMemoryTime). */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "500"))
+	float AISightRadius = 2600.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "5"))
+	float AIMemoryTime = 90.f;
 
 	/** What the commander builds, in order, as gold allows (it repeats the list's farms / mines / towers after it ends). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI")

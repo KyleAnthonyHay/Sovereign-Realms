@@ -60,20 +60,26 @@ Use `U(designUnits)` for every size and position. Body text is 14-17 units, head
 - **Minimap**: generated base image, free gold veins, buildings (squares; the castles larger with a gold core),
   troops (dots; selected ones white), the camera's view of the ground (the four screen corners cast onto the
   focus plane and clipped), pings at alert locations. +X is up, +Y is right, like the camera. LMB (drag) moves
-  the camera, RMB orders the selection there (or moves the rally point with the Citadel selected).
-- **Build menu**: Farm / Gold Mine / Watchtower with cost and hotkey; greyed with a red price when unaffordable
-  (a click then flashes the gold counter); gold frame while that building is in hand (click again to cancel).
-  Tooltip: what it does, cost, build time, placement rule. While placing, the refusal reason follows the cursor.
+  the camera, RMB orders the selection there (or moves the rally point with a Barracks / Archery Range selected).
+- **Build menu**: one tall Build button (B) beside the minimap opens a panel over the selection panel with three tabs,
+  Economy (Farm, Gold Mine) / Military (Barracks, Archery Range) / Defence (Watchtower), each a card with icon, name,
+  gold cost and its number key (1-6 while the menu is open; Tab changes tab, Esc closes). Unaffordable cards dim with a
+  red price (a click then flashes the gold counter). Tooltip: what it does, what it trains or yields, cost, build time,
+  health, placement rule. New building types appear by their `Category` in Sovereign Feel. While placing, the refusal
+  reason follows the cursor.
 - **Selection panel** (only with a selection): troops (portrait and count per type, average health, how many are
-  fighting, command buttons Attack-move / Stop / Hold / Stance / Formation); a building (health, construction
-  progress with Cancel, or the payout meter; the Citadel's recruit buttons, queue and rally hint; "Housing full" /
-  "Queue full" states); enemies read-only.
+  fighting, command buttons Attack-move / Stop / Hold / Patrol / Stance / Form, and Disband for a platoon); a building
+  (health and "badly damaged" below half, construction progress with Cancel, or the payout meter; a Barracks or Range
+  shows its queue, its one recruit button and the rally hint; "Housing full" / "Queue full" states); enemies read-only.
 - **Platoon panel**: six slots. A formed platoon shows number, kind icon, name, counts, health, a burning left
-  edge while engaged, and three small buttons (formation, stance, "recruits join here"). Click selects, a second
-  click within 0.35 s also centres the camera. Empty slots read "Ctrl+N to form". The header folds the panel
-  away (remembered).
+  edge while engaged, and four small buttons (formation, stance, "recruits join here", disband). Click selects, a
+  second click within 0.35 s also centres the camera. Empty slots read "Ctrl+N to form". The header folds the panel
+  away (remembered). A platoon whose troops all fall disappears with an alert.
 - **World-space**: health bars (selected or recently hurt troops; damaged buildings), the box-select rectangle,
-  "+N" payout popups, training progress over a working castle.
+  "+N" payout popups, training progress over a working barracks / range, dashed ground lines for the selected troops'
+  patrol route and the selected barracks' / range's rally point.
+- **Top bar, enemy**: "Enemy ready in m:ss" until its first attack may leave, "Enemy watching" after, "Enemy
+  attacking!" (pulsing red) while an attack or raid is out.
 
 ## Game states
 

@@ -72,5 +72,93 @@
   "Bld_Shutter",
   "Bld_Thatch",
   "Bld_Trim"
- ]
+ ],
+ "states": {
+  "site": {
+   "mesh": "SM_Bld_Castle_Site",
+   "triangles": 3034,
+   "bounds": {
+    "min": [
+     -619.1,
+     -719.4,
+     -4.0
+    ],
+    "max": [
+     619.1,
+     719.4,
+     695.5
+    ]
+   },
+   "slots": [
+    "Bld_AshlarLarge",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Dirt",
+    "Bld_Planks",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "damaged": {
+   "mesh": "SM_Bld_Castle_Damaged",
+   "triangles": 6418,
+   "bounds": {
+    "min": [
+     -622.0,
+     -657.0,
+     -13.8
+    ],
+    "max": [
+     498.0,
+     642.0,
+     1162.0
+    ]
+   },
+   "slots": [
+    "Bld_Ashlar",
+    "Bld_AshlarLarge",
+    "Bld_Awning",
+    "Bld_Banner",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Dark",
+    "Bld_Door",
+    "Bld_Flame",
+    "Bld_Frieze",
+    "Bld_Leaves",
+    "Bld_Planks",
+    "Bld_Plaster",
+    "Bld_Pot",
+    "Bld_RoofClay",
+    "Bld_Scorch",
+    "Bld_Shutter",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "ruin": {
+   "mesh": "SM_Bld_Castle_Ruin",
+   "triangles": 2592,
+   "bounds": {
+    "min": [
+     -572.7,
+     -642.0,
+     -28.7
+    ],
+    "max": [
+     498.0,
+     642.0,
+     288.0
+    ]
+   },
+   "slots": [
+    "Bld_AshlarLarge",
+    "Bld_Char",
+    "Bld_Dirt",
+    "Bld_Plaster",
+    "Bld_Scorch"
+   ]
+  }
+ }
 }

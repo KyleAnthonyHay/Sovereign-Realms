@@ -97,6 +97,7 @@ void ASRHUD::DrawHUD()
 		bInputOpen = State == ESRGameState::Playing && !bLegend;
 		DrawHealthBars();
 		DrawTrainingBars();
+		DrawRouteLines();
 		DrawPayoutPopups();
 		DrawSelectionBox();
 		DrawGameHUD();
@@ -253,11 +254,11 @@ float ASRHUD::TextIn(const FBox2D& Box, const FString& String, float Pixels, con
 void ASRHUD::Icon(ESRIcon Which, float X, float Y, float Size, const FLinearColor& Tint, bool bEnemy)
 {
 	if (!IconAtlas) { return; }
-	// atlas: 8 x 10 cells of 18 px (a 16 px icon and a 1 px gutter); the lower five rows are the enemy-red copies
+	// atlas: 8 x 12 cells of 18 px (a 16 px icon and a 1 px gutter); the lower six rows are the enemy-red copies
 	const int32 N = int32(Which);
-	const float Col = float(N % 8), Row = float(N / 8 + (bEnemy ? 5 : 0));
+	const float Col = float(N % 8), Row = float(N / 8 + (bEnemy ? 6 : 0));
 	DrawTexture(IconAtlas, FMath::RoundToFloat(X), FMath::RoundToFloat(Y), FMath::RoundToFloat(Size), FMath::RoundToFloat(Size),
-		(Col * 18.f + 1.f) / 144.f, (Row * 18.f + 1.f) / 180.f, 16.f / 144.f, 16.f / 180.f, Lin(Tint), BLEND_Translucent);
+		(Col * 18.f + 1.f) / 144.f, (Row * 18.f + 1.f) / 216.f, 16.f / 144.f, 16.f / 216.f, Lin(Tint), BLEND_Translucent);
 }
 
 void ASRHUD::Meter(float X, float Y, float W, float H, float Frac, const FLinearColor& FillColor)
@@ -470,6 +471,50 @@ void ASRHUD::DrawPayoutPopups()
 		const float X = S.X - (W + U(5.f) + IS) * 0.5f, Y = S.Y - P * 0.6f;
 		Text(Label, X, Y, P, A(Popup.Resource == ESRResource::Gold ? GoldBright : FoodColor, Alpha), AlignLeft, Bold);
 		Icon(Popup.Resource == ESRResource::Gold ? ESRIcon::Coin : ESRIcon::Food, X + W + U(5.f), Y + P * 0.12f, IS, FLinearColor(1.f, 1.f, 1.f, Alpha));
+	}
+}
+
+void ASRHUD::DrawRouteLines()
+{
+	// Dashed ground lines: the patrol route of the selected troops, and a selected barracks' or range's rally point.
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || !PC) { return; }
+	auto Ground = [Battle](const FVector2D& P)
+	{
+		float Z = 0.f;
+		Battle->SampleGround(P, 20000.f, Z);
+		return FVector(P.X, P.Y, Z + 20.f);
+	};
+	auto Dashed = [this](const FVector& A, const FVector& B, const FLinearColor& Color)
+	{
+		const int32 N = 24;
+		for (int32 i = 0; i < N; i += 2)
+		{
+			const FVector S0 = Canvas->Project(FMath::Lerp(A, B, float(i) / N));
+			const FVector S1 = Canvas->Project(FMath::Lerp(A, B, float(i + 1) / N));
+			if (S0.Z <= 0.f || S1.Z <= 0.f) { continue; }
+			DrawLine(S0.X, S0.Y, S1.X, S1.Y, Color, FMath::Max(1.f, U(2.f)));
+		}
+		for (const FVector& End : { A, B })
+		{
+			const FVector S = Canvas->Project(End);
+			if (S.Z > 0.f) { Fill(S.X - U(4.f), S.Y - U(4.f), U(8.f), U(8.f), Color); }
+		}
+	};
+	TArray<FVector4> Drawn;
+	for (const TWeakObjectPtr<ASRUnit>& U2 : PC->GetSelection())
+	{
+		FVector2D A, B;
+		if (!U2.IsValid() || !Battle->GetPatrolRoute(U2.Get(), A, B)) { continue; }
+		const FVector4 Key(A.X, A.Y, B.X, B.Y);
+		if (Drawn.Contains(Key)) { continue; }
+		Drawn.Add(Key);
+		Dashed(Ground(A), Ground(B), FLinearColor(1.f, 0.62f, 0.25f, 0.85f));
+	}
+	if (const ASRBuilding* Trainer = PC->GetSelectedBuilding(); Trainer && Trainer->IsRecruiter() && Trainer->IsAlive() && Trainer->Team == ESRTeam::Player)
+	{
+		const FVector Gate = Trainer->GetGatePoint();
+		Dashed(Ground(FVector2D(Gate.X, Gate.Y)), Ground(Trainer->GetRallyPoint()), FLinearColor(0.55f, 0.8f, 1.f, 0.85f));
 	}
 }
 

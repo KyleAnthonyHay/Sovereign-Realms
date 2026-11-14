@@ -33,7 +33,8 @@ namespace
 		{ TEXT("A, then LMB"), TEXT("Attack-move: fight what you meet on the way") },
 		{ TEXT("S"), TEXT("Stop") },
 		{ TEXT("H"), TEXT("Hold ground: fight only what is in reach") },
-		{ TEXT("G"), TEXT("Cycle stance: aggressive, defensive, hold") },
+		{ TEXT("P, then LMB"), TEXT("Patrol between here and there") },
+		{ TEXT("F / G"), TEXT("Formation (re-forms at once) / stance") },
 		{ nullptr, TEXT("CAMERA") },
 		{ TEXT("WASD / Arrows"), TEXT("Pan (hold A or S: a tap is the order)") },
 		{ TEXT("Screen edge"), TEXT("Pan") },
@@ -47,15 +48,14 @@ namespace
 		{ TEXT("Ctrl / Cmd / Alt + 1-6"), TEXT("Form a platoon from the selection") },
 		{ TEXT("1-6"), TEXT("Select the platoon (twice: go to it)") },
 		{ TEXT("Shift + 1-6"), TEXT("Add the selection to the platoon") },
-		{ TEXT("F"), TEXT("Cycle the platoon's formation") },
+		{ TEXT("Delete"), TEXT("Disband the selected platoon") },
 		{ nullptr, TEXT("BUILDING") },
-		{ TEXT("Z / X / C"), TEXT("Build a Farm / Gold Mine / Watchtower") },
-		{ TEXT("LMB"), TEXT("Place it (Shift + LMB: keep placing)") },
-		{ TEXT("RMB / Esc"), TEXT("Cancel the placement") },
+		{ TEXT("B, then 1-6"), TEXT("Build menu (Tab: next tab), pick a building") },
+		{ TEXT("LMB / RMB"), TEXT("Place it (Shift: keep placing) / cancel") },
 		{ TEXT("Delete"), TEXT("Cancel construction (75% refund)") },
-		{ nullptr, TEXT("CITADEL") },
-		{ TEXT("Q / E"), TEXT("Recruit a Shieldbearer / an Archer") },
-		{ TEXT("RMB"), TEXT("Set the rally point (Citadel selected)") },
+		{ nullptr, TEXT("TROOPS") },
+		{ TEXT("Q / E"), TEXT("Train a Shieldbearer (Barracks) / Archer (Range)") },
+		{ TEXT("RMB"), TEXT("Rally point (Barracks or Range selected)") },
 		{ nullptr, TEXT("GAME") },
 		{ TEXT("Esc"), TEXT("Cancel, then deselect, then pause") },
 		{ TEXT("F1"), TEXT("Show or hide this list") },
@@ -63,9 +63,9 @@ namespace
 
 	const TCHAR* DifficultyNames[3] = { TEXT("Easy"), TEXT("Normal"), TEXT("Hard") };
 	const TCHAR* DifficultyNotes[3] = {
-		TEXT("The enemy marches late, in small waves."),
-		TEXT("A fair fight: waves come on time and grow."),
-		TEXT("The enemy marches early, in strength.") };
+		TEXT("The enemy is slow to attack and waits for big odds."),
+		TEXT("A fair fight: it attacks when it thinks it can win."),
+		TEXT("The enemy strikes early, raids often, adapts fully.") };
 }
 
 void ASRHUD::DimScreen(float Alpha)

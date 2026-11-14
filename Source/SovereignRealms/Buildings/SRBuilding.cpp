@@ -16,6 +16,7 @@
 #include "Components/BoxComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Misc/PackageName.h"
 
 ASRBuilding::ASRBuilding()
 {
@@ -80,7 +81,9 @@ void ASRBuilding::BeginPlay()
 	Ring->BuildRoundedRect(Half, 70.f, F.BuildingRingWidth);
 	Ring->SetVisibility(false);
 
-	if (IsCastle())
+	LoadStateMeshes();
+
+	if (IsRecruiter())
 	{
 		if (UStaticMesh* FlagMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/SR/Buildings/SM_Bld_RallyFlag.SM_Bld_RallyFlag")))
 		{
@@ -138,6 +141,7 @@ void ASRBuilding::ResetRuntime()
 	Health = Stats().MaxHealth * (BuildProgress >= 1.f ? 1.f : USRFeelSettings::Get().ConstructionStartHealth);
 	Mesh->SetRelativeLocation(MeshBaseLocation);
 	Mesh->SetRelativeRotation(FRotator::ZeroRotator);
+	SetState(BuildProgress < 1.f ? ESRBuildingState::Site : ESRBuildingState::Complete);
 	ApplyBuildVisual();
 	if (Mesh) { Mesh->SetVisibility(true); }
 	UpdateWorkers();
@@ -224,7 +228,7 @@ bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const TCHAR* Name = *F.StatsFor(Type).DisplayName;
-	if (!CanRecruit() || !Economy)
+	if (!CanRecruit() || !Trains(Type) || !Economy)
 	{
 		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s cannot recruit"), *GetActorNameOrLabel());
 		return false;
@@ -501,7 +505,7 @@ ASRBuilding* ASRBuilding::SpawnBuilding(UWorld* World, ESRBuildingType Type, ESR
 	B->BlockHeight = S.BlockHeight;
 	B->RingRadius = FMath::Max(S.FootprintMax.X - S.FootprintMin.X, S.FootprintMax.Y - S.FootprintMin.Y) * 0.7f;
 	B->GateOffset = S.GateOffset;
-	B->RallyOffset = S.GateOffset + FVector(-250.f, 0.f, 0.f);
+	B->RallyOffset = S.GateOffset + FVector(-450.f, 0.f, 0.f);
 	B->LabelOffset = S.LabelOffset;
 	B->PopupOffset = S.PopupOffset;
 	B->bRuntimeBuilt = true;
@@ -565,6 +569,7 @@ void ASRBuilding::StepConstruction(float Dt)
 		{
 			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::BuildComplete); }
 		}
+		SetState(ESRBuildingState::Complete);
 		if (Economy) { Economy->NotifyBuildingFinished(this); }
 		RallyPoint = ToWorld2D(FVector2D(RallyOffset.X, RallyOffset.Y));
 		UpdateWorkers();
@@ -633,7 +638,8 @@ void ASRBuilding::ReceiveDamage(float Amount, ASRUnit* From)
 		}
 	}
 
-	if (Health <= 0.f) { Collapse(From); }
+	if (Health <= 0.f) { Collapse(From); return; }
+	if (State == ESRBuildingState::Complete && IsFinished() && GetHealthFrac() < F.DamagedStateFraction) { SetState(ESRBuildingState::Damaged); }
 }
 
 void ASRBuilding::Collapse(ASRUnit* Killer)
@@ -665,11 +671,21 @@ void ASRBuilding::StepCollapse(float Dt)
 	const float T = FMath::Clamp(CollapseClock / FMath::Max(F.CollapseTime, 0.1f), 0.f, 1.f);
 	const float E = T * T;                                            // falls faster as it goes
 	const float Shake = (1.f - T) * 6.f;
-	Mesh->SetRelativeLocation(MeshBaseLocation + FVector(FMath::FRandRange(-Shake, Shake), FMath::FRandRange(-Shake, Shake), -BlockHeight * 0.18f * E));
-	Mesh->SetRelativeRotation(FRotator(0.f, 0.f, 3.5f * E));
-	Mesh->SetRelativeScale3D(FVector(1.f + 0.04f * E, 1.f + 0.04f * E, FMath::Lerp(1.f, 0.28f, E)));   // slumps into a heap of rubble
+	if (State != ESRBuildingState::Ruin)
+	{
+		Mesh->SetRelativeLocation(MeshBaseLocation + FVector(FMath::FRandRange(-Shake, Shake), FMath::FRandRange(-Shake, Shake), -BlockHeight * 0.18f * E));
+		Mesh->SetRelativeRotation(FRotator(0.f, 0.f, 3.5f * E));
+		Mesh->SetRelativeScale3D(FVector(1.f + 0.04f * E, 1.f + 0.04f * E, FMath::Lerp(1.f, 0.28f, E)));   // slumps into a heap of rubble
+		if (T >= 1.f) { SetState(ESRBuildingState::Ruin); }
+	}
+	else if (bRuntimeBuilt)
+	{
+		// a ruin of something raised during the match sinks away in its last few seconds
+		const float Left = F.CollapseTime + F.RuinLingerTime - CollapseClock;
+		if (Left < 3.f) { Mesh->SetRelativeLocation(MeshBaseLocation - FVector(0.f, 0.f, BlockHeight * 0.25f * (1.f - FMath::Max(Left, 0.f) / 3.f))); }
+	}
 
-	if (CollapseClock > F.CollapseTime * 6.f && bRuntimeBuilt)
+	if (bRuntimeBuilt && CollapseClock > F.CollapseTime + F.RuinLingerTime)
 	{
 		Destroy();
 	}
@@ -728,4 +744,53 @@ void ASRBuilding::UpdateWorkers()
 		if (!W) { break; }
 		Workers.Add(W);
 	}
+}
+
+// ------------------------------------------------------------------ states
+
+void ASRBuilding::LoadStateMeshes()
+{
+	if (!BuildingMesh) { return; }
+	const FString Pkg = BuildingMesh->GetOutermost()->GetName();
+	const FString Name = BuildingMesh->GetName();
+	auto Load = [&](const TCHAR* Suffix) -> UStaticMesh*
+	{
+		const FString Path = FString::Printf(TEXT("%s_%s.%s_%s"), *Pkg, Suffix, *Name, Suffix);
+		if (!FPackageName::DoesPackageExist(Pkg + TEXT("_") + Suffix)) { return nullptr; }
+		return LoadObject<UStaticMesh>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	};
+	DamagedMeshAsset = Load(TEXT("Damaged"));
+	RuinMeshAsset = Load(TEXT("Ruin"));
+	if (UStaticMesh* Site = Load(TEXT("Site")))
+	{
+		SiteMesh = NewObject<UStaticMeshComponent>(this, TEXT("SiteMesh"));
+		SiteMesh->SetupAttachment(Root);
+		SiteMesh->SetMobility(EComponentMobility::Movable);
+		SiteMesh->SetCollisionProfileName(TEXT("NoCollision"));
+		SiteMesh->SetGenerateOverlapEvents(false);
+		SiteMesh->SetStaticMesh(Site);
+		SiteMesh->SetRelativeLocation(Mesh->GetRelativeLocation());
+		SiteMesh->RegisterComponent();
+		const USRFeelSettings& F = USRFeelSettings::Get();
+		const FLinearColor Color = Team == ESRTeam::Player ? F.PlayerTeamColor : F.EnemyTeamColor;
+		SiteMesh->SetCustomPrimitiveDataVector4(0, FVector4(Color.R, Color.G, Color.B, 1.f));
+		SiteMesh->SetVisibility(false);
+	}
+}
+
+void ASRBuilding::SetState(ESRBuildingState NewState)
+{
+	State = NewState;
+	UStaticMesh* Want = BuildingMesh;
+	if (NewState == ESRBuildingState::Damaged && DamagedMeshAsset) { Want = DamagedMeshAsset; }
+	if (NewState == ESRBuildingState::Ruin && RuinMeshAsset)
+	{
+		Want = RuinMeshAsset;
+		// the ruin stands as modelled, not slumped
+		Mesh->SetRelativeLocation(MeshBaseLocation);
+		Mesh->SetRelativeRotation(FRotator::ZeroRotator);
+		Mesh->SetRelativeScale3D(FVector::OneVector);
+	}
+	if (Want && Mesh->GetStaticMesh() != Want) { Mesh->SetStaticMesh(Want); }
+	if (SiteMesh) { SiteMesh->SetVisibility(NewState == ESRBuildingState::Site); }
 }

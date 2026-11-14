@@ -12,6 +12,7 @@ team colour (frieze) or glints (gold ore). On the card textures (M_BuildingCard:
 leaves, flame) alpha 0 is a hole, 153 is opaque and team-coloured, 255 is opaque and plain.
 A contact sheet per texture is written to Saved/TexturePreview/.
 """
+import math
 import os
 import sys
 
@@ -774,6 +775,153 @@ def dark(seed):
     return t
 
 
+# ---------------------------------------------------------------------------------------- battle damage, new roofs
+CHAR = pal("#0c0a09", "#171412", "#241f1b", "#342d27", "#4a4138", "#6b645a")       # soot, charred timber, ash
+TILE = [mix(a, b, 0.58) for a, b in zip(TERRA, CLAY)]                              # sun-faded terracotta roof tiles
+
+# T_Bld_Scorch is an atlas of soot marks (256 x 128 texels). name -> (x, y, w, h) in texels; plumes have their
+# foot on the bottom edge of their cell. Mirrored by SCORCH in Tools/blender/bldkit.py (in cm: x 4).
+SCORCH_CELLS = {
+    "plume_l": (0, 0, 64, 96), "plume_m": (64, 0, 48, 64), "plume_s": (112, 0, 32, 48), "blot_l": (144, 0, 64, 64),
+    "blot_s": (208, 0, 32, 32), "streak": (240, 0, 16, 64), "smear": (0, 96, 64, 32), "plume_m2": (64, 64, 48, 64),
+    "blot_m": (112, 64, 48, 48), "lick": (160, 64, 32, 64), "blot_w": (192, 64, 64, 40),
+}
+
+
+def char(seed):
+    """Charred timber / burnt thatch, 64 x 64, tiles: alligatored black blocks, grey ash on the lit edges."""
+    rng = np.random.default_rng(seed)
+    W = H = 64
+    t = Tile(W, H, CHAR[1])
+    y = 0
+    while y < H:
+        ch = int(rng.choice([5, 6, 7, 8]))
+        ch = min(ch, H - y)
+        x = int(rng.integers(0, 6))
+        end = x + W
+        while x < end:
+            bw = min(int(rng.integers(5, 12)), end - x)
+            tone = int(rng.choice([1, 1, 2, 2, 3]))
+            for j in range(ch):
+                for i in range(bw):
+                    c = CHAR[tone]
+                    if j == 0 or i == 0:
+                        c = CHAR[0]                           # the crack
+                    elif j == 1 and i > 1 and rng.random() < 0.7:
+                        c = CHAR[min(tone + 2, 5)]            # ash on the lit arris
+                    elif rng.random() < 0.06:
+                        c = CHAR[min(tone + 1, 4)]
+                    t.put(x + i, y + j, c)
+            x += bw
+        y += ch
+    for _ in range(10):                                      # flecks of pale ash
+        x, y = int(rng.integers(W)), int(rng.integers(H))
+        t.put(x, y, CHAR[5]); t.put(x + 1, y, CHAR[4])
+    return t
+
+
+def scorch(seed):
+    """Soot marks as cut-outs (card slot): black hearts, brown-grey fringes that break up in a dither."""
+    rng = np.random.default_rng(seed)
+    W, H = 256, 128
+    t = Tile(W, H, CHAR[1], alpha=True)
+    for name, (cx, cy, cw, chh) in SCORCH_CELLS.items():
+        n1 = value_noise(rng, cw, chh, 8)
+        n2 = value_noise(rng, cw, chh, 4)
+        tongues = [(rng.uniform(0.18, 0.82), rng.uniform(0.55, 1.0), rng.uniform(0.10, 0.2)) for _ in range(5)]
+        for j in range(1, chh - 1):
+            for i in range(1, cw - 1):
+                fx = (i + 0.5) / cw - 0.5                     # -0.5 .. 0.5
+                fy = 1.0 - (j + 0.5) / chh                    # 0 at the foot .. 1 at the top
+                if name.startswith("blot"):
+                    d = math.hypot(fx, fy - 0.5) * 2.0
+                    f = 1.0 - d
+                elif name == "smear":
+                    f = min(1.0 - abs(fx) * 2.0, 1.0 - fy) * 1.3
+                elif name in ("streak", "lick"):
+                    f = (1.0 - abs(fx) * 2.0) * (1.0 - fy * 0.85)
+                else:                                         # plume: a broad foot, tongues licking upward
+                    f = (1.0 - abs(fx) * 2.0 / (1.0 - 0.45 * fy)) * (1.0 - fy) * 2.2
+                    for tx, th, tw in tongues:
+                        if fy < th:
+                            f = max(f, (1.0 - abs(fx + 0.5 - tx) / tw) * (1.0 - fy / th) * 1.6)
+                f += (n1[j, i] - 0.5) * 0.5 + (n2[j, i] - 0.5) * 0.25
+                edge = min(i, cw - 1 - i, j, (chh - 1 - j) if name.startswith("blot") else 99) / 3.0
+                f = min(f, edge)
+                if f <= 0.06:
+                    continue
+                if f < 0.34 and (i + j) % 2:                  # the fringe breaks up: the wall shows through
+                    continue
+                if f < 0.16 and (j % 2 or rng.random() < 0.4):
+                    continue
+                if f < 0.5 and (i % 2 == 0 and j % 2 == 0):
+                    continue
+                tone = 0 if f > 0.8 else 1 if f > 0.56 else 2 if f > 0.36 else 3
+                if rng.random() < 0.12:
+                    tone = min(tone + 1, 4)
+                put_a(t, cx + i, cy + j, CHAR[tone], 255)
+    return t
+
+
+def target(seed):
+    """Face of a straw archery butt, 32 x 32 (128 cm across): coiled straw, painted rings, a bronze-gold centre."""
+    rng = np.random.default_rng(seed)
+    W = H = 32
+    t = Tile(W, H, THATCH[1])
+    for y in range(H):
+        for x in range(W):
+            d = math.hypot(x - 15.5, y - 15.5)
+            ring = int(d) % 3
+            c = THATCH[3] if ring else THATCH[1]              # the coil
+            if rng.random() < 0.2:
+                c = THATCH[4] if ring else THATCH[2]
+            if d < 3.0:
+                c = BRONZE[4] if d < 1.6 else BRONZE[3]
+            elif d < 6.5:
+                c = TERRA[2] if rng.random() < 0.85 else TERRA[1]
+            elif d < 9.5:
+                c = CREAM[2] if rng.random() < 0.85 else CREAM[1]
+            elif d < 12.5:
+                c = TERRA[2] if rng.random() < 0.85 else TERRA[3]
+            elif d >= 15.5:
+                c = THATCH[0]
+            t.put(x, y, c)
+    for (x, y) in ((19, 12), (11, 18), (22, 20)):             # arrow holes
+        t.put(x, y, DARK[1])
+    return t
+
+
+def roof_tile(seed):
+    """Terracotta pan-and-cover tiles, 64 x 64, v runs down the slope: pans 5 texels wide between raised covers,
+    each course 8 texels with a shadowed lower lip."""
+    rng = np.random.default_rng(seed)
+    W = H = 64
+    t = Tile(W, H, TILE[2])
+    for row in range(H // 8):
+        for col in range(W // 8):
+            tone = int(rng.choice([2, 2, 3, 3, 1, 4], p=[0.36, 0.26, 0.16, 0.1, 0.08, 0.04]))
+            for j in range(8):
+                for i in range(8):
+                    if i < 5:                                 # the pan
+                        c, h = TILE[tone], 0.5
+                        if i == 0:
+                            c, h = TILE[max(tone - 2, 0)], 0.3       # in the cover's shadow
+                        if j == 7:
+                            c, h = TILE[max(tone - 2, 0)], 0.2       # under the next course
+                        elif j == 6:
+                            c = TILE[min(tone + 1, 5)]
+                    else:                                     # the cover
+                        k = (tone + 1, tone + 2, tone)[i - 5]
+                        c, h = TILE[int(np.clip(k, 0, 5))], 1.0
+                        if j == 7:
+                            c, h = TILE[max(tone - 1, 0)], 0.5
+                    t.put(col * 8 + i, row * 8 + j, c, h)
+        for _ in range(3):                                    # lichen and chips
+            x, y = int(rng.integers(W)), row * 8 + int(rng.integers(1, 6))
+            t.put(x, y, mix(TILE[1], GRASS_MOSS[3], 0.5) if rng.random() < 0.5 else TILE[5])
+    return t
+
+
 # ---------------------------------------------------------------------------------------- build
 def build():
     os.makedirs(OUT, exist_ok=True)
@@ -807,9 +955,14 @@ def build():
         "T_Bld_Leaves": leaves(153),
         "T_Bld_Flame": flame(154),
         "T_Bld_Dark": dark(155),
+        "T_Bld_Char": char(161),
+        "T_Bld_Scorch": scorch(162),
+        "T_Bld_Target": target(163),
+        "T_Bld_RoofTile": roof_tile(164),
     }
     normals = {"T_Bld_Ashlar": 1.7, "T_Bld_AshlarLarge": 1.9, "T_Bld_Trim": 1.4, "T_Bld_Mudbrick": 1.3, "T_Bld_Plaster": 1.2,
-               "T_Bld_RoofClay": 1.0, "T_Bld_Thatch": 1.6, "T_Bld_Soil": 1.8}
+               "T_Bld_RoofClay": 1.0, "T_Bld_Thatch": 1.6, "T_Bld_Soil": 1.8,
+               "T_Bld_RoofTile": 1.5}
     for name, t in tiles.items():
         t.image().save(os.path.join(OUT, name + ".png"))
         if name in normals:

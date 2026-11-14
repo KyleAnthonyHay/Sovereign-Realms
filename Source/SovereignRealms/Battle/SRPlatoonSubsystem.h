@@ -80,6 +80,8 @@ public:
 	void SetFormation(int32 Index, ESRFormationShape Shape);
 	void SetStance(int32 Index, ESRStance Stance);
 	void CycleFormation(int32 Index);
+	/** Re-forms the platoon where it stands in its current formation. */
+	void Reform(int32 Index);
 	void CycleStance(int32 Index);
 	/** Only one platoon receives recruits at a time; pass INDEX_NONE to stop. */
 	void SetRecruitTarget(int32 Index);

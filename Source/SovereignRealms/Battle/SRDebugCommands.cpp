@@ -36,6 +36,17 @@ namespace
 		return World ? Cast<ASRPlayerController>(World->GetFirstPlayerController()) : nullptr;
 	}
 
+	ESRBuildingType ParseBuildingType(const FString& Name)
+	{
+		const FString N = Name.ToLower();
+		if (N == TEXT("mine")) { return ESRBuildingType::Mine; }
+		if (N == TEXT("tower")) { return ESRBuildingType::Tower; }
+		if (N == TEXT("barracks")) { return ESRBuildingType::Barracks; }
+		if (N == TEXT("range")) { return ESRBuildingType::Range; }
+		if (N == TEXT("castle")) { return ESRBuildingType::Castle; }
+		return ESRBuildingType::Farm;
+	}
+
 	bool ParseXY(const TArray<FString>& Args, FVector2D& Out)
 	{
 		if (Args.Num() < 2) { return false; }
@@ -276,13 +287,13 @@ namespace
 			UE_LOG(LogSovereign, Log, TEXT("sr.Give: player gold=%d food=%d"), Economy->GetResource(ESRTeam::Player, ESRResource::Gold), Economy->GetResource(ESRTeam::Player, ESRResource::Food));
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdRecruit(TEXT("sr.Recruit"), TEXT("sr.Recruit <shield|archer>: queue a recruit at the player's castle (pays the cost; refused if it cannot be afforded)."),
+	FAutoConsoleCommandWithWorldAndArgs CmdRecruit(TEXT("sr.Recruit"), TEXT("sr.Recruit <shield|archer>: queue a recruit at the player's barracks / range (pays the cost; refused if it cannot be afforded)."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ASRPlayerController* PC = GetSRController(World);
 			if (!PC || Args.Num() < 1) { return; }
 			const ESRUnitType Type = Args[0].StartsWith(TEXT("a"), ESearchCase::IgnoreCase) ? ESRUnitType::Archer : ESRUnitType::Shieldbearer;
-			const bool bOk = PC->RecruitAtCastle(Type);
+			const bool bOk = PC->RecruitTroop(Type);
 			UE_LOG(LogSovereign, Log, TEXT("sr.Recruit %s: %s"), *Args[0], bOk ? TEXT("queued") : TEXT("REFUSED"));
 		}));
 
@@ -297,6 +308,9 @@ namespace
 			if (What == TEXT("farm")) { Building = Economy->FindBuilding(ESRBuildingType::Farm, ESRTeam::Player); }
 			else if (What == TEXT("mine")) { Building = Economy->FindBuilding(ESRBuildingType::Mine, ESRTeam::Player); }
 			else if (What == TEXT("enemy")) { Building = Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Enemy); }
+			else if (What == TEXT("barracks")) { Building = Economy->FindBuilding(ESRBuildingType::Barracks, ESRTeam::Player); }
+			else if (What == TEXT("range")) { Building = Economy->FindBuilding(ESRBuildingType::Range, ESRTeam::Player); }
+			else if (What == TEXT("tower")) { Building = Economy->FindBuilding(ESRBuildingType::Tower, ESRTeam::Player); }
 			else if (What != TEXT("none")) { Building = Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Player); }
 			PC->SelectBuilding(Building);
 			UE_LOG(LogSovereign, Log, TEXT("sr.SelectCastle: %s"), Building ? *Building->GetActorNameOrLabel() : TEXT("none"));
@@ -307,7 +321,7 @@ namespace
 		{
 			FVector2D XY;
 			ASRPlayerController* PC = GetSRController(World);
-			if (PC && ParseXY(Args, XY)) { PC->SetCastleRally(GroundAt(World, XY)); }
+			if (PC && ParseXY(Args, XY)) { PC->SetRallyFor(GroundAt(World, XY)); }
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdEconomy(TEXT("sr.Economy"), TEXT("Log both teams' gold and food, income, and every building's timers, queue and rally point."),
@@ -349,7 +363,7 @@ namespace
 			UE_LOG(LogSovereign, Log, TEXT("sr.Speed %.1f"), X);
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdBuild(TEXT("sr.Build"), TEXT("sr.Build <farm|mine|tower> X Y [enemy]: lay a building (pays gold; refused like the player would be)."),
+	FAutoConsoleCommandWithWorldAndArgs CmdBuild(TEXT("sr.Build"), TEXT("sr.Build <farm|mine|tower|barracks|range> X Y [enemy]: lay a building (pays gold; refused like the player would be)."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
@@ -357,20 +371,20 @@ namespace
 			if (!Eco || Args.Num() < 3) { return; }
 			TArray<FString> Rest(Args.GetData() + 1, 2);
 			if (!ParseXY(Rest, XY)) { return; }
-			const ESRBuildingType Type = Args[0] == TEXT("mine") ? ESRBuildingType::Mine : (Args[0] == TEXT("tower") ? ESRBuildingType::Tower : ESRBuildingType::Farm);
+			const ESRBuildingType Type = ParseBuildingType(Args[0]);
 			const ESRTeam Team = Args.Num() > 3 && Args[3] == TEXT("enemy") ? ESRTeam::Enemy : ESRTeam::Player;
 			FText Why;
 			ASRBuilding* B = Eco->PlaceBuilding(Type, Team, XY, &Why);
 			UE_LOG(LogSovereign, Log, TEXT("sr.Build %s at (%.0f, %.0f): %s"), *Args[0], XY.X, XY.Y, B ? TEXT("placed") : *Why.ToString());
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdPlace(TEXT("sr.Place"), TEXT("sr.Place <farm|mine|tower|off>: enter placement mode as if the build hotkey was pressed."),
+	FAutoConsoleCommandWithWorldAndArgs CmdPlace(TEXT("sr.Place"), TEXT("sr.Place <farm|mine|tower|barracks|range|off>: enter placement mode as if the build hotkey was pressed."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ASRPlayerController* PC = GetSRController(World);
 			if (!PC || Args.Num() == 0) { return; }
 			if (Args[0] == TEXT("off")) { PC->CancelPlacement(); return; }
-			PC->BeginPlacement(Args[0] == TEXT("mine") ? ESRBuildingType::Mine : (Args[0] == TEXT("tower") ? ESRBuildingType::Tower : ESRBuildingType::Farm));
+			PC->BeginPlacement(ParseBuildingType(Args[0]));
 		}));
 
 	// ---- game flow: the menus, for scripted tests ----
@@ -401,6 +415,19 @@ namespace
 			const USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
 			const bool bPlayer = Args.Num() > 0 && Args[0].Equals(TEXT("player"), ESearchCase::IgnoreCase);
 			if (ASRBuilding* Castle = Economy ? Economy->GetCastle(bPlayer ? ESRTeam::Player : ESRTeam::Enemy) : nullptr) { Castle->ReceiveDamage(1.0e9f, nullptr); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdDamage(TEXT("sr.Damage"), TEXT("sr.Damage <castle|farm|mine|tower|barracks|range> <health fraction left> [enemy]: hurt a building (0 destroys it)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
+			if (!Economy || Args.Num() < 2) { return; }
+			const ESRTeam Team = Args.Num() > 2 && Args[2].Equals(TEXT("enemy"), ESearchCase::IgnoreCase) ? ESRTeam::Enemy : ESRTeam::Player;
+			ASRBuilding* B = Economy->FindBuilding(ParseBuildingType(Args[0]), Team);
+			if (!B) { UE_LOG(LogSovereign, Log, TEXT("sr.Damage: no %s"), *Args[0]); return; }
+			const float Left = FMath::Clamp(FCString::Atof(*Args[1]), 0.f, 1.f) * B->Stats().MaxHealth;
+			B->ReceiveDamage(FMath::Max(B->GetHealth() - Left, 0.f) + (Left <= 0.f ? 1.f : 0.f), nullptr);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Damage %s -> %.0f / %.0f (state %d)"), *B->GetDisplayName(), B->GetHealth(), B->Stats().MaxHealth, int32(B->GetState()));
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdWindowSize(TEXT("sr.WindowSize"), TEXT("sr.WindowSize W H: resize the game window so the view is W x H pixels (interface scaling tests; r.SetRes does nothing in a PIE window)."),

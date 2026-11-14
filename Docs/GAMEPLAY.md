@@ -11,21 +11,30 @@ Sovereign Feel** (`Source/SovereignRealms/Common/SRFeelSettings.{h,cpp}`, overri
   ground round it. Two lakes, terraces, knolls, woods and rocks shape the routes; ten gold veins (two under the
   starting mines, two safe expansions each, contested ones in the middle and the far corners).
 - **Win / lose**: the side whose castle falls loses (`USRBattleSubsystem::NotifyBuildingDestroyed`).
-- **Economy**: farms make **food**, which buys **troops**; mines make **gold**, which buys **buildings**. Each
+- **Economy**: farms make **food**, which buys **troops** (trained at a **Barracks**: Shieldbearers, or an
+  **Archery Range**: Archers; the castle no longer trains); mines make **gold**, which buys **buildings**. Each
   farm and mine has workers (miners walk into the adit and come out with ore; farmhands hoe the field and carry
   sheaves to the cottage) and the income lands when they deliver (`ASRWorker`, `ASRBuilding::Deliver`).
-- **Population**: the castle houses 12 troops, each farm 6, capped at 60 (`MaxPopulation`).
+- **Population**: the castle houses 8 troops, each farm 4, capped at 36 (`MaxPopulation`). Fewer, weightier troops:
+  each one matters.
 
 | | Cost | Build | Health | Notes |
 | --- | --- | --- | --- | --- |
-| Shieldbearer | 50 food | 5 s at the castle | 130 | melee, heavy hits |
-| Archer | 40 food | 4.5 s | 60 | ranged; 0.35x damage to buildings |
-| Farm | 90 gold | 14 s | 520 | 7 food / 6 s, houses 6 |
-| Gold Mine | 140 gold | 16 s | 650 | 10 gold / 6 s; only on a free gold vein |
-| Watchtower | 160 gold | 18 s | 700 | shoots 11 dmg / 1.25 s at 12.5 m |
-| Citadel | — | — | 6000 | shoots 12 dmg / 1.4 s at 10 m; recruits; houses 12 |
+| Shieldbearer | 100 food | 9 s at a Barracks | 280 | melee, 27 dmg / 1.15 s, heavy hits |
+| Archer | 85 food | 8 s at an Archery Range | 125 | ranged, 18 dmg / 1.5 s; 0.35x damage to buildings |
+| Farm | 90 gold | 14 s | 1000 | 9 food / 6 s, houses 4 |
+| Gold Mine | 140 gold | 16 s | 1250 | 10 gold / 6 s; only on a free gold vein |
+| Barracks | 110 gold | 16 s | 1600 | trains Shieldbearers; own rally point |
+| Archery Range | 125 gold | 16 s | 1400 | trains Archers; own rally point |
+| Watchtower | 160 gold | 18 s | 1800 | shoots 40 dmg / 1.2 s at 14 m |
+| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8; if it falls, the kingdom falls |
 
-Starting stock: 250 gold, 150 food, 4 Shieldbearers + 3 Archers each side.
+Starting stock: 320 gold, 200 food, 3 Shieldbearers + 2 Archers each side.
+
+**Building states** (`ESRBuildingState`; meshes `SM_Bld_<Name>_Site / _Damaged / _Ruin` from the Blender scripts): a
+construction site (scaffold, footings, stone and timber stacks) with the walls rising course by course inside it;
+complete; battle-damaged below 50% health (holed roofs, charred rafters, missing merlons, soot, debris); and after the
+collapse a ruin of low rubble and wall stubs (the ruin of a building raised in the match sinks away after 40 s).
 
 ## Building
 
@@ -34,7 +43,8 @@ water, the hidden blocker boxes (rocks, trunks, ruins: one instanced actor tagge
 building footprints while they stand. A building can be placed when every footprint cell is dry, unblocked and within
 30 cm of level, one free cell separates it from other buildings, no enemy troop stands on it, and it is inside its
 kingdom's territory (within the territory radius of a finished building: castle 38 m, farm 24 m, mine 20 m, tower
-12 m). Mines ignore territory but must snap onto a free vein. Placing pays the gold; the building rises course by
+12 m). Mines ignore territory but must snap onto a free vein. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
+Defence (watchtower); 1-6 picks, Tab changes tab. Placing pays the gold; the building rises course by
 course over its build time with hammering, and works when done. Delete / Backspace cancels a building under
 construction for 75% of its price. Destroyed buildings slump into rubble (runtime ones clear away; the level's own
 stand again on restart).
@@ -47,6 +57,11 @@ out formation slots at the goal (`SRFormation::ComputeSlots`: Line, Column, Wedg
 still steer locally (separation, sidestepping, sliding along walls). A unit chasing a target that is out of straight
 reach re-plans a grid path about once a second. Units attack buildings (walk to the nearest wall, strike it there).
 
+**Formation**: F (or the Form button) changes it and the group re-forms where it stands at once, facing the way it
+faces; a selection that is not a platoon has its own formation too. **Patrol**: P, then a click: the group attack-moves
+back and forth between where it stood and the point until it is given another order (the route is drawn on the ground
+while selected; `USRBattleSubsystem::CommandPatrol`).
+
 **Stances** (per platoon or per selection, G cycles): Aggressive (chase anything in acquire range), Defensive (chase at
 most 9 m from the post, then return), Hold Ground (never move to fight; H gives a one-off hold order).
 
@@ -55,34 +70,48 @@ most 9 m from the post, then return), Hold Ground (never move to fight; H gives 
 `USRPlatoonSubsystem`: six slots. Ctrl+N makes the selection platoon N, N selects it (twice: centre the camera),
 Shift+N adds to it. A platoon has a name, a kind judged from its members (Shield Wall, Archer Company, Mixed Host), a
 formation (F cycles) used whenever it is moved, a stance pushed to its members, and an optional "recruits join here"
-flag (new troops from the castle join it and march to it).
+flag (new troops from the barracks and ranges join it and march to it). Disband: the button on its card, or Delete
+with it selected (the troops stay). A platoon whose last troop falls is struck off by itself and its slot is free.
+
+**Rally points**: select a Barracks or Archery Range and right-click the ground (or the minimap): its recruits march
+there. The route is drawn while it is selected. Q / E train at the selected one, or at your least busy one.
 
 ## The enemy commander
 
-`USRAISubsystem` (Sovereign Feel > AI). No map knowledge beyond what the player has; difficulty never adds income.
-- Economy: works through `AIBuildOrder` (farm, mine, farm, tower, ...), then adds farms for housing, mines on free
-  veins, up to four spread-out towers.
-- Army: recruits continuously toward 55% Shieldbearers within food and housing; idle troops gather at a muster point
-  in front of the castle.
-- Defence: any enemy within 32 m of its buildings draws the home army; a wave that has barely left is recalled if
-  home is badly outnumbered.
-- Waves: the first at 3:30 (Easy 5:05, Hard 2:31), then every 150 s (x1.4 / x0.78); size 7, +3 per wave, up to 26
-  (x0.75 / x1.25); once its army is at the housing cap it pushes with everything but a 20% garrison. A wave marches
-  on the nearest player building, fights on to the castle, retreats when down to 30% and outnumbered, and goes home if
-  it has not fought for 150 s.
+`USRAISubsystem` (Sovereign Feel > AI). It plays by the player's rules and knows only what it has seen: every think
+it notes the player's troops within 26 m of its own troops and buildings and remembers them for 90 s (buildings are
+known). Strength is estimated per troop as sqrt(health x damage per second), archers x1.5 for their reach, scaled by
+health left; towers and the castle count as defenders where they reach. Difficulty never adds income.
+- **Economy**: a build order (barracks, farm, range, mine, farm, tower, ...), then whatever is short: farms for housing
+  and food, mines on free veins, towers (more if it has been attacked), a second barracks / range when food piles up;
+  a lost barracks or range is rebuilt first. A building that finds no room is skipped for 25 s, so one bad spot never
+  stalls the economy.
+- **Adapts to the player**: trains toward a Shieldbearer share that answers what it has seen (more Shieldbearers
+  against archers and towers, more Archers against a wall of shields); a bigger garrison and earlier towers against a
+  player who attacks it; mines are worth more as targets when the player has more of them.
+- **Defence**: meets a force near its buildings with the nearest troops until it has 1.6x their strength (its towers
+  count); outmatched at home, it recalls its raid, and its main attack too unless that attack is about to win (from
+  anywhere if the castle itself is threatened: no blind base races).
+- **Attack sense**: picks the target worth most for the least expected resistance (economy first, a half-built or
+  damaged building gladly, the castle when its defence is beatable) and goes when its free army is 1.3x (Easy 1.7x,
+  Hard 1.1x) what it expects to meet there: troops seen nearby, the unseen rest of the player's army near the
+  player's castle, and towers. It also goes when it is at its housing cap, or 150 s past due at nearly even odds. A
+  winning attack is reinforced every 20 s; one whose local fight turns (below 0.65x) falls back to regroup; after a
+  target falls it re-picks from where it stands, and comes home if the next is too strong.
+- **Raids**: every 75 s (Hard 52 s) a party of 3-4 Shieldbearers slips at an outlying farm or mine where it has seen
+  next to no defence (never near the castle), burns it and comes home, or turns back the moment it is outmatched.
+- **Timing**: earliest main attack 2:30 (Easy 3:38, Hard 1:48); between attacks it regroups 50 s (x1.5 / x0.7).
 
 ## Balance, as tested (accelerated runs, `sr.Speed 8`)
 
-- **AI vs AI** (`sr.AIvsAI 1`): both sides build to 8 farms / 4 mines / 3-4 towers and the housing cap by ~9
-  minutes; waves trade buildings back and forth; the match was decided at **24.5 minutes** when one side broke the
-  other's army and razed its castle. Before the fixes below it stalled for 49+ minutes.
-- **Passive player, Normal**: the first wave (7) burns the outlying farm; the castle falls at **~14 minutes**
-  (it fell at 7.5 minutes before the castle was strengthened and waves slowed). A player who recruits or builds a
-  tower holds the early waves.
-- Fixes that came out of testing: food was meaningless (piling up to 4600) until farm output fell to 70 / min and
-  troops cost 50 / 40 food; housing per farm rose to 6 so ~8 farms reach the cap; the AI stopped recruiting into a
-  full house (alert spam), stopped stacking towers in a row, sizes its waves instead of sending everything at once,
-  and abandons stuck waves.
+- **AI vs AI, Normal** (`sr.AIvsAI 1`): raids from ~3 min, the first attacks trade mines; both sides adapt (each
+  settled on 65% Shieldbearers), recall attacks to defend, and at 22 minutes it was still contested (7 attacks vs 4,
+  8 raids vs 7). Earlier builds ended in a base race at 5 minutes (fixed: a threatened castle recalls the attack, and
+  buildings got health to match the stronger troops) and in a side that never attacked again after an attack was
+  wiped out (fixed).
+- **Passive player, Normal**: the first attack (9 troops) comes at ~2:20 for the outlying mine; the castle falls at
+  **~9.5 minutes** (14 with the old wave timer). A player who builds a barracks and a tower holds it.
+- Towers: 40 damage an arrow: a Shieldbearer dies to 7, an Archer to 4; three towers make an assault expensive.
 
 ## Sound
 
@@ -129,8 +158,8 @@ What was done (following Epic's significance / instancing guidance and profiling
 
 ## Test commands
 
-`sr.StartMatch [0|1|2]`, `sr.AIvsAI [0|1]`, `sr.Speed <x>`, `sr.AIStatus`, `sr.Perf [s]`, `sr.Build <farm|mine|tower>
-X Y [enemy]`, `sr.Place <type|off>`, `sr.Platoon <n> [assign|select|stance|formation]`, `sr.Give gold|food N`,
+`sr.StartMatch [0|1|2]`, `sr.AIvsAI [0|1]`, `sr.Speed <x>`, `sr.AIStatus`, `sr.Perf [s]`, `sr.Build <farm|mine|tower|
+barracks|range> X Y [enemy]`, `sr.Place <type|off>`, `sr.Damage <type> <health left 0..1> [enemy]`, `sr.Platoon <n> [assign|select|stance|formation]`, `sr.Give gold|food N`,
 `sr.Recruit shield|archer`, `sr.KillCastle enemy|player`, plus the camera / cursor / key commands listed in
 `Battle/SRDebugCommands.cpp`. Drive them from the shell with `Tools/pie.py run "<cmd>"`.
 

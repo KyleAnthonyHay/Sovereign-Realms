@@ -3,8 +3,8 @@
 
   T_UI_Icons.png   the icon atlas: COLS x ROWS cells of CELL px (a 16 px icon with a 1 px gutter). The order of ICONS
                    below IS the C++ enum ESRIcon (Source/SovereignRealms/Player/SRHUD.h): add new icons at the end
-                   of the list and to the enum. Every icon is drawn twice: rows 0..4 in the player's blue, rows
-                   5..9 with the team pixels (t T u) swapped to the enemy's red.
+                   of the list and to the enum. Every icon is drawn twice: rows 0..5 in the player's blue, rows
+                   6..11 with the team pixels (t T u) swapped to the enemy's red.
   T_UI_Title.png   the "SOVEREIGN REALMS" title lettering (an original chiselled-gold pixel face).
 Imported by Tools/import_ui_assets.py into /Game/SR/UI (nearest filter, no mips). A contact sheet goes to
 Saved/TexturePreview/ui.png.
@@ -15,7 +15,7 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "SourceArt", "UI")
-CELL, COLS, ROWS = 18, 8, 5
+CELL, COLS, ROWS = 18, 8, 6
 
 PAL = {
     "k": "1a1210", "y": "e8b030", "Y": "ffe07a", "o": "a86a14", "w": "f4ecd8", "g": "b9c0c8", "G": "7c8794",
@@ -412,6 +412,65 @@ eee..eee...
 .yyyyyooyyo.
 ..oyyoo.oo..
 ...ooo......"""),
+    ("Barracks", """
+..b......b..
+...b....b...
+....b..b....
+.rrrrbbrrrr.
+rrRRRbbRRRrr
+.pppbppbppp.
+.ppbptTpbpp.
+.pppptTpppp.
+.ppppnnpppp.
+.ppppnnpppp.
+eEeEeEeEeEeE"""),
+    ("Range", """
+....rrrr....
+..rrwwwwrr..
+.rwwrrrrwwr.
+.rwrrwwrrwr.
+rwrwwyywwrwr
+rwrwyYYywrwr
+rwrwyYYywrwr
+rwrwwyywwrwr
+.rwrrwwrrwr.
+.rwwrrrrwwr.
+..rrwwwwrr..
+....rrrr...."""),
+    ("Hammer", """
+..ggggg.....
+.gwGGGGg....
+.gGGGGGg....
+..gggggB....
+......BB....
+.....BB.....
+....BB......
+...bb.......
+..bb........
+.bb........."""),
+    ("Patrol", """
+...uuuuu....
+..u.....uu..
+.u.......uuu
+.u.......uu.
+.u..........
+............
+..........u.
+.uu.......u.
+uuu.......u.
+..uu.....u..
+....uuuuu..."""),
+    ("Disband", """
+.n..........
+.ntttttt....
+.nttTTtt....
+.ntttttt....
+.n......r..r
+.n.......rr.
+.n.......rr.
+.n......r..r
+.n..........
+.n.........."""),
 ]
 
 

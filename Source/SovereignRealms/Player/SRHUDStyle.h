@@ -47,10 +47,10 @@ namespace SRId
 	enum : uint32
 	{
 		Pause = 1, Help, Minimap, PlatoonHeader, CancelBuild, LegendClose,
-		Build = 10,       // + 0..2
-		Command = 20,     // + 0..5
+		Build = 10,       // + 0 toggle, 1..3 tabs, 4..9 entries
+		Command = 20,     // + 0..8
 		Recruit = 30,     // + 0..1
-		Slot = 100,       // + platoon * 4 + {0 row, 1 formation, 2 stance, 3 recruits}
+		Slot = 100,       // + platoon * 5 + {0 row, 1 formation, 2 stance, 3 recruits, 4 disband}
 		Menu = 300,       // + entry
 		Screen = 340,     // + control on a sub-screen
 		Setting = 400     // + row

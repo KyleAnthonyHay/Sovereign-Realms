@@ -249,6 +249,7 @@ void USRBattleSubsystem::StepFrame(float Dt)
 	// The commanders (enemy, and the player's side in AI-vs-AI tests) and the platoons decide before anyone moves.
 	if (USRAISubsystem* AI = USRAISubsystem::Get(this)) { AI->Step(Dt); }
 	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Step(Dt); }
+	StepPatrols(Dt);
 
 	// 1) think + move  2) push overlapping bodies apart  3) pose and place the actors
 	RebuildBuckets();
@@ -404,6 +405,7 @@ void USRBattleSubsystem::ResetBattle()
 	UWorld* World = GetWorld();
 	if (!World) { return; }
 
+	Patrols.Reset();
 	for (ASRUnit* Unit : Units) { if (Unit) { Unit->Destroy(); } }
 	for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->Destroy(); } }
 	for (AActor* Obstacle : Obstacles) { if (Obstacle) { Obstacle->Destroy(); } }
@@ -875,5 +877,74 @@ void USRBattleSubsystem::CommandAttackBuilding(const TArray<ASRUnit*>& Group, AS
 			U->OrderAttackBuilding(Target);
 			U->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay));
 		}
+	}
+}
+
+// ------------------------------------------------------------------ patrols
+
+void USRBattleSubsystem::CommandPatrol(const TArray<ASRUnit*>& Group, const FVector2D& To, ESRFormationShape Shape)
+{
+	TArray<ASRUnit*> Live;
+	FVector2D Centre = FVector2D::ZeroVector;
+	for (ASRUnit* U : Group) { if (U && U->IsActive()) { Live.Add(U); Centre += U->GetPos2D(); } }
+	if (Live.Num() == 0) { return; }
+	Centre /= Live.Num();
+	ClearPatrol(Live);
+	FPatrol& P = Patrols.AddDefaulted_GetRef();
+	for (ASRUnit* U : Live) { P.Members.Add(U); }
+	P.A = Centre;
+	P.B = To;
+	if (const USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { P.A = Grid->NearestWalkable(P.A); P.B = Grid->NearestWalkable(P.B); }
+	P.bTowardB = true;
+	P.Shape = Shape;
+	P.Settle = 1.5f;
+	CommandMove(Live, P.B, true, Shape, true);
+	UE_LOG(LogSovereign, Log, TEXT("PATROL %d troops (%.0f, %.0f) <-> (%.0f, %.0f)"), Live.Num(), P.A.X, P.A.Y, P.B.X, P.B.Y);
+}
+
+void USRBattleSubsystem::ClearPatrol(const TArray<ASRUnit*>& Group)
+{
+	for (int32 i = Patrols.Num() - 1; i >= 0; --i)
+	{
+		FPatrol& P = Patrols[i];
+		P.Members.RemoveAll([&Group](const TWeakObjectPtr<ASRUnit>& M) { return !M.IsValid() || Group.Contains(M.Get()); });
+		if (P.Members.Num() == 0) { Patrols.RemoveAt(i); }
+	}
+}
+
+bool USRBattleSubsystem::GetPatrolRoute(const ASRUnit* Unit, FVector2D& OutA, FVector2D& OutB) const
+{
+	for (const FPatrol& P : Patrols)
+	{
+		for (const TWeakObjectPtr<ASRUnit>& M : P.Members)
+		{
+			if (M.Get() == Unit) { OutA = P.A; OutB = P.B; return true; }
+		}
+	}
+	return false;
+}
+
+void USRBattleSubsystem::StepPatrols(float Dt)
+{
+	for (int32 i = Patrols.Num() - 1; i >= 0; --i)
+	{
+		FPatrol& P = Patrols[i];
+		P.Members.RemoveAll([](const TWeakObjectPtr<ASRUnit>& M) { return !M.IsValid() || !M->IsAlive(); });
+		if (P.Members.Num() == 0) { Patrols.RemoveAt(i); continue; }
+		P.Settle -= Dt;
+		if (P.Settle > 0.f) { continue; }
+
+		// Turn round once nobody is fighting and everyone has arrived (or given up on) the far end.
+		TArray<ASRUnit*> Live;
+		bool bBusy = false;
+		for (const TWeakObjectPtr<ASRUnit>& M : P.Members)
+		{
+			Live.Add(M.Get());
+			if (M->IsEngaged() || (M->GetOrder() != ESROrder::Idle && M->GetOrder() != ESROrder::Hold)) { bBusy = true; }
+		}
+		if (bBusy) { continue; }
+		P.bTowardB = !P.bTowardB;
+		P.Settle = 1.5f;
+		CommandMove(Live, P.bTowardB ? P.B : P.A, true, P.Shape, false);
 	}
 }

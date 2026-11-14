@@ -20,7 +20,8 @@ enum class ESRIcon : uint8
 	FormLine, FormColumn, FormWedge, FormSquare, StanceAggressive, StanceDefensive, StanceHold, Stop,
 	Swords, AlertAttack, AlertLost, AlertDone, AlertWave, AlertPop, AlertInfo, Clock,
 	Pause, Help, RecruitFlag, Castle, ChevronDown, ChevronUp, Crown, Cancel,
-	PortraitShield, PortraitArcher, Check, Vein
+	PortraitShield, PortraitArcher, Check, Vein, Barracks, Range, Hammer, Patrol,
+	Disband
 };
 
 /**
@@ -121,6 +122,7 @@ private:
 	void DrawHealthBars();
 	void DrawPayoutPopups();
 	void DrawTrainingBars();
+	void DrawRouteLines();
 
 	// ---- in-game HUD (SRHUDGame.cpp) ----
 	void DrawGameHUD();

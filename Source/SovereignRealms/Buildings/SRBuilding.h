@@ -16,7 +16,12 @@ class ASRUnit;
 class ASRWorker;
 
 /**
- * A kingdom building: the castle (recruits troops), a farm (food) or a mine (gold).
+ * A kingdom building: the castle (the kingdom's seat), a farm (food, housing), a mine (gold), a watchtower, the
+ * barracks (trains Shieldbearers) or the archery range (trains Archers).
+ *
+ * States (ESRBuildingState): a construction Site (SM_Bld_<Name>_Site scaffold round the walls, which rise course by
+ * course), Complete, Damaged (SM_Bld_<Name>_Damaged below DamagedStateFraction of its health) and Ruin
+ * (SM_Bld_<Name>_Ruin after it collapses). A missing state mesh just keeps the finished one.
  *
  * Placed in the level by Tools/build_battlefield_visuals.py from SourceArt/World/layout.json, which also fills in
  * the footprint and the sockets the Blender model exports (SourceArt/Buildings/<type>.json). The actor origin is on
@@ -26,7 +31,7 @@ class ASRWorker;
  * traces see it); ground and cursor traces ignore buildings. Team colour reaches the materials as custom primitive
  * data 0..2 (Docs/VISUAL_CONTRACT.md, "Buildings").
  *
- * USREconomySubsystem steps every building each frame: farms and mines pay out on a timer, the castle works
+ * USREconomySubsystem steps every building each frame: farms and mines pay out on a timer, a barracks or range works
  * through its recruit queue and sends each recruit to its rally point.
  */
 UCLASS()
@@ -137,7 +142,12 @@ public:
 
 	// ---- queries ----
 	FString GetDisplayName() const;
-	bool CanRecruit() const { return IsCastle() && IsFinished(); }
+	/** Trains troops at all (finished barracks or range). */
+	bool CanRecruit() const { return Stats().bRecruits && IsFinished(); }
+	/** Is this the kind of building that trains Type (finished or not)? */
+	bool Trains(ESRUnitType Type) const { return Stats().bRecruits && Stats().RecruitType == Type; }
+	bool IsRecruiter() const { return Stats().bRecruits; }
+	ESRBuildingState GetState() const { return State; }
 	bool IsCastle() const { return BuildingType == ESRBuildingType::Castle; }
 	FVector2D ToLocal2D(const FVector2D& World) const;
 	FVector2D ToWorld2D(const FVector2D& Local) const;
@@ -172,6 +182,8 @@ private:
 	void Collapse(ASRUnit* Killer);
 	void ApplyBuildVisual();
 	void UpdateWorkers();
+	void SetState(ESRBuildingState NewState);
+	void LoadStateMeshes();
 
 	UPROPERTY(VisibleAnywhere, Category = "Building") TObjectPtr<USceneComponent> Root;
 	UPROPERTY(VisibleAnywhere, Category = "Building") TObjectPtr<UStaticMeshComponent> Mesh;
@@ -179,7 +191,12 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Building") TObjectPtr<UBoxComponent> Blocker;
 	/** Selection / hover outline round the footprint. */
 	UPROPERTY(Transient) TObjectPtr<USRRingComponent> Ring;
-	/** The rally flag (castle only): planted at the rally point while the castle is selected or just after it moves. */
+	/** Scaffold round the walls while it is built (SM_Bld_<Name>_Site). */
+	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> SiteMesh;
+	UPROPERTY(Transient) TObjectPtr<UStaticMesh> DamagedMeshAsset;
+	UPROPERTY(Transient) TObjectPtr<UStaticMesh> RuinMeshAsset;
+	ESRBuildingState State = ESRBuildingState::Complete;
+	/** The rally flag (barracks and range): planted at the rally point while the castle is selected or just after it moves. */
 	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> RallyFlag;
 
 	UPROPERTY(Transient) TObjectPtr<USREconomySubsystem> Economy;

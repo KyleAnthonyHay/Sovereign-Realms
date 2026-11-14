@@ -2,6 +2,7 @@
 
 #include "Battle/SRPlatoonSubsystem.h"
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SREconomySubsystem.h"
 #include "Units/SRUnit.h"
 #include "Common/SRFeelSettings.h"
 #include "SovereignRealms.h"
@@ -36,9 +37,22 @@ void USRPlatoonSubsystem::Prune(FSRPlatoon& P)
 
 void USRPlatoonSubsystem::Step(float Dt)
 {
-	for (FSRPlatoon& P : Platoons)
+	for (int32 i = 0; i < Platoons.Num(); ++i)
 	{
-		if (P.bExists) { Prune(P); }
+		FSRPlatoon& P = Platoons[i];
+		if (!P.bExists) { continue; }
+		Prune(P);
+		if (P.Members.Num() == 0)
+		{
+			// Its last troop has fallen: the platoon is struck off and its slot is free again.
+			const FString Name = P.Name;
+			Disband(i);
+			if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this))
+			{
+				Economy->PushAlert(ESRAlertKind::Info, FText::Format(LOCTEXT("Fallen", "{0} has fallen to the last troop."), FText::FromString(Name)));
+			}
+			UE_LOG(LogSovereign, Log, TEXT("PLATOON %d '%s' wiped out: disbanded"), i + 1, *Name);
+		}
 	}
 }
 
@@ -117,6 +131,29 @@ void USRPlatoonSubsystem::CycleFormation(int32 Index)
 {
 	if (!Platoons.IsValidIndex(Index)) { return; }
 	SetFormation(Index, ESRFormationShape((uint8(Platoons[Index].Formation) + 1) % 4));
+	Reform(Index);
+}
+
+void USRPlatoonSubsystem::Reform(int32 Index)
+{
+	// The new shape shows at once: whoever is not fighting closes up round the platoon's centre, facing the way it faces.
+	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || !Platoons.IsValidIndex(Index)) { return; }
+	TArray<ASRUnit*> Free;
+	FVector2D Centre = FVector2D::ZeroVector, Facing = FVector2D::ZeroVector;
+	for (const TWeakObjectPtr<ASRUnit>& M : Platoons[Index].Members)
+	{
+		if (!M.IsValid() || !M->IsActive() || M->IsEngaged()) { continue; }
+		Free.Add(M.Get());
+		Centre += M->GetPos2D();
+		Facing += M->GetFacingDir();
+	}
+	if (Free.Num() < 2) { return; }
+	Centre /= Free.Num();
+	Facing = Facing.GetSafeNormal();
+	if (Facing.IsNearlyZero()) { Facing = FVector2D(1.f, 0.f); }
+	Battle->ClearPatrol(Free);
+	Battle->CommandMove(Free, Centre, false, Platoons[Index].Formation, true, &Facing);
 }
 
 void USRPlatoonSubsystem::CycleStance(int32 Index)

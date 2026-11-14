@@ -12,14 +12,39 @@ enum class ESRTeam : uint8
 	Enemy
 };
 
-/** What a building is for. Castle: the kingdom's seat, recruits troops. Farm: food. Mine: gold (on a vein). Tower: shoots. */
+/**
+ * What a building is for. Castle: the kingdom's seat (it falls, the kingdom falls). Farm: food and housing. Mine: gold
+ * (on a vein). Tower: shoots. Barracks: trains Shieldbearers. Range: trains Archers. New types go at the end (the
+ * level stores the value).
+ */
 UENUM(BlueprintType)
 enum class ESRBuildingType : uint8
 {
 	Castle,
 	Farm,
 	Mine,
-	Tower
+	Tower,
+	Barracks,
+	Range
+};
+
+/** The build menu's tabs. */
+UENUM(BlueprintType)
+enum class ESRBuildCategory : uint8
+{
+	Economy,
+	Military,
+	Defence
+};
+
+/** What a building looks like right now: the construction site, standing, battle-damaged, or a ruin. */
+UENUM(BlueprintType)
+enum class ESRBuildingState : uint8
+{
+	Site,
+	Complete,
+	Damaged,
+	Ruin
 };
 
 /** How a platoon (and every unit in it) reacts to enemies it was not told to fight. */
@@ -63,6 +88,13 @@ struct FSRCost
 	FSRCost(int32 InGold, int32 InFood) : Gold(InGold), Food(InFood) {}
 };
 
+UENUM()
+enum class ESRUnitType : uint8
+{
+	Shieldbearer,
+	Archer
+};
+
 class UStaticMesh;
 
 /**
@@ -101,6 +133,21 @@ struct FSRBuildingStats
 	UPROPERTY(EditAnywhere, Config, Category = "Building")
 	bool bPlayerBuildable = true;
 
+	/** Which tab of the build menu it sits in. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building")
+	ESRBuildCategory Category = ESRBuildCategory::Economy;
+
+	/** One line for the build menu's tooltip. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building")
+	FString Blurb;
+
+	/** It trains troops (of RecruitType). */
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Recruits")
+	bool bRecruits = false;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Recruits")
+	ESRUnitType RecruitType = ESRUnitType::Shieldbearer;
+
 	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape")
 	TSoftObjectPtr<UStaticMesh> Mesh;
 
@@ -138,12 +185,6 @@ struct FSRBuildingStats
 	float MuzzleHeight = 700.f;
 };
 
-UENUM()
-enum class ESRUnitType : uint8
-{
-	Shieldbearer,
-	Archer
-};
 
 /** What the unit has been told to do. Auto-acquired targets do not change the order. */
 UENUM()

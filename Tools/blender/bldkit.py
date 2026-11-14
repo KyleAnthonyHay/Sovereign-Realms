@@ -64,6 +64,27 @@ MATERIALS = {
     "Bld_Cobble": ("T_Cobble", "opaque"),
     "Bld_Cliff": ("T_Cliff", "opaque"),
     "Bld_Turf": ("T_Grass", "opaque"),
+    "Bld_RoofTile": ("T_Bld_RoofTile", "opaque"),     # terracotta pan tiles (barracks)
+    "Bld_Target": ("T_Bld_Target", "opaque"),         # the painted face of a straw archery butt
+    "Bld_Char": ("T_Bld_Char", "opaque"),             # charred timber, burnt thatch (damaged, ruin)
+    "Bld_Scorch": ("T_Bld_Scorch", "card"),           # soot marks: cut-out decals a few cm proud of a surface
+}
+
+# A building comes in four meshes with one origin and footprint: the finished one, its construction site (shown
+# round the finished mesh while that rises out of the ground), the battle-damaged one, and the ruin left behind.
+STATES = ("complete", "site", "damaged", "ruin")
+STATE_SUFFIX = {"complete": "", "site": "_Site", "damaged": "_Damaged", "ruin": "_Ruin"}
+
+# Soot marks in T_Bld_Scorch: name -> (u, v, width, height) in cm (gen_building_textures.py SCORCH_CELLS x 4).
+# Plumes, licks, the streak and the smear stand on their bottom edge; blots are round.
+SCORCH = {
+    "plume_l": (0, 0, 256, 384), "plume_m": (256, 0, 192, 256), "plume_s": (448, 0, 128, 192), "blot_l": (576, 0, 256, 256),
+    "blot_s": (832, 0, 128, 128), "streak": (960, 0, 64, 256), "smear": (0, 384, 256, 128), "plume_m2": (256, 256, 192, 256),
+    "blot_m": (448, 256, 192, 192), "lick": (640, 256, 128, 256), "blot_w": (768, 256, 256, 160),
+}
+FACING = {   # facing -> (right, up) with right x up = the outward normal
+    "-x": ((0, -1, 0), (0, 0, 1)), "+x": ((0, 1, 0), (0, 0, 1)), "-y": ((1, 0, 0), (0, 0, 1)), "+y": ((-1, 0, 0), (0, 0, 1)),
+    "up": ((0, 1, 0), (-1, 0, 0)),
 }
 
 
@@ -134,10 +155,13 @@ def inset_ring(ring, d):
 
 
 class Kit:
-    def __init__(self, name, seed=1):
+    def __init__(self, name, seed=1, state="complete"):
         self.name = name
+        self.state = state         # one of STATES; the modules and some parts below read it
+        self.damaged = state == "damaged"
         self.faces = []            # (slot, [Vector], [(u, v)], [w], shade)
         self.rng = random.Random(seed)
+        self.drng = random.Random(seed * 7919 + 17)      # decides the damage, so the finished mesh's dice are untouched
         self._off = Vector((0, 0, 0))
         self._yaw = 0.0
         self.colliders = []        # (centre, size, yaw) boxes, cm, for the import script
@@ -455,12 +479,17 @@ class Kit:
             inward = Vector((-d.y, d.x))
             count = max(int(round((L + gap) / (width + gap))), 2)
             step = (L - width) / (count - 1)
+            lost = self._merlon_loss(count)
             for k in range(count):
                 s0 = k * step
                 if skip_spans and any(a < s0 + width * 0.5 < b for a, b in skip_spans.get(i, [])):
                     continue
                 h = height
                 if broken and self.rng.random() < broken and 0 < k < count - 1:
+                    h = height - 24.0
+                if lost[k] == 2:
+                    continue
+                if lost[k] == 1:
                     h = height - 24.0
                 c = p0 + d * (s0 + width / 2) + inward * (thick / 2)
                 yaw = math.degrees(math.atan2(d.y, d.x))
@@ -514,6 +543,18 @@ class Kit:
         """Cloth hanging from the line a -> b (left to right as seen from the front), `drop` cm long."""
         a, b = V3(a), V3(b)
         L = (b - a).length
+        if self.damaged:                                      # torn: two ragged tails of different lengths
+            dr = self.drng
+            cut = dr.uniform(0.35, 0.65)
+            long, short = drop * dr.uniform(0.5, 0.75), drop * dr.uniform(0.16, 0.34)
+            tails = [(0.0, cut, long, long * 0.72), (cut, 1.0, short * 1.3, short)]
+            if dr.random() < 0.5:
+                tails = [(0.0, cut, short, short * 1.3), (cut, 1.0, long * 0.72, long)]
+            for f0, f1, d0, d1 in tails:
+                p0, p1 = a.lerp(b, f0), a.lerp(b, f1)
+                self.poly(slot, [p1 - Vector((0, 0, d1)), p0 - Vector((0, 0, d0)), p0, p1],
+                          [(u0 + L * f1, d1), (u0 + L * f0, d0), (u0 + L * f0, 0.0), (u0 + L * f1, 0.0)], w=[1.0, 1.0, 0.0, 0.0])
+            return
         pts = [a - Vector((0, 0, drop)), b - Vector((0, 0, drop)), b, a]
         # seen from -X the line runs toward +Y = screen right: u increases along it
         uv = [(u0, drop), (u0 + L, drop), (u0 + L, 0.0), (u0, 0.0)]
@@ -586,13 +627,18 @@ class Kit:
             count = max(int(round((L + gap) / (width + gap))), 2)
             step = (L - width) / (count - 1)
             yaw = math.degrees(math.atan2(d.y, d.x))
+            lost = self._merlon_loss(count)
             for k in range(count):
                 s0 = k * step
                 if skip_spans and any(a < s0 + width * 0.5 < b for a, b in skip_spans.get(i, [])):
                     continue
+                if lost[k] == 2:
+                    continue
                 c = p0 + d * (s0 + width / 2) + inward * (thick / 2)
                 self.obox_wall(slot, (c.x, c.y, z), (width, thick, h1), yaw)
                 if broken and self.rng.random() < broken and 0 < k < count - 1:
+                    continue
+                if lost[k] == 1:
                     continue
                 self.obox_wall(slot, (c.x, c.y, z + h1), (width * 0.5, thick, h2), yaw, cap=cap, cap_h=6.0)
 
@@ -669,6 +715,365 @@ class Kit:
 
     def rope(self, a, b, r=2.0):
         self.cyl("Bld_Thatch", a, b, r, sides=4)
+
+    # ------------------------------------------------------------------ roofs
+    def gable_roof(self, slot, x0, x1, y0, y1, z, rise, over=22.0, verge=14.0, ridge="Bld_Beam", edge="Bld_Beam", holes=(),
+                   cell=24.0, ceiling=True):
+        """A pitched roof whose ridge runs along local Y over the walls x0..x1, y0..y1 (wall head at z): two slopes
+        with eaves `over` and verges `verge` proud, edge boards and a ridge piece. v runs down the slope.
+        holes: (side, y, d, r) burnt through, side -1 = the -X slope, d = cm down from the ridge; only cut on the
+        damaged mesh, where they show charred rafters over a dark loft."""
+        xc, half = (x0 + x1) / 2.0, (x1 - x0) / 2.0
+        ang = math.atan2(rise, half)
+        ca, sa = math.cos(ang), math.sin(ang)
+        Ls = (half + over) / ca
+        zr = z + rise
+        ya, yb = y0 - verge, y1 + verge
+        holes = [h for h in holes] if self.damaged else []
+        uo = (self.U(0, 256), 0.0)
+
+        def P(side, y, d, drop=0.0):
+            return (xc + side * (d * ca - drop * sa), y, zr - d * sa - drop * ca)
+
+        def quad(sl, side, ua, ub, da, db, shade=1.0):
+            pts = [P(side, ua, db), P(side, ub, db), P(side, ub, da), P(side, ua, da)]
+            uv = [(ua + uo[0], db), (ub + uo[0], db), (ub + uo[0], da), (ua + uo[0], da)]
+            if side < 0:
+                pts.reverse(); uv.reverse()
+            self.poly(sl, pts, uv, shade=shade)
+
+        for side in (-1, 1):
+            mine = [h for h in holes if h[0] == side]
+            if not mine:
+                quad(slot, side, ya, yb, 0.0, Ls)
+            else:
+                nu, nd = int(math.ceil((yb - ya) / cell)), int(math.ceil(Ls / cell))
+                for j in range(nd):
+                    da, db = j * cell, min((j + 1) * cell, Ls)
+                    run = None                                 # (slot or None, start)
+                    for i in range(nu + 1):
+                        kind = None
+                        if i < nu:
+                            cu, cd = ya + (i + 0.5) * cell, (da + db) / 2
+                            kind = slot
+                            for (_, hy, hd, hr) in mine:
+                                dist = math.hypot(cu - hy, cd - hd) / hr
+                                jit = 0.8 + 0.4 * ((math.sin(i * 12.9898 + j * 78.233 + hy) * 43758.5453) % 1.0)
+                                if dist < jit:
+                                    kind = None
+                                    break
+                                if dist < jit + 0.3:
+                                    kind = "Bld_Char"
+                        if run is None or run[0] != kind:
+                            if run is not None and run[0] is not None:
+                                quad(run[0], side, run[1], min(ya + i * cell, yb), da, db)
+                            run = (kind, ya + i * cell)
+                for (_, hy, hd, hr) in mine:                   # what the hole shows: rafters and a purlin
+                    y = math.ceil((hy - hr) / 56.0) * 56.0
+                    while y <= hy + hr:
+                        d0, d1 = max(hd - hr - 14, 4.0), min(hd + hr + 14, Ls - 4.0)
+                        m = P(side, y, (d0 + d1) / 2, drop=7.0)
+                        self.obox("Bld_Char", m, (d1 - d0, 9, 9), pitch=side * math.degrees(ang))
+                        y += 56.0
+                    m = P(side, hy, min(max(hd, 20.0), Ls - 20.0), drop=14.0)
+                    self.obox("Bld_Char", m, (9, min(hr * 2 + 30, yb - ya), 9), grain="y")
+            # eave board and verge boards
+            e0, e1 = P(side, ya, Ls), P(side, yb, Ls)
+            pts = [(e0[0], e0[1], e0[2] - 9), (e1[0], e1[1], e1[2] - 9), e1, e0]
+            if side < 0:
+                pts.reverse()
+            self.poly(edge, pts)
+            for y in (ya, yb):
+                m = P(side, y, Ls / 2, drop=4.0)
+                self.obox(edge, m, (Ls, 6, 10), pitch=math.degrees(ang) * side)
+        if ridge:
+            self.obox(ridge, (xc, (ya + yb) / 2, zr + 1), (16, yb - ya + 6, 12), grain="y")
+        if holes and ceiling:
+            self.poly("Bld_Dark", [(x0, y0, z + 2), (x1, y0, z + 2), (x1, y1, z + 2), (x0, y1, z + 2)])
+        return zr
+
+    def gable_end(self, slot, x0, x1, y, z, rise, facing=-1):
+        """The triangle of wall under a gable_roof at y (facing -1: toward -Y)."""
+        pts = [(x0, y, z), (x1, y, z), ((x0 + x1) / 2, y, z + rise)]
+        if facing > 0:
+            pts.reverse()
+        self.poly(slot, pts)
+
+    # ------------------------------------------------------------------ battle damage (damaged and ruin meshes)
+    def _merlon_loss(self, count):
+        """Per merlon on an edge: 0 intact, 1 upper courses gone, 2 gone. All intact unless damaged."""
+        lost = [0] * count
+        if not self.damaged:
+            return lost
+        dr = self.drng
+        for _ in range(1 if count < 6 else 2):
+            a = dr.randrange(count)
+            for k in range(a, min(a + dr.randint(1, 3), count)):
+                lost[k] = 2
+        for k in range(count):
+            if lost[k] == 0 and dr.random() < (0.6 if 2 in lost[max(k - 1, 0):k + 2] else 0.18):
+                lost[k] = 1
+        return lost
+
+    def breach(self, a, b, z0, z1, depth=34.0, rows=None, back="Bld_Dark", reveal="Bld_Char"):
+        """Openings for wall(): a ragged hole between a..b along the edge and z0..z1, widest in the middle.
+        Empty unless the mesh is the damaged one, so a module can always add it to its openings."""
+        if not self.damaged:
+            return []
+        dr = self.drng
+        rows = rows or max(int(round((z1 - z0) / 36.0)), 2)
+        out = []
+        w = b - a
+        for r in range(rows):
+            f = (r + 0.5) / rows
+            bulge = 1.0 - (2.0 * f - 1.0) ** 2                 # 0 at the bottom and top rows, 1 in the middle
+            inset = w * 0.5 * (1.0 - (0.35 + 0.65 * bulge))
+            ra = a + inset * dr.uniform(0.5, 1.5) + dr.uniform(-6, 6)
+            rb = b - inset * dr.uniform(0.5, 1.5) + dr.uniform(-6, 6)
+            ra, rb = round(ra / 4.0) * 4.0, round(rb / 4.0) * 4.0
+            if rb - ra < 12:
+                continue
+            out.append(dict(a=ra, b=rb, z0=z0 + (z1 - z0) * r / rows, z1=z0 + (z1 - z0) * (r + 1) / rows, depth=depth,
+                            back=back, reveal=reveal, shade=0.75, back_shade=1.0))
+        return out
+
+    def scorch(self, kind, origin, facing="-x", out=3.5, flip=False):
+        """A soot mark from the T_Bld_Scorch atlas at the texture's own scale. `origin`: the middle of its foot
+        (plumes, licks) or its centre (blots) on the surface; facing: a key of FACING or (right, up) vectors."""
+        u, v, w, h = SCORCH[kind]
+        r, up = FACING[facing] if isinstance(facing, str) else facing
+        r, up = V3(r).normalized(), V3(up).normalized()
+        n = r.cross(up)
+        o = V3(origin) + n * out
+        if kind.startswith("blot"):
+            o = o - up * (h / 2.0)
+        pts = [o - r * (w / 2), o + r * (w / 2), o + r * (w / 2) + up * h, o - r * (w / 2) + up * h]
+        ua, ub = (u + w - 2, u + 2) if flip else (u + 2, u + w - 2)
+        self.poly("Bld_Scorch", pts, [(ua, v + h - 2), (ub, v + h - 2), (ub, v + 2), (ua, v + 2)], w=0.0)
+
+    def burn_hole(self, centre, size=(120.0, 90.0), yaw=0.0, joists=3, soot="blot_l"):
+        """A hole burnt through a flat roof at `centre` (on the roof surface): a ragged dark opening, charred
+        joists across it and a soot blot round it."""
+        with self.at(centre, yaw):
+            n = 9
+            ring = []
+            for i in range(n):
+                a = 2 * math.pi * i / n
+                f = self.U(0.72, 1.0)
+                ring.append((math.cos(a) * size[0] / 2 * f, math.sin(a) * size[1] / 2 * f))
+            if soot:
+                self.scorch(soot, (0, 0, 0), "up", out=1.5)
+            self.poly("Bld_Dark", [(x, y, 3.0) for x, y in ring])
+            for j in range(joists):
+                y = size[1] * ((j + 0.5) / joists - 0.5) * 0.8
+                half = size[0] / 2 * math.sqrt(max(1.0 - (2 * y / size[1]) ** 2, 0.1)) * 0.86
+                self.obox("Bld_Char", (self.U(-6, 6), y, 6.5), (half * 2, 9, 7), yaw=self.U(-7, 7))
+
+    def cloth(self, slot, pts, uvs, w=0.0, strips=4):
+        """A stretched cloth quad (awning): pts[0] -> pts[1] is its fixed edge. Whole, or on the damaged mesh
+        burnt back to tatters hanging from that edge."""
+        if not self.damaged:
+            self.poly(slot, pts, uvs, w=w)
+            return
+        P = [V3(p) for p in pts]
+        ws = w if isinstance(w, (list, tuple)) else [w] * 4
+        for i in range(strips):
+            if self.drng.random() < 0.3:
+                continue
+            f0, f1 = i / strips, (i + 1) / strips
+            g0, g1 = self.drng.uniform(0.15, 0.7), self.drng.uniform(0.15, 0.7)
+            lerp2 = lambda A, B, t: tuple(a + (b - a) * t for a, b in zip(A, B))
+            a0, a1 = P[0].lerp(P[1], f0), P[0].lerp(P[1], f1)
+            b0, b1 = P[3].lerp(P[2], f0), P[3].lerp(P[2], f1)
+            ua0, ua1 = lerp2(uvs[0], uvs[1], f0), lerp2(uvs[0], uvs[1], f1)
+            ub0, ub1 = lerp2(uvs[3], uvs[2], f0), lerp2(uvs[3], uvs[2], f1)
+            sag = Vector((0, 0, -18.0))
+            self.poly(slot, [a0, a1, a1.lerp(b1, g1) + sag * g1, a0.lerp(b0, g0) + sag * g0],
+                      [ua0, ua1, lerp2(ua1, ub1, g1), lerp2(ua0, ub0, g0)],
+                      w=[ws[0], ws[1], ws[1] + (ws[2] - ws[1]) * g1 + 0.3, ws[0] + (ws[3] - ws[0]) * g0 + 0.3])
+
+    def charred(self, a, b, size=11.0):
+        """A charred timber from a to b."""
+        a, b = V3(a), V3(b)
+        d = b - a
+        L = d.length
+        yaw = math.degrees(math.atan2(d.y, d.x))
+        pitch = -math.degrees(math.asin(max(min(d.z / max(L, 1e-6), 1.0), -1.0)))
+        self.obox("Bld_Char", (a + b) / 2, (L, size, size), yaw=yaw, pitch=pitch)
+
+    def rubble(self, centre, size=(160.0, 140.0), height=36.0, slot="Bld_AshlarLarge", blocks=6, beams=1, mound=True, block=(44, 30, 24)):
+        """Fallen masonry: a low heap with tumbled blocks on and round it and a charred timber or two."""
+        cx, cy, cz = centre
+        if mound:
+            lumps = int(round(size[0] * size[1] / 48000.0))
+            if lumps <= 1:
+                self.blob(slot, (cx, cy, cz), (size[0], size[1], height * 2.0), points=12, squash=0.3)
+            for _ in range(lumps + 1 if lumps > 1 else 0):   # a big heap is several lumps, not one tent
+                a, d, f = self.U(0, 2 * math.pi), self.U(0.0, 0.5), self.U(0.5, 0.72)
+                self.blob(slot, (cx + math.cos(a) * d * size[0] * 0.5, cy + math.sin(a) * d * size[1] * 0.5, cz),
+                          (size[0] * f, size[1] * f, height * 2.0 * self.U(0.6, 1.0)), points=12, squash=0.3)
+        for _ in range(blocks):
+            a, d = self.U(0, 2 * math.pi), self.U(0.15, 1.0) ** 0.7
+            x, y = cx + math.cos(a) * d * size[0] * 0.56, cy + math.sin(a) * d * size[1] * 0.56
+            s = self.U(0.7, 1.15)
+            z = cz + (height * max(0.0, 1.0 - d) * 0.8 if mound else 0.0) + block[2] * s * 0.3
+            self.obox(slot, (x, y, z), (block[0] * s, block[1] * s, block[2] * s), yaw=self.U(0, 180), pitch=self.U(-22, 22), roll=self.U(-16, 16))
+        for _ in range(beams):
+            a = self.U(0, math.pi)
+            L = self.U(0.5, 0.8) * max(size)
+            dx, dy = math.cos(a) * L / 2, math.sin(a) * L / 2
+            bx, by = cx + self.U(-0.3, 0.3) * size[0], cy + self.U(-0.3, 0.3) * size[1]
+            z = cz + (height * 0.6 if mound else 6.0)
+            self.charred((bx - dx, by - dy, z - self.U(0, 14)), (bx + dx, by + dy, z + self.U(6, 30)), size=self.U(9, 13))
+
+    def stub(self, slot, p0, p1, thick=28.0, hmax=160.0, hmin=24.0, seg=52.0, ends=(1.0, 1.0), gaps=0.18, z=0.0, step=16.0, top=None):
+        """What is left of a wall from p0 to p1 (centre line): blocks of ragged height, tallest toward the ends
+        that `ends` weights (corners outlast the middle of a wall), with gaps knocked through."""
+        a, b = Vector(p0), Vector(p1)
+        d = b - a
+        L = d.length
+        d /= L
+        yaw = math.degrees(math.atan2(d.y, d.x))
+        n = max(int(round(L / seg)), 1)
+        w = L / n
+        dr = self.drng
+        for i in range(n):
+            t = (i + 0.5) / n
+            corner = max(ends[0] * (1.0 - t * 2.4), ends[1] * (1.0 - (1.0 - t) * 2.4), 0.0)
+            f = min(0.22 + 0.78 * corner + dr.uniform(-0.2, 0.3), 1.0)
+            if corner < 0.3 and dr.random() < gaps:
+                continue
+            h = max(round((hmin + (hmax - hmin) * f) / step) * step, step)
+            c = a + d * (w * (i + 0.5))
+            with self.at((c.x, c.y, z), yaw):
+                ring = rect(-w / 2, -thick / 2, w / 2, thick / 2)
+                self.wall(slot, ring, 0.0, h, u0=-(w * (i + 1)) - thick, bleach=False)
+                self.cap(top or slot, ring, h, shade=0.9)
+
+    def ruin_rect(self, slot, x0, y0, x1, y1, hmax, thick=28.0, hmin=24.0, seg=52.0, gaps=0.2, z=0.0, corners=(1, 1, 1, 1), top=None, step=16.0):
+        """Wall stubs round a rectangle (centre lines), highest at the corners. corners: weights for
+        (x0,y0), (x1,y0), (x1,y1), (x0,y1), so a ruin can keep one tall corner."""
+        c = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        for i in range(4):
+            self.stub(slot, c[i], c[(i + 1) % 4], thick, hmax, hmin, seg, ends=(corners[i], corners[(i + 1) % 4]), gaps=gaps, z=z, top=top, step=step)
+
+    # ------------------------------------------------------------------ construction site
+    def footings(self, x0, y0, x1, y1, width=30.0, height=12.0, slot="Bld_AshlarLarge", top="Bld_Trim", dirt="Bld_Dirt"):
+        """The foundation outline: a course of big blocks round the rectangle (outer edge), packed earth inside."""
+        if dirt:
+            self.poly(dirt, [(x0 + 4, y0 + 4, 2.0), (x1 - 4, y0 + 4, 2.0), (x1 - 4, y1 - 4, 2.0), (x0 + 4, y1 - 4, 2.0)])
+        w = width
+        for lo, hi in (((x0, y0), (x1, y0 + w)), ((x0, y1 - w), (x1, y1)), ((x0, y0 + w), (x0 + w, y1 - w)), ((x1 - w, y0 + w), (x1, y1 - w))):
+            self.box(slot, (lo[0], lo[1], 0), (hi[0], hi[1], height), top=top, u0=self.U(0, 256))
+
+    def scaffold(self, x0, y0, x1, y1, height, lift=170.0, bay=230.0, depth=46.0, edges=(0, 1, 2, 3), planks=0.45, braces=0.3,
+                 ladder=(2, 0), pole=4.6):
+        """Pole scaffolding round the rectangle x0..x1, y0..y1 (the inner row of standards; the outer row stands
+        `depth` further out): ledgers and putlogs at every lift, plank walkways on some bays, diagonal braces,
+        a ladder. edges: 0 = +X (back), 1 = +Y, 2 = -X (front), 3 = -Y, as rect(). ladder: (edge, bay)."""
+        ring = rect(x0, y0, x1, y1)
+        lifts = max(int(round(height / lift)), 1)
+        zs = [height * (l + 1) / lifts for l in range(lifts)]
+        done = set()
+
+        def standard(p):
+            key = (round(p.x), round(p.y))
+            if key in done:
+                return
+            done.add(key)
+            self.cyl("Bld_Beam", (p.x, p.y, -4), (p.x + self.U(-3, 3), p.y + self.U(-3, 3), height + self.U(14, 46)), pole, pole * 0.8, sides=4, caps=False)
+
+        for e in edges:
+            p0, p1 = Vector(ring[e]), Vector(ring[(e + 1) % 4])
+            d = p1 - p0
+            L = d.length
+            d /= L
+            nrm = Vector((d.y, -d.x))
+            n = max(int(round(L / bay)), 1)
+            before, after = ((e - 1) % 4) in edges, ((e + 1) % 4) in edges
+            ext0, ext1 = 0.0, (depth if after else 0.0)       # the corner square is decked by the edge that ends there
+            pts = []
+            for i in range(n + 1):
+                inner = p0 + d * (L * i / n)
+                outer = inner + nrm * depth
+                if i == 0 and before:
+                    outer = outer - d * depth
+                if i == n and after:
+                    outer = outer + d * depth
+                pts.append((inner, outer))
+                standard(inner); standard(outer)
+            yaw = math.degrees(math.atan2(d.y, d.x))
+            for li, z in enumerate(zs):
+                toplift = li == lifts - 1
+                for i in range(n + 1):
+                    inner, outer = pts[i]
+                    if i < n or not after:                     # the corner's putlog belongs to the next edge
+                        self.cyl("Bld_Beam", (inner.x, inner.y, z - 3), (outer.x, outer.y, z - 3), 3.2, sides=4, caps=False)
+                    if i == n:
+                        break
+                    i2, o2 = pts[i + 1]
+                    self.cyl("Bld_Beam", (outer.x, outer.y, z - 9), (o2.x, o2.y, z - 9), 3.4, sides=4, caps=False)
+                    if toplift:
+                        self.cyl("Bld_Beam", (inner.x, inner.y, z - 9), (i2.x, i2.y, z - 9), 3.4, sides=4, caps=False)
+                        self.cyl("Bld_Beam", (outer.x, outer.y, z + 84), (o2.x, o2.y, z + 84), 2.8, sides=4, caps=False)   # guard rail
+                    sa = L * i / n - (ext0 if i == 0 else 0.0)
+                    sb = L * (i + 1) / n + (ext1 if i == n - 1 else 0.0)
+                    if self.rng.random() < (0.9 if toplift else planks):
+                        c = p0 + d * ((sa + sb) / 2) + nrm * (depth / 2)
+                        self.obox("Bld_Planks", (c.x, c.y, z + 2.5), (sb - sa - 4, depth - 6, 5), yaw=yaw)
+                    if self.rng.random() < braces:
+                        zl = zs[li - 1] if li else 0.0
+                        a, b = (outer, o2) if (i + li) % 2 else (o2, outer)
+                        self.cyl("Bld_Beam", (a.x, a.y, zl + 4), (b.x, b.y, z - 12), 2.8, sides=4, caps=False)
+            if ladder and ladder[0] == e:
+                i = min(ladder[1], n - 1)
+                a = p0 + d * (L * (i + 0.15) / n) + nrm * (depth / 2)
+                b = p0 + d * (L * (i + 0.85) / n) + nrm * (depth / 2)
+                self.ladder((a.x, a.y, 0), (b.x, b.y, zs[0] + 40), width=depth - 16, rungs=int(zs[0] / 30) + 1)
+                for li in range(1, lifts):                     # and on up, zigzag, between the lifts
+                    lo, hi = (b, a) if li % 2 else (a, b)
+                    self.ladder((lo.x, lo.y, zs[li - 1] + 4), (hi.x, hi.y, zs[li] + 30), width=depth - 18, rungs=int((zs[li] - zs[li - 1]) / 32) + 1)
+
+    def stone_stack(self, pos, yaw=0.0, courses=(3, 2, 2), block=(46.0, 30.0, 22.0), rows=2, slot="Bld_Trim"):
+        """Cut blocks stacked for the masons."""
+        with self.at(pos, yaw):
+            for c, n in enumerate(courses):
+                for r in range(rows if c < len(courses) - 1 else max(rows - 1, 1)):
+                    for i in range(n):
+                        x = (i - (n - 1) / 2) * (block[0] + 3) + self.U(-3, 3)
+                        y = (r - (rows - 1) / 2) * (block[1] + 3) + self.U(-2, 2)
+                        self.obox(slot, (x, y, block[2] * (c + 0.5) + c * 0.5), block, yaw=self.U(-4, 4))
+            self.obox(slot, (block[0] * 1.9, self.U(-10, 10), block[2] / 2), block, yaw=self.U(20, 60))
+
+    def timber_pile(self, pos, yaw=0.0, length=230.0, r=8.5, base=4, planks=True):
+        """Poles and beams stacked on two bearers."""
+        with self.at(pos, yaw):
+            for x in (-length * 0.3, length * 0.3):
+                self.obox("Bld_Beam", (x, 0, 4), (10, base * r * 2 + 12, 8), grain="y")
+            for row in range(base - 1 if base > 2 else base):
+                for i in range(base - row):
+                    y = (i - (base - row - 1) / 2) * (r * 2 + 1)
+                    z = 8 + r + row * r * 1.75
+                    o = self.U(-16, 16)
+                    self.cyl("Bld_Beam", (-length / 2 + o, y, z), (length / 2 + o, y, z), r, r * 0.9, sides=6)
+            if planks:
+                self.obox("Bld_Planks", (length * 0.1, base * r + 30, 4), (length * 0.8, 40, 6), yaw=4)
+
+    def hoist(self, pos, height=420.0, reach=150.0, yaw=0.0, load_z=None):
+        """A lifting pole: a mast with a jib reaching toward local +X, a rope over the jib's end and a block
+        slung from it."""
+        with self.at(pos, yaw):
+            self.cyl("Bld_Beam", (0, 0, -4), (0, 0, height), 7.5, 6.0, sides=6)
+            tip = (reach, 0, height + reach * 0.42)
+            self.cyl("Bld_Beam", (0, 0, height - 110), tip, 5.5, 4.5, sides=5)
+            self.cyl("Bld_Beam", (0, 0, height - 6), (reach * 0.55, 0, height - 110 + (tip[2] - height + 110) * 0.55), 3.5, sides=4)
+            lz = load_z if load_z is not None else height * 0.45
+            self.rope((tip[0], 0, tip[2]), (tip[0], 0, lz + 30), 1.8)
+            self.rope((tip[0], 0, tip[2]), (-6, 0, height * 0.3), 1.6)       # the fall, belayed on the mast
+            self.obox("Bld_Bronze", (tip[0], 0, lz + 30), (8, 8, 10))
+            self.obox("Bld_Trim", (tip[0], 0, lz + 12), (48, 32, 24), yaw=self.U(-20, 20))
+            for s in (-1, 1):
+                self.rope((tip[0], s * 12, lz + 30), (tip[0], s * 14, lz + 12), 1.4)
 
     # ------------------------------------------------------------------ output
     def collider(self, lo, hi, yaw=0.0):
@@ -797,12 +1202,12 @@ def reset_scene():
     return bpy.context.scene
 
 
-def setup_preview(scene, focus=(0.0, 0.0, 0.0), zoom=0.5, ground=3000.0, res=(1920, 1080), yaw=0.0):
+def setup_preview(scene, focus=(0.0, 0.0, 0.0), zoom=0.5, ground=3000.0, res=(1920, 1080), yaw=0.0, pitch=None, dist=None):
     """The game camera (Docs/VISUAL_CONTRACT.md: yaw 0, FOV 50, pitch -30..-46, distance 950..3600 geometric)
     and the game's sun, so a render shows roughly what the building will look like in the level.
     `yaw` turns the BUILDING's parent empty, as the level will place it."""
-    dist = 950.0 * (3600.0 / 950.0) ** zoom
-    pitch = 30.0 + 16.0 * zoom
+    dist = dist if dist is not None else 950.0 * (3600.0 / 950.0) ** zoom
+    pitch = pitch if pitch is not None else 30.0 + 16.0 * zoom       # or the tactical view: pitch 54, far away
     f = V3(focus)
     cam_d = bpy.data.cameras.get("GameCamera") or bpy.data.cameras.new("GameCamera")
     cam_d.sensor_fit = "HORIZONTAL"

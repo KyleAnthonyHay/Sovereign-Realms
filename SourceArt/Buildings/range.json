@@ -1,0 +1,169 @@
+{
+ "name": "range",
+ "mesh": "SM_Bld_Range",
+ "triangles": 3408,
+ "bounds": {
+  "min": [
+   -437.2,
+   -417.1,
+   -5.1
+  ],
+  "max": [
+   416.7,
+   396.2,
+   414.0
+  ]
+ },
+ "colliders": [
+  {
+   "centre": [
+    0.0,
+    0.0,
+    140.0
+   ],
+   "size": [
+    800.0,
+    800.0,
+    280
+   ],
+   "yaw": 0.0
+  }
+ ],
+ "sockets": {
+  "gate": [
+   -460.0,
+   -190.0,
+   0.0
+  ],
+  "rally": [
+   -760.0,
+   -190.0,
+   0.0
+  ],
+  "label": [
+   120.0,
+   0.0,
+   520.0
+  ],
+  "popup": [
+   0.0,
+   0.0,
+   320.0
+  ]
+ },
+ "footprint": [
+  -400.0,
+  -400.0,
+  400.0,
+  400.0
+ ],
+ "ring_radius": 560.0,
+ "slots": [
+  "Bld_Awning",
+  "Bld_Banner",
+  "Bld_Bark",
+  "Bld_Beam",
+  "Bld_Bronze",
+  "Bld_Dark",
+  "Bld_Dirt",
+  "Bld_Frieze",
+  "Bld_LeafCore",
+  "Bld_Leaves",
+  "Bld_Mudbrick",
+  "Bld_Planks",
+  "Bld_Plaster",
+  "Bld_Pot",
+  "Bld_Shutter",
+  "Bld_Target",
+  "Bld_Thatch",
+  "Bld_Trim"
+ ],
+ "states": {
+  "site": {
+   "mesh": "SM_Bld_Range_Site",
+   "triangles": 1718,
+   "bounds": {
+    "min": [
+     -400.0,
+     -435.7,
+     -4.0
+    ],
+    "max": [
+     434.6,
+     400.0,
+     322.8
+    ]
+   },
+   "slots": [
+    "Bld_Beam",
+    "Bld_Dirt",
+    "Bld_Mudbrick",
+    "Bld_Planks",
+    "Bld_Thatch"
+   ]
+  },
+  "damaged": {
+   "mesh": "SM_Bld_Range_Damaged",
+   "triangles": 3424,
+   "bounds": {
+    "min": [
+     -420.0,
+     -422.9,
+     -24.1
+    ],
+    "max": [
+     416.7,
+     394.0,
+     414.0
+    ]
+   },
+   "slots": [
+    "Bld_Awning",
+    "Bld_Banner",
+    "Bld_Bark",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Dark",
+    "Bld_Dirt",
+    "Bld_Frieze",
+    "Bld_LeafCore",
+    "Bld_Leaves",
+    "Bld_Mudbrick",
+    "Bld_Planks",
+    "Bld_Plaster",
+    "Bld_Pot",
+    "Bld_Scorch",
+    "Bld_Shutter",
+    "Bld_Target",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "ruin": {
+   "mesh": "SM_Bld_Range_Ruin",
+   "triangles": 1242,
+   "bounds": {
+    "min": [
+     -394.1,
+     -398.0,
+     -24.1
+    ],
+    "max": [
+     394.9,
+     422.0,
+     96.2
+    ]
+   },
+   "slots": [
+    "Bld_Beam",
+    "Bld_Char",
+    "Bld_Dirt",
+    "Bld_Mudbrick",
+    "Bld_Scorch",
+    "Bld_Target",
+    "Bld_Thatch"
+   ]
+  }
+ }
+}

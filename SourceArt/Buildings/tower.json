@@ -67,5 +67,88 @@
   "Bld_Rock",
   "Bld_RoofClay",
   "Bld_Trim"
- ]
+ ],
+ "states": {
+  "site": {
+   "mesh": "SM_Bld_Tower_Site",
+   "triangles": 1554,
+   "bounds": {
+    "min": [
+     -277.4,
+     -277.2,
+     -4.0
+    ],
+    "max": [
+     275.7,
+     275.3,
+     874.3
+    ]
+   },
+   "slots": [
+    "Bld_AshlarLarge",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Dirt",
+    "Bld_Planks",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "damaged": {
+   "mesh": "SM_Bld_Tower_Damaged",
+   "triangles": 1527,
+   "bounds": {
+    "min": [
+     -297.8,
+     -269.0,
+     -12.8
+    ],
+    "max": [
+     200.0,
+     230.1,
+     1214.0
+    ]
+   },
+   "slots": [
+    "Bld_Ashlar",
+    "Bld_AshlarLarge",
+    "Bld_Banner",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Dark",
+    "Bld_Door",
+    "Bld_Flame",
+    "Bld_Frieze",
+    "Bld_Planks",
+    "Bld_Rock",
+    "Bld_RoofClay",
+    "Bld_Scorch",
+    "Bld_Trim"
+   ]
+  },
+  "ruin": {
+   "mesh": "SM_Bld_Tower_Ruin",
+   "triangles": 470,
+   "bounds": {
+    "min": [
+     -234.1,
+     -200.0,
+     -12.5
+    ],
+    "max": [
+     200.0,
+     200.0,
+     228.0
+    ]
+   },
+   "slots": [
+    "Bld_Ashlar",
+    "Bld_AshlarLarge",
+    "Bld_Char",
+    "Bld_Dirt",
+    "Bld_Scorch"
+   ]
+  }
+ }
 }

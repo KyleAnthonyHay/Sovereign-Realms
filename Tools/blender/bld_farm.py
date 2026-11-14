@@ -3,10 +3,13 @@
 Read from the tactical zoom through the gold: a field of ripe barley in rows across the screen, a harvested strip
 with stooks, a haystack. Beside it a small mudbrick-and-plaster cottage with a reed porch, a beehive granary, a
 cart, an olive tree, a scarecrow in the team's colours and a little banner on the roof.
+
+States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
+damage(); `site` and `ruin` are small meshes of their own on the same footprint.
 """
 import math
 
-from bldkit import inset_ring, rect
+from bldkit import NO_TOP, STATES, inset_ring, rect  # noqa: F401
 
 NAME = "farm"
 MESH = "SM_Bld_Farm"
@@ -16,6 +19,7 @@ RING_RADIUS = 620.0
 PREVIEW_FIGURES = [(-560, -60), (-600, 60)]
 
 FX0, FX1, FY0, FY1 = -400.0, 256.0, -110.0, 452.0        # the field
+BURN = (40.0, 110.0, 170.0)                               # damaged: x, y, radius of barley burnt to the ground
 
 
 def cottage(k):
@@ -33,7 +37,7 @@ def cottage(k):
         win = dict(a=side / 2 - 124, b=side / 2 - 76, z0=112, z1=172, depth=12, back="Bld_Shutter", reveal="Bld_Mudbrick", shade=0.7)
         win2 = dict(a=120, b=168, z0=112, z1=172, depth=12, back="Bld_Shutter", reveal="Bld_Mudbrick", shade=0.7)
         top = 236.0
-        k.wall("Bld_Plaster", r1, 64, top, u0=u0, openings={2: [door, win], 3: [win2]})
+        k.wall("Bld_Plaster", r1, 64, top, u0=u0, openings={2: [door, win] + k.breach(212, 288, 80, 208, depth=20), 3: [win2]})
         # the doorway reaches the ground: cut the footing too
         k.obox("Bld_Planks", (x0 + 6, hw - 8 - side / 2 - 10, 32), (16, 80, 64), grain="z")
         k.obox("Bld_Beam", (x0 + 2, hw - 8 - side / 2 - 10, 196), (16, 108, 18), grain="y")
@@ -45,17 +49,20 @@ def cottage(k):
         k.wall("Bld_Plaster", r2, top, top + 26, u0=u0, bleach=False)
         k.parapet("Bld_Plaster", r2, top + 4, top + 26, thick=20, top="Bld_Plaster")
         # on the roof: sheaves drying, jars, a short standard
-        for (x, y, yaw) in ((300, -60, 20), (332, 10, -30), (286, 44, 75)):
+        for (x, y, yaw) in ((300, -60, 20), (332, 10, -30), (286, 44, 75)) if not k.damaged else ():
             sheaf(k, (x, y, top + 4), lying=True, yaw=yaw)
+        if k.damaged:
+            k.burn_hole((262, -6, top + 4), (150, 120), yaw=25, soot="blot_m")
         k.pot((170, 96, top + 4), 0.8)
         k.pot((214, 110, top + 4), 0.6)
         k.pole_banner((x1 - 44, -hw + 44, top + 4), height=210.0, cloth_w=64.0, cloth_h=192.0)
         # reed porch over the door on two forked posts
         px = x0 - 118
-        k.poly("Bld_Thatch", [(x0 + 2, 124, 214), (x0 + 2, -96, 214), (px, -96, 176), (px, 124, 176)],
-               [(220, 0), (0, 0), (0, 126), (220, 126)])
-        k.poly("Bld_Thatch", [(x0 + 2, -96, 208), (x0 + 2, 124, 208), (px, 124, 170), (px, -96, 170)],
-               [(0, 0), (220, 0), (220, 126), (0, 126)], shade=0.55)
+        k.cloth("Bld_Thatch", [(x0 + 2, 124, 214), (x0 + 2, -96, 214), (px, -96, 176), (px, 124, 176)],       # damaged: burnt to tatters
+                [(220, 0), (0, 0), (0, 126), (220, 126)], w=NO_TOP)
+        if not k.damaged:
+            k.poly("Bld_Thatch", [(x0 + 2, -96, 208), (x0 + 2, 124, 208), (px, 124, 170), (px, -96, 170)],
+                   [(0, 0), (220, 0), (220, 126), (0, 126)], shade=0.55)
         for y in (-88, 116):
             k.cyl("Bld_Beam", (px + 10, y, 0), (px + 10, y, 176), 5.0, 4.0, sides=5)
         k.obox("Bld_Beam", (px + 10, 14, 172), (7, 226, 7), grain="y")
@@ -90,6 +97,10 @@ def stook(k, pos):
 
 def haystack(k, pos, r=92.0, h=176.0):
     with k.at(pos):
+        if k.damaged:                                        # burnt down to a blackened half
+            k.lathe("Bld_Thatch", (0, 0, 0), [(r * 0.92, 0), (r, h * 0.2), (r * 0.94, h * 0.42)], sides=9, rot=11, top=False)
+            k.lathe("Bld_Char", (0, 0, 0), [(r * 0.94, h * 0.42), (r * 0.6, h * 0.58), (r * 0.2, h * 0.52)], sides=9, rot=11)
+            return
         k.lathe("Bld_Thatch", (0, 0, 0), [(r * 0.92, 0), (r, h * 0.2), (r * 0.94, h * 0.5), (r * 0.62, h * 0.82), (r * 0.16, h)], sides=9, rot=11)
         k.cyl("Bld_Beam", (0, 0, h - 20), (4, 2, h + 44), 3.5, 2.5, sides=5)
         k.ladder((r + 34, 6, 0), (r * 0.72, 4, h * 0.72), width=30, rungs=5)
@@ -100,8 +111,12 @@ def granary(k, pos):
     with k.at(pos):
         k.lathe("Bld_Mudbrick", (0, 0, 0), [(104, 0), (110, 40), (106, 150), (92, 196)], sides=10, rot=18)
         k.lathe("Bld_Plaster", (0, 0, 196), [(92, 0), (70, 34), (58, 44)], sides=10, rot=18, top="Bld_Dark")
-        k.lathe("Bld_Thatch", (0, 0, 228), [(84, 0), (56, 40), (10, 84)], sides=10, rot=18)
-        k.cyl("Bld_Thatch", (0, 0, 306), (0, 0, 326), 9.0, 5.0, sides=6)
+        if not k.damaged:                                    # damaged: the reed cap has burnt off the open throat
+            k.lathe("Bld_Thatch", (0, 0, 228), [(84, 0), (56, 40), (10, 84)], sides=10, rot=18)
+            k.cyl("Bld_Thatch", (0, 0, 306), (0, 0, 326), 9.0, 5.0, sides=6)
+        else:
+            k.lathe("Bld_Char", (0, 0, 236), [(66, 0), (62, 10)], sides=10, rot=18, top=False)
+            k.charred((-50, -30, 244), (56, 20, 250), size=8)
         # the filling hatch and a ledge under it, facing the camera
         k.obox("Bld_Planks", (-108, 0, 116), (10, 44, 52), grain="z")
         k.obox("Bld_Beam", (-110, 0, 86), (18, 58, 8), grain="y")
@@ -174,7 +189,8 @@ def field(k):
         while y < stand_y1 - 20:
             L = min(k.U(110, 190), stand_y1 - y)
             # the scarecrow stands in a small gap
-            if not (abs(x + 150) < 20 and 130 < y + L / 2 < 190):
+            burnt = k.damaged and math.hypot(x - BURN[0], y + L / 2 - BURN[1]) < BURN[2]
+            if not (abs(x + 150) < 20 and 130 < y + L / 2 < 190) and not burnt:
                 k.card("Bld_Wheat", (x + k.U(-2, 2), y, z - 2), (x + k.U(-2, 2), y + L, z - 2), 128, 128, u0=k.U(0, 256), lean=k.U(-10, 6))
             y += L
         x += 32.0
@@ -184,7 +200,17 @@ def field(k):
     scarecrow(k, (-150, 160, z))
 
 
-def build(k):
+def build(k, state="complete"):
+    if state == "site":
+        return site(k)
+    if state == "ruin":
+        return ruin(k)
+    complete(k)
+    if k.damaged:
+        damage(k)
+
+
+def complete(k):
     cottage(k)
     field(k)
     granary(k, (336, 44, 0))
@@ -200,8 +226,69 @@ def build(k):
     k.cyl("Bld_Bark", (-330, -200, 0), (-330, -200, 34), 22.0, sides=7, grain="ring", cap_slot="Bld_Beam")
     # fence round the plot and the yard, open toward the road at the yard's front
     x0, y0, x1, y1 = FOOTPRINT[0] + 14, FOOTPRINT[1] + 14, FOOTPRINT[2] - 14, FOOTPRINT[3] - 14
-    fence(k, [(x1 - 150, y0), (x0, y0), (x0, y1), (FX1 + 20, y1)], gaps=((1, 150, 300),))
+    fence(k, [(x1 - 150, y0), (x0, y0), (x0, y1), (FX1 + 20, y1)],
+          gaps=((1, 150, 300),) + (((0, 180, 420), (1, 560, 760), (2, 330, 520)) if k.damaged else ()))
     fence(k, [(FX0 - 6, FY0 - 16), (FX1 - 40, FY0 - 16)], post_h=72)
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 300))
     k.sockets["label"] = (60.0, 0.0, 470.0)
     k.sockets["popup"] = (-80.0, 170.0, 190.0)
+
+
+def damage(k):
+    """Added to the finished build on the damaged mesh: soot, the burnt field, what fell."""
+    z = 8.0
+    k.scorch("blot_l", (BURN[0], BURN[1], z), "up", out=1.5)
+    k.scorch("blot_w", (BURN[0] - 60, BURN[1] + 120, z), "up", out=1.6)
+    k.scorch("blot_m", (BURN[0] + 90, BURN[1] - 70, z), "up", out=1.7)
+    for (x, y, a) in ((0, 60, 30), (80, 170, 100), (-40, 190, 160)):       # charred stooks and stakes in the burnt patch
+        k.charred((x, y, z + 4), (x + math.cos(math.radians(a)) * 90, y + math.sin(math.radians(a)) * 90, z + 22), size=8)
+    k.scorch("blot_s", (104, -398, 228))                     # the cottage, over its breach
+    k.scorch("plume_s", (104, -214, 66), flip=True)
+    k.rubble((56, -400, 0), (120, 130), 26, slot="Bld_Mudbrick", blocks=7, beams=1, block=(30, 18, 12))
+    k.scorch("blot_m", (-110, -230, 0), "up", out=2.0)       # round the burnt haystack
+    k.charred((250, 60, 200), (410, 30, 226), size=9)
+    k.rubble((-250, 420, 0), (90, 60), 0, slot="Bld_Mudbrick", blocks=0, beams=2, mound=False)
+
+
+def site(k):
+    fp = FOOTPRINT
+    k.footings(fp[0], fp[1], fp[2], fp[3], width=20, height=9, slot="Bld_Mudbrick", top="Bld_Mudbrick")
+    k.scaffold(90, -458, 406, -134, height=250, lift=125, bay=160, depth=40, ladder=(2, 0))          # round the cottage
+    k.stone_stack((-90, -330, 0), yaw=20, slot="Bld_Mudbrick", block=(40, 22, 14), courses=(4, 4, 3, 3), rows=3)
+    k.timber_pile((-270, -250, 0), yaw=-24, length=210, base=3)
+    # the field pegged out with stakes and line, a first furrow turned
+    c = [(FX0, FY0), (FX1, FY0), (FX1, FY1), (FX0, FY1)]
+    for i in range(4):
+        (ax, ay), (bx, by) = c[i], c[(i + 1) % 4]
+        k.cyl("Bld_Beam", (ax, ay, -4), (ax, ay, 58), 4.0, 3.0, sides=5)
+        k.rope((ax, ay, 46), (bx, by, 46), 1.4)
+    for i in range(5):
+        x = FX0 + 40 + i * 44
+        k.box("Bld_Soil", (x, FY0 + 30, 0), (x + 26, FY1 - 30, 9), u0=i * 40.0)
+    k.sack((180, -30, 0), 1.0, yaw=40)
+    k.sack((204, 4, 0), 0.9, yaw=-20)
+
+
+def ruin(k):
+    with k.at((0, -296, 0)):                                 # the cottage
+        k.ruin_rect("Bld_Mudbrick", 108, -144, 388, 144, hmax=108, hmin=16, thick=24, seg=46, gaps=0.2, corners=(0.5, 1, 0.3, 0.8), step=12)
+        k.rubble((250, 0, 0), (230, 240), 40, slot="Bld_Mudbrick", blocks=8, beams=3, block=(30, 18, 12))
+    r = rect(FX0, FY0, FX1, FY1)                             # the field: scorched earth
+    k.wall("Bld_Soil", r, -2, 8, inset=6, u0=0.0, bleach=False)
+    k.cap("Bld_Soil", inset_ring(r, 6), 8)
+    for (x, y, kind) in ((-240, 60, "blot_l"), (40, 130, "blot_l"), (-120, 320, "blot_w"), (150, 330, "blot_m"), (-320, 280, "blot_m")):
+        k.scorch(kind, (x, y, 8), "up", out=1.5)
+    for i in range(7):
+        x, y, a = k.U(FX0 + 60, FX1 - 60), k.U(FY0 + 50, FY1 - 50), k.U(0, math.pi)
+        k.charred((x, y, 11), (x + math.cos(a) * 70, y + math.sin(a) * 70, 11 + k.U(0, 24)), size=7)
+    with k.at((336, 44, 0)):                                 # the granary's stump
+        k.lathe("Bld_Mudbrick", (0, 0, 0), [(104, 0), (110, 34), (106, 52)], sides=10, rot=18, top="Bld_Soil")
+        k.rubble((-10, 6, 52), (150, 150), 26, slot="Bld_Mudbrick", blocks=5, beams=1, block=(30, 18, 12))
+    k.blob("Bld_Char", (-96, -214, 0), (190, 180, 70), points=14, squash=0.3)        # the haystack
+    k.scorch("blot_l", (-96, -214, 0), "up", out=2.0)
+    for (x, y, h) in ((338, 352, 54), (-396, -440, 40)):     # the olives
+        k.cyl("Bld_Char", (x, y, -4), (x + 6, y - 4, h), 17.0, 12.0, sides=6, grain="ring")
+    x0, y0, y1 = FOOTPRINT[0] + 14, FOOTPRINT[1] + 14, FOOTPRINT[3] - 14
+    fence(k, [(250, y0), (x0, y0), (x0, y1), (FX1 + 20, y1)], gaps=((0, 60, 400), (1, 100, 560), (1, 700, 880), (2, 200, 640)), post_h=62)
+    k.wheel((-240, -300, 5), radius=38.0, thick=8.0, axis="x")
+    k.rubble((-250, -300, 0), (130, 90), 0, slot="Bld_Char", blocks=4, beams=2, mound=False, block=(60, 12, 6))

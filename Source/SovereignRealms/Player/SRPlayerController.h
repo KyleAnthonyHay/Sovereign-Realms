@@ -30,16 +30,21 @@ struct FInputActionValue;
  *   WASD / arrows / screen edge / MMB drag           pan              wheel: zoom
  *   Space / Home                                     centre on selection
  *   Ctrl|Cmd|Alt + 1..6 / 1..6 / Shift + 1..6        make / select (double-tap: centre) / add to platoon N
- *   F / G                                            cycle the selected platoon's formation / stance
+ *   F / G                                            formation (re-forms on the spot) / stance of the selection
  *   H                                                hold ground (stand fast, fight only what is in reach)
- *   Z / X / C                                        build a Farm / Gold Mine / Watchtower (LMB place, Shift keeps
- *                                                    placing, RMB or Esc cancels)
- *   Delete                                           pull down the selected building while it is still being built
- *   Esc                                              cancel placement / attack-move, clear the selection, then pause
+ *   P then LMB                                       patrol between here and there (attack-moving), until re-ordered
+ *   B                                                the build menu (tabs Economy / Military / Defence); while it is
+ *                                                    open 1..n pick a building, Tab changes tab. LMB places, Shift
+ *                                                    keeps placing, RMB or Esc cancels
+ *   Delete                                           pull down the selected building while it is still being built;
+ *                                                    with a platoon selected, disband the platoon (troops stay)
+ *   Esc                                              cancel placement / attack-move / the build menu, clear the
+ *                                                    selection, then pause
  *   F1                                               the controls overlay
- *   LMB on a building                                select it (info panel; the castle shows its recruit commands)
- *   Q / E, or the panel buttons, castle selected     recruit a Shieldbearer / an Archer
- *   RMB, castle selected                             set the rally point
+ *   LMB on a building                                select it (info panel; barracks and range show recruit commands)
+ *   Q / E                                            recruit a Shieldbearer (at a barracks) / an Archer (at a range):
+ *                                                    the selected one, or the one with the shortest queue
+ *   RMB, barracks or range selected                  set where its recruits muster (its rally point)
  *   Minimap: LMB (drag) moves the camera, RMB orders the selection there
  *
  * The interface (ASRHUD) sees every mouse press first (OnSelectPressed / OnCommandPressed ask ASRHUD::OnMousePress),
@@ -68,9 +73,12 @@ public:
 	void SelectBuilding(ASRBuilding* Building);
 	ASRBuilding* GetSelectedBuilding() const { return SelectedBuilding.Get(); }
 	ASRBuilding* GetHoveredBuilding() const { return HoveredBuilding.Get(); }
-	/** Queue a recruit at the selected castle (or the player's castle if none is selected). */
-	bool RecruitAtCastle(ESRUnitType Type);
-	void SetCastleRally(const FVector& GroundPoint);
+	/** Queue a recruit at the selected barracks / range if it trains that type, else at the player's least busy one. */
+	bool RecruitTroop(ESRUnitType Type);
+	/** The selected (or else the first) barracks / range the player owns gets this rally point. */
+	void SetRallyFor(const FVector& GroundPoint);
+	/** The player's finished building that would train Type (least busy first), or null. */
+	ASRBuilding* FindTrainer(ESRUnitType Type) const;
 	/** HUD feedback: which recruit button was last used, and when (real seconds). */
 	int32 GetLastRecruitButton() const { return LastRecruitButton; }
 	double GetLastRecruitTime() const { return LastRecruitTime; }
@@ -87,6 +95,24 @@ public:
 	/** The command buttons of the selection panel (same as the A / F / G / Delete keys). */
 	void ArmAttackMoveCommand() { ArmAttackMove(); }
 	void CycleFormationCommand() { OnCycleFormation(); }
+	void ArmPatrolCommand() { ArmPatrol(); }
+	bool IsPatrolArmed() const { return bPatrolArmed; }
+	void IssuePatrol(const FVector& GroundPoint);
+	/** Disband the selected platoon (its troops stay selected). */
+	void DisbandPlatoonCommand();
+	/** The formation a selection that is not a platoon takes (F cycles it). */
+	ESRFormationShape GetLooseFormation() const { return LooseFormation; }
+	/** The formation the current selection would move in. */
+	ESRFormationShape GetSelectionFormation() const;
+
+	// ---- build menu ----
+	void ToggleBuildMenu();
+	void SetBuildMenuOpen(bool bOpen);
+	bool IsBuildMenuOpen() const { return bBuildMenuOpen; }
+	ESRBuildCategory GetBuildMenuTab() const { return BuildMenuTab; }
+	void SetBuildMenuTab(ESRBuildCategory Tab) { BuildMenuTab = Tab; }
+	/** The player-buildable types in a tab, in menu order. */
+	static void GetBuildMenuEntries(ESRBuildCategory Tab, TArray<ESRBuildingType>& Out);
 	void CycleStanceCommand() { OnCycleStance(); }
 	void CancelConstructionCommand() { OnDeleteBuilding(); }
 
@@ -160,9 +186,12 @@ private:
 	void OnGroup4() { OnGroupKey(3); }
 	void OnGroup5() { OnGroupKey(4); }
 	void OnGroup6() { OnGroupKey(5); }
-	void OnBuildFarm() { BeginPlacement(ESRBuildingType::Farm); }
-	void OnBuildMine() { BeginPlacement(ESRBuildingType::Mine); }
-	void OnBuildTower() { BeginPlacement(ESRBuildingType::Tower); }
+	void OnBuildMenu() { ToggleBuildMenu(); }
+	void OnNextBuildTab();
+	void OnPatrol() { ArmPatrol(); }
+	void ArmPatrol();
+	/** Re-form a group in place in a new shape (facing the way it already faces). */
+	void ReformInPlace(const TArray<ASRUnit*>& Units, ESRFormationShape Shape);
 	void OnHold() { IssueHold(); }
 	void OnCycleFormation();
 	void OnCycleStance();
@@ -189,7 +218,9 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MenuContext;
 	bool bMenuInput = false;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> GroupActions[6];
-	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildActions[3];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildMenuAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildTabAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> PatrolAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> HoldAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> FormationAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> StanceAction;
@@ -222,6 +253,10 @@ private:
 	ESRUnitType LastClickType = ESRUnitType::Shieldbearer;
 
 	bool bAttackMoveArmed = false;
+	bool bPatrolArmed = false;
+	bool bBuildMenuOpen = false;
+	ESRBuildCategory BuildMenuTab = ESRBuildCategory::Economy;
+	ESRFormationShape LooseFormation = ESRFormationShape::Line;
 
 	bool bCursorOverride = false;
 	FVector2D CursorOverride = FVector2D(0.5f, 0.5f);

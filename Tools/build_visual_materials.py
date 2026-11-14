@@ -816,6 +816,11 @@ BUILDING_SLOTS = {
     "Banner": ("card", "T_Bld_Banner", (16, 64), None, {"TeamMask": 1.0, "UpNormal": 0.35, "SwayAmount": 5.0, "SwaySpeed": 2.2}, {}),
     "Awning": ("card", "T_Bld_Awning", (32, 32), None, {"TeamMask": 1.0, "UpNormal": 0.0, "SwayAmount": 1.5, "SwaySpeed": 1.8}, {}),
     "Flame": ("card", "T_Bld_Flame", (16, 16), None, {"Glow": 9.0, "UpNormal": 1.0, "SwayAmount": 2.5, "SwaySpeed": 9.0}, {}),
+    # barracks, archery range, and the damaged / ruined states (Tools/blender/bldkit.py)
+    "RoofTile": ("opaque", "T_Bld_RoofTile", (64, 64), "T_Bld_RoofTile_N", {"Damp": 0.0, "Bleach": 0.0}, {}),
+    "Target": ("opaque", "T_Bld_Target", (32, 32), None, {"Damp": 0.0, "Bleach": 0.0, "Roughness": 0.9}, {}),
+    "Char": ("opaque", "T_Bld_Char", (64, 64), None, {"Damp": 0.0, "Bleach": 0.0, "Moss": 0.0, "Roughness": 1.0, "Specular": 0.1}, {}),
+    "Scorch": ("card", "T_Bld_Scorch", (256, 128), None, {"UpNormal": 0.0, "SwayAmount": 0.0, "SwaySpeed": 0.0}, {}),
 }
 
 

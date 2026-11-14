@@ -93,6 +93,16 @@ public:
 	void CommandAttack(const TArray<ASRUnit*>& Group, ASRUnit* Target);
 	void CommandAttackBuilding(const TArray<ASRUnit*>& Group, ASRBuilding* Target);
 
+	/**
+	 * Patrol: the group walks (attack-moving, in formation) between where it stands now and To, back and forth, until
+	 * one of its members is given another order (ClearPatrol). Fights on the way are fought, then the patrol resumes.
+	 */
+	void CommandPatrol(const TArray<ASRUnit*>& Group, const FVector2D& To, ESRFormationShape Shape);
+	/** Takes these units off any patrol (a patrol left with nobody ends). */
+	void ClearPatrol(const TArray<ASRUnit*>& Group);
+	/** The patrol route a unit is on, if any (the HUD draws it). */
+	bool GetPatrolRoute(const ASRUnit* Unit, FVector2D& OutA, FVector2D& OutB) const;
+
 	/** A building fell; if it was a castle the match is decided. */
 	void NotifyBuildingDestroyed(ASRBuilding* Building);
 	float GetBattleClock() const { return BattleClock; }
@@ -184,7 +194,18 @@ private:
 	void IgnoreBuildings(struct FCollisionQueryParams& Params) const;
 
 	void StepFrame(float Dt);
+	void StepPatrols(float Dt);
 	void RebuildBuckets();
+
+	struct FPatrol
+	{
+		TArray<TWeakObjectPtr<ASRUnit>> Members;
+		FVector2D A = FVector2D::ZeroVector, B = FVector2D::ZeroVector;
+		bool bTowardB = true;
+		ESRFormationShape Shape = ESRFormationShape::Line;
+		float Settle = 0.f;
+	};
+	TArray<FPatrol> Patrols;
 	static constexpr float BucketSize = 400.f;
 	TMap<FIntPoint, TArray<ASRUnit*>> Buckets;
 

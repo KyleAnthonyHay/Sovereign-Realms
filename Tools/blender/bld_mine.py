@@ -3,10 +3,13 @@
 Read at a glance as dark opening + timber frame + gold: an adit under a heavy timber set, cut into a rock outcrop
 (turf on its top, ore showing in the face), a track of sleepers and rails with a loaded cart, crates and baskets of
 washed gold under a striped awning, a windlass over a side shaft, a spoil heap, a tool rack, lanterns, a banner.
+
+States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
+damage(); `site` and `ruin` are small meshes of their own on the same footprint.
 """
 import math
 
-from bldkit import clip_ring, convex_ring, rect
+from bldkit import STATES, clip_ring, convex_ring, rect  # noqa: F401
 
 NAME = "mine"
 MESH = "SM_Bld_Mine"
@@ -58,9 +61,14 @@ def outcrop(k):
         k.blob("Bld_Ore", (MOUTH_X + 2, y, z), (30, s, s * 0.8), points=9, flat=False, squash=0.2)
 
 
-def timber_set(k, x, hw, h, post=26.0, shade=False):
-    """One mining set: two raking posts and a cap beam."""
+def timber_set(k, x, hw, h, post=26.0, shade=False, broken=False):
+    """One mining set: two raking posts and a cap beam. broken: one post snapped and burnt, the cap down."""
     slot = "Bld_Beam"
+    if broken:
+        k.obox(slot, (x, -(hw + post * 0.3), h / 2), (post, post, h + 6), roll=-3.0, grain="z")
+        k.obox("Bld_Char", (x, hw + post * 0.3, h * 0.2), (post, post, h * 0.4), roll=3.0, grain="z")
+        k.charred((x - 4, -hw - 10, h + post * 0.2), (x - 16, hw + 30, 24), size=post)
+        return
     for s in (-1, 1):
         k.obox(slot, (x, s * (hw + post * 0.3), h / 2), (post, post, h + 6), roll=s * 3.0, grain="z")
     k.obox(slot, (x, 0, h + post * 0.42), (post + 4, hw * 2 + post * 2.4, post), grain="y")
@@ -71,10 +79,11 @@ def timber_set(k, x, hw, h, post=26.0, shade=False):
 
 def portal(k):
     x = MOUTH_X - 20
-    timber_set(k, x, AW, AH)
+    timber_set(k, x, AW, AH, broken=k.damaged)
     # lagging: boards between the cap and the rock, and cribbing either side
-    k.obox("Bld_Planks", (x + 10, 0, AH + 44), (8, AW * 2 + 40, 36), grain="y")
-    k.obox("Bld_Planks", (x + 12, 0, AH + 80), (8, AW * 2 + 6, 30), grain="y")
+    if not k.damaged:
+        k.obox("Bld_Planks", (x + 10, 0, AH + 44), (8, AW * 2 + 40, 36), grain="y")
+        k.obox("Bld_Planks", (x + 12, 0, AH + 80), (8, AW * 2 + 6, 30), grain="y")
     for s in (-1, 1):
         for i, z in enumerate((30, 78, 126)):
             k.obox("Bld_Planks", (x + 12, s * (AW + 58 + i * 4), z), (8, 70 - i * 10, 36), grain="y", roll=s * (2 + i))
@@ -140,8 +149,8 @@ def stores(k):
         # awning: four poles, cloth sloping toward the camera
         for (x, y, h) in ((-110, -104, 170), (-110, 88, 170), (96, -104, 214), (96, 88, 214)):
             k.cyl("Bld_Beam", (x, y, 0), (x, y, h), 4.5, 3.5, sides=5)
-        k.poly("Bld_Awning", [(104, 100, 218), (104, -116, 218), (-122, -116, 168), (-122, 100, 168)],
-               [(216, 0), (0, 0), (0, 232), (216, 232)], w=[0.0, 0.0, 0.3, 0.3])
+        k.cloth("Bld_Awning", [(104, 100, 218), (104, -116, 218), (-122, -116, 168), (-122, 100, 168)],
+                [(216, 0), (0, 0), (0, 232), (216, 232)], w=[0.0, 0.0, 0.3, 0.3])
         k.obox("Bld_Beam", (96, -8, 214), (5, 216, 5), grain="y")
         k.obox("Bld_Beam", (-110, -8, 170), (5, 216, 5), grain="y")
     # tool rack against the left shoulder: picks and a shovel
@@ -164,10 +173,14 @@ def windlass(k):
         k.lathe("Bld_Rock", (0, 0, 0), [(46, 30), (46, 2)], sides=9, top=False)
         k.poly("Bld_Rock", [(math.cos(2 * math.pi * i / 9) * 60, math.sin(2 * math.pi * i / 9) * 60, 30) for i in range(9)])
         k.poly("Bld_Dark", [(math.cos(2 * math.pi * i / 9) * 46, math.sin(2 * math.pi * i / 9) * 46, 30.6) for i in range(9)])
-        for s in (-1, 1):
+        for s in (-1, 1) if not k.damaged else (-1,):
             for d in (-1, 1):
                 k.cyl("Bld_Beam", (d * 44, s * 84, 0), (0, s * 80, 146), 5.5, 4.5, sides=5)
             k.obox("Bld_Beam", (0, s * 82, 60), (56, 5, 6))
+        if k.damaged:                                        # the drum has come down across the collar
+            k.charred((-20, -70, 150), (30, 96, 34), size=17)
+            k.charred((40, 60, 6), (-50, 110, 10), size=10)
+            return
         k.cyl("Bld_Beam", (0, -96, 140), (0, 96, 140), 9.0, sides=7)
         k.cyl("Bld_Thatch", (0, -30, 140), (0, 30, 140), 12.5, sides=7, grain="ring")        # rope wound on the drum
         for s in (-1, 1):
@@ -192,7 +205,17 @@ def spoil(k):
     k.obox("Bld_Planks", (-226, 262, 26), (150, 26, 5), yaw=30, pitch=-16)
 
 
-def build(k):
+def build(k, state="complete"):
+    if state == "site":
+        return site(k)
+    if state == "ruin":
+        return ruin(k)
+    complete(k)
+    if k.damaged:
+        damage(k)
+
+
+def complete(k):
     outcrop(k)
     portal(k)
     track(k)
@@ -208,3 +231,61 @@ def build(k):
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 420))
     k.sockets["label"] = (120.0, 0.0, 620.0)
     k.sockets["popup"] = (-214.0, 0.0, 200.0)
+
+
+def damage(k):
+    """Added to the finished build on the damaged mesh: a rock fall in the adit, soot, burnt stores."""
+    for (x, y, z, sx, sy, sz) in ((-36, 34, 30, 120, 110, 110), (-60, -40, 16, 100, 90, 70), (-20, -10, 110, 90, 100, 80), (-96, 60, 8, 60, 70, 44),
+                                  (-110, -84, 6, 54, 50, 40)):
+        k.blob("Bld_Rock", (x, y, z), (sx, sy, sz), points=11)
+    k.scorch("smear", (39, 10, 256), out=10)                 # over the mouth, on the ledge's face
+    k.scorch("plume_m", (MOUTH_X, -160, 4), out=5)
+    k.scorch("lick", (MOUTH_X, 150, 0), out=5, flip=True)
+    k.scorch("blot_l", (-262, -258, 0), "up", out=2.0)       # the stores burnt out under their awning
+    k.scorch("blot_m", (-150, 228, 31), "up", out=1.5)
+    k.charred((-330, -330, 4), (-250, -210, 150), size=9)
+    k.charred((-150, -360, 6), (-40, -300, 12), size=10)
+    k.rubble((-300, 90, 0), (110, 120), 0, slot="Bld_Rock", blocks=5, beams=1, mound=False, block=(34, 28, 22))
+
+
+def site(k):
+    fp = FOOTPRINT
+    k.footings(fp[0], fp[1], fp[2], fp[3], width=26, height=10, slot="Bld_Cliff", top="Bld_Rock")
+    k.scaffold(-84, -426, 426, 426, height=270, lift=135, bay=215, depth=44, edges=(1, 2, 3), ladder=(2, 2))       # across the face
+    k.timber_pile((-250, -250, 0), yaw=74, length=220, base=4)          # pit props for the adit
+    k.stone_stack((-290, 250, 0), yaw=10, slot="Bld_Rock", block=(50, 40, 30), courses=(2, 2), rows=2)
+    k.hoist((-128, 0, 0), height=330, reach=120, yaw=0, load_z=200)
+    x = -360.0
+    while x < -140:                                          # the first sleepers of the track
+        k.obox("Bld_Beam", (x, k.U(-3, 3), 4), (12, 92, 8), yaw=k.U(-4, 4), grain="y")
+        x += 46
+
+
+def ruin(k):
+    base = convex_ring([(MOUTH_X, -220), (MOUTH_X, 220), (56, 344), (206, 412), (350, 362), (418, 196), (418, -176), (342, -352), (192, -412), (48, -338)])
+    top = k.wall("Bld_Cliff", base, -6, 84, inset=10, v0=0.0, bleach=False)
+    k.cap("Bld_Dirt", top, 84)                              # the turf went with the slide: bare scree
+    upper = convex_ring([(120, -230), (110, 200), (220, 300), (350, 220), (380, -120), (280, -290)])
+    top = k.wall("Bld_Cliff", upper, 84, 128, inset=8, v0=0.0, bleach=False, u0=70.0)
+    k.cap("Bld_Dirt", top, 128)
+    for i in range(9):
+        x, y, s = k.U(110, 370), k.U(-250, 250), k.U(40, 80)
+        k.blob("Bld_Rock", (x, y, 84 if abs(y) > 200 or x < 130 else 128), (s, s * k.U(0.7, 1.0), s * 0.6), points=8)
+    # the adit has fallen in: boulders where the mouth was, its timbers burnt
+    for (x, y, z, sx, sy, sz) in ((-30, 10, 30, 200, 190, 130), (-90, -70, 14, 110, 100, 70), (-80, 90, 10, 100, 110, 64), (30, -150, 70, 120, 110, 80),
+                                  (60, 140, 76, 110, 120, 70), (-150, 10, 6, 70, 80, 44), (16, -360, 16, 150, 110, 110), (-10, 352, 12, 130, 120, 100)):
+        k.blob("Bld_Rock", (x, y, z), (sx, sy, sz), points=12)
+    k.obox("Bld_Char", (-60, -110, 40), (24, 24, 84), roll=-10, grain="z")
+    k.charred((-70, -100, 96), (-110, 80, 30), size=22)
+    k.charred((-120, 120, 4), (-40, 150, 70), size=16)
+    x = -362.0
+    while x < -150:                                          # what is left of the track
+        if k.rng.random() < 0.7:
+            k.obox("Bld_Beam", (x, k.U(-6, 6), 4), (12, 92 + k.U(-6, 6), 8), yaw=k.U(-12, 12), grain="y")
+        x += 46
+    k.blob("Bld_Dirt", (-292, 316, 0), (250, 220, 100), points=22, squash=0.25)      # the spoil heap stays
+    k.scorch("blot_l", (-262, -258, 0), "up", out=2.0)
+    k.rubble((-262, -258, 0), (150, 130), 0, slot="Bld_Char", blocks=5, beams=2, mound=False, block=(56, 14, 8))
+    k.scorch("blot_m", (-180, 140, 0), "up", out=2.0)
+    for (x, y, s) in ((-230, -80, 30), (-300, 60, 24), (-190, 250, 34), (-120, -230, 26)):
+        k.blob("Bld_Rock", (x, y, 4), (s * 2.2, s * 1.8, s * 1.3), points=8)

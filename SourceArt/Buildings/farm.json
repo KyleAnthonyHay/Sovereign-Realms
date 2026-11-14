@@ -67,5 +67,94 @@
   "Bld_Thatch",
   "Bld_Trim",
   "Bld_Wheat"
- ]
+ ],
+ "states": {
+  "site": {
+   "mesh": "SM_Bld_Farm_Site",
+   "triangles": 1696,
+   "bounds": {
+    "min": [
+     -440.0,
+     -503.4,
+     -4.0
+    ],
+    "max": [
+     450.6,
+     480.0,
+     336.8
+    ]
+   },
+   "slots": [
+    "Bld_Beam",
+    "Bld_Dirt",
+    "Bld_Mudbrick",
+    "Bld_Planks",
+    "Bld_Soil",
+    "Bld_Thatch"
+   ]
+  },
+  "damaged": {
+   "mesh": "SM_Bld_Farm_Damaged",
+   "triangles": 3718,
+   "bounds": {
+    "min": [
+     -510.0,
+     -533.1,
+     -10.3
+    ],
+    "max": [
+     486.6,
+     475.0,
+     464.0
+    ]
+   },
+   "slots": [
+    "Bld_Awning",
+    "Bld_Banner",
+    "Bld_Bark",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Dark",
+    "Bld_LeafCore",
+    "Bld_Leaves",
+    "Bld_Mudbrick",
+    "Bld_Planks",
+    "Bld_Plaster",
+    "Bld_Pot",
+    "Bld_RoofClay",
+    "Bld_Scorch",
+    "Bld_Shutter",
+    "Bld_Soil",
+    "Bld_Thatch",
+    "Bld_Trim",
+    "Bld_Wheat"
+   ]
+  },
+  "ruin": {
+   "mesh": "SM_Bld_Farm_Ruin",
+   "triangles": 1050,
+   "bounds": {
+    "min": [
+     -431.2,
+     -471.3,
+     -31.1
+    ],
+    "max": [
+     440.6,
+     474.1,
+     108.0
+    ]
+   },
+   "slots": [
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Mudbrick",
+    "Bld_Planks",
+    "Bld_Scorch",
+    "Bld_Soil"
+   ]
+  }
+ }
 }

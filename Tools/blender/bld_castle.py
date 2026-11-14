@@ -5,8 +5,11 @@ square towers (the back pair taller, so the silhouette climbs away from the came
 with a bronze-strapped double gate under a timber lintel, and a plastered upper hall on the roof terrace with an
 awning, shutters and beam ends. Team colour: glazed-brick friezes on the towers and gatehouse, hanging banners,
 the hall awning, flags on the back towers and the hall.
+
+States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
+damage(); `site` and `ruin` are small meshes of their own on the same footprint.
 """
-from bldkit import inset_ring, rect
+from bldkit import STATES, inset_ring, rect  # noqa: F401
 
 NAME = "castle"
 MESH = "SM_Bld_Castle"
@@ -24,7 +27,7 @@ def front(hw, ya, yb, **kw):
     return dict(a=hw - yb, b=hw - ya, **kw)
 
 
-def tower(k, cx, cy, half, h, u0, slits=(2, 3), frieze=True):
+def tower(k, cx, cy, half, h, u0, slits=(2, 3), frieze=True, breach=None):
     r0 = rect(cx - half, cy - half, cx + half, cy + half)
     r1 = k.wall("Bld_AshlarLarge", r0, 0, 124, inset=14, u0=u0, bleach=False)
     k.band("Bld_Trim", r1, 124, 136, out=4, u0=u0)
@@ -35,6 +38,8 @@ def tower(k, cx, cy, half, h, u0, slits=(2, 3), frieze=True):
     # a lost block or two on the sunlit side
     ops.setdefault(3, []).append(dict(a=side * 0.2, b=side * 0.2 + 32, z0=200, z1=216, depth=9, back="Bld_Dark", shade=0.55))
     top = h - 76
+    if breach:
+        ops.setdefault(2, []).extend(k.breach(*breach))
     r2 = k.wall("Bld_Ashlar", r1, 136, top, inset=5, u0=u0, openings=ops)
     k.band("Bld_Trim", r2, top, top + 12, out=9, u0=u0)
     r3 = inset_ring(r2, -10)                               # the head oversails on the corbel course
@@ -57,6 +62,7 @@ def curtain(k):
     ops = {2: [front(hw, y - 6, y + 6, z0=196, z1=260, depth=14, back="Bld_Dark", shade=0.5) for y in (-305, 305)]
            + [front(hw, 262, 290, z0=292, z1=308, depth=9, back="Bld_Dark", shade=0.55)],
            3: [dict(a=x, b=x + 12, z0=196, z1=260, depth=14, back="Bld_Dark", shade=0.5) for x in (250, 520)]}
+    ops[2] += k.breach(hw + 256, hw + 372, 150, 306)       # damaged: the left curtain is breached
     r2 = k.wall("Bld_Ashlar", r1, 136, 380, inset=4, u0=u0, openings=ops)
     k.band("Bld_Trim", r2, 380, 392, out=8, u0=u0)
     r3 = inset_ring(r2, -6)
@@ -97,7 +103,8 @@ def gatehouse(k):
     for s in (-1, 1):
         y = s * 190
         k.cyl("Bld_Bronze", (x0 - 8, y - 40, 368), (x0 - 8, y + 40, 368), 2.6, sides=4)
-        k.hang_cloth((x0 - 8, y - 32, 366), (x0 - 8, y + 32, 366), 192.0)
+        if not (k.damaged and s > 0):                      # damaged: one has burnt off its rod, the other is torn
+            k.hang_cloth((x0 - 8, y - 32, 366), (x0 - 8, y + 32, 366), 192.0)
     # braziers on the roof corners
     for s in (-1, 1):
         k.brazier((x0 + 46, s * (hw - 52), 476), h=64)
@@ -113,12 +120,13 @@ def hall(k):
     u0 = 60.0
     top = zp + 292
     win = dict(z0=zp + 120, z1=zp + 196, depth=14, back="Bld_Shutter", reveal="Bld_Trim", shade=0.75, back_shade=0.8)
+    wins = (-212, -124, 124, 212) if not k.damaged else (-212, -124)       # damaged: a breach takes the right pair
     ops = {2: [front(hw, -50, 50, z0=zp, z1=zp + 196, depth=22, back="Bld_Planks", reveal="Bld_Trim", shade=0.7, back_shade=0.7, no_sill=True)]
-           + [front(hw, y - 26, y + 26, **win) for y in (-212, -124, 124, 212)],
+           + [front(hw, y - 26, y + 26, **win) for y in wins] + k.breach(hw - 248, hw - 96, zp + 84, zp + 236),
            3: [dict(a=s - 26, b=s + 26, **win) for s in (90, 240)]}
     k.wall("Bld_Plaster", r0, zp, top, u0=u0, openings=ops)
     # sills and the door lintel
-    for y in (-212, -124, 124, 212):
+    for y in wins:
         k.obox("Bld_Trim", (x0 - 4, y, zp + 116), (14, 64, 8))
     k.obox("Bld_Beam", (x0 - 5, 0, zp + 206), (18, 132, 20), grain="y")
     # roof beams poking through under the cornice, front and sunlit side
@@ -140,8 +148,8 @@ def hall(k):
     top_k = kz + 146
     # striped awning over the door on two poles
     za, zb, ax = zp + 250, zp + 206, x0 - 124
-    k.poly("Bld_Awning", [(x0 - 2, 112, za), (x0 - 2, -112, za), (ax, -112, zb), (ax, 112, zb)],
-           [(224, 0), (0, 0), (0, 132), (224, 132)], w=[0.0, 0.0, 0.5, 0.5])
+    k.cloth("Bld_Awning", [(x0 - 2, 112, za), (x0 - 2, -112, za), (ax, -112, zb), (ax, 112, zb)],
+            [(224, 0), (0, 0), (0, 132), (224, 132)], w=[0.0, 0.0, 0.5, 0.5])
     for s in (-1, 1):
         k.cyl("Bld_Beam", (ax + 8, s * 104, H), (ax + 8, s * 104, zb + 4), 4.0, sides=5)
     k.obox("Bld_Beam", (ax + 8, 0, zb + 2), (6, 232, 6), grain="y")
@@ -163,8 +171,9 @@ def dressing(k):
     # at the foot of the walls
     k.pot((-470, 314, 0), 1.1)
     k.pot((-500, 264, 0), 0.85)
-    k.crate((-470, -300, 0), (60, 60, 48), yaw=12)
-    k.sack((-492, -250, 0), 1.0, yaw=70)
+    if not k.damaged:                                      # buried under the fallen curtain
+        k.crate((-470, -300, 0), (60, 60, 48), yaw=12)
+        k.sack((-492, -250, 0), 1.0, yaw=70)
     for s in (-1, 1):
         k.brazier((-590, s * 292, 0), h=92)
     # creeper climbing the right-hand tower and the curtain beside it
@@ -173,12 +182,22 @@ def dressing(k):
     k.patch("Bld_Leaves", (-380, -640, 0), (1, 0, 0), (0, 0, 1), 200, 180, cells=12, fill=0.55, out=17)
 
 
-def build(k):
+def build(k, state="complete"):
+    if state == "site":
+        return site(k)
+    if state == "ruin":
+        return ruin(k)
+    complete(k)
+    if k.damaged:
+        damage(k)
+
+
+def complete(k):
     curtain(k)
     gatehouse(k)
     top = hall(k)
     for sy in (-1, 1):
-        tower(k, -D + 34, sy * (W - 28), 130, 596, u0=40.0 + sy * 130)
+        tower(k, -D + 34, sy * (W - 28), 130, 596, u0=40.0 + sy * 130, breach=(22, 96, 400, 508) if sy < 0 else None)
         r = tower(k, D - 40, sy * (W - 36), 138, 716, u0=300.0 + sy * 90)
         k.pole_banner((D - 40, sy * (W - 36), 716 - 36), height=260.0)
         # banner on the front towers' faces
@@ -190,3 +209,65 @@ def build(k):
     k.sockets["gate"] = (-600.0, 0.0, 0.0)          # where a recruit appears: just outside the doors
     k.sockets["rally"] = (-780.0, 800.0, 0.0)       # default rally point: the court, clear of the right-hand tower
     k.sockets["label"] = (0.0, 0.0, top + 270.0)
+
+
+def damage(k):
+    """Added to the finished build on the damaged mesh: soot, burnt roofs, what fell."""
+    gx = -548.0
+    k.scorch("plume_m", (gx, -66, 300))                      # licking up the gatehouse over the frieze
+    k.scorch("lick", (gx, 150, 20), flip=True)
+    k.scorch("smear", (-384, -314, 308), out=6)              # over the curtain breach
+    k.scorch("plume_m2", (-384, 306, 140), out=7)
+    k.scorch("smear", (-487, -470, 530))                     # the left tower's frieze, over its breach
+    k.scorch("plume_m", (-482, 520, 142), out=6, flip=True)
+    k.scorch("streak", (-482, -590, 240), out=6)
+    zp = H + 36
+    k.scorch("smear", (-30, 172, zp + 222))                  # the hall, over its breach
+    k.scorch("lick", (-30, -250, zp + 20))
+    k.burn_hole((-226, 322, H), (170, 130), yaw=15)          # the roof terrace
+    k.burn_hole((-250, -210, H), (120, 100), yaw=-30, soot="blot_m")
+    k.burn_hole((70, -196, zp + 312), (190, 140), yaw=8)     # the hall roof
+    k.burn_hole((gx + 84, 40, 476), (110, 150), yaw=0, soot="blot_m")
+    k.rubble((-476, -312, 0), (170, 150), 46, blocks=9, beams=1)
+    k.rubble((-528, 520, 0), (80, 190), 28, blocks=6, beams=0)
+    k.rubble((-580, -160, 0), (60, 120), 0, blocks=4, beams=1, mound=False)
+    k.rubble((-110, 150, zp), (150, 170), 26, slot="Bld_Plaster", blocks=6, beams=1)
+    k.charred((gx - 14, -40, 4), (gx - 2, 60, 150), size=14)             # a beam fallen across the gate
+
+
+def site(k):
+    fp = FOOTPRINT
+    k.footings(fp[0], fp[1], fp[2], fp[3], width=40, height=16)
+    g = 6.0
+    k.scaffold(fp[0] - g, fp[1] - g, fp[2] + g, fp[3] + g, height=470, lift=160, bay=245, depth=46, ladder=(2, 1))
+    k.stone_stack((-474, 312, 0), yaw=90)                    # in the angle between the gatehouse and the towers
+    k.stone_stack((-470, -250, 0), yaw=84, courses=(2, 2))
+    k.timber_pile((-476, -330, 0), yaw=90, length=130, base=3)
+    k.hoist((-612, 712, 0), height=600, reach=220, yaw=-49, load_z=330)
+    k.hoist((612, -712, 0), height=560, reach=200, yaw=131, load_z=380)
+
+
+def ruin(k):
+    k.poly("Bld_Dirt", [(-380, -520, 2.5), (380, -520, 2.5), (380, 520, 2.5), (-380, 520, 2.5)])
+    k.ruin_rect("Bld_AshlarLarge", -384, -524, 384, 524, hmax=196, hmin=36, thick=34, seg=66, gaps=0.16)
+    for sy in (-1, 1):                                       # the towers' stumps, the back pair higher
+        cx, cy = -D + 34, sy * (W - 28)
+        k.ruin_rect("Bld_AshlarLarge", cx - 114, cy - 114, cx + 114, cy + 114, hmax=220, hmin=48, thick=32, seg=58, gaps=0.1,
+                    corners=(1, 0.6, 0.4, 0.9) if sy < 0 else (0.5, 1, 0.8, 0.3))
+        cx, cy = D - 40, sy * (W - 36)
+        k.ruin_rect("Bld_AshlarLarge", cx - 122, cy - 122, cx + 122, cy + 122, hmax=280, hmin=64, thick=32, seg=62, gaps=0.08,
+                    corners=(0.6, 1, 0.9, 0.4) if sy < 0 else (1, 0.5, 0.6, 1))
+        k.rubble((cx - 20, cy, 0), (190, 190), 70, blocks=5, beams=1)
+        # the gatehouse: its two piers either side of the way in
+        k.stub("Bld_AshlarLarge", (-532, sy * 232), (-532, sy * 128), thick=34, hmax=250, hmin=80, seg=52, ends=(0.5, 1.0), gaps=0)
+        k.stub("Bld_AshlarLarge", (-515, sy * 216), (-400, sy * 216), thick=32, hmax=200, hmin=48, seg=58, ends=(1.0, 0.3))
+    k.rubble((-80, 0, 0), (560, 800), 104, blocks=18, beams=4)
+    k.rubble((150, -30, 40), (380, 520), 96, slot="Bld_Plaster", blocks=10, beams=3)       # where the hall came down
+    k.ruin_rect("Bld_Plaster", 10, -250, 270, 250, hmax=110, hmin=24, thick=26, seg=58, gaps=0.5, z=84, corners=(0.4, 1, 0.7, 0.2))
+    k.rubble((-470, 0, 0), (150, 300), 50, blocks=8, beams=2)                              # the gate passage, choked
+    k.rubble((-490, 310, 0), (120, 130), 0, blocks=6, beams=1, mound=False)
+    k.rubble((-480, -310, 0), (130, 130), 24, blocks=5, beams=0)
+    for (x, y) in ((-220, 60), (-150, 330), (100, -380)):
+        k.scorch("blot_l", (x, y, 3), "up", out=2.0)
+    k.charred((-300, -200, 30), (-120, -330, 190), size=16)
+    k.charred((60, 240, 60), (250, 120, 200), size=15)

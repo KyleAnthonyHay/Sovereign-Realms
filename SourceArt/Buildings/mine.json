@@ -65,5 +65,93 @@
   "Bld_Rock",
   "Bld_Thatch",
   "Bld_Turf"
- ]
+ ],
+ "states": {
+  "site": {
+   "mesh": "SM_Bld_Mine_Site",
+   "triangles": 1386,
+   "bounds": {
+    "min": [
+     -400.0,
+     -474.6,
+     -4.0
+    ],
+    "max": [
+     431.9,
+     474.8,
+     383.0
+    ]
+   },
+   "slots": [
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Cliff",
+    "Bld_Dirt",
+    "Bld_Planks",
+    "Bld_Rock",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "damaged": {
+   "mesh": "SM_Bld_Mine_Damaged",
+   "triangles": 2698,
+   "bounds": {
+    "min": [
+     -411.2,
+     -420.1,
+     -18.0
+    ],
+    "max": [
+     418.0,
+     420.7,
+     686.0
+    ]
+   },
+   "slots": [
+    "Bld_Awning",
+    "Bld_Banner",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Cliff",
+    "Bld_Dark",
+    "Bld_Dirt",
+    "Bld_Flame",
+    "Bld_Gold",
+    "Bld_LeafCore",
+    "Bld_Leaves",
+    "Bld_Ore",
+    "Bld_Planks",
+    "Bld_Rock",
+    "Bld_Scorch",
+    "Bld_Thatch",
+    "Bld_Turf"
+   ]
+  },
+  "ruin": {
+   "mesh": "SM_Bld_Mine_Ruin",
+   "triangles": 572,
+   "bounds": {
+    "min": [
+     -414.3,
+     -412.0,
+     -15.0
+    ],
+    "max": [
+     418.0,
+     412.0,
+     143.9
+    ]
+   },
+   "slots": [
+    "Bld_Beam",
+    "Bld_Char",
+    "Bld_Cliff",
+    "Bld_Dirt",
+    "Bld_Rock",
+    "Bld_Scorch"
+   ]
+  }
+ }
 }

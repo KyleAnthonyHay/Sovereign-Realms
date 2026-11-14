@@ -395,7 +395,7 @@ the level like the terrain. How to rebuild them: `SourceArt/Buildings/README.md`
 | Step | Command | Produces |
 | --- | --- | --- |
 | B1. Textures | `Tools/.venv/bin/python Tools/textures/gen_building_textures.py` | `SourceArt/Textures/T_Bld_*.png` (+ `_N`). Alpha is a mask: 0.6 = team-coloured or glinting texel; 0 = hole on card textures. |
-| B2. Models | `Blender -b -P Tools/blender/build_building.py -- castle` (also `farm`, `mine`, `rallyflag`) | `SourceArt/Buildings/SM_Bld_<Name>.gltf`, `<name>.json` (footprint, sockets), `blender/<name>.blend`, previews in `Saved/BuildingPreview/`. Kit: `Tools/blender/bldkit.py`; one module per building, `bld_<name>.py`. |
+| B2. Models | `Blender -b -P Tools/blender/build_building.py -- castle` (also `farm`, `mine`, `tower`, `barracks`, `range`, `rallyflag`; `--state site,damaged` for some states only) | `SourceArt/Buildings/SM_Bld_<Name>.gltf` and its states `_Site`, `_Damaged`, `_Ruin`, `<name>.json` (footprint, sockets; `states`), `blender/<name>.blend`, previews in `Saved/BuildingPreview/`. Kit: `Tools/blender/bldkit.py`; one module per building, `bld_<name>.py`. |
 | B3. Import | `Tools/ue_py.py -c "PARTS=['textures']; TEX_PREFIX='T_Bld_'; exec(open(r'<repo>/Tools/import_world_assets.py').read())"`, then `ONLY=['building']` with `build_visual_materials.py`, then `Tools/ue_py.py Tools/import_buildings.py` | `/Game/SR/Textures/T_Bld_*`, `/Game/SR/Materials/M_Building`, `M_BuildingCard`, `MI_Bld_<slot>`, `/Game/SR/Buildings/SM_Bld_*`. |
 | B4. Placement | `BUILDINGS` in `Tools/world/gen_battlefield.py` (step 2), then step 5, or only `PARTS=['buildings']` | `ASRBuilding` actors in the outliner folder `Buildings`. Step 2 also clears terraces and dressing under the footprints and paints packed earth, the castle court and footpaths into `T_Splat`. |
 
@@ -425,6 +425,23 @@ wraps the C++ cycle; `Tools/pie.py start|run|shot|log|stop` drives PIE and the `
 | `SM_Bld_Farm` | 880 x 960 cm | 4.6 m | 3,937 | Barley field (card rows 32 cm apart), stubble with stooks, cottage, granary, haystack, cart, olives. |
 | `SM_Bld_Mine` | 820 x 840 cm | 5.4 m, 6.9 m with standard | 2,757 | Stepped bluff in the terraces' own cliff / turf, timber adit, track and ore cart, awning with crated gold, windlass, spoil. |
 | `SM_Bld_RallyFlag` | none | 2.1 m | 96 | The castle's rally marker. |
+| `SM_Bld_Barracks` | 920 x 880 cm | 4.4 m ridge, 5.7 m armoury tower | 3,452 | Trains Shieldbearers. Stone-and-timber hall under terracotta tiles, armoury tower with frieze, walled drill yard: spear racks, practice posts, striped shields, awning. Sockets: `gate` (-520, 0), `rally` (-820, 0), `label`, `popup`. |
+| `SM_Bld_Range` | 800 x 800 cm | 3.9 m ridge, 4.1 m with standard | 3,408 | Archery Range: trains Archers. Thatched bowyer's lodge with frieze, shooting line under a striped awning, three painted straw butts, bow rack, fletching bench, fenced yard. Sockets: `gate` (-460, -190), `rally` (-760, -190), `label`, `popup`. |
+
+### Building states
+
+Each building (castle, farm, mine, tower, barracks, range) is four meshes sharing origin, orientation and footprint;
+`<name>.json` lists the three extra ones under `states`. How they are built: `SourceArt/Buildings/README.md`, "States".
+
+| Mesh | When | Content |
+| --- | --- | --- |
+| `SM_Bld_<Name>_Site` | under construction, drawn round the finished mesh while it rises from the ground | Footings and packed earth on the footprint, an open pole scaffold with plank walkways and ladders up to wall height, stacked stone, timber, a lifting pole. Within the footprint + 60 cm. |
+| `SM_Bld_<Name>_Damaged` | health below 50 % | The finished building with breaches, lost merlons, burnt roofs showing charred rafters, soot, fallen stone, torn banners and awnings. Same silhouette and team colour. |
+| `SM_Bld_<Name>_Ruin` | destroyed | Wall stumps, rubble heaps, charred timbers, soot on the ground; at most a quarter of the finished height. |
+
+Slots added for these and the two new buildings: `Bld_RoofTile` (opaque, terracotta pan tiles, has a normal map),
+`Bld_Target` (opaque, the painted face of a straw butt, 128 cm, not tiled), `Bld_Char` (opaque, charred timber and
+burnt thatch), `Bld_Scorch` (card, soot marks from an atlas: no sway, no team mask, `RootShade` 0).
 
 Placed by `BUILDINGS`: player castle (-2000, -1300), mine (-2570, -2550), farm (-2500, 620); enemy castle (2250, -1100).
 

@@ -81,9 +81,9 @@ void ASRPlayerController::BuildInput()
 	{
 		GroupActions[i] = MakeAction(*FString::Printf(TEXT("IA_Platoon%d"), i + 1), EInputActionValueType::Boolean);
 	}
-	BuildActions[0] = MakeAction(TEXT("IA_BuildFarm"), EInputActionValueType::Boolean);
-	BuildActions[1] = MakeAction(TEXT("IA_BuildMine"), EInputActionValueType::Boolean);
-	BuildActions[2] = MakeAction(TEXT("IA_BuildTower"), EInputActionValueType::Boolean);
+	BuildMenuAction = MakeAction(TEXT("IA_BuildMenu"), EInputActionValueType::Boolean);
+	BuildTabAction = MakeAction(TEXT("IA_BuildTab"), EInputActionValueType::Boolean);
+	PatrolAction = MakeAction(TEXT("IA_Patrol"), EInputActionValueType::Boolean);
 	HoldAction = MakeAction(TEXT("IA_Hold"), EInputActionValueType::Boolean);
 	FormationAction = MakeAction(TEXT("IA_Formation"), EInputActionValueType::Boolean);
 	StanceAction = MakeAction(TEXT("IA_Stance"), EInputActionValueType::Boolean);
@@ -124,9 +124,9 @@ void ASRPlayerController::BuildInput()
 	MenuContext->MapKey(HelpAction, EKeys::F1);
 	const FKey Digits[6] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
 	for (int32 i = 0; i < 6; ++i) { MappingContext->MapKey(GroupActions[i], Digits[i]); }
-	MappingContext->MapKey(BuildActions[0], EKeys::Z);
-	MappingContext->MapKey(BuildActions[1], EKeys::X);
-	MappingContext->MapKey(BuildActions[2], EKeys::C);
+	MappingContext->MapKey(BuildMenuAction, EKeys::B);
+	MappingContext->MapKey(BuildTabAction, EKeys::Tab);
+	MappingContext->MapKey(PatrolAction, EKeys::P);
 	MappingContext->MapKey(HoldAction, EKeys::H);
 	MappingContext->MapKey(FormationAction, EKeys::F);
 	MappingContext->MapKey(StanceAction, EKeys::G);
@@ -168,9 +168,9 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(GroupActions[3], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup4);
 	Input->BindAction(GroupActions[4], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup5);
 	Input->BindAction(GroupActions[5], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup6);
-	Input->BindAction(BuildActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnBuildFarm);
-	Input->BindAction(BuildActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnBuildMine);
-	Input->BindAction(BuildActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnBuildTower);
+	Input->BindAction(BuildMenuAction, ETriggerEvent::Started, this, &ASRPlayerController::OnBuildMenu);
+	Input->BindAction(BuildTabAction, ETriggerEvent::Started, this, &ASRPlayerController::OnNextBuildTab);
+	Input->BindAction(PatrolAction, ETriggerEvent::Started, this, &ASRPlayerController::OnPatrol);
 	Input->BindAction(HoldAction, ETriggerEvent::Started, this, &ASRPlayerController::OnHold);
 	Input->BindAction(FormationAction, ETriggerEvent::Started, this, &ASRPlayerController::OnCycleFormation);
 	Input->BindAction(StanceAction, ETriggerEvent::Started, this, &ASRPlayerController::OnCycleStance);
@@ -206,7 +206,7 @@ void ASRPlayerController::PlayerTick(float DeltaTime)
 		Camera->SetPanInput(ComputePanInput());
 	}
 
-	CurrentMouseCursor = bAttackMoveArmed ? EMouseCursor::Crosshairs : (bPlacing ? EMouseCursor::Hand : EMouseCursor::Default);
+	CurrentMouseCursor = (bAttackMoveArmed || bPatrolArmed) ? EMouseCursor::Crosshairs : (bPlacing ? EMouseCursor::Hand : EMouseCursor::Default);
 }
 
 FVector2D ASRPlayerController::ComputePanInput()
@@ -333,6 +333,16 @@ void ASRPlayerController::ArmAttackMove()
 	TArray<ASRUnit*> Commandable;
 	GatherCommandable(Commandable);
 	bAttackMoveArmed = Commandable.Num() > 0;
+	bPatrolArmed = false;
+}
+
+void ASRPlayerController::ArmPatrol()
+{
+	TArray<ASRUnit*> Commandable;
+	GatherCommandable(Commandable);
+	bPatrolArmed = Commandable.Num() > 0;
+	bAttackMoveArmed = false;
+	if (bPatrolArmed) { CancelPlacement(); SetBuildMenuOpen(false); }
 }
 
 void ASRPlayerController::OnRecenter()
@@ -356,6 +366,9 @@ void ASRPlayerController::ResetForNewMatch()
 	SelectBuilding(nullptr);
 	CancelPlacement();
 	bAttackMoveArmed = false;
+	bPatrolArmed = false;
+	bBuildMenuOpen = false;
+	LooseFormation = ESRFormationShape::Line;
 	bSelectDown = bBoxSelecting = false;
 }
 
@@ -387,6 +400,15 @@ void ASRPlayerController::OnSelectPressed()
 	if (bPlacing)
 	{
 		TryPlace();
+		return;
+	}
+
+	if (bPatrolArmed)
+	{
+		// P, then click: patrol between where they are and there.
+		FVector Origin, Dir;
+		if (GetCursorRay(Origin, Dir)) { IssuePatrol(Battle->RayToGround(Origin, Dir)); }
+		bPatrolArmed = false;
 		return;
 	}
 
@@ -493,19 +515,19 @@ void ASRPlayerController::OnCommandPressed()
 		CancelPlacement(); // right-click drops the building you were about to place
 		return;
 	}
-	if (bAttackMoveArmed)
+	if (bAttackMoveArmed || bPatrolArmed)
 	{
-		bAttackMoveArmed = false; // right-click cancels a pending attack-move
+		bAttackMoveArmed = bPatrolArmed = false; // right-click cancels a pending attack-move or patrol
 		return;
 	}
 
 	FVector Origin, Dir;
 	if (!GetCursorRay(Origin, Dir)) { return; }
 
-	// With the player's castle selected, right-click plants its rally point.
-	if (ASRBuilding* Castle = SelectedBuilding.Get(); Castle && Castle->IsCastle() && Castle->Team == ESRTeam::Player)
+	// With one of the player's barracks or ranges selected, right-click plants its rally point.
+	if (ASRBuilding* Trainer = SelectedBuilding.Get(); Trainer && Trainer->IsRecruiter() && Trainer->IsAlive() && Trainer->Team == ESRTeam::Player)
 	{
-		SetCastleRally(Battle->RayToGround(Origin, Dir));
+		SetRallyFor(Battle->RayToGround(Origin, Dir));
 		return;
 	}
 
@@ -546,39 +568,57 @@ ASRBuilding* ASRPlayerController::PickBuildingUnderCursor() const
 	return (Economy && GetCursorRay(Origin, Dir)) ? Economy->PickBuilding(Origin, Dir) : nullptr;
 }
 
-bool ASRPlayerController::RecruitAtCastle(ESRUnitType Type)
+ASRBuilding* ASRPlayerController::FindTrainer(ESRUnitType Type) const
 {
-	ASRBuilding* Castle = SelectedBuilding.Get();
-	if (!Castle || !Castle->IsCastle() || Castle->Team != ESRTeam::Player)
+	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
+	if (!Economy) { return nullptr; }
+	ASRBuilding* Best = nullptr;
+	for (ASRBuilding* B : Economy->GetBuildings())
 	{
-		const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
-		Castle = Economy ? Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Player) : nullptr;
+		if (B && B->Team == ESRTeam::Player && B->CanRecruit() && B->Trains(Type) && (!Best || B->GetQueue().Num() < Best->GetQueue().Num())) { Best = B; }
 	}
+	return Best;
+}
+
+bool ASRPlayerController::RecruitTroop(ESRUnitType Type)
+{
+	ASRBuilding* Trainer = SelectedBuilding.Get();
+	if (!Trainer || !Trainer->CanRecruit() || !Trainer->Trains(Type) || Trainer->Team != ESRTeam::Player) { Trainer = FindTrainer(Type); }
 	LastRecruitButton = Type == ESRUnitType::Archer ? 1 : 0;
 	LastRecruitTime = GetWorld()->GetRealTimeSeconds();
-	bLastRecruitAccepted = Castle && Castle->QueueRecruit(Type);
+	bLastRecruitAccepted = Trainer && Trainer->QueueRecruit(Type);
+	if (!Trainer)
+	{
+		if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this))
+		{
+			const FText Msg = Type == ESRUnitType::Archer
+				? NSLOCTEXT("SRPC", "NoRange", "Build an Archery Range to train Archers.")
+				: NSLOCTEXT("SRPC", "NoBarracks", "Build a Barracks to train Shieldbearers.");
+			Economy->PushAlert(ESRAlertKind::Info, Msg);
+		}
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
+	}
 	return bLastRecruitAccepted;
 }
 
 void ASRPlayerController::RecruitHotkey(ESRUnitType Type)
 {
-	// The hotkeys and buttons belong to the castle's panel: they do nothing unless it is selected.
-	const ASRBuilding* Castle = SelectedBuilding.Get();
-	if (Castle && Castle->IsCastle() && Castle->Team == ESRTeam::Player) { RecruitAtCastle(Type); }
+	RecruitTroop(Type);
 }
 
-void ASRPlayerController::SetCastleRally(const FVector& GroundPoint)
+void ASRPlayerController::SetRallyFor(const FVector& GroundPoint)
 {
-	ASRBuilding* Castle = SelectedBuilding.Get();
-	if (!Castle || !Castle->IsCastle() || Castle->Team != ESRTeam::Player)
+	ASRBuilding* Trainer = SelectedBuilding.Get();
+	if (!Trainer || !Trainer->IsRecruiter() || Trainer->Team != ESRTeam::Player)
 	{
-		const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
-		Castle = Economy ? Economy->FindBuilding(ESRBuildingType::Castle, ESRTeam::Player) : nullptr;
+		Trainer = FindTrainer(ESRUnitType::Shieldbearer);
+		if (!Trainer) { Trainer = FindTrainer(ESRUnitType::Archer); }
 	}
-	if (!Castle) { return; }
-	Castle->SetRallyPoint(FVector2D(GroundPoint.X, GroundPoint.Y));
-	const FVector2D Rally = Castle->GetRallyPoint();
+	if (!Trainer) { return; }
+	Trainer->SetRallyPoint(FVector2D(GroundPoint.X, GroundPoint.Y));
+	const FVector2D Rally = Trainer->GetRallyPoint();
 	ASROrderMarker::SpawnMarker(GetWorld(), FVector(Rally.X, Rally.Y, GroundPoint.Z), USRFeelSettings::Get().MoveMarkerColor);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); }
 }
 
 // ------------------------------------------------------------------- orders
@@ -589,14 +629,11 @@ void ASRPlayerController::IssueMove(const FVector& GroundPoint, bool bAttackMove
 	GatherCommandable(Units);
 	if (Units.Num() == 0) { return; }
 
-	// A platoon moves in its own formation; any other selection forms a battle line.
-	ESRFormationShape Shape = ESRFormationShape::Line;
-	if (const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
-	{
-		if (const FSRPlatoon* P = Platoons->Find(Platoons->PlatoonOf(Units))) { Shape = P->Formation; }
-	}
+	// A platoon moves in its own formation; any other selection in the loose formation (F).
+	const ESRFormationShape Shape = GetSelectionFormation();
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const FVector2D Dest(GroundPoint.X, GroundPoint.Y);
+	Battle->ClearPatrol(Units);
 	Battle->CommandMove(Units, Dest, bAttackMove, Shape, true);
 	ASROrderMarker::SpawnMarker(GetWorld(), GroundPoint, bAttackMove ? F.AttackMarkerColor : F.MoveMarkerColor);
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(bAttackMove ? ESRSound::AttackOrder : ESRSound::Acknowledge); }
@@ -607,6 +644,7 @@ void ASRPlayerController::IssueAttack(ASRUnit* Target)
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
 	if (Units.Num() == 0 || !Target) { return; }
+	Battle->ClearPatrol(Units);
 	Battle->CommandAttack(Units, Target);
 	Target->FlashTargeted();
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackOrder); }
@@ -617,6 +655,7 @@ void ASRPlayerController::IssueAttackBuilding(ASRBuilding* Target)
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
 	if (Units.Num() == 0 || !Target) { return; }
+	Battle->ClearPatrol(Units);
 	Battle->CommandAttackBuilding(Units, Target);
 	const FVector2D At = Target->GetFootprintCentre();
 	ASROrderMarker::SpawnMarker(GetWorld(), FVector(At, Target->GetActorLocation().Z), USRFeelSettings::Get().AttackMarkerColor);
@@ -627,6 +666,7 @@ void ASRPlayerController::IssueHold()
 {
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
+	Battle->ClearPatrol(Units);
 	for (ASRUnit* Unit : Units) { Unit->OrderHold(); Unit->Acknowledge(FMath::FRandRange(0.f, USRFeelSettings::Get().AckMaxDelay)); }
 	bAttackMoveArmed = false;
 	if (Units.Num() > 0) { if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); } }
@@ -636,8 +676,51 @@ void ASRPlayerController::IssueStop()
 {
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
+	Battle->ClearPatrol(Units);
 	for (ASRUnit* Unit : Units) { Unit->OrderStop(); }
-	bAttackMoveArmed = false;
+	bAttackMoveArmed = bPatrolArmed = false;
+}
+
+void ASRPlayerController::IssuePatrol(const FVector& GroundPoint)
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	if (Units.Num() == 0) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	Battle->CommandPatrol(Units, FVector2D(GroundPoint.X, GroundPoint.Y), GetSelectionFormation());
+	ASROrderMarker::SpawnMarker(GetWorld(), GroundPoint, F.AttackMarkerColor);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackOrder); }
+}
+
+ESRFormationShape ASRPlayerController::GetSelectionFormation() const
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	if (const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
+	{
+		if (const FSRPlatoon* P = Platoons->Find(Platoons->PlatoonOf(Units))) { return P->Formation; }
+	}
+	return LooseFormation;
+}
+
+void ASRPlayerController::ReformInPlace(const TArray<ASRUnit*>& Units, ESRFormationShape Shape)
+{
+	// Everyone not busy fighting closes up round the group's centre in the new shape, facing the way they face.
+	TArray<ASRUnit*> Free;
+	FVector2D Centre = FVector2D::ZeroVector, Facing = FVector2D::ZeroVector;
+	for (ASRUnit* U : Units)
+	{
+		if (!U || !U->IsActive() || U->IsEngaged()) { continue; }
+		Free.Add(U);
+		Centre += U->GetPos2D();
+		Facing += U->GetFacingDir();
+	}
+	if (Free.Num() < 2) { return; }
+	Centre /= Free.Num();
+	Facing = Facing.GetSafeNormal();
+	if (Facing.IsNearlyZero()) { Facing = FVector2D(1.f, 0.f); }
+	Battle->ClearPatrol(Free);
+	Battle->CommandMove(Free, Centre, false, Shape, true, &Facing);
 }
 
 // ---------------------------------------------------------------- selection
@@ -849,6 +932,14 @@ void ASRPlayerController::PlatoonKey(int32 Index)
 {
 	USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
 	if (!Platoons || Index >= Platoons->Num()) { return; }
+	if (bBuildMenuOpen && !IsGroupModifierDown() && !IsShiftDown())
+	{
+		// while the build menu is open the number keys pick from it
+		TArray<ESRBuildingType> Entries;
+		GetBuildMenuEntries(BuildMenuTab, Entries);
+		if (Entries.IsValidIndex(Index)) { BeginPlacement(Entries[Index]); }
+		return;
+	}
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
 	if (IsGroupModifierDown())
@@ -886,11 +977,71 @@ void ASRPlayerController::SelectPlatoon(int32 Index, bool bCentre)
 
 void ASRPlayerController::OnCycleFormation()
 {
-	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	if (Units.Num() == 0) { return; }
+	USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	const int32 P = GetSelectedPlatoon();
+	ESRFormationShape Shape;
+	if (Platoons && P != INDEX_NONE)
 	{
-		const int32 P = GetSelectedPlatoon();
-		if (P != INDEX_NONE) { Platoons->CycleFormation(P); if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); } }
+		Platoons->CycleFormation(P);    // re-forms it on the spot
 	}
+	else
+	{
+		LooseFormation = ESRFormationShape((uint8(LooseFormation) + 1) % 4);
+		Shape = LooseFormation;
+		// The new shape shows at once: the group re-forms where it stands.
+		ReformInPlace(Units, Shape);
+	}
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+}
+
+void ASRPlayerController::DisbandPlatoonCommand()
+{
+	USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	const int32 P = GetSelectedPlatoon();
+	if (!Platoons || P == INDEX_NONE) { return; }
+	const FString Name = Platoons->Find(P)->Name;
+	Platoons->Disband(P);
+	if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this))
+	{
+		Economy->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "Disbanded", "{0} disbanded."), FText::FromString(Name)));
+	}
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+}
+
+// ----------------------------------------------------------------- build menu
+
+void ASRPlayerController::GetBuildMenuEntries(ESRBuildCategory Tab, TArray<ESRBuildingType>& Out)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	for (ESRBuildingType T : USRFeelSettings::AllBuildingTypes())
+	{
+		const FSRBuildingStats& S = F.BuildingStatsFor(T);
+		if (S.bPlayerBuildable && S.Category == Tab) { Out.Add(T); }
+	}
+}
+
+void ASRPlayerController::SetBuildMenuOpen(bool bOpen)
+{
+	if (bOpen == bBuildMenuOpen) { return; }
+	bBuildMenuOpen = bOpen;
+	if (bOpen) { bAttackMoveArmed = bPatrolArmed = false; }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+}
+
+void ASRPlayerController::ToggleBuildMenu()
+{
+	if (bPlacing) { CancelPlacement(); SetBuildMenuOpen(true); return; }
+	SetBuildMenuOpen(!bBuildMenuOpen);
+}
+
+void ASRPlayerController::OnNextBuildTab()
+{
+	if (!bBuildMenuOpen) { SetBuildMenuOpen(true); return; }
+	BuildMenuTab = ESRBuildCategory((uint8(BuildMenuTab) + 1) % 3);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
 }
 
 void ASRPlayerController::OnCycleStance()
@@ -927,7 +1078,8 @@ void ASRPlayerController::BeginPlacement(ESRBuildingType Type)
 	}
 	bPlacing = true;
 	PlacingType = Type;
-	bAttackMoveArmed = false;
+	bAttackMoveArmed = bPatrolArmed = false;
+	bBuildMenuOpen = false;
 	if (!Preview)
 	{
 		FActorSpawnParameters Params;
@@ -983,7 +1135,8 @@ void ASRPlayerController::OnCancel()
 	// An open overlay or menu screen closes first.
 	if (ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && HUD->OnEscape()) { return; }
 	if (bPlacing) { CancelPlacement(); return; }
-	if (bAttackMoveArmed) { bAttackMoveArmed = false; return; }
+	if (bBuildMenuOpen) { SetBuildMenuOpen(false); return; }
+	if (bAttackMoveArmed || bPatrolArmed) { bAttackMoveArmed = bPatrolArmed = false; return; }
 	if (Selection.Num() > 0 || SelectedBuilding.IsValid()) { ClearSelection(); SelectBuilding(nullptr); return; }
 	OnEscapeUnhandled();
 }
@@ -994,5 +1147,7 @@ void ASRPlayerController::OnDeleteBuilding()
 	{
 		SelectBuilding(nullptr);
 		B->CancelConstruction();
+		return;
 	}
+	DisbandPlatoonCommand();
 }
