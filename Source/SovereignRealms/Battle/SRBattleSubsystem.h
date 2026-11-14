@@ -49,6 +49,8 @@ struct FSRMatchStats
  * Units do not tick themselves; this subsystem steps them so every unit sees
  * a consistent world each frame.
  */
+enum class ESRFX : uint8;
+
 UCLASS()
 class SOVEREIGNREALMS_API USRBattleSubsystem : public UTickableWorldSubsystem
 {
@@ -137,6 +139,8 @@ public:
 	/** Camera axes, sun direction and shadow-card transform shared by every sprite this frame. */
 	const FSRSpriteView& GetSpriteView() const { return SpriteView; }
 	UMaterialInterface* GetSpriteMaterial(ESRUnitType Type) const;
+	/** One-shot or looping battlefield effect (fire, smoke, dust, debris, impact); see ASRFXSprite. */
+	class ASRFXSprite* SpawnFX(ESRFX Kind, const FVector& Location, float Scale = 1.f, float Lifetime = 0.f);
 	UMaterialInterface* GetSpriteShadowMaterial(ESRUnitType Type) const;
 
 	/**
@@ -175,8 +179,11 @@ public:
 	// of their own: the frame, team colour, flash and fade travel as custom primitive data.
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> UnitCardMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> ArrowCardMesh;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[2];
-	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[2];
+	/** Index = ESRUnitType. A type whose sheet is not imported yet borrows the Shieldbearer's. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[4];
+	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[4];
+	/** Catapult stones (an arrow card with the stone sheet). */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StoneMaterial;
 	/** Workers (cosmetic miners and farmhands): 0 miner, 1 farmhand. */
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> WorkerMaterials[2];
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> WorkerShadowMaterials[2];

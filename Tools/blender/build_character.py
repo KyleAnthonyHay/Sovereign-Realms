@@ -24,7 +24,8 @@ def main():
     name = args[0]
     mod = importlib.import_module("char_" + name)
     sc, col = K.new_scene()
-    rig = K.Rig(name, mod.bones(), col)
+    rig = K.Rig(name, mod.bones(), col, ik_prefixes=getattr(mod, "IK_PREFIXES", ("",)),
+                ik_chains=getattr(mod, "IK_CHAINS", ()))
     b = K.Builder(name)
     mod.build_mesh(b)
     ob = b.build(rig.ob, col)
@@ -41,6 +42,9 @@ def main():
     sc.frame_set(0)
     sc["sr_character"] = name
     sc["sr_body_height_cm"] = mod.BODY_HEIGHT_CM
+    # bigger units (horseman, catapult) declare their own cell / pivot; render_sprites.py takes them as defaults
+    for k, v in getattr(mod, "RENDER", {}).items():
+        sc["sr_render_" + k] = list(v) if isinstance(v, (tuple, list)) else v
     os.makedirs(os.path.join(OUT, "blender"), exist_ok=True)
     blend = os.path.join(OUT, "blender", name + ".blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend, compress=True)

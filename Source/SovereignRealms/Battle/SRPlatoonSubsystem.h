@@ -16,7 +16,9 @@ enum class ESRPlatoonKind : uint8
 	Empty,
 	ShieldWall,      // all (or nearly all) Shieldbearers
 	ArcherCompany,   // all (or nearly all) Archers
-	MixedHost        // both
+	MixedHost,       // both
+	Cavalry,         // Horse Riders
+	SiegeTrain       // Catapults
 };
 
 /** One of the player's platoons: a standing group with its own formation and stance (UI: the platoon panel). */
@@ -43,6 +45,8 @@ struct FSRPlatoonInfo
 	bool bReceivesRecruits = false;
 	int32 Shieldbearers = 0;
 	int32 Archers = 0;
+	int32 Riders = 0;
+	int32 Catapults = 0;
 	/** Mean health fraction of the living members. */
 	float Health = 1.f;
 	/** Members fighting right now. */

@@ -281,7 +281,9 @@ ASRBuilding* USRAISubsystem::PickTarget(const FSRCommander& C, const FVector2D& 
 		case ESRBuildingType::Mine: Value = FoeMines > OurMines ? 3.6f : 3.f; break;
 		case ESRBuildingType::Farm: Value = 2.4f; break;
 		case ESRBuildingType::Barracks:
-		case ESRBuildingType::Range: Value = 2.6f; break;
+		case ESRBuildingType::Range:
+		case ESRBuildingType::Stable:
+		case ESRBuildingType::Workshop: Value = 2.6f; break;
 		case ESRBuildingType::Tower: Value = 1.f; break;
 		case ESRBuildingType::Castle: Value = 4.f; break;
 		default: break;
@@ -442,7 +444,9 @@ bool USRAISubsystem::TryBuild(FSRCommander& C, ESRBuildingType Type)
 	{
 	case ESRBuildingType::Farm: Near = Base - Fwd * 900.f + Side * FMath::FRandRange(-1800.f, 1800.f); Radius = 3000.f; break; // behind the castle
 	case ESRBuildingType::Barracks:
-	case ESRBuildingType::Range: Near = Base + Fwd * 300.f + Side * (FMath::RandBool() ? 1.f : -1.f) * FMath::FRandRange(1300.f, 1900.f); Radius = 2400.f; break;
+	case ESRBuildingType::Range:
+	case ESRBuildingType::Stable:
+	case ESRBuildingType::Workshop: Near = Base + Fwd * 300.f + Side * (FMath::RandBool() ? 1.f : -1.f) * FMath::FRandRange(1300.f, 1900.f); Radius = 2400.f; break;
 	case ESRBuildingType::Mine: Near = Base; Radius = 16000.f; break; // the nearest free vein, wherever it is
 	default: break;
 	}
@@ -522,6 +526,9 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 			if (Towers < FMath::Min(1 + Mines / 2 + FMath::Min(C.FoeAttacks, 2), Prof.MaxTowers)) { Want(ESRBuildingType::Tower); }
 			if (Food > 450 && Barracks < 2) { Want(ESRBuildingType::Barracks); }  // food piling up: train faster
 			if (Food > 450 && Ranges < 2) { Want(ESRBuildingType::Range); }
+			if (Prof.AdaptWeight > 0.f && Eco->CountBuildings(ESRBuildingType::Stable, C.Team) == 0 && Farms >= 3) { Want(ESRBuildingType::Stable); }
+			if (Prof.AdaptWeight > 0.f && Eco->CountBuildings(ESRBuildingType::Workshop, C.Team) == 0
+				&& (Eco->CountBuildings(ESRBuildingType::Tower, Foe(C.Team)) >= 2 || C.WavesSent >= 2)) { Want(ESRBuildingType::Workshop); }
 			if (Farms < FMath::Min(8, Prof.MaxFarms)) { Want(ESRBuildingType::Farm); }
 			if (Gold > 600.f) { Want(ESRBuildingType::Mine); if (Towers < Prof.MaxTowers) { Want(ESRBuildingType::Tower); } }  // gold to spare
 		}
@@ -550,29 +557,40 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
-	int32 Shields = 0, Total = 0;
-	for (const ASRUnit* U : Mine) { Shields += U->GetUnitType() == ESRUnitType::Shieldbearer ? 1 : 0; ++Total; }
+	int32 Count[4] = { 0, 0, 0, 0 }, Total = 0;
+	for (const ASRUnit* U : Mine) { ++Count[FMath::Clamp(int32(U->GetUnitType()), 0, 3)]; ++Total; }
 	TArray<ASRBuilding*> Trainers;
 	for (ASRBuilding* B : Eco->GetBuildings())
 	{
 		if (!B || B->Team != C.Team || !B->IsAlive() || !B->IsRecruiter()) { continue; }
-		for (ESRUnitType T : B->GetQueue()) { Shields += T == ESRUnitType::Shieldbearer ? 1 : 0; ++Total; }
+		for (ESRUnitType T : B->GetQueue()) { ++Count[FMath::Clamp(int32(T), 0, 3)]; ++Total; }
 		if (B->CanRecruit()) { Trainers.Add(B); }
 		const FVector2D Muster = MusterPoint(C);
 		if (FVector2D::Distance(B->GetRallyPoint(), Muster) > 150.f) { B->SetRallyPoint(Muster); }
 	}
 	if (Trainers.Num() == 0) { return; }
-	// Which type the army needs most, then whichever has a trainer.
-	const bool bNeedShields = Total == 0 || float(Shields) / Total < C.ShieldRatio;
-	const ESRUnitType Order[2] = { bNeedShields ? ESRUnitType::Shieldbearer : ESRUnitType::Archer, bNeedShields ? ESRUnitType::Archer : ESRUnitType::Shieldbearer };
+
+	// What the army wants next: a catapult or two against towers (and for the castle), a few riders (more against
+	// archers), then the shield / archer mix.
+	const FSRAIProfile Prof = Profile();
+	const int32 FoeTowers = Eco->CountBuildings(ESRBuildingType::Tower, Foe(C.Team));
+	const int32 WantCatapults = Prof.AdaptWeight <= 0.f ? 0 : FMath::Min(3, FoeTowers / 2 + (C.WavesSent >= 2 ? 1 : 0));
+	const int32 WantRiders = Prof.AdaptWeight <= 0.f ? 0 : FMath::RoundToInt(Total * (0.12f + (C.FoeArcherShare > 0.5f ? 0.12f : 0.f)));
+	TArray<ESRUnitType, TInlineAllocator<4>> Order;
+	if (Count[3] < WantCatapults) { Order.Add(ESRUnitType::Catapult); }
+	if (Count[2] < WantRiders) { Order.Add(ESRUnitType::Horseman); }
+	const int32 Core = Count[0] + Count[1];
+	const bool bNeedShields = Core == 0 || float(Count[0]) / Core < C.ShieldRatio;
+	Order.Add(bNeedShields ? ESRUnitType::Shieldbearer : ESRUnitType::Archer);
+	Order.Add(bNeedShields ? ESRUnitType::Archer : ESRUnitType::Shieldbearer);
 	for (ESRUnitType Type : Order)
 	{
 		ASRBuilding* Best = nullptr;
-		for (ASRBuilding* B : Trainers) { if (B->Trains(Type) && B->GetQueue().Num() < Profile().RecruitQueue && (!Best || B->GetQueue().Num() < Best->GetQueue().Num())) { Best = B; } }
-		if (!Best) { continue; }
+		for (ASRBuilding* B : Trainers) { if (B->Trains(Type) && B->GetQueue().Num() < Prof.RecruitQueue && (!Best || B->GetQueue().Num() < Best->GetQueue().Num())) { Best = B; } }
+		if (!Best) { continue; }   // no trainer for it (yet): the next want
 		const bool bRoom = Eco->GetPopulation(C.Team) + Eco->GetQueuedPopulation(C.Team) + F.StatsFor(Type).PopCost <= Eco->GetPopulationCap(C.Team);
 		if (bRoom && Eco->CanAfford(C.Team, F.CostFor(Type))) { Best->QueueRecruit(Type); }
-		break; // one decision per think: the wanted type waits for food rather than the other draining it
+		break; // one decision per think: the wanted type waits for its cost rather than another draining it
 	}
 }
 
@@ -771,8 +789,11 @@ void USRAISubsystem::ManageRaid(FSRCommander& C, TArray<ASRUnit*>& Home)
 	TArray<ASRUnit*> Free;
 	for (ASRUnit* U : Home) { if (!U->IsEngaged() && !C.Main.Units.Contains(U)) { Free.Add(U); } }
 	if (Free.Num() < Size + FMath::Max(2, F.AIMinAttackSize / 2)) { return; }
-	// Fast and hits buildings: Shieldbearers first.
-	Free.Sort([](const ASRUnit& A, const ASRUnit& B) { return A.GetUnitType() < B.GetUnitType(); });
+	// Fast first: riders, then Shieldbearers (they hit buildings); never the slow catapults.
+	Free.RemoveAll([](const ASRUnit* U) { return U->GetUnitType() == ESRUnitType::Catapult; });
+	if (Free.Num() < Size) { return; }
+	auto Rank = [](ESRUnitType T) { return T == ESRUnitType::Horseman ? 0 : (T == ESRUnitType::Shieldbearer ? 1 : 2); };
+	Free.Sort([&Rank](const ASRUnit& A, const ASRUnit& B) { return Rank(A.GetUnitType()) < Rank(B.GetUnitType()); });
 	Free.SetNum(Size);
 	const float Power = SumPower(Free);
 	float Defence = 0.f;

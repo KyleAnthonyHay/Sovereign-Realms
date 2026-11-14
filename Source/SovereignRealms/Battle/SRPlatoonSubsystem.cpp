@@ -199,7 +199,13 @@ FSRPlatoonInfo USRPlatoonSubsystem::GetInfo(int32 Index) const
 	for (const TWeakObjectPtr<ASRUnit>& M : P.Members)
 	{
 		if (!M.IsValid() || !M->IsAlive()) { continue; }
-		(M->GetUnitType() == ESRUnitType::Archer ? I.Archers : I.Shieldbearers)++;
+		switch (M->GetUnitType())
+		{
+		case ESRUnitType::Archer: ++I.Archers; break;
+		case ESRUnitType::Horseman: ++I.Riders; break;
+		case ESRUnitType::Catapult: ++I.Catapults; break;
+		default: ++I.Shieldbearers; break;
+		}
 		HealthSum += M->GetHealthFrac();
 		I.Engaged += M->IsEngaged() ? 1 : 0;
 		I.Centre += M->GetPos2D();
@@ -207,8 +213,10 @@ FSRPlatoonInfo USRPlatoonSubsystem::GetInfo(int32 Index) const
 	}
 	if (N > 0) { I.Health = HealthSum / N; I.Centre /= N; }
 	if (N == 0) { I.Kind = ESRPlatoonKind::Empty; }
-	else if (I.Archers <= N / 5) { I.Kind = ESRPlatoonKind::ShieldWall; }
-	else if (I.Shieldbearers <= N / 5) { I.Kind = ESRPlatoonKind::ArcherCompany; }
+	else if (I.Riders > N * 4 / 5) { I.Kind = ESRPlatoonKind::Cavalry; }
+	else if (I.Catapults > N * 4 / 5) { I.Kind = ESRPlatoonKind::SiegeTrain; }
+	else if (I.Archers + I.Riders + I.Catapults <= N / 5) { I.Kind = ESRPlatoonKind::ShieldWall; }
+	else if (I.Shieldbearers + I.Riders + I.Catapults <= N / 5) { I.Kind = ESRPlatoonKind::ArcherCompany; }
 	else { I.Kind = ESRPlatoonKind::MixedHost; }
 	return I;
 }
@@ -247,6 +255,8 @@ FText USRPlatoonSubsystem::KindName(ESRPlatoonKind Kind)
 	case ESRPlatoonKind::ShieldWall: return LOCTEXT("ShieldWall", "Shield Wall");
 	case ESRPlatoonKind::ArcherCompany: return LOCTEXT("ArcherCompany", "Archer Company");
 	case ESRPlatoonKind::MixedHost: return LOCTEXT("MixedHost", "Mixed Host");
+	case ESRPlatoonKind::Cavalry: return LOCTEXT("Cavalry", "Cavalry");
+	case ESRPlatoonKind::SiegeTrain: return LOCTEXT("SiegeTrain", "Siege Train");
 	default: return LOCTEXT("Platoon", "Platoon");
 	}
 }

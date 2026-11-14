@@ -199,6 +199,10 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> DamagedMeshAsset;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> RuinMeshAsset;
 	ESRBuildingState State = ESRBuildingState::Complete;
+	/** Fire and smoke while it burns (damaged), smoke over the ruin. */
+	TArray<TWeakObjectPtr<class ASRFXSprite>> StateFX;
+	double LastDebrisTime = -10.0;
+	void ClearStateFX(bool bKeepSmoke);
 	/** The rally flag (barracks and range): planted at the rally point while the castle is selected or just after it moves. */
 	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> RallyFlag;
 

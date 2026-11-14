@@ -707,7 +707,7 @@ void ASRHUD::DrawTrainingBars()
 		const bool bEnemy = Building->Team == ESRTeam::Enemy;
 		const float W = U(110.f), H = U(9.f), IS = U(26.f);
 		const float X = FMath::RoundToFloat(S.X - W * 0.5f + IS * 0.5f), Y = FMath::RoundToFloat(S.Y);
-		Icon(Building->GetQueue()[0] == ESRUnitType::Archer ? ESRIcon::PortraitArcher : ESRIcon::PortraitShield, X - IS - U(5.f), Y + H * 0.5f - IS * 0.5f, IS, FLinearColor::White, bEnemy);
+		Icon(SRUnitIcon(Building->GetQueue()[0]), X - IS - U(5.f), Y + H * 0.5f - IS * 0.5f, IS, FLinearColor::White, bEnemy);
 		Meter(X, Y, W, H, Building->GetBuildFraction(), GoldBright);
 		if (Building->GetQueue().Num() > 1)
 		{

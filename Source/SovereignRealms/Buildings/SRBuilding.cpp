@@ -18,6 +18,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Misc/PackageName.h"
+#include "FX/SRFXSprite.h"
 
 ASRBuilding::ASRBuilding()
 {
@@ -116,6 +117,7 @@ void ASRBuilding::BeginPlay()
 
 void ASRBuilding::EndPlay(const EEndPlayReason::Type Reason)
 {
+	ClearStateFX(false);
 	if (Economy) { Economy->UnregisterBuilding(this); }
 	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this); Grid && !bDestroyed) { Grid->SetFootprint(this, false); }
 	for (ASRWorker* W : Workers) { if (W) { W->Destroy(); } }
@@ -626,6 +628,12 @@ void ASRBuilding::ReceiveDamage(float Amount, ASRUnit* From)
 	LastDamagedTime = GetWorld()->GetTimeSeconds();
 	HitShake = 1.f;
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildingHit, GetAimPointFrom(From ? From->GetPos2D() : GetFootprintCentre())); }
+	// chips fly from the struck wall (not every blow: a crowd hacking at it would bury it in debris)
+	if (GetWorld()->GetTimeSeconds() - LastDebrisTime > 0.35)
+	{
+		LastDebrisTime = GetWorld()->GetTimeSeconds();
+		if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->SpawnFX(ESRFX::Debris, GetAimPointFrom(From ? From->GetPos2D() : GetFootprintCentre()), 0.9f); }
+	}
 	if (Economy) { Economy->NotifyBuildingAttacked(this, From); }
 
 	// Troops of ours nearby come to its defence.
@@ -796,6 +804,39 @@ void ASRBuilding::SetState(ESRBuildingState NewState)
 	}
 	if (Want && Mesh->GetStaticMesh() != Want) { Mesh->SetStaticMesh(Want); }
 	if (SiteMesh) { SiteMesh->SetVisibility(NewState == ESRBuildingState::Site); }
+
+	// Effects: a damaged building burns in a couple of places and smokes; a ruin smokes for a while.
+	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || !GetWorld() || !GetWorld()->IsGameWorld()) { return; }
+	if (NewState == ESRBuildingState::Damaged)
+	{
+		ClearStateFX(false);
+		const FVector2D H = (FootprintMax - FootprintMin) * 0.32f;
+		const FVector2D C = GetFootprintCentre();
+		const float Top = GetActorLocation().Z + FMath::Min(BlockHeight * 0.8f, 520.f);
+		const FVector2D Spots[2] = { C + FVector2D(-H.X, H.Y), C + FVector2D(H.X * 0.6f, -H.Y) };
+		for (const FVector2D& P : Spots)
+		{
+			if (ASRFXSprite* Fire = Battle->SpawnFX(ESRFX::Fire, FVector(P.X, P.Y, Top), 1.f)) { StateFX.Add(Fire); }
+		}
+		if (ASRFXSprite* Smoke = Battle->SpawnFX(ESRFX::Smoke, FVector(C.X, C.Y, Top + 220.f), 1.2f)) { StateFX.Add(Smoke); }
+	}
+	else if (NewState == ESRBuildingState::Ruin)
+	{
+		ClearStateFX(false);
+		const FVector2D C = GetFootprintCentre();
+		if (ASRFXSprite* Smoke = Battle->SpawnFX(ESRFX::Smoke, FVector(C.X, C.Y, GetActorLocation().Z + 180.f), 1.1f, 25.f)) { StateFX.Add(Smoke); }
+	}
+	else
+	{
+		ClearStateFX(false);
+	}
+}
+
+void ASRBuilding::ClearStateFX(bool bKeepSmoke)
+{
+	for (const TWeakObjectPtr<ASRFXSprite>& FX : StateFX) { if (FX.IsValid()) { FX->Stop(); } }
+	StateFX.Reset();
 }
 
 void ASRBuilding::ApplySaved(float InHealth, float InProgress, bool bInDestroyed, const TArray<ESRUnitType>& InQueue, const FVector2D& InRally)

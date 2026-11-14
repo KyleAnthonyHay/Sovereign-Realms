@@ -3,6 +3,7 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SRGridSubsystem.h"
 #include "Battle/SRFogSubsystem.h"
+#include "FX/SRFXSprite.h"
 #include "Battle/SRAISubsystem.h"
 #include "Battle/SRPlatoonSubsystem.h"
 #include "Battle/SRFormation.h"
@@ -92,15 +93,26 @@ void USRBattleSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// Sovereign Feel > Visuals > Sprites look values can be tuned live; per-unit values are custom primitive data.
 	UnitCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_UnitCard.SM_UnitCard"));
 	ArrowCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_ArrowCard.SM_ArrowCard"));
-	SpriteMaterials[0] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Shieldbearer.MI_UnitSprite_Shieldbearer"))), this);
-	SpriteMaterials[1] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Archer.MI_UnitSprite_Archer"))), this);
-	SpriteShadowMaterials[0] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Shieldbearer.MI_UnitSpriteShadow_Shieldbearer")));
-	SpriteShadowMaterials[1] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Archer.MI_UnitSpriteShadow_Archer")));
+	static const TCHAR* Troops[4] = { TEXT("Shieldbearer"), TEXT("Archer"), TEXT("Horseman"), TEXT("Catapult") };
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const FString Path = FString::Printf(TEXT("/Game/SR/Materials/MI_UnitSprite_%s.MI_UnitSprite_%s"), Troops[i], Troops[i]);
+		const FString ShadowPath = FString::Printf(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_%s.MI_UnitSpriteShadow_%s"), Troops[i], Troops[i]);
+		UMaterialInterface* Base = i < 2 ? LoadSpriteAsset<UMaterialInterface>(*Path) : LoadObject<UMaterialInterface>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		UMaterialInterface* Shadow = i < 2 ? LoadSpriteAsset<UMaterialInterface>(*ShadowPath) : LoadObject<UMaterialInterface>(nullptr, *ShadowPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Base && i >= 2) { SpriteMaterials[i] = SpriteMaterials[0]; SpriteShadowMaterials[i] = SpriteShadowMaterials[0]; continue; }   // not imported yet
+		SpriteMaterials[i] = UMaterialInstanceDynamic::Create(OrDefault(Base), this);
+		SpriteShadowMaterials[i] = OrDefault(Shadow);
+	}
 	WorkerMaterials[0] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Miner.MI_UnitSprite_Miner"))), this);
 	WorkerMaterials[1] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Farmer.MI_UnitSprite_Farmer"))), this);
 	WorkerShadowMaterials[0] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Miner.MI_UnitSpriteShadow_Miner")));
 	WorkerShadowMaterials[1] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Farmer.MI_UnitSpriteShadow_Farmer")));
 	ArrowMaterial = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_ArrowSprite.MI_ArrowSprite"))), this);
+	if (UMaterialInterface* Stone = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SR/Materials/MI_StoneSprite.MI_StoneSprite"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+	{
+		StoneMaterial = UMaterialInstanceDynamic::Create(Stone, this);
+	}
 	ArrowShadowMaterial = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_ArrowShadow.MI_ArrowShadow")));
 	BlobMaterial = LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/M_UnitBlob.M_UnitBlob"));
 
@@ -112,12 +124,12 @@ void USRBattleSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 UMaterialInterface* USRBattleSubsystem::GetSpriteMaterial(ESRUnitType Type) const
 {
-	return SpriteMaterials[Type == ESRUnitType::Archer ? 1 : 0];
+	return SpriteMaterials[FMath::Clamp(int32(Type), 0, 3)];
 }
 
 UMaterialInterface* USRBattleSubsystem::GetSpriteShadowMaterial(ESRUnitType Type) const
 {
-	return SpriteShadowMaterials[Type == ESRUnitType::Archer ? 1 : 0];
+	return SpriteShadowMaterials[FMath::Clamp(int32(Type), 0, 3)];
 }
 
 // ----------------------------------------------------------- sprite view
@@ -187,14 +199,16 @@ void USRBattleSubsystem::UpdateSpriteLook()
 	if (Look.Equals(AppliedSpriteLook, 0.0005f) && F.HitFlashColor.Equals(AppliedFlashColor, 0.0005f)) { return; }
 	AppliedSpriteLook = Look;
 	AppliedFlashColor = F.HitFlashColor;
-	for (UMaterialInstanceDynamic* MID : { SpriteMaterials[0].Get(), SpriteMaterials[1].Get(), WorkerMaterials[0].Get(), WorkerMaterials[1].Get(), ArrowMaterial.Get() })
+	TSet<UMaterialInstanceDynamic*> MIDs = { SpriteMaterials[0].Get(), SpriteMaterials[1].Get(), SpriteMaterials[2].Get(), SpriteMaterials[3].Get(),
+		WorkerMaterials[0].Get(), WorkerMaterials[1].Get(), ArrowMaterial.Get(), StoneMaterial.Get() };
+	for (UMaterialInstanceDynamic* MID : MIDs)
 	{
 		if (!MID) { continue; }
 		MID->SetScalarParameterValue(TEXT("Relight"), F.SpriteRelight);
 		MID->SetScalarParameterValue(TEXT("BakedLight"), F.SpriteBakedLight);
 		MID->SetScalarParameterValue(TEXT("EdgeSoftness"), F.SpriteEdgeSoftness);
 		MID->SetVectorParameterValue(TEXT("HitFlashColor"), F.HitFlashColor);
-		if (MID != ArrowMaterial) { MID->SetScalarParameterValue(TEXT("NormalStrength"), F.SpriteNormalStrength); }
+		if (MID != ArrowMaterial && MID != StoneMaterial) { MID->SetScalarParameterValue(TEXT("NormalStrength"), F.SpriteNormalStrength); }
 	}
 }
 
@@ -966,4 +980,9 @@ void USRBattleSubsystem::RemoveAllUnits()
 	for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->Destroy(); } }
 	Units.Reset();
 	Corpses.Reset();
+}
+
+ASRFXSprite* USRBattleSubsystem::SpawnFX(ESRFX Kind, const FVector& Location, float Scale, float Lifetime)
+{
+	return ASRFXSprite::Spawn(GetWorld(), Kind, Location, Scale, Lifetime);
 }

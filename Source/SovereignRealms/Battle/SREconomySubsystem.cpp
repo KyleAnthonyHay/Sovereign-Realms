@@ -286,7 +286,7 @@ void USREconomySubsystem::LogStatus() const
 	{
 		if (!Building) { continue; }
 		FString Queue;
-		for (ESRUnitType Type : Building->GetQueue()) { Queue += Type == ESRUnitType::Archer ? TEXT("A") : TEXT("S"); }
+		for (ESRUnitType Type : Building->GetQueue()) { Queue += TEXT("SAHC")[FMath::Clamp(int32(Type), 0, 3)]; }
 		UE_LOG(LogSovereign, Log, TEXT("  %-16s %-9s team=%d pos=(%6.0f,%6.0f) payout=%.2f queue=[%s] build=%.2f rally=(%.0f,%.0f) sel=%d"),
 			*Building->GetActorNameOrLabel(), *Building->GetDisplayName(), int32(Building->Team), Building->GetActorLocation().X, Building->GetActorLocation().Y,
 			Building->GetPayoutFraction(), *Queue, Building->GetBuildFraction(), Building->GetRallyPoint().X, Building->GetRallyPoint().Y, Building->IsSelected() ? 1 : 0);

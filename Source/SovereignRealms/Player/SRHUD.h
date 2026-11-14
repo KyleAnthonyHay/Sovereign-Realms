@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
+#include "Common/SRTypes.h"
 #include "Fonts/SlateFontInfo.h"
 #include "Battle/SRGameFlowSubsystem.h"
 #include "SRHUD.generated.h"
@@ -22,8 +23,31 @@ enum class ESRIcon : uint8
 	Swords, AlertAttack, AlertLost, AlertDone, AlertWave, AlertPop, AlertInfo, Clock,
 	Pause, Help, RecruitFlag, Castle, ChevronDown, ChevronUp, Crown, Cancel,
 	PortraitShield, PortraitArcher, Check, Vein, Barracks, Range, Hammer, Patrol,
-	Disband
+	Disband, PortraitHorse, PortraitCatapult, Stable, Workshop
 };
+
+inline ESRIcon SRUnitIcon(ESRUnitType Type)
+{
+	switch (Type)
+	{
+	case ESRUnitType::Archer: return ESRIcon::PortraitArcher;
+	case ESRUnitType::Horseman: return ESRIcon::PortraitHorse;
+	case ESRUnitType::Catapult: return ESRIcon::PortraitCatapult;
+	default: return ESRIcon::PortraitShield;
+	}
+}
+
+/** The recruit hotkey of a troop type (Q / E / R / T). */
+inline const TCHAR* SRUnitKey(ESRUnitType Type)
+{
+	switch (Type)
+	{
+	case ESRUnitType::Archer: return TEXT("E");
+	case ESRUnitType::Horseman: return TEXT("R");
+	case ESRUnitType::Catapult: return TEXT("T");
+	default: return TEXT("Q");
+	}
+}
 
 /**
  * The whole interface, drawn immediate-mode on the HUD canvas every frame (Docs/UI.md):

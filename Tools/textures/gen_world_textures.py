@@ -141,14 +141,30 @@ TURF_MARKS = [
 ]
 
 
+GRASS_CALM = 0.74      # how much of each turf palette's spread is kept (1 = the first, noisier pass)
+
+
+def calm(pal, keep=GRASS_CALM):
+    """Pulls a 5-tone palette toward its middle tone: the same hues, less contrast between neighbours."""
+    mid = pal[2].astype(float)
+    return [(mid + (c.astype(float) - mid) * keep + 0.5).astype(np.uint8) for c in pal]
+
+
 def grass(seed, pal, highlights=0.5, sparse=0.0):
     """Tufted top-down turf: authored blade marks laid like shingles from the back row forward, so
-    each overlaps the one behind it and leaves dark thatch showing in the gaps."""
+    each overlaps the one behind it and leaves dark thatch showing in the gaps.
+    Kept calm so troop sprites read against it: the palette is drawn in (GRASS_CALM), a blade mark spans only
+    three neighbouring tones, and the lighter and darker tones come in clumps 6 to 10 texels across (a tileable
+    value-noise pick per mark) instead of texel by texel. Measured against the first pass: a third less
+    luminance step between neighbouring texels (0.057 -> 0.038), a fifth less spread overall."""
     rng = np.random.default_rng(seed)
     W = H = 128
+    pal = calm(pal)
     t = Tile(W, H, pal[1])
-    for _ in range(500):                                   # thatch under the blades
+    for _ in range(160):                                   # thatch under the blades
         t.put(rng.integers(W), rng.integers(H), pal[0])
+    clump = value_noise(rng, W, H, 8) * 0.8 + value_noise(rng, W, H, 16) * 0.2
+    soften = {"0": "1", "1": "1", "2": "2", "3": "3", "4": "3"}
     cw, ch = 4, 3
     rows_n = H // ch
     placed = []
@@ -160,11 +176,10 @@ def grass(seed, pal, highlights=0.5, sparse=0.0):
             x = gx * cw + int(rng.integers(0, 3)) + (2 if gy % 2 else 0)
             y = gy * ch + int(rng.integers(0, 2))
             marks = TURF_MARKS[int(rng.integers(len(TURF_MARKS)))]
-            shift = 0
-            if rng.random() > highlights:                  # most tufts keep their highlight for the tips only
-                marks = [r.replace("4", "3") for r in marks]
-            if rng.random() < 0.16:                        # the odd tuft sits a tone lower
-                shift = -1
+            c = float(clump[y % H, x % W])
+            shift = -1 if c < 0.4 else (1 if c > 0.62 else 0)      # tone by clump, not by tuft
+            if not (shift == 1 and rng.random() < highlights * 0.5):   # a few tufts in the light clumps keep a bright tip
+                marks = ["".join(soften.get(ch, ch) for ch in r) for r in marks]
             row.append((x, y, marks, shift, rng.random() < 0.5))
         placed.append(row)
     # Shingle order has to hold across the wrap too: a mark may only cover marks from the rows just behind it
@@ -614,28 +629,57 @@ def log_end(seed):
 
 
 # ---------------------------------------------------------------------------------------- water / sprites
+FLOW_TEXELS = (2, 3)      # the river's downstream direction in texture space (x right, y down): M_Water slides T_Water
+                          # along it, and the streaks are drawn lying that way. Matches FLOW_DIR in gen_battlefield.py.
+GRAVEL = [rgb(c) for c in ("#5d5a48", "#77735c", "#928c71", "#aaa487", "#c2bc9d", "#d8d3b6")]   # a ford's bed, dry tones (the water tints it)
+
+
 def water(seed):
-    """Still pond seen from above: dark teal with short ripple dashes and a few glints."""
+    """Running water seen from above: calm pools of two close teals in broad patches, with sparse ripple streaks lying
+    along the current (FLOW_TEXELS), each a light line with a dark one under its lee side, and the odd glint."""
     rng = np.random.default_rng(seed)
-    W = H = 64
+    W = H = 128
     t = Tile(W, H, WATER[1])
+    n = value_noise(rng, W, H, 32) * 0.6 + value_noise(rng, W, H, 16) * 0.4
+    t.c[n < 0.44] = WATER[0]
+    t.c[n > 0.66] = mix(WATER[1], WATER[2], 0.6)
+    fx, fy = FLOW_TEXELS
+    for _ in range(84):
+        x, y = int(rng.integers(W)), int(rng.integers(H))
+        L = int(rng.integers(6, 17))
+        bright = rng.random()
+        tone = WATER[3] if bright < 0.72 else WATER[4]
+        bend = int(rng.integers(3, 6))                         # a streak wavers a texel now and then
+        for k in range(L):
+            px_, py_ = x + (k * fx) // fy + ((k // bend) % 2), y + k
+            t.put(px_, py_, WATER[2] if k in (0, L - 1) else tone)        # the ends fade
+            if 0 < k < L - 1:
+                t.put(px_ + 1, py_, WATER[0])
+        if bright > 0.9:
+            t.put(x + ((L // 2) * fx) // fy, y + L // 2, WATER[5])
+    return t
+
+
+def gravel(seed):
+    """The bed of a ford: rounded pale pebbles packed on dark wet sand, a few larger stones."""
+    rng = np.random.default_rng(seed)
+    W = H = 128
+    t = Tile(W, H, GRAVEL[1])
     n = value_noise(rng, W, H, 16)
-    t.c[n < 0.42] = WATER[0]
-    t.c[n > 0.7] = WATER[2]
-    for gy in range(H // 4):
-        for gx in range(W // 8):
-            if rng.random() < 0.35:
-                continue
-            x = gx * 8 + int(rng.integers(0, 8)) + (4 if gy % 2 else 0)
-            y = gy * 4 + int(rng.integers(0, 4))
-            L = int(rng.integers(3, 8))
-            bright = rng.random()
-            for d in range(L):
-                t.put(x + d, y, WATER[3] if bright < 0.75 else WATER[4])
-            if bright > 0.93:
-                t.put(x + L // 2, y, WATER[5])
-            for d in range(1, L):
-                t.put(x + d, y + 1, WATER[0])
+    t.c[n > 0.6] = mix(GRAVEL[1], GRAVEL[2], 0.5)
+    for _ in range(300):
+        t.put(rng.integers(W), rng.integers(H), GRAVEL[0])
+    for i in range(1000):
+        x, y = int(rng.integers(W)), int(rng.integers(H))
+        big = i < 40
+        w, h = (int(rng.integers(5, 9)), int(rng.integers(4, 7))) if big else (int(rng.integers(2, 5)), int(rng.integers(2, 4)))
+        tone = int(rng.integers(2, 5))
+        for j in range(h):
+            for k in range(w):
+                if (k in (0, w - 1)) and (j in (0, h - 1)) and w > 2:
+                    continue
+                col = GRAVEL[min(tone + 1, 5)] if j == 0 else (GRAVEL[tone - 1] if j == h - 1 else GRAVEL[tone])
+                t.put(x + k, y + j, col)
     return t
 
 
@@ -765,7 +809,7 @@ def build():
         "T_Dirt": dirt(21),
         "T_Cobble": cobble(22),
         "T_Cliff": cliff(31),
-        "T_Lip": lip(32, GRASS),
+        "T_Lip": lip(32, calm(GRASS)),
         "T_Rock": rock(41),
         "T_Sandstone": sandstone(42),
         "T_Needles": needles(51),
@@ -773,6 +817,7 @@ def build():
         "T_Wood": wood(53),
         "T_LogEnd": log_end(54),
         "T_Water": water(61),
+        "T_Gravel": gravel(62),
         "T_Tufts": tufts(71),
         "T_Banner": banner(72),
     }

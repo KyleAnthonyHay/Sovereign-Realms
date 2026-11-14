@@ -1,0 +1,33 @@
+{
+  "name": "fx_debris",
+  "file": "fx_debris.png",
+  "layout": "single horizontal strip, frame k at x = k * frame_size[0]",
+  "frame_size": [
+    96,
+    96
+  ],
+  "frames": 6,
+  "fps": 12,
+  "loop": false,
+  "duration_s": 0.5,
+  "strip_size": [
+    576,
+    96
+  ],
+  "pivot_px": [
+    48,
+    60
+  ],
+  "pivot_uv_in_frame": [
+    0.5,
+    0.625
+  ],
+  "cm_per_px": 1.75,
+  "quad_size_cm": [
+    168.0,
+    168.0
+  ],
+  "alpha": "binary (0 or 255): masked material, nearest filtering, no mips, like the troop sheets",
+  "palette_size": 13,
+  "notes": "Stone and wood chips from a struck building. Pivot = the hit point on the wall."
+}

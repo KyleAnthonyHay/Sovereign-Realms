@@ -42,6 +42,11 @@ GAMEPLAY = {
                   max_speed=170.0, body_height_cm=132.0, radius_cm=30.0),
     "farmer": dict(display_name="Farmhand", windup=0.5, recovery=0.5, attack_interval=1.2,
                    max_speed=160.0, body_height_cm=132.0, radius_cm=30.0),
+    # cavalry and siege (256 px cells). Suggested values: nothing in SRFeelSettings existed for them when written.
+    "horseman": dict(display_name="Horse Rider", windup=0.30, recovery=0.40, attack_interval=1.3,
+                     max_speed=620.0, body_height_cm=202.0, radius_cm=70.0),
+    "catapult": dict(display_name="Catapult", windup=1.6, recovery=0.6, attack_interval=4.0,
+                     max_speed=130.0, body_height_cm=200.0, radius_cm=120.0),
 }
 FEEL = dict(stride_length_cm=62.0, spawn_pop_time=0.38, hit_flash_time=0.16, death_topple_time=0.42,
             corpse_linger_time=2.2, hit_stop_time=0.045, melee_lunge_cm=30.0)

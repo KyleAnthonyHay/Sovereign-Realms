@@ -79,7 +79,16 @@ public:
 	float GetPushMass() const;
 	/** Standing its ground (idle, or committed to a swing) rather than travelling. */
 	bool IsPlanted() const;
-	float GetBodyHeight() const { return UnitType == ESRUnitType::Archer ? 134.f : 142.f; }
+	float GetBodyHeight() const
+	{
+		switch (UnitType)
+		{
+		case ESRUnitType::Archer: return 134.f;
+		case ESRUnitType::Horseman: return 200.f;
+		case ESRUnitType::Catapult: return 190.f;
+		default: return 142.f;
+		}
+	}
 	/** Mid-torso of the sprite as it appears on screen: where arrows land and what box selection tests. */
 	FVector GetAimPoint() const;
 	/** A point just above the sprite's head as it appears on screen (health bars). */
@@ -193,6 +202,8 @@ private:
 	ESRAttackPhase AttackPhase = ESRAttackPhase::Ready;
 	float PhaseTime = 0.f;
 	float Cooldown = 0.f;
+	double LastStrikeTime = -100.0;
+	float DustClock = 0.f;   // cavalry charge: the first blow after a rest
 	float HitStopLeft = 0.f;
 	double LastDamagedTime = -100.0;
 

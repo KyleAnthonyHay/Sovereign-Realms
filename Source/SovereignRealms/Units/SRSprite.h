@@ -43,6 +43,8 @@ struct FSRSpriteSheet
 	float TopCm = 140.f;
 	/** Where a projectile leaves, in character space: forward, right, up from the feet (cm). */
 	FVector MuzzleCm = FVector::ZeroVector;
+	/** The sheet's cells against the troops' 160 px (horse and catapult: 256 px, at the same cm per pixel). */
+	float CardScale = 1.f;
 
 	const FAnim& Anim(ESRSpriteAnim A) const { return Anims[int32(A)]; }
 	int32 AttackFrame(ESRAttackPhase Phase, float Phase01) const;

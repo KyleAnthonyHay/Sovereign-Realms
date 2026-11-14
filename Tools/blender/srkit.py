@@ -333,36 +333,46 @@ def get_material(name):
 # --------------------------------------------------------------------------- rig
 
 # name: (head, tail, parent, deform). Filled per character from a proportions dict.
-def humanoid_bones(P):
-    """Bone table for a stocky humanoid. P holds joint positions (left side, mirrored for the right)."""
+def humanoid_bones(P, prefix="", root="root", origin=(0, 0, 0), add_root=True):
+    """Bone table for a stocky humanoid. P holds joint positions (left side, mirrored for the right).
+
+    prefix / root / origin / add_root let a second figure share an armature (a rider on a mount, a machine's
+    crew): every bone name gets the prefix, the figure stands at `origin`, and its hips, foot controls and knee
+    poles hang from the bone `root` instead of a root bone of their own."""
+    O = Vector(origin)
     hip, knee, ankle = Vector(P["hip"]), Vector(P["knee"]), Vector(P["ankle"])
     sh, el, wr = Vector(P["shoulder"]), Vector(P["elbow"]), Vector(P["wrist"])
     toe = Vector((ankle.x, ankle.y - P["foot_len"], 0.02))
     hand_tail = wr + (wr - el).normalized() * 0.10
-    B = [
-        ("root", (0, 0, 0), (0, 0.15, 0), None, True),
-        ("hips", (0, 0, P["pelvis"]), (0, 0, P["waist"]), "root", True),
-        ("spine", (0, 0, P["waist"]), (0, 0, P["chest"]), "hips", True),
-        ("chest", (0, 0, P["chest"]), (0, 0, P["neck"]), "spine", True),
-        ("head", (0, 0, P["neck"]), (0, 0, P["neck"] + 0.30), "chest", True),
+    n = prefix
+
+    def c(x, y, z):
+        return (x + O.x, y + O.y, z + O.z)
+
+    B = [("root", (0, 0, 0), (0, 0.15, 0), None, True)] if add_root else []
+    B += [
+        (n + "hips", c(0, 0, P["pelvis"]), c(0, 0, P["waist"]), root, True),
+        (n + "spine", c(0, 0, P["waist"]), c(0, 0, P["chest"]), n + "hips", True),
+        (n + "chest", c(0, 0, P["chest"]), c(0, 0, P["neck"]), n + "spine", True),
+        (n + "head", c(0, 0, P["neck"]), c(0, 0, P["neck"] + 0.30), n + "chest", True),
     ]
     for side, sx in ((".L", 1), (".R", -1)):
         def m(v):
-            return (v.x * sx, v.y, v.z)
+            return c(v.x * sx, v.y, v.z)
         B += [
-            ("upper_leg" + side, m(hip), m(knee), "hips", True),
-            ("lower_leg" + side, m(knee), m(ankle), "upper_leg" + side, True),
-            ("foot" + side, m(ankle), m(toe), "lower_leg" + side, True),
-            ("upper_arm" + side, m(sh), m(el), "chest", True),
-            ("lower_arm" + side, m(el), m(wr), "upper_arm" + side, True),
-            ("hand" + side, m(wr), m(hand_tail), "lower_arm" + side, True),
+            (n + "upper_leg" + side, m(hip), m(knee), n + "hips", True),
+            (n + "lower_leg" + side, m(knee), m(ankle), n + "upper_leg" + side, True),
+            (n + "foot" + side, m(ankle), m(toe), n + "lower_leg" + side, True),
+            (n + "upper_arm" + side, m(sh), m(el), n + "chest", True),
+            (n + "lower_arm" + side, m(el), m(wr), n + "upper_arm" + side, True),
+            (n + "hand" + side, m(wr), m(hand_tail), n + "lower_arm" + side, True),
             # controls
-            ("ik_foot" + side, m(ankle), m(toe), "root", False),
-            ("pole_knee" + side, m(Vector((knee.x, knee.y - 1.0, knee.z))),
-             m(Vector((knee.x, knee.y - 1.1, knee.z))), "root", False),
-            ("ik_hand" + side, m(wr), m(hand_tail), "chest", False),
-            ("pole_elbow" + side, m(Vector((el.x + 0.25, el.y + 0.9, el.z - 0.2))),
-             m(Vector((el.x + 0.25, el.y + 1.0, el.z - 0.2))), "chest", False),
+            (n + "ik_foot" + side, m(ankle), m(toe), root, False),
+            (n + "pole_knee" + side, m(Vector((knee.x, knee.y - 1.0, knee.z))),
+             m(Vector((knee.x, knee.y - 1.1, knee.z))), root, False),
+            (n + "ik_hand" + side, m(wr), m(hand_tail), n + "chest", False),
+            (n + "pole_elbow" + side, m(Vector((el.x + 0.25, el.y + 0.9, el.z - 0.2))),
+             m(Vector((el.x + 0.25, el.y + 1.0, el.z - 0.2))), n + "chest", False),
         ]
     return B
 
@@ -381,8 +391,11 @@ def _pole_angle(base, ik, pole_loc):
 
 
 class Rig:
-    def __init__(self, name, bones, collection):
+    def __init__(self, name, bones, collection, ik_prefixes=("",), ik_chains=()):
+        """ik_prefixes: one humanoid limb set per prefix (see humanoid_bones). ik_chains: extra two-bone chains
+        as (upper, lower, end, target, pole) bone names, e.g. a horse's legs."""
         self.name = name
+        self.ik_prefixes, self.ik_chains = tuple(ik_prefixes), tuple(ik_chains)
         arm = bpy.data.armatures.new(name + "_rig")
         ob = bpy.data.objects.new(name + "_armature", arm)
         collection.objects.link(ob)
@@ -419,25 +432,26 @@ class Rig:
                 s.head_local, s.tail_local = b.head_local, b.tail_local
                 s.x_axis_arm = b.matrix_local.to_3x3().col[0].copy()
 
-        for side in (".L", ".R"):
-            for upper, lower, end, target, pole in (
-                    ("upper_leg", "lower_leg", "foot", "ik_foot", "pole_knee"),
-                    ("upper_arm", "lower_arm", "hand", "ik_hand", "pole_elbow")):
-                c = pb[lower + side].constraints.new("IK")
-                c.name = "IK"
-                c.target = self.ob
-                c.subtarget = target + side
-                c.pole_target = self.ob
-                c.pole_subtarget = pole + side
-                c.pole_angle = _pole_angle(_B(bones[upper + side]), _B(bones[lower + side]),
-                                           bones[pole + side].head_local)
-                c.chain_count = 2
-                c.use_stretch = False
-                c.iterations = 200
-                r = pb[end + side].constraints.new("COPY_ROTATION")
-                r.name = "Follow"
-                r.target = self.ob
-                r.subtarget = target + side
+        chains = list(self.ik_chains)
+        for pre in self.ik_prefixes:
+            for side in (".L", ".R"):
+                chains += [tuple(pre + n + side for n in ("upper_leg", "lower_leg", "foot", "ik_foot", "pole_knee")),
+                           tuple(pre + n + side for n in ("upper_arm", "lower_arm", "hand", "ik_hand", "pole_elbow"))]
+        for upper, lower, end, target, pole in chains:
+            c = pb[lower].constraints.new("IK")
+            c.name = "IK"
+            c.target = self.ob
+            c.subtarget = target
+            c.pole_target = self.ob
+            c.pole_subtarget = pole
+            c.pole_angle = _pole_angle(_B(bones[upper]), _B(bones[lower]), bones[pole].head_local)
+            c.chain_count = 2
+            c.use_stretch = False
+            c.iterations = 200
+            r = pb[end].constraints.new("COPY_ROTATION")
+            r.name = "Follow"
+            r.target = self.ob
+            r.subtarget = target
 
     def attach_prop(self, prop_bone, socket_bone):
         """prop_bone (child of root, same rest matrix as socket_bone) follows socket_bone while influence = 1."""

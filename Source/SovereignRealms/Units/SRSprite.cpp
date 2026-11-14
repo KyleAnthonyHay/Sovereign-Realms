@@ -41,6 +41,30 @@ namespace
 		return S;
 	}
 
+	// horseman.json / catapult.json: 256 px cells (1.6x the troops'), pivot row 184, figure top row 80, 1.75 cm per px.
+	FSRSpriteSheet MakeHorseman()
+	{
+		FSRSpriteSheet S = MakeSheet();
+		S.StrikeFrame = 3;
+		S.WindupMap = { 0.f, 0.30f, 0.62f };
+		S.RecoveryMap = { 0.f, 0.22f, 0.42f, 0.62f, 0.82f };
+		S.TopCm = (184 - 80) * 1.75f;
+		S.CardScale = 1.6f;
+		return S;
+	}
+
+	FSRSpriteSheet MakeCatapult()
+	{
+		FSRSpriteSheet S = MakeSheet();
+		S.StrikeFrame = 5;          // the arm's release
+		S.WindupMap = { 0.f, 0.20f, 0.42f, 0.64f, 0.84f };
+		S.RecoveryMap = { 0.f, 0.30f, 0.62f };
+		S.TopCm = (184 - 80) * 1.75f;
+		S.MuzzleCm = FVector(5.f, 0.f, 210.f);
+		S.CardScale = 1.6f;
+		return S;
+	}
+
 	int32 LastAtOrBelow(TConstArrayView<float> Map, float Value)
 	{
 		int32 Index = 0;
@@ -56,7 +80,15 @@ const FSRSpriteSheet& FSRSpriteSheet::For(ESRUnitType Type)
 {
 	static const FSRSpriteSheet Shieldbearer = MakeShieldbearer();
 	static const FSRSpriteSheet Archer = MakeArcher();
-	return Type == ESRUnitType::Archer ? Archer : Shieldbearer;
+	static const FSRSpriteSheet Horseman = MakeHorseman();
+	static const FSRSpriteSheet Catapult = MakeCatapult();
+	switch (Type)
+	{
+	case ESRUnitType::Archer: return Archer;
+	case ESRUnitType::Horseman: return Horseman;
+	case ESRUnitType::Catapult: return Catapult;
+	default: return Shieldbearer;
+	}
 }
 
 int32 FSRSpriteSheet::AttackFrame(ESRAttackPhase Phase, float Phase01) const

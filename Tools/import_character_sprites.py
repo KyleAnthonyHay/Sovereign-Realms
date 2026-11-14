@@ -28,12 +28,15 @@ TC = unreal.TextureCompressionSettings
 
 # source file stem -> (asset name, kind)
 SHEETS = []
-for troop in ("shieldbearer", "archer", "arrow", "miner", "farmer"):
+for troop in ("shieldbearer", "archer", "arrow", "miner", "farmer", "horseman", "catapult", "stone"):
     cap = troop.capitalize()
     SHEETS.append((troop + "_color", "T_%s_Color" % cap, "color"))
     SHEETS.append((troop + "_teammask", "T_%s_TeamMask" % cap, "mask"))
-    if troop != "arrow":
+    if troop not in ("arrow", "stone"):
         SHEETS.append((troop + "_normal", "T_%s_Normal" % cap, "normal"))
+# battlefield effects (SourceArt/FX, Tools/blender/make_fx.py): one strip each
+for fx in ("fire", "smoke", "dust", "debris", "impact"):
+    SHEETS.append(("../FX/fx_" + fx, "T_FX_" + fx.capitalize(), "color"))
 
 
 def import_textures():

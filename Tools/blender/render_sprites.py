@@ -38,6 +38,10 @@ def main():
     sc = bpy.context.scene
     name = sc["sr_character"]
     d = dict(srrender.DEFAULTS)
+    for k in list(d):                              # per-character defaults stored by build_character.py (RENDER)
+        if "sr_render_" + k in sc:
+            v = sc["sr_render_" + k]
+            d[k] = tuple(int(x) for x in v) if k == "pivot" else type(d[k])(v)
     d["elev"] = arg(args, "--elev", d["elev"], float)
     d["cm_per_px"] = arg(args, "--cm-per-px", d["cm_per_px"], float)
     d["cell"] = arg(args, "--cell", d["cell"], int)

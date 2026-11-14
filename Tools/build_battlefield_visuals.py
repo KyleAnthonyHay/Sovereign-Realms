@@ -11,9 +11,11 @@ Pipeline (see Docs/VISUAL_CONTRACT.md):
 One part only:  Tools/ue_py.py -c "PARTS=['lighting']; exec(open('<abs path to this file>').read())"
 Parts: world (terrain + props + water + buildings), buildings (only re-place the buildings), lighting.
 
-Gameplay rules honoured (enforced by the generator): the +/-3000 cm play area keeps both spawn
-areas and the lane flat; terraces inside it step <= 40 cm; blocking rocks and ruin pieces are single
-convex boxes (tag SRBlocker); foliage and dressing have no collision.
+Gameplay rules honoured (enforced by the generator): the +/-12000 cm play area keeps both kingdoms' aprons,
+the spawn areas, the roads, the fords and the island flat; walkable terraces step <= 40 cm (the ridges, knolls and
+tors are taller on purpose: they block); blocking rocks, trunks, the fir-wood belts and ruin pieces are single
+convex boxes (tag SRBlocker); the river blocks by its bed being below -30 cm, its fords and bridges are ground;
+foliage and dressing have no collision.
 """
 import json
 import os
@@ -174,7 +176,9 @@ def build_world():
     for t in layout["terrain"]:
         mesh_actor(load(MESH + t["mesh"]), t["pos"], 0.0, t["mesh"][5:], t["folder"], collide=True)
     w = layout["water"]
-    mesh_actor(load(MESH + w["mesh"]), w["pos"], 0.0, "Pond", "Water", collide=False, shadow=False)
+    # one sheet for the river, its channels and the far lake. No collision: the grid's ground trace must pass through it
+    # to the bed (deep: below -30 cm = water, blocked; a ford's bed is at -24 cm = wet but walkable).
+    mesh_actor(load(MESH + w["mesh"]), w["pos"], 0.0, "River", "Water", collide=False, shadow=False)
 
     # single actors: rocks over their collision boxes, the ruin, fences, logs
     for a in layout["actors"]:
@@ -236,20 +240,25 @@ def set_pp(volume, **values):
 
 
 # Every look value in one place, so a retune is one edit and one `PARTS=['lighting']` run.
+# Sun height: 42 degrees above the horizon (it was 33). At 33 a shadow was 1.5x as long as its caster and trees, ridges
+# and castles laid near-black bars across the lanes; at 42 it is 1.1x. The sky fill is up by a quarter so that shadowed
+# ground sits near 35-40% of lit ground and blue troops stay readable in it; the sun is a touch lower in lux and the
+# exposure bias a touch lower because the higher sun puts more light on flat ground (sin 42 / sin 33 = 1.23). The warm
+# sun colour, the haze and the grade are unchanged: still late afternoon, just not the last ten minutes of it.
 LOOK = dict(
-    sun_pitch=-33.0, sun_yaw=75.0,              # light travels toward screen right and a little up-screen
-    sun_lux=11.0, sun_color=(255, 214, 165), sun_source_angle=1.8, sun_shafts=11.0,
-    sky_intensity=7.5, sky_color=(205, 225, 255), sky_fog=0.3,
+    sun_pitch=-42.0, sun_yaw=75.0,              # light travels toward screen right and a little up-screen
+    sun_lux=10.5, sun_color=(255, 214, 165), sun_source_angle=1.8, sun_shafts=11.0,
+    sky_intensity=9.5, sky_color=(208, 226, 255), sky_fog=0.3,
     fog_density=0.2, fog_falloff=0.3, fog_albedo=(255, 242, 224), fog_phase=0.35, fog_extinction=0.55,
-    exposure_bias=-0.6,
+    exposure_bias=-0.7,
 )
 
 
 def build_lighting():
     V4 = unreal.Vector4
     L = LOOK
-    # Sun: low and warm, from screen left, raking across the field toward screen right and slightly up-screen.
-    # Terrace faces that turn toward it light up, the rest sit in cool sky fill; long shadows cross the lane.
+    # Sun: warm, from screen left, raking across the field toward screen right and slightly up-screen.
+    # Terrace faces that turn toward it light up, the rest sit in cool sky fill; shadows about as long as their casters.
     sun = find_or_spawn(unreal.DirectionalLight, "Sun")
     sun.set_actor_rotation(unreal.Rotator(0, L["sun_pitch"], L["sun_yaw"]), False)      # roll, pitch, yaw
     lc = sun.light_component

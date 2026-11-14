@@ -73,6 +73,15 @@ MATERIALS = [
          ramp=["#9a907e", "#e2d9bd"]),
     dict(name="shaft", base="#8a6a48", rough=0.8, metal=0.0, thin=True, accent=True,
          ramp=["#553428", "#744a31", "#93643d"]),
+    # cavalry and siege (appended: ids of the materials above must not change): a bay horse's coat, grey field stone, twisted rope
+    dict(name="horse", base="#84492b", rough=0.7, metal=0.0, spec=(0.14, 10), bias=0.03,
+         ramp=["#24141a", "#42241f", "#633524", "#84492b", "#a26236", "#bf8248"]),
+    dict(name="stone", base="#8a8478", rough=0.9, metal=0.0, spec=(0.05, 8),
+         tex=dict(size=0.06, edge=0.30, cell=0.30),
+         ramp=["#2a2630", "#474350", "#68636a", "#8b867f", "#aca696", "#cbc5ae"]),
+    dict(name="rope", base="#a08660", rough=0.9, metal=0.0, spec=(0.04, 6),
+         tex=dict(size=0.03, edge=0.40, cell=0.25),
+         ramp=["#33261f", "#55402c", "#7a603c", "#a08450", "#c2a86c"]),
 ]
 
 for _i, _m in enumerate(MATERIALS):

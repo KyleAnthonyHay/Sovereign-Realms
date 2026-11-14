@@ -2,18 +2,25 @@
 """Offline generator for the battlefield diorama: terrain meshes, props, the ground splat map and
 the placement list. Deterministic. Unreal only imports and places what this writes.
 
-  Tools/.venv/bin/python Tools/world/gen_battlefield.py
+  Tools/.venv/bin/python Tools/world/gen_battlefield.py            (about 3 minutes)
+  Tools/.venv/bin/python Tools/world/gen_battlefield.py --plan     (20 s: only the previews under Saved/, for layout work)
   -> SourceArt/Meshes/battlefield.gltf (+ .bin)   every static mesh, Unreal axes, cm (the buildings are separate:
                                                    Tools/blender/build_building.py; BUILDINGS below places them)
-     SourceArt/Textures/T_Splat.png               ground blend map (see SPLAT below)
-     SourceArt/World/layout.json                  where everything goes
+     SourceArt/Textures/T_Splat.png               ground blend map (see build_splat_fields)
+     SourceArt/Textures/T_WaterMap.png            water data map for M_Water (see build_water_map)
+     SourceArt/Textures/T_MinimapBase.png         the HUD minimap's base
+     SourceArt/World/layout.json                  where everything goes (+ veins, river, fords, bridges, lanes)
      Saved/WorldPreview/map.png                   top-down preview (+X up, like the game camera)
-  then, in the editor:  Tools/ue_py.py Tools/build_battlefield_visuals.py
+     Saved/MapPreview/layout.png, report.txt      the plan as the walkability grid will read it, and its checks
+  then, in the editor:  Tools/ue_py.py Tools/import_world_assets.py, build_visual_materials.py, build_battlefield_visuals.py
 
-Rules honoured (Docs/VISUAL_CONTRACT.md): play area +/-3000 cm; both spawn areas and the lane
-between them stay flat; ledges inside the play area that units should climb are <= 40 cm; taller
-tiers stay outside the bound (except the small blocking knolls); blocking rocks keep their old
-positions and convex footprints.
+The field (see "the map's shape" below): two kingdoms in opposite corners, a river between them crossed only at two
+fords and over the shrine island's two bridges, three lanes parted by a fir-wood belt and a rock ridge on each side,
+a highland with two veins in each far corner. Point-symmetric: the enemy's half is the player's turned 180 degrees.
+
+Rules honoured (Docs/VISUAL_CONTRACT.md): play area +/-12000 cm; both kingdoms' aprons, the spawn areas, the roads,
+the fords and the island stay flat; ledges units should climb are <= 40 cm; anything taller blocks on purpose (ridge,
+knolls, bluffs, tors); deep water has its bed below -30 cm (the grid's water test), a ford's bed is above it.
 """
 import json
 import math
@@ -38,7 +45,8 @@ TEXEL = 4.0                     # cm per texel, everywhere
 BOUND = 12000.0                 # playable half extent (the map was +/-3000 until the 4x pass)
 # dressed world: the low camera sees far up-screen (+X), a little behind the near bound, wide at the back
 WX0, WX1, WY0, WY1 = -15500.0, 24000.0, -16500.0, 16500.0
-SPLAT_ORIGIN, SPLAT_SIZE, SPLAT_RES = (-16000.0, -20480.0), 40960.0, 4096     # world square the splat map covers
+FAST = "--plan" in sys.argv     # planning run: coarse splat, thin grass, writes only the previews under Saved/ (about 4x quicker)
+SPLAT_ORIGIN, SPLAT_SIZE, SPLAT_RES = (-16000.0, -20480.0), 40960.0, (1024 if FAST else 4096)     # world square the splat map covers
 HM_RES = 8.0                    # heightmap raster, cm per cell
 
 rng = np.random.default_rng(20261)
@@ -152,6 +160,9 @@ def rasterize_heights():
     if LAKE is not None:
         for part in LAKE.geoms:
             d.polygon(ring_px(part.exterior), fill=LAKE_BED)
+        for part in LAKE.geoms:
+            for hole in part.interiors:                        # islands
+                d.polygon(ring_px(hole), fill=0.0)
     for t in sorted(TIERS, key=lambda t: t["top"]):
         d.polygon(ring_px(t["poly"].exterior), fill=t["top"])
     return np.array(img)
@@ -482,8 +493,6 @@ def build_prop_meshes():
 
 
 # ============================================================================================ layout
-LAKE = None
-LAKE_BED, LAKE_SURFACE = -170.0, -48.0
 INSTANCES = {}      # mesh -> list of [x, y, z, yaw, scale]
 ACTORS = []         # dicts: mesh, pos, yaw, mat, label, folder
 BLOCKERS = []       # dicts: label, pos, size, yaw
@@ -528,104 +537,356 @@ BUILDINGS = [
 PLAYER_START = (P_ANCHOR[0] + 1500.0, P_ANCHOR[1] + 1400.0)
 ENEMY_START = (E_ANCHOR[0] - 1500.0, E_ANCHOR[1] - 1400.0)
 
-# Gold veins: the only places a mine can be built (layout.json "veins"; ASRBuilding placement rules read them).
-# Two are under the starting mines; each kingdom has two safe expansions; the rest are contested.
-GOLD_VEINS = [(P_ANCHOR[0] + 450.0, P_ANCHOR[1] - 2500.0), (E_ANCHOR[0] - 450.0, E_ANCHOR[1] + 2500.0),      # home
-              (-2600.0, -9300.0), (2600.0, 9300.0), (-9600.0, -1200.0), (9600.0, 1200.0),                    # expansions
-              (-1500.0, 1700.0), (1500.0, -1700.0),                                                          # centre
-              (-8200.0, 8600.0), (8200.0, -8600.0)]                                                          # far corners
 
-# The king's road: from the near edge into the player's castle court, diagonally across the field, into the enemy
-# court and away up-screen into the hills. Branches run to the far corners past the contested veins.
-ROAD_MAIN_KEYS = [(-7950.0, -6400.0), (-7700.0, -5000.0), (-6200.0, -4500.0), (-4300.0, -3300.0), (-2400.0, -1700.0), (-700.0, -350.0),
-                  (700.0, 350.0), (2400.0, 1700.0), (4300.0, 3300.0), (5600.0, 4700.0), (6000.0, 5700.0), (6050.0, 6400.0)]
+# ---- the map's shape. Everything that matters to play is point-symmetric about the centre (a half turn swaps the
+# kingdoms): it is authored or scattered for the player's half and turned 180 degrees for the enemy's.
+def mir(p):
+    """The same spot seen from the other kingdom."""
+    return (-p[0], -p[1])
+
+
+def rot180(geom):
+    return affinity.rotate(geom, 180.0, origin=(0, 0))
+
+
+# The river runs between the kingdoms from the hills beyond the far-left corner (a lake there feeds it) down to the near
+# edge, right of centre. Laid out in river coordinates: s = distance upstream from the map centre, n = offset toward the
+# enemy's bank. It parts round an island at the centre (two channels) and is deep everywhere except at two fords.
+RIVER_AXIS = (0.8160, -0.5780)          # upstream
+RIVER_PERP = (0.5780, 0.8160)           # toward the enemy's bank
+FLOW_DIR = (-RIVER_AXIS[0], -RIVER_AXIS[1])
+
+
+def sn(s, n):
+    return (s * RIVER_AXIS[0] + n * RIVER_PERP[0], s * RIVER_AXIS[1] + n * RIVER_PERP[1])
+
+
+def to_sn(x, y):
+    return (x * RIVER_AXIS[0] + y * RIVER_AXIS[1], x * RIVER_PERP[0] + y * RIVER_PERP[1])
+
+
+ISLE_S = 2900.0                         # the channels part and meet again this far up / down stream of the centre
+RIVER_UP_KEYS = [(ISLE_S, 0), (3900, -450), (5100, 200), (6300, 520), (7300, 220), (8600, -420), (10000, -380), (11400, 350),
+                 (12900, 450), (14700, 0), (16500, -500), (18300, -1200), (20200, -1700), (22000, -1900)]
+CHANNEL_KEYS = [(ISLE_S, 0), (2000, -1050), (750, -1650), (-750, -1650), (-2000, -1050), (-ISLE_S, 0)]   # round the player's side
+RIVER_UP = catmull([sn(*k) for k in RIVER_UP_KEYS], per=8)
+RIVER_DOWN = [mir(p) for p in RIVER_UP]
+CHANNEL_P = catmull([sn(*k) for k in CHANNEL_KEYS], per=8)
+CHANNEL_E = [mir(p) for p in CHANNEL_P]
+RIVER_HALF, CHANNEL_HALF = 300.0, 235.0  # half widths, cm: 6 m of deep water, 4.7 m in each channel
+FORD_A = sn(7300, 220)                   # upstream ford (top-left lane); FORD_B is its twin downstream
+FORD_B = mir(FORD_A)
+FORD_HALF, FORD_RIVER_HALF = 700.0, 450.0   # a ford is 14 m wide along the river, which spreads to 9 m there
+BRIDGE_HALF = 350.0                      # the two bridges onto the island are 7 m wide
+LAKE_BED, LAKE_SURFACE, FORD_BED = -170.0, -16.0, -24.0
+# The walkability grid (USRGridSubsystem) traces the ground: anything below -30 cm is water and blocked. Deep water has
+# its bed at LAKE_BED; a ford's bed is FORD_BED, 8 cm under the surface: wet, walkable, and the water material paints it
+# as pale gravel. The bridges are terrain slabs at ground level over the channels. No collision on the water sheet.
+
+# Separating belts on the player's side (their twins stand on the enemy's): a fir wood between the centre lane and the
+# top-left lane, a rock ridge between the centre lane and the bottom-right lane. Each stops short of the kingdom's apron,
+# has one opening part-way and leaves a second between its end and the river bank.
+# Seen from the player's castle the lanes leave at about 10 degrees (top-left), 42 (centre) and 85 (bottom-right) from +X;
+# the wood runs out at about 17 and the ridge at 70, each from the apron's edge toward the river between the island and a
+# ford, keeping clear of the island's channel. The wood has an opening part-way and its last stretch runs along the river,
+# leaving a riverside meadow between the island and the ford; the ridge (39 m) is unbroken.
+WOOD_KEYS = [(-3400.0, -5350.0), (-1300.0, -4750.0), (632.0, -4124.0), (2064.0, -4525.0), (3179.0, -4335.0), (3910.0, -3995.0)]
+RIDGE_KEYS = [(-5717.0, -2876.0), (-5150.0, -1200.0), (-4700.0, 400.0), (-4250.0, 1700.0), (-3800.0, 2500.0)]
+WOOD_ANGLE, RIDGE_ANGLE = 17.0, 70.0
+BELT_GAP, BELT_RIVER_GAP, WOOD_HALF = 1300.0, 1300.0, 300.0
+# The highlands: a stepped rocky upland in the far-left corner on the player's bank (twin: near-right corner on the
+# enemy's), each with two veins. The other kingdom reaches it through the ford next to it.
+HIGHLAND_P = (8900.0, -9300.0)
+HIGHLAND_R = (2700.0, 2400.0)
+
+# Gold veins: the only places a mine can be built (layout.json "veins"; ASRBuilding placement rules read them).
+ISLE_VEIN = sn(1450, 0)
+GOLD_VEINS = [(P_ANCHOR[0] + 450.0, P_ANCHOR[1] - 2500.0), (E_ANCHOR[0] - 450.0, E_ANCHOR[1] + 2500.0),      # home (under the starting mines)
+              (-9600.0, -1200.0), (9600.0, 1200.0),                                                          # safe expansion each
+              ISLE_VEIN, mir(ISLE_VEIN),                                                                     # contested: the shrine island
+              (7900.0, -7900.0), (10000.0, -10000.0), (-7900.0, 7900.0), (-10000.0, 10000.0)]               # the highlands
+
+# Roads. The king's road: from the near edge into the player's castle court, across the field and the island (two
+# bridges), into the enemy court and away up-screen into the hills. Two earth roads take the flank lanes, one over each
+# ford; a spur climbs from each to its highland.
+ROAD_MAIN_KEYS = [(-7950.0, -6400.0), (-7700.0, -5000.0), (-6200.0, -4500.0), (-4300.0, -3300.0), (-2600.0, -2400.0), (-1150.0, -1350.0), (0.0, 0.0),
+                  (1150.0, 1350.0), (2600.0, 2400.0), (4300.0, 3300.0), (5600.0, 4700.0), (6000.0, 5700.0), (6050.0, 6400.0)]
 ROAD_MAIN = catmull([(-15500, -7200), (-11500, -6900), (-9200, -6700)] + ROAD_MAIN_KEYS + [(5850, 7600), (6300, 9600), (7300, 11800), (9300, 14800), (12500, 17000), (17600, 18000)])
-ROAD_BRANCH = catmull([(-2400, -1700), (-4400, 1500), (-6200, 4900), (-8000, 8300)])
-ROAD_SIDE = catmull([(2400, 1700), (4400, -1500), (6200, -4900), (8000, -8300)])       # second branch (earth only)
-LAKE_SEEDS = [(-2600.0, 6600.0, 1500.0, 1150.0), (2600.0, -6600.0, 1500.0, 1150.0)]     # inside the field: obstacles
+ROAD_TL_KEYS = [(-5600.0, -5300.0), (-2700.0, -6100.0), (400.0, -6300.0), (3300.0, -6000.0), FORD_A, (6900.0, -1700.0), (7200.0, 800.0), (6400.0, 2300.0), (5500.0, 3600.0), (5300.0, 4400.0)]
+ROAD_TL = catmull(ROAD_TL_KEYS)                                     # top-left lane: player -> ford A -> enemy
+ROAD_BR = [mir(p) for p in ROAD_TL][::-1]                           # bottom-right lane: player -> ford B -> enemy
+ROAD_SPUR_P = catmull([(3300.0, -6000.0), (5600.0, -7000.0), (7900.0, -7900.0), (10000.0, -10000.0)])
+ROAD_SPUR_E = [mir(p) for p in ROAD_SPUR_P]
+FLANK_ROADS = [ROAD_TL, ROAD_BR, ROAD_SPUR_P, ROAD_SPUR_E]
+
+LAKE = None           # all water: the river, its channels and the lake beyond the far-left corner (MultiPolygon)
+ISLAND = None         # the river island (Polygon)
+FORD_POLYS = []       # the two fords' beds (Polygon)
+BRIDGE_POLYS = []     # the two bridge decks (Polygon)
+SIDE_P = None         # the ground on the player's side of the river (Polygon)
+WOOD_PARTS, RIDGE_PARTS, BELT_GAPS = [], [], []      # player's side: LineStrings, and the openings' centres
+HIGHLAND_POLY = None  # player's highland (lower tier outline)
+
+# the river's middle line as a table n(s), for "which bank is this point on"
+_tab = sorted([to_sn(*p) for p in RIVER_DOWN] + [to_sn(*p) for p in RIVER_UP])
+_TAB_S = np.array([t[0] for t in _tab] )
+_TAB_N = np.array([t[1] for t in _tab])
+
+
+def side_n(x, y):
+    """Signed distance across the river from its middle line (cm, roughly): negative on the player's bank. Works on arrays."""
+    s = x * RIVER_AXIS[0] + y * RIVER_AXIS[1]
+    return x * RIVER_PERP[0] + y * RIVER_PERP[1] - np.interp(s, _TAB_S, _TAB_N)
+
+
+def zone_of(x, y):
+    """Region of the map, the same for both kingdoms (a point on the enemy's bank is judged from the enemy's castle):
+    home (the apron), wood (the fir-wood flank: top-left lane for the player), plain (centre lane), stone (the rocky
+    flank: bottom-right lane), highland, back (behind the castle)."""
+    if side_n(x, y) > 0:
+        x, y = -x, -y
+    if ((x - HIGHLAND_P[0]) / HIGHLAND_R[0]) ** 2 + ((y - HIGHLAND_P[1]) / HIGHLAND_R[1]) ** 2 < 1.0:
+        return "highland"
+    dx, dy = x - P_ANCHOR[0], y - P_ANCHOR[1]
+    if math.hypot(dx, dy) < 3400.0:
+        return "home"
+    a = math.degrees(math.atan2(dy, dx))
+    if a < -25.0 or a > 115.0:
+        return "back"
+    return "wood" if a < WOOD_ANGLE else ("plain" if a < RIDGE_ANGLE else "stone")
+
+
+def _line_parts(geom, min_len=250.0):
+    if geom.is_empty:
+        return []
+    parts = list(geom.geoms) if hasattr(geom, "geoms") else [geom]
+    return [p for p in parts if p.geom_type == "LineString" and p.length > min_len]
+
+
+def plan_water():
+    """The river polygon (wobbled banks, cut like the plateaus), the island, the fords, the bridges."""
+    global LAKE, ISLAND, SIDE_P
+    r = np.random.default_rng(77)
+    up, ch = LineString(RIVER_UP), LineString(CHANNEL_P)
+    parts = [up.buffer(RIVER_HALF, 3), ch.buffer(CHANNEL_HALF, 3), Point(sn(ISLE_S, 0)).buffer(RIVER_HALF + 110, 3)]
+    d_ford = up.project(Point(FORD_A))
+    for line, half in ((up, RIVER_HALF), (ch, CHANNEL_HALF)):               # uneven banks
+        d = 60.0
+        while d < line.length:
+            p = line.interpolate(d)
+            if line is ch or abs(d - d_ford) > FORD_HALF + 500.0:
+                k = float(r.uniform(0.82, 1.22)) if line is up else float(r.uniform(0.9, 1.12))
+                parts.append(Point(p.x + float(r.normal(0, 45)), p.y + float(r.normal(0, 45))).buffer(half * k, 2))
+            d += float(r.uniform(190, 330))
+    from shapely.ops import substring
+    parts.append(substring(up, d_ford - FORD_HALF - 260.0, d_ford + FORD_HALF + 260.0).buffer(FORD_RIVER_HALF, 3))    # the river spreads at the ford
+    half = unary_union(parts)
+    far_lake = unary_union([chunk_shape(BOUND + 4200, -BOUND - 1800, 2200, 2600, 6), rounded_box(BOUND + 2600, -BOUND - 400, 1300, 1500, 20, 420)])
+    water = unary_union([half, rot180(half), far_lake]).intersection(box(WX0, WY0, WX1, WY1))
+    water = water.buffer(-40, 2).buffer(40, 2)
+    LAKE = MultiPolygon([p.simplify(8.0) for p in largest(water, 200000.0, all_parts=True)])
+    holes = [Polygon(i) for part in LAKE.geoms for i in part.interiors]
+    ISLAND = max(holes, key=lambda h: h.area)
+    # fords: the stretch of river FORD_HALF either side of the crossing
+    i = min(range(1, len(RIVER_UP) - 1), key=lambda k: math.hypot(RIVER_UP[k][0] - FORD_A[0], RIVER_UP[k][1] - FORD_A[1]))
+    t = np.array(RIVER_UP[i + 1]) - np.array(RIVER_UP[i - 1])
+    t /= np.linalg.norm(t)
+    c = np.array(FORD_A)
+    strip = LineString([tuple(c - t * FORD_HALF), tuple(c + t * FORD_HALF)]).buffer(1600, cap_style=2)
+    ford = largest(strip.intersection(LAKE))
+    FORD_POLYS[:] = [ford, rot180(ford)]
+    # bridges: where the king's road crosses the two channels
+    road = LineString(ROAD_MAIN)
+    cross = [g for g in _line_parts(road.intersection(LAKE), 50.0) if g.centroid.distance(Point(0, 0)) < 3000 and side_n(g.centroid.x, g.centroid.y) < 0]
+    a, b = np.array(cross[0].coords[0]), np.array(cross[0].coords[-1])
+    dvec = (b - a) / np.linalg.norm(b - a)
+    deck = LineString([tuple(a - dvec * 70.0), tuple(b + dvec * 70.0)]).buffer(BRIDGE_HALF, cap_style=2)
+    BRIDGE_POLYS[:] = [deck, rot180(deck)]
+    # the player's bank: everything on the near-left side of the river's middle line
+    mid = [sn(-60000, _TAB_N[0])] + [sn(s, n) for s, n in zip(_TAB_S, _TAB_N)] + [sn(60000, _TAB_N[-1])]
+    SIDE_P = Polygon(mid + [sn(60000, -90000), sn(-60000, -90000)]).buffer(0)
+
+
+def plan_belts():
+    """Cuts the wood and ridge lines to length (clear of the river bank) and opens the gap in each."""
+    for keys, out, frac in ((WOOD_KEYS, WOOD_PARTS, 0.38), (RIDGE_KEYS, RIDGE_PARTS, None)):
+        line = LineString(catmull(keys, per=6))
+        parts = _line_parts(line.difference(LAKE.buffer(BELT_RIVER_GAP + WOOD_HALF)))
+        line = min(parts, key=lambda l: l.distance(Point(keys[0])))        # the stretch from the apron to the bank
+        if frac is None:
+            out[:] = [line]
+            continue
+        g = line.interpolate(frac, normalized=True)
+        BELT_GAPS.append((g.x, g.y))
+        out[:] = _line_parts(line.difference(g.buffer(BELT_GAP * 0.5 + WOOD_HALF)))
+    print("belts: wood %s m, ridge %s m" % (" + ".join("%.0f" % (l.length / 100) for l in WOOD_PARTS), " + ".join("%.0f" % (l.length / 100) for l in RIDGE_PARTS)))
 
 
 def lane_keepout():
-    """Ground that must stay flat: both kingdoms, both spawn areas, the main road between them and the gold veins."""
+    """Ground that must stay flat and clear: both kingdoms and their aprons, both spawn areas, the king's road, the flank
+    roads, the fords' approaches, the island, the belts' openings and the gold veins."""
     lane = LineString(ROAD_MAIN_KEYS).buffer(560)
+    flank = unary_union([LineString(r).buffer(400) for r in FLANK_ROADS])
     spawns = unary_union([Point(PLAYER_START).buffer(900), Point(ENEMY_START).buffer(900)])
     kingdoms = unary_union([Point(x, y).buffer(1250 if k == "castle" else 950) for k, x, y, *_ in BUILDINGS])
     veins = unary_union([Point(x, y).buffer(800) for x, y in GOLD_VEINS])
     # room to build round each castle: a broad flat apron the player's farms and mines can go on
     aprons = unary_union([Point(P_ANCHOR).buffer(3400), Point(E_ANCHOR).buffer(3400)])
-    return unary_union([lane, spawns, kingdoms, veins, aprons])
+    fords = unary_union([Point(FORD_A).buffer(1500), Point(FORD_B).buffer(1500)])
+    gaps = unary_union([Point(g).buffer(BELT_GAP * 0.5 + 150) for g in BELT_GAPS] + [Point(mir(g)).buffer(BELT_GAP * 0.5 + 150) for g in BELT_GAPS])
+    heads = unary_union([b.buffer(700) for b in BRIDGE_POLYS])
+    return unary_union([lane, flank, spawns, kingdoms, veins, aprons, fords, gaps, heads, ISLAND.buffer(250)])
 
 
 BLOCK_ROCKS = []      # name, x, y, (sx, sy, sz), yaw : blocking boulders (gameplay collision box each)
 KNOLLS = []           # (x, y, rx, ry, height): blocking knolls with a tree or two
 FIELD_TERRACES = []   # (x, y, rx, ry, walkable 40 cm steps, core steps)
-FIELD_FIRS = []       # (x, y, kind): single firs in the field, each with a trunk blocker
+FIELD_FIRS = []       # (x, y, kind): single firs on the player's side, each with a trunk blocker (and a twin)
 CORE_TOPS = []        # (x, y) on top of each bluff, for trees
+# Dressing by region, player's side (the enemy's is its mirror image): (zone, terraces, knolls, boulders, single firs).
+# Far fewer than the old uniform scatter: the belts, the river and the highlands give the field its shape.
+FIELD_SPEC = [("plain", 6, 2, 2, 8), ("wood", 8, 7, 4, 0), ("stone", 7, 5, 8, 5), ("back", 5, 4, 3, 6)]
 
 
-def plan_field(keep):
-    """Scatters the in-field features over the +/-BOUND play area (Poisson-ish, with keep-outs), so the large map
-    reads like the hand-placed small one did: open lanes, terraces to fight round, knolls and boulders as cover."""
+def plan_field(keep, keep_open):
+    """Scatters the in-field dressing over the player's half (Poisson-ish, with keep-outs), by region. `keep` also
+    excludes the highland (terraces and knolls); `keep_open` does not (its boulders and firs)."""
+    from shapely.prepared import prep
     taken = []
     keep_p = {}
 
-    def kept(x, y, pad):
-        if pad not in keep_p:
-            from shapely.prepared import prep
-            keep_p[pad] = prep(keep.buffer(pad))
-        return keep_p[pad].contains(Point(x, y))
+    def kept(x, y, pad, which):
+        if (pad, which) not in keep_p:
+            keep_p[(pad, which)] = prep((keep if which else keep_open).buffer(pad))
+        return keep_p[(pad, which)].contains(Point(x, y))
 
-    def free(x, y, r, pad):
-        if abs(x) > BOUND - r * 0.6 or abs(y) > BOUND - r * 0.6:
+    def free(x, y, r, pad, which):
+        if abs(x) > BOUND - r * 0.6 - 150 or abs(y) > BOUND - r * 0.6 - 150:
             return False
-        if kept(x, y, pad):
+        if side_n(x, y) > -(r + 250.0) or kept(x, y, pad, which):
             return False
         return all((x - tx) ** 2 + (y - ty) ** 2 > (r + tr) ** 2 for tx, ty, tr in taken)
 
-    def scatter(n, rmin, rmax, pad, tries=20000):
+    def scatter(n, rmin, rmax, pad, zone, which=True, tries=30000):
         out = []
         for _ in range(tries):
             if len(out) >= n:
                 break
             r = U(rmin, rmax)
             x, y = U(-BOUND, BOUND), U(-BOUND, BOUND)
-            if free(x, y, r, pad):
+            if zone_of(x, y) == zone and free(x, y, r, pad, which):
                 taken.append((x, y, r))
                 out.append((x, y, r))
         return out
 
-    for x, y, r in scatter(95, 450, 1000, 300.0):
-        tiers = int(rng.integers(1, 3))
-        core = [] if rng.random() < 0.35 else [U(70, 110) for _ in range(int(rng.integers(1, 4)))]
-        FIELD_TERRACES.append((x, y, r * U(0.8, 1.1), r * U(0.75, 1.05), tiers, core))
-    for x, y, r in scatter(70, 220, 320, 150.0):
-        KNOLLS.append((x, y, r * U(0.9, 1.1), r * U(0.9, 1.1), U(95, 140)))
-    for i, (x, y, r) in enumerate(scatter(46, 170, 240, 120.0)):
-        BLOCK_ROCKS.append(("Rock_%02d" % i, x, y, (U(200, 320), U(170, 240), U(130, 210)), U(-60, 60)))
-    for x, y, r in scatter(70, 90, 120, 80.0):
-        FIELD_FIRS.append((x, y, "ABBCC"[int(rng.integers(0, 5))]))
+    ri = 0
+    for zone, n_ter, n_knoll, n_rock, n_fir in FIELD_SPEC:
+        for x, y, r in scatter(n_ter, 420 if zone == "plain" else 450, 800 if zone == "plain" else 1000, 300.0, zone):
+            if zone == "plain":                                # low single steps only: the centre lane stays open
+                tiers, core = 1, []
+            else:
+                tiers = int(rng.integers(1, 3))
+                core = [] if rng.random() < (0.2 if zone == "stone" else 0.4) else [U(70, 110) for _ in range(int(rng.integers(1, 4)))]
+            FIELD_TERRACES.append((x, y, r * U(0.8, 1.1), r * U(0.75, 1.05), tiers, core))
+        for x, y, r in scatter(n_knoll, 220, 320, 150.0, zone):
+            KNOLLS.append((x, y, r * U(0.9, 1.1), r * U(0.9, 1.1), U(95, 140)))
+        for x, y, r in scatter(n_rock, 170, 240, 120.0, zone):
+            BLOCK_ROCKS.append(("Rock_%02d" % ri, x, y, (U(200, 320), U(170, 240), U(130, 210)), U(-60, 60)))
+            ri += 1
+        for x, y, r in scatter(n_fir, 90, 120, 80.0, zone):
+            FIELD_FIRS.append((x, y, "ABBCC"[int(rng.integers(0, 5))]))
+    for x, y, r in scatter(8, 170, 240, 120.0, "highland", which=False):       # the upland is strewn with boulders
+        BLOCK_ROCKS.append(("Rock_%02d" % ri, x, y, (U(220, 340), U(180, 260), U(140, 230)), U(-60, 60)))
+        ri += 1
+    for x, y, r in scatter(3, 90, 120, 80.0, "highland", which=False):
+        FIELD_FIRS.append((x, y, "AAB"[int(rng.integers(0, 3))]))
+
+
+def build_ridge():
+    """The rock ridge: a chain of cut slabs along RIDGE_PARTS, 78 cm at the foot (too tall to climb) with a crest on top."""
+    stop = unary_union([Point(g).buffer(BELT_GAP * 0.5) for g in BELT_GAPS] + [LAKE.buffer(BELT_RIVER_GAP), Point(P_ANCHOR).buffer(3550)])
+    polys = []
+    for k, line in enumerate(RIDGE_PARTS):
+        blobs, d = [], 0.0
+        while d <= line.length:
+            p = line.interpolate(d)
+            blobs.append(chunk_shape(p.x + U(-50, 50), p.y + U(-50, 50), U(250, 340), U(230, 320), 3))
+            d += U(260, 360)
+        body = unary_union([b for b in blobs if b is not None]).intersection(line.buffer(370)).difference(stop)
+        for j, poly in enumerate(clean(body, 60000.0)):
+            name = "SM_T_Ridge_%d%d" % (k, j)
+            add_tier(poly, 78.0, 0.0, name, "Terrain/Ridges")
+            polys.append(poly)
+            for crest in clean(poly.buffer(-U(80, 105), 2), 30000.0):
+                add_tier(crest, 78.0 + U(56, 68), 78.0, name, "Terrain/Ridges")
+                for _ in range(max(int(crest.area / 500000.0), 1)):
+                    pt = crest.buffer(-60).representative_point() if rng.random() < 0.5 else crest.centroid
+                    if crest.buffer(-50).contains(pt):
+                        CORE_TOPS.append((pt.x + U(-20, 20), pt.y + U(-20, 20)))
+    return polys
+
+
+def build_highland(keep_base):
+    """The player's highland: two broad walkable steps (40 cm each) with the veins on the upper one and a few rock tors."""
+    global HIGHLAND_POLY
+    hx, hy = HIGHLAND_P
+    veins = [v for v in GOLD_VEINS if zone_of(*v) == "highland" and side_n(*v) < 0]
+    limit = SIDE_P.difference(LAKE.buffer(560)).intersection(box(-BOUND + 150, -BOUND + 150, BOUND - 150, BOUND - 150))
+    t1 = unary_union([chunk_shape(hx, hy, HIGHLAND_R[0] * 0.92, HIGHLAND_R[1] * 0.92, 7)] + [Point(v).buffer(1300) for v in veins]).intersection(limit)
+    t1 = largest(t1.buffer(-60, 2).buffer(60, 2)).simplify(9.0)
+    HIGHLAND_POLY = t1
+    add_tier(t1, 40.0, 0.0, "SM_T_Highland_0", "Terrain/Highland")
+    inner = unary_union([chunk_shape(hx + U(-150, 150), hy + U(-150, 150), HIGHLAND_R[0] * 0.66, HIGHLAND_R[1] * 0.66, 6)] + [Point(v).buffer(980) for v in veins])
+    t2 = largest(inner.intersection(t1.buffer(-U(280, 380), 2)).buffer(-50, 2).buffer(50, 2)).simplify(9.0)
+    add_tier(t2, 80.0, 40.0, "SM_T_Highland_0", "Terrain/Highland")
+    clear = unary_union([Point(v).buffer(1150) for v in veins] + [LineString(ROAD_SPUR_P).buffer(330)])
+    room = t2.buffer(-420, 2).difference(clear)
+    made = []
+    for _ in range(400):
+        if len(made) >= 5 or room.is_empty:
+            break
+        minx, miny, maxx, maxy = room.bounds
+        x, y = U(minx, maxx), U(miny, maxy)
+        if not room.contains(Point(x, y)) or any(math.hypot(x - mx, y - my) < 1100 for mx, my in made):
+            continue
+        made.append((x, y))
+        tor = chunk_shape(x, y, U(260, 400), U(240, 360), 4)
+        if tor is None:
+            continue
+        tor = tor.intersection(t2.buffer(-120, 2)).difference(clear)
+        for poly in clean(tor, 40000.0)[:1]:
+            h = U(85, 115)
+            name = "SM_T_Tor_%d" % len(made)
+            add_tier(poly, 80.0 + h, 80.0, name, "Terrain/Highland")
+            for top in clean(poly.buffer(-U(60, 90), 2), 20000.0)[:1]:
+                add_tier(top, 80.0 + h + U(60, 90), 80.0 + h, name, "Terrain/Highland")
+                CORE_TOPS.append((top.representative_point().x, top.representative_point().y))
+    return t1
 
 
 def build_layout():
-    global LAKE, HM
+    global HM
     play = box(-BOUND, -BOUND, BOUND, BOUND)
     tall_zone_out = play.buffer(95, join_style=2)              # tiers taller than a step stay outside this
-    road_poly = unary_union([LineString(ROAD_MAIN).buffer(180), LineString(ROAD_BRANCH).buffer(150), LineString(ROAD_SIDE).buffer(140)])
+    road_poly = unary_union([LineString(ROAD_MAIN).buffer(180)] + [LineString(r).buffer(140) for r in FLANK_ROADS])
 
-    # ---- lakes: two in the field (obstacles both armies must go round), one beyond the left edge
-    lakes = [chunk_shape(x, y, rx, ry, 6) for x, y, rx, ry in LAKE_SEEDS]
-    lakes.append(unary_union([chunk_shape(BOUND + 4200, -BOUND - 1800, 2200, 2600, 6), rounded_box(BOUND + 2600, -BOUND - 400, 1300, 1500, 20, 420)]))
-    lake = unary_union(lakes).difference(road_poly.buffer(200)).buffer(-40, 2).buffer(40, 2)
-    LAKE = MultiPolygon([p.simplify(10.0) for p in largest(lake, 200000.0, all_parts=True)])
     lake_out = LAKE.buffer(110)
-    keep = unary_union([lane_keepout(), lake_out])
-    plan_field(keep)
-    rock_clear = unary_union([Point(x, y).buffer(max(s[0], s[1]) * 0.5 + 150) for _, x, y, s, _ in BLOCK_ROCKS])
+    wood_poly = unary_union([l.buffer(WOOD_HALF) for l in WOOD_PARTS])
+    keep_base = unary_union([lane_keepout(), lake_out, wood_poly.buffer(160)])
 
-    # ---- field terraces (walkable: 36-40 cm steps)
+    # ---- the player's half: ridge, highland, then the scattered dressing; all of it is mirrored for the enemy below
+    n0 = len(TIERS)
+    ridge_polys = build_ridge()
+    keep_base = unary_union([keep_base] + [p.buffer(220) for p in ridge_polys])
+    highland = build_highland(keep_base)
+    keep = unary_union([keep_base, highland.buffer(200)])
+    plan_field(keep, keep_base)
+    rock_clear_p = unary_union([Point(x, y).buffer(max(s[0], s[1]) * 0.5 + 150) for _, x, y, s, _ in BLOCK_ROCKS])
+
+    # field terraces (walkable: 36-40 cm steps)
     for i, (x, y, rx, ry, tiers, core) in enumerate(FIELD_TERRACES):
         shape = chunk_shape(x, y, rx, ry, 5)
-        shape = shape.difference(unary_union([keep, rock_clear, road_poly.buffer(30)]))
+        shape = shape.intersection(SIDE_P).difference(unary_union([keep, rock_clear_p, road_poly.buffer(30)]))
         base = clean(shape, 60000.0)
         if not base:
             continue
@@ -642,12 +903,29 @@ def build_layout():
                 c = low["poly"].centroid
                 CORE_TOPS.append((c.x + U(-60, 60), c.y + U(-60, 60)))
 
-    # ---- blocking knolls
+    # blocking knolls
     for i, (x, y, rx, ry, h) in enumerate(KNOLLS):
-        shape = chunk_shape(x, y, rx, ry, 3).difference(unary_union([keep, road_poly]))
+        shape = chunk_shape(x, y, rx, ry, 3).intersection(SIDE_P).difference(unary_union([keep, road_poly]))
         base = clean(shape, 30000.0)
         if base:
             stack("SM_T_Knoll_%02d" % i, "Terrain/Knolls", base[:1], [h * 0.62, h * 0.38], shrink=(0.7, 0.9), ledge=(34.0, 60.0), split=0.0)
+
+    # ---- the enemy's half: the same, turned 180 degrees about the centre
+    for t in TIERS[n0:]:
+        add_tier(rot180(t["poly"]), t["top"], t["below"], t["group"] + "m", GROUPS[t["group"]])
+    KNOLLS.extend([(-x, -y, rx, ry, h) for x, y, rx, ry, h in list(KNOLLS)])
+    CORE_TOPS.extend([mir(p) for p in list(CORE_TOPS)])
+    BLOCK_ROCKS.extend([(name + "m", -x, -y, size, yaw) for name, x, y, size, yaw in list(BLOCK_ROCKS)])
+    rock_clear = unary_union([Point(x, y).buffer(max(s[0], s[1]) * 0.5 + 150) for _, x, y, s, _ in BLOCK_ROCKS])
+    keep = unary_union([keep, rot180(keep)])
+
+    # ---- the centre: the shrine's paved dais on the island, the bridge decks, the fords' beds
+    dais = Polygon([(620.0 * math.cos(math.radians(11.25 + 22.5 * k)), 620.0 * math.sin(math.radians(11.25 + 22.5 * k))) for k in range(16)])
+    add_tier(dais, 24.0, 0.0, "SM_T_Shrine", "Terrain/Shrine")
+    for i, deck in enumerate(BRIDGE_POLYS):                    # a stone slab from bank to bank, its underside just clear of the water
+        add_tier(deck, 0.0, LAKE_SURFACE + 10.0, "SM_T_Bridge_%d" % i, "Terrain/Bridges")
+    for i, ford in enumerate(FORD_POLYS):
+        add_tier(ford, FORD_BED, LAKE_BED, "SM_T_Ford_%d" % i, "Terrain/Shore")
 
     # ---- plateaus framing the field. Far side rises in many steps; near side stays low.
     def ring_stack(name, x, y, rx, ry, steps, apron=True):
@@ -757,49 +1035,125 @@ def place_props(keep, road_poly, rock_clear):
         return True
 
     for (x, y, rx, ry, h) in KNOLLS:
+        if height_at(x, y) < 50.0:                             # the knoll was cut away by a keep-out
+            continue
         tree(x + U(-30, 30), y + U(-30, 30), "CD"[int(rng.integers(0, 2))], force=True)
         if rng.random() < 0.6:
             tree(x + U(-70, 70), y + rx * 0.45 * (1 if rng.random() < 0.5 else -1), "A", force=True)
+
+    # Blocking trees inside the field always come in pairs, one each side of the map (both stand or neither does).
+    def trunk_ok(x, y, pad, check_keep):
+        if not play_in(x, y, -80) or in_lake(x, y, 110) or on_road(x, y, pad) or not flat_around(x, y, 60):
+            return False
+        if check_keep and keep_prep.contains(Point(x, y)):
+            return False
+        return all((x - tx) ** 2 + (y - ty) ** 2 >= 150 ** 2 for tx, ty in trees)
+
+    def tree_pair(x, y, kind, label, pad=60.0, check_keep=True):
+        if not trunk_ok(x, y, pad, check_keep) or not trunk_ok(-x, -y, pad, check_keep):
+            return False
+        s = U(0.92, 1.08)
+        for k, (px_, py_) in enumerate(((x, y), (-x, -y))):
+            inst("SM_Conifer_" + kind, px_, py_, scale=s, sink=6.0)
+            trees.append((px_, py_))
+            BLOCKERS.append({"label": "%s%s_Collision" % (label, "m" if k else ""), "pos": [round(px_, 1), round(py_, 1), height_at(px_, py_) + 90.0], "size": [46, 46, 200], "yaw": 0})
+            if rng.random() < 0.5:
+                a2 = U(0, 2 * math.pi)
+                fx, fy = px_ + math.cos(a2) * U(80, 170), py_ + math.sin(a2) * U(80, 170)
+                if not on_road(fx, fy) and not in_lake(fx, fy, 30):
+                    inst("SM_Tuft_Fern", fx, fy, yaw=U(-35, 35))
+        return True
+
     for i, (x, y, kind) in enumerate(FIELD_FIRS):              # single firs in the field: one small trunk blocker each
-        if flat_around(x, y, 60) and not on_road(x, y, 60) and tree(x, y, kind, force=True):
-            BLOCKERS.append({"label": "Fir_%03d_Collision" % i, "pos": [x, y, height_at(x, y) + 90.0], "size": [46, 46, 200], "yaw": 0})
+        tree_pair(x, y, kind, "Fir_%03d" % i, check_keep=False)
     for (x, y) in CORE_TOPS:
-        tree(x, y, "ABC"[int(rng.integers(0, 3))], force=True)
+        if height_at(x, y) > 50.0:
+            tree(x, y, "ABC"[int(rng.integers(0, 3))], force=True)
+
+    # ---- the fir-wood belts: a thicket no troop can pass (one row of hidden blocker boxes along its middle line), low
+    # firs so the lanes behind stay in view. Player's side, and its twin.
+    belt_n = 0
+    for k, line in enumerate(WOOD_PARTS):
+        body = line.buffer(WOOD_HALF).difference(unary_union([Point(g).buffer(BELT_GAP * 0.5) for g in BELT_GAPS] + [LAKE.buffer(BELT_RIVER_GAP)]))
+        n_box = max(int(math.ceil(line.length / 300.0)), 1)
+        for j in range(n_box + 1):
+            d = line.length * j / n_box
+            p, p2 = line.interpolate(d), line.interpolate(min(d + 20.0, line.length))
+            p0 = line.interpolate(max(d - 20.0, 0.0))
+            yaw = math.degrees(math.atan2(p2.y - p0.y, p2.x - p0.x))
+            for sgn, tag in ((1.0, ""), (-1.0, "m")):
+                BLOCKERS.append({"label": "Wood_%d_%02d%s_Collision" % (k, j, tag), "pos": [round(sgn * p.x, 1), round(sgn * p.y, 1), 100.0],
+                                 "size": [line.length / n_box + 70.0, 2.0 * WOOD_HALF - 90.0, 220.0], "yaw": round(yaw, 1)})
+        local = []
+        minx, miny, maxx, maxy = body.bounds
+        body_p = prep(body)
+        for _ in range(int(body.area / 9000.0)):
+            x, y = U(minx, maxx), U(miny, maxy)
+            if not body_p.contains(Point(x, y)) or any((x - tx) ** 2 + (y - ty) ** 2 < 150 ** 2 for tx, ty in local):
+                continue
+            local.append((x, y))
+            kind, s = "AABBBC"[int(rng.integers(0, 6))], U(0.92, 1.08)
+            for px_, py_ in ((x, y), (-x, -y)):
+                inst("SM_Conifer_" + kind, px_, py_, scale=s, sink=6.0)
+                trees.append((px_, py_))
+                if rng.random() < 0.6:
+                    a2 = U(0, 2 * math.pi)
+                    inst("SM_Tuft_Fern", px_ + math.cos(a2) * U(70, 150), py_ + math.sin(a2) * U(70, 150), yaw=U(-35, 35))
+            belt_n += 2
+
+    # ---- stands of firs inside the field (trunk blockers; pairs): thick on the wooded flank, a few behind each castle
+    # and along the field's edges
+    stand_n = 0
+    for zone, count, pick in (("wood", 20, None), ("back", 6, None), (None, 26, "edge")):
+        made = 0
+        for _ in range(4000):
+            if made >= count:
+                break
+            cx, cy = U(-B + 500, B - 500), U(-B + 500, B - 500)
+            if side_n(cx, cy) > -500.0 or keep_prep.contains(Point(cx, cy)):
+                continue
+            if pick == "edge":
+                if abs(abs(cx) - B) > 1600 and abs(abs(cy) - B) > 1600:
+                    continue
+            elif zone_of(cx, cy) != zone:
+                continue
+            made += 1
+            spread = U(300, 520)
+            for _ in range(int(rng.integers(5, 10))):
+                a, d = U(0, 2 * math.pi), spread * math.sqrt(U(0.02, 1.0))
+                x, y = cx + math.cos(a) * d, cy + math.sin(a) * d
+                if side_n(x, y) > -200.0:
+                    continue
+                kind = "ABCDE"[int(rng.choice(5, p=[0.2, 0.32, 0.3, 0.14, 0.04]))]
+                if tree_pair(x, y, kind, "Stand_%04d" % stand_n):
+                    stand_n += 1
+
     for _ in range(110):                                       # loose stones in the field (ankle high: dressing only)
         cx, cy = U(-B + 200, B - 200), U(-B + 200, B - 200)
-        if keep_prep.contains(Point(cx, cy)) or on_road(cx, cy, 30):
+        if keep_prep.contains(Point(cx, cy)) or on_road(cx, cy, 30) or in_lake(cx, cy, 120):
             continue
         for _ in range(int(rng.integers(2, 5))):
             inst("SM_Rock_S%d" % rng.integers(0, 3), cx + float(rng.normal(0, 45)), cy + float(rng.normal(0, 45)), sink=9.0)
+
+    # ---- stands beyond the field (dressing only, no collision)
     stands = []
     for _ in range(520):
         x, y = U(-B, B + 4000), U(-B - 3400, B + 3400)
         if play_in(x, y, 240):
             continue
         stands.append((x, y, int(rng.integers(4, 10)), U(240, 520)))
-    # woods at the field's edges, inside the bound but clear of the kingdoms
-    for _ in range(60):
-        x, y = U(-B + 600, B - 600), U(-B + 600, B - 600)
-        if abs(abs(x) - B) > 1600 and abs(abs(y) - B) > 1600:
-            continue
-        if keep_prep.contains(Point(x, y)):
-            continue
-        stands.append((x, y, int(rng.integers(5, 10)), U(300, 520)))
     for cx, cy, num, spread in stands:
         for _ in range(num):
             a, d = U(0, 2 * math.pi), spread * math.sqrt(U(0.02, 1.0))
             x, y = cx + math.cos(a) * d, cy + math.sin(a) * d
-            inside = play_in(x, y, 150)
-            if inside and keep_prep.contains(Point(x, y)):
+            if play_in(x, y, 60):
                 continue
-            if tree(x, y):
-                if inside:
-                    BLOCKERS.append({"label": "Wood_%04d_Collision" % len(trees), "pos": [x, y, height_at(x, y) + 90.0], "size": [46, 46, 200], "yaw": 0})
-                if rng.random() < 0.5:
-                    a2 = U(0, 2 * math.pi)
-                    fx, fy = x + math.cos(a2) * U(80, 170), y + math.sin(a2) * U(80, 170)
-                    if not on_road(fx, fy) and not in_lake(fx, fy, 30) and not (play_in(fx, fy) and keep_prep.contains(Point(fx, fy))):
-                        inst("SM_Tuft_Fern", fx, fy, yaw=U(-35, 35))
+            if tree(x, y) and rng.random() < 0.5:
+                a2 = U(0, 2 * math.pi)
+                fx, fy = x + math.cos(a2) * U(80, 170), y + math.sin(a2) * U(80, 170)
+                if not on_road(fx, fy) and not in_lake(fx, fy, 30) and not play_in(fx, fy):
+                    inst("SM_Tuft_Fern", fx, fy, yaw=U(-35, 35))
+    print("belt firs %d, stand firs %d" % (belt_n, stand_n * 2))
     for i in range(160):                                       # backdrop hills: big firs, sparse
         x, y = U(B + 4000, WX1 - 600), U(WY0 + 600, WY1 - 600)
         if height_at(x, y) > 100 and flat_around(x, y, 80):
@@ -860,8 +1214,8 @@ def place_props(keep, road_poly, rock_clear):
     # ---- grass: blade cards in clumps over the turf (units wade through them; no collision, no shadow). Denser in
     # the field, sparser in the dressing beyond it (seen only far off, through haze and blur).
     n = 0
-    for k_ in range(26000):
-        if k_ < 19000:
+    for k_ in range(2600 if FAST else 26000):
+        if k_ < (1900 if FAST else 19000):
             cx, cy = U(-B - 300, B + 300), U(-B - 300, B + 300)
         else:
             cx, cy = U(-B - 1300, B + 3600), U(-B - 2800, B + 2800)
@@ -888,35 +1242,116 @@ def place_props(keep, road_poly, rock_clear):
         for _ in range(int(rng.integers(2, 5))):
             inst("SM_Tuft_Flower", cx + float(rng.normal(0, 50)), cy + float(rng.normal(0, 50)), yaw=U(-30, 30))
 
-    # ---- ruins (blocking: one convex box each): one in the middle of the field, one where the road leaves it
+    # ---- ruins (blocking pieces: one convex box each)
     def ruin_piece(mesh, x, y, yaw, label, block=None):
         actor(mesh, x, y, yaw, "sandstone", label, "Props/Ruin")
         if block:
             z = height_at(x, y)
             BLOCKERS.append({"label": label + "_Collision", "pos": [x, y, z + block[2] * 0.5 - 6.0], "size": list(block), "yaw": yaw})
 
-    for tag, (rx_, ry_) in (("Ruin", (-900.0, 1300.0)), ("RuinB", (1000.0, -1200.0))):
-        ruin_piece("SM_Ruin_Pillar", rx_ + 120, ry_ - 150, 8, tag + "_Pillar_A", (88, 88, 320))
-        ruin_piece("SM_Ruin_PillarBroken", rx_ + 130, ry_ + 170, -6, tag + "_Pillar_B", (88, 88, 190))
-        ruin_piece("SM_Ruin_Wall", rx_ - 60, ry_ - 20, 4, tag + "_Wall", (60, 370, 190))
-        ruin_piece("SM_Ruin_Block", rx_ + 200, ry_ + 40, 35, tag + "_Block_A")
-        ruin_piece("SM_Ruin_Block", rx_ + 60, ry_ + 300, -50, tag + "_Block_B")
-        actor("SM_BannerPole", rx_ + 150, ry_ - 60, 0, "wood", tag + "_BannerPole", "Props/Ruin")
-        actor("SM_BannerCloth", rx_ + 150, ry_ - 60, 0, "banner", tag + "_Banner", "Props/Ruin")
-        for i, (dx, dy, mesh) in enumerate([(-190, -330, "SM_Menhir_1"), (-230, 280, "SM_Menhir_2")]):
-            actor(mesh, rx_ + dx, ry_ + dy, U(0, 360), "rock", "%s_Stone_%d" % (tag, i), "Props/Ruin")
-    gx, gy = 6700.0, 10400.0                                   # gate on the road where it leaves the field (outside the bound)
+    def both(fn, x, y, *args):
+        """Places a piece and its twin across the centre."""
+        fn(x, y, "", *args)
+        fn(-x, -y, "m", *args)
+
+    # The shrine on the river island, the map's landmark: a paved dais (terrain, 24 cm) ringed by standing stones, with
+    # pillars where the king's road enters and leaves it. The stones block; the road and the sides toward the veins stay open.
+    road_ang = math.degrees(math.atan2(ROAD_MAIN_KEYS[7][1] - ROAD_MAIN_KEYS[5][1], ROAD_MAIN_KEYS[7][0] - ROAD_MAIN_KEYS[5][0]))
+    for i, off in enumerate((45.0, 70.0, 110.0, 135.0)):
+        a = math.radians(road_ang + off)
+
+        def stone(x, y, tag, i=i, a=a):
+            mesh = "SM_Menhir_%d" % (i % 3)
+            yaw = math.degrees(a) + 90.0 + (180.0 if tag else 0.0)
+            actor(mesh, x, y, yaw, "rock", "Shrine_Stone_%d%s" % (i, tag), "Props/Ruin")
+            BLOCKERS.append({"label": "Shrine_Stone_%d%s_Collision" % (i, tag), "pos": [x, y, height_at(x, y) + 100.0], "size": [84, 64, 220], "yaw": yaw})
+        both(stone, 780.0 * math.cos(a), 780.0 * math.sin(a))
+    for i, (off, mesh, hgt) in enumerate(((21.0, "SM_Ruin_Pillar", 320), (-21.0, "SM_Ruin_PillarBroken", 190))):
+        a = math.radians(road_ang + off)
+        both(lambda x, y, tag, i=i, mesh=mesh, hgt=hgt: ruin_piece(mesh, x, y, road_ang + (180.0 if tag else 0.0), "Shrine_Pillar_%d%s" % (i, tag), (88, 88, hgt)),
+             700.0 * math.cos(a), 700.0 * math.sin(a))
+    c_, s_ = math.cos(math.radians(road_ang)), math.sin(math.radians(road_ang))
+    for i, (along, across, yaw) in enumerate(((120.0, 300.0, 35.0), (-60.0, 380.0, -50.0), (260.0, 430.0, 8.0))):      # fallen blocks beside the road (dressing)
+        both(lambda x, y, tag, i=i, yaw=yaw: ruin_piece("SM_Ruin_Block", x, y, road_ang + yaw + (180.0 if tag else 0.0), "Shrine_Block_%d%s" % (i, tag)),
+             along * c_ - across * s_, along * s_ + across * c_)
+
+    def banner(x, y, tag):
+        actor("SM_BannerPole", x, y, 0, "wood", "Shrine_BannerPole" + tag, "Props/Ruin")
+        actor("SM_BannerCloth", x, y, 0, "banner", "Shrine_Banner" + tag, "Props/Ruin")
+    both(banner, 470.0 * math.cos(math.radians(road_ang + 90.0)), 470.0 * math.sin(math.radians(road_ang + 90.0)))
+
+    # The bridges: a pillar pair at each end (blocking, on the banks beside the deck) and kerb stones along the slab.
+    deck = BRIDGE_POLYS[0]
+    mrr = deck.minimum_rotated_rectangle
+    cs = list(mrr.exterior.coords)[:4]
+    e0, e1 = np.array(cs[1]) - np.array(cs[0]), np.array(cs[2]) - np.array(cs[1])
+    if abs(np.linalg.norm(e0) - 2 * BRIDGE_HALF) < abs(np.linalg.norm(e1) - 2 * BRIDGE_HALF):
+        e0, e1 = e1, e0                                         # e0 runs along the bridge
+    span = float(np.linalg.norm(e0))
+    dvec, pvec = e0 / span, e1 / np.linalg.norm(e1)
+    mid_ = np.array([deck.centroid.x, deck.centroid.y])
+    deck_yaw = math.degrees(math.atan2(dvec[1], dvec[0]))
+    n_p = 0
+    for end in (-1.0, 1.0):
+        for sd in (-1.0, 1.0):
+            p = mid_ + dvec * end * (span * 0.5 + 60.0) + pvec * sd * (BRIDGE_HALF + 80.0)
+            if in_lake(p[0], p[1], 60) or in_lake(-p[0], -p[1], 60):
+                p = mid_ + dvec * end * (span * 0.5 + 170.0) + pvec * sd * (BRIDGE_HALF + 80.0)
+            mesh, hgt = (("SM_Ruin_Pillar", 320) if (end * sd) > 0 else ("SM_Ruin_PillarBroken", 190))
+            both(lambda x, y, tag, mesh=mesh, hgt=hgt, n_p=n_p: ruin_piece(mesh, x, y, deck_yaw + (180.0 if tag else 0.0), "Bridge_Pillar_%d%s" % (n_p, tag), (88, 88, hgt)), p[0], p[1])
+            n_p += 1
+    n_k = 0
+    for sd in (-1.0, 1.0):
+        for f in (-0.34, 0.0, 0.34):
+            p = mid_ + dvec * f * span + pvec * sd * (BRIDGE_HALF - 30.0)
+            both(lambda x, y, tag, n_k=n_k: actor("SM_Ruin_Block", x, y, deck_yaw + 90.0 + (180.0 if tag else 0.0), "sandstone", "Bridge_Kerb_%d%s" % (n_k, tag), "Props/Ruin", z=0.0), p[0], p[1])
+            n_k += 1
+
+    gx, gy = 6700.0, 10400.0                                   # gate on the road where it leaves the field for the hills (dressing)
     ruin_piece("SM_Ruin_Pillar", gx, gy - 300, 4, "Gate_Pillar_A")
     ruin_piece("SM_Ruin_Pillar", gx + 40, gy + 330, -5, "Gate_Pillar_B")
     ruin_piece("SM_Ruin_Wall", gx + 20, gy - 560, 2, "Gate_Wall_A")
     ruin_piece("SM_Ruin_Wall", gx + 70, gy + 600, 184, "Gate_Wall_B")
     actor("SM_BannerPole", gx - 30, gy + 250, 0, "wood", "Gate_BannerPole", "Props/Ruin")
     actor("SM_BannerCloth", gx - 30, gy + 250, 0, "banner", "Gate_Banner", "Props/Ruin")
-    for i, (lx, ly, lrx, lry) in enumerate(LAKE_SEEDS):
-        a = U(0, 2 * math.pi)
-        x, y = lx + math.cos(a) * (lrx + 450), ly + math.sin(a) * (lry + 450)
-        if not in_lake(x, y, 60) and not keep_prep.contains(Point(x, y)):
-            actor("SM_Menhir_%d" % (i % 3), x, y, U(0, 360), "rock", "Shore_Stone_%d" % i, "Props/Rocks")
+
+    # The fords: a standing stone at each corner of the crossing, on the banks (dressing: they mark it from afar).
+    ford = FORD_POLYS[0]
+    fr = list(ford.minimum_rotated_rectangle.exterior.coords)[:4]
+    fc = np.array([ford.centroid.x, ford.centroid.y])
+    for i, corner in enumerate(fr):
+        v = np.array(corner) - fc
+        p = fc + v * (1.0 + 190.0 / max(np.linalg.norm(v), 1.0))
+        if in_lake(p[0], p[1], 40) or in_lake(-p[0], -p[1], 40):
+            continue
+        both(lambda x, y, tag, i=i: actor("SM_Menhir_%d" % (i % 3), x, y, U(0, 360), "rock", "Ford_Stone_%d%s" % (i, tag), "Props/Rocks"), p[0], p[1])
+
+    # Reeds and long grass along the banks (not at the fords or the bridge heads).
+    quiet = prep(unary_union([f.buffer(260) for f in FORD_POLYS] + [b.buffer(260) for b in BRIDGE_POLYS]))
+    reeds = 0
+    for part in LAKE.geoms:
+        for ring in [part.exterior] + list(part.interiors):
+            d = U(0, 80)
+            while d < ring.length:
+                p = ring.interpolate(d)
+                q = ring.interpolate(min(d + 10.0, ring.length))
+                d += U(60, 150)
+                if not play_in(p.x, p.y, 400) or quiet.contains(p) or rng.random() < 0.4:
+                    continue
+                ex, ey = q.x - p.x, q.y - p.y
+                ln = math.hypot(ex, ey) or 1.0
+                nx, ny = ey / ln, -ex / ln
+                if in_lake(p.x + nx * 40, p.y + ny * 40):
+                    nx, ny = -nx, -ny
+                kind = "SM_Tuft_Dry" if rng.random() < 0.65 else "SM_Tuft_Tall"
+                for _ in range(int(rng.integers(2, 6))):
+                    off = U(12, 75)
+                    x, y = p.x + nx * off + U(-35, 35), p.y + ny * off + U(-35, 35)
+                    if in_lake(x, y, 4) or abs(height_at(x, y)) > 1.0:
+                        continue
+                    inst(kind, x, y, yaw=U(-32, 32), scale=1.0)
+                    reeds += 1
+    print("reeds %d" % reeds)
 
     # ---- fences, stumps and logs round the kingdoms and along the road
     def scatter_near(cx, cy, rmin, rmax):
@@ -1073,11 +1508,6 @@ def apply_kingdoms():
         placed.append({"type": kind, "mesh": meta["mesh"], "label": label, "team": team, "pos": [x, y, 0.0], "yaw": yaw,
                        "footprint": meta["footprint"], "ring_radius": meta["ring_radius"],
                        "colliders": meta["colliders"], "sockets": meta["sockets"]})
-    # two firs to frame the opening view again, where the knolls behind the player's start used to carry them
-    for (x, y, kind) in ((-2360.0, -420.0, "B"), (-1960.0, 1250.0, "D"), (-2740.0, -640.0, "A")):
-        if not inside.contains(Point(x, y)):
-            inst("SM_Conifer_" + kind, x, y, yaw=37.0, scale=1.0, sink=6.0)
-            BLOCKERS.append({"label": "Fir_K%d_Collision" % int(abs(x + y)), "pos": [x, y, height_at(x, y) + 90.0], "size": [46, 46, 200], "yaw": 0})
     print("kingdoms: %d buildings, dressing dropped %d, re-seated %d" % (len(placed), dropped, moved))
     return placed
 
@@ -1115,18 +1545,18 @@ def build_splat_fields():
     shape = X.shape
     wob = (smooth_noise(shape, 24, 1) - 0.5) * 150.0 + (smooth_noise(shape, 7, 2) - 0.5) * 50.0
     d_main = dist_to_polyline(X, Y, ROAD_MAIN) + wob
-    d_branch = dist_to_polyline(X, Y, ROAD_BRANCH) + wob
-    d_side = dist_to_polyline(X, Y, ROAD_SIDE) + wob
-    road_d = np.minimum(d_main, d_branch + 25.0)
+    d_flank = raster_dist(FLANK_ROADS, lines=True)[0] + wob
+    road_d = np.minimum(d_main, d_flank + 25.0)
 
     def band(d, core, edge):
         return np.clip((edge - d) / (edge - core), 0.0, 1.0)
 
     paved = np.clip((smooth_noise(shape, 30, 8) - 0.34) * 5.0, 0.0, 1.0)             # the old paving survives in stretches
-    R = band(road_d, 55.0, 105.0) * 0.5 * paved + band(road_d, 100.0, 165.0) * 0.5   # stones inside ~55, earth out to ~165
-    R = np.maximum(R, band(d_side, 40.0, 120.0) * 0.52)                               # footpath: earth only
+    paved = np.maximum(paved, np.clip((3100.0 - np.hypot(X, Y)) / 500.0, 0.0, 1.0))  # and is whole across the island and its bridges
+    R = band(d_main, 55.0, 105.0) * 0.5 * paved + band(d_main, 100.0, 165.0) * 0.5   # stones inside ~55, earth out to ~165
+    R = np.maximum(R, band(d_flank, 40.0, 120.0) * 0.52)                              # flank roads: earth only
     worn = smooth_noise(shape, 40, 3)
-    for (cx, cy, rad) in [(PLAYER_START[0], PLAYER_START[1], 620.0), (ENEMY_START[0], ENEMY_START[1], 620.0), (-900.0, 1300.0, 330.0), (1000.0, -1200.0, 330.0), (6700.0, 10400.0, 520.0)] + [(x, y, 420.0) for x, y in GOLD_VEINS]:
+    for (cx, cy, rad) in [(PLAYER_START[0], PLAYER_START[1], 620.0), (ENEMY_START[0], ENEMY_START[1], 620.0), (6700.0, 10400.0, 520.0)] + [(x, y, 420.0) for x, y in GOLD_VEINS]:
         dd = np.hypot(X - cx, Y - cy)
         R = np.maximum(R, np.clip((rad - dd) / rad, 0, 1) * (0.25 + worn * 0.45))      # trampled ground at camps and ruins
     R = np.maximum(R, np.clip((worn - 0.83) * 4.0, 0, 0.5))                           # a few bare scuffs
@@ -1152,6 +1582,31 @@ def build_splat_fields():
         R = np.maximum(R, band(dist_to_polyline(X, Y, pts) + wob2, 34.0, 100.0) * 0.56)
     moss = smooth_noise(shape, 50, 4) * 0.75 + smooth_noise(shape, 14, 5) * 0.25
     dry = smooth_noise(shape, 60, 6) * 0.7 + smooth_noise(shape, 18, 7) * 0.3
+
+    # ---- regions (see zone_of): the same for both kingdoms, so judged on the player's side and mirrored
+    sd = side_n(X, Y)
+    Xm, Ym = np.where(sd > 0, -X, X), np.where(sd > 0, -Y, Y)
+    ang = np.degrees(np.arctan2(Ym - P_ANCHOR[1], Xm - P_ANCHOR[0])) + (smooth_noise(shape, 36, 11) - 0.5) * 10.0
+    far = np.clip((np.hypot(Xm - P_ANCHOR[0], Ym - P_ANCHOR[1]) - 2600.0) / 1200.0, 0.0, 1.0)
+    field = np.clip((BOUND + 500.0 - np.maximum(np.abs(X), np.abs(Y))) / 600.0, 0.0, 1.0)
+    hl = np.clip((1.06 - np.hypot((Xm - HIGHLAND_P[0]) / HIGHLAND_R[0], (Ym - HIGHLAND_P[1]) / HIGHLAND_R[1]) + (worn - 0.5) * 0.12) / 0.14, 0.0, 1.0) * field
+    plain = np.clip((ang - WOOD_ANGLE + 2.0) / 5.0, 0, 1) * np.clip((RIDGE_ANGLE + 2.0 - ang) / 5.0, 0, 1) * far * field * (1.0 - hl)
+    wood = np.clip((ang + 27.0) / 5.0, 0, 1) * np.clip((WOOD_ANGLE + 2.0 - ang) / 5.0, 0, 1) * far * field * (1.0 - hl)
+    stone = np.clip((ang - RIDGE_ANGLE + 2.0) / 5.0, 0, 1) * np.clip((117.0 - ang) / 5.0, 0, 1) * far * field * (1.0 - hl)
+    d_bank, water = raster_dist(list(LAKE.geoms))
+    belts = [l.buffer(WOOD_HALF) for l in WOOD_PARTS]
+    d_belt = raster_dist(belts + [rot180(b) for b in belts])[0]
+    bank = band(d_bank + wob * 0.25, 60.0, 520.0)                  # a lush strip along the water
+    belt = band(d_belt + wob * 0.4, 120.0, 420.0)                  # mossy floor under the fir belts
+    moss = moss + 0.14 * wood + 0.5 * belt + 0.42 * bank - 0.35 * hl
+    dry = dry + 0.22 * plain + 0.1 * stone + 0.42 * hl - 0.6 * belt - 0.5 * bank     # straw-gold plain, parched upland
+    R = np.maximum(R, hl * np.clip((worn - 0.5) * 1.5, 0.0, 0.45))                    # bare, stony ground on the highlands
+    R = np.maximum(R, stone * np.clip((worn - 0.68) * 2.0, 0.0, 0.45))
+    R = np.maximum(R, band(d_bank + wob2 * 0.6, 25.0, 90.0) * 0.46)                   # mud at the water's edge
+    d_ford = raster_dist(FORD_POLYS)[0]
+    R = np.maximum(R, band(d_ford + wob2, 120.0, 520.0) * (0.56 + 0.44 * paved2))     # gravel bars on a ford's banks and bed
+    R = np.maximum(R, band(raster_dist(BRIDGE_POLYS)[0], 0.0, 60.0))                  # the bridge slabs: set stone
+    R = np.maximum(R, band(np.hypot(X, Y), 600.0, 640.0) * (0.62 + 0.38 * paved2))    # the shrine's dais
     return X, Y, R, moss, dry, road_d
 
 
@@ -1202,7 +1657,8 @@ def write_preview(splat, path, minimap=0):
     col = col * (0.75 + np.clip(z, 0, 900)[..., None] / 900.0 * 0.9) * sp[..., 3:4]
     zs = hm(Xg - (60 if minimap else 14), Yg + (60 if minimap else 14))   # cheap relief
     col = np.where((zs > z + 5)[..., None], col * 0.55, np.where((zs < z - 5)[..., None], col * 1.25, col))
-    col = np.where((z < -1)[..., None], np.array([40, 90, 100], np.float32), col)
+    col = np.where((z < -1)[..., None], np.array([118, 150, 138], np.float32), col)     # a ford's gravel showing through
+    col = np.where((z < -30)[..., None], np.array([40, 90, 100], np.float32), col)
     img = Image.fromarray(np.clip(col, 0, 255).astype(np.uint8))
     d = ImageDraw.Draw(img)
 
@@ -1241,9 +1697,279 @@ def write_preview(splat, path, minimap=0):
     img.save(path)
 
 
+# ============================================================================================ checks and the plan view
+def walk_grid():
+    """The field as USRGridSubsystem will sample it: 1 m cells over +/-BOUND, ground height from the height map; a cell
+    is blocked where the ground is below -30 cm (water) or under a hidden blocker box (grown by half a cell). Also
+    returns the cells under the level's buildings. Arrays are indexed [ix, iy]."""
+    n = int(2 * BOUND / 100.0)
+    c = -BOUND + (np.arange(n) + 0.5) * 100.0
+    Xc, Yc = np.meshgrid(c, c, indexing="ij")
+    H = HM[((Xc - WX0) / HM_RES).astype(int), ((Yc - WY0) / HM_RES).astype(int)]
+    blocked = H < -30.0
+    for b in BLOCKERS:
+        ex, ey = b["size"][0] * 0.5 + 50.0, b["size"][1] * 0.5 + 50.0
+        rad = math.hypot(ex, ey)
+        cx, cy = b["pos"][0], b["pos"][1]
+        i0, i1 = max(int((cx - rad + BOUND) / 100.0), 0), min(int((cx + rad + BOUND) / 100.0), n - 1)
+        j0, j1 = max(int((cy - rad + BOUND) / 100.0), 0), min(int((cy + rad + BOUND) / 100.0), n - 1)
+        if i1 < i0 or j1 < j0:
+            continue
+        ca, sa = math.cos(math.radians(b["yaw"])), math.sin(math.radians(b["yaw"]))
+        dx, dy = Xc[i0:i1 + 1, j0:j1 + 1] - cx, Yc[i0:i1 + 1, j0:j1 + 1] - cy
+        blocked[i0:i1 + 1, j0:j1 + 1] |= (np.abs(dx * ca + dy * sa) <= ex) & (np.abs(-dx * sa + dy * ca) <= ey)
+    built = np.zeros_like(blocked)
+    for kind, x, y, yaw, team, label in BUILDINGS:
+        x0, y0, x1, y1 = building_meta(kind)["footprint"]
+        built |= (Xc >= x + x0) & (Xc <= x + x1) & (Yc >= y + y0) & (Yc <= y + y1)
+    return Xc, Yc, H, blocked, built
+
+
+def flood(H, blocked, start, step=45.0):
+    """Cells a troop can walk to from `start` (4-neighbour moves, climbing at most `step` cm): distance in cells, -1 = never."""
+    n = H.shape[0]
+    dist = np.full(H.shape, -1, np.int32)
+    i, j = int((start[0] + BOUND) / 100.0), int((start[1] + BOUND) / 100.0)
+    if blocked[i, j]:
+        return dist
+    dist[i, j] = 0
+    front = [(i, j)]
+    while front:
+        nxt = []
+        for i, j in front:
+            for a, b in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)):
+                if 0 <= a < n and 0 <= b < n and dist[a, b] < 0 and not blocked[a, b] and abs(H[a, b] - H[i, j]) <= step:
+                    dist[a, b] = dist[i, j] + 1
+                    nxt.append((a, b))
+        front = nxt
+    return dist
+
+
+def validate():
+    """Checks the layout the way the game will use it and prints a report. Returns (lines, grid) for the plan view."""
+    from shapely.prepared import prep
+    Xc, Yc, H, blocked, built = walk_grid()
+    solid = blocked | built
+    n = H.shape[0]
+    out = []
+
+    def cells_in(poly):
+        m = np.zeros(H.shape, bool)
+        minx, miny, maxx, maxy = poly.bounds
+        pp = prep(poly)
+        for i in range(max(int((minx + BOUND) / 100.0), 0), min(int((maxx + BOUND) / 100.0) + 1, n)):
+            for j in range(max(int((miny + BOUND) / 100.0), 0), min(int((maxy + BOUND) / 100.0) + 1, n)):
+                m[i, j] = pp.contains(Point(Xc[i, j], Yc[i, j]))
+        return m
+
+    crossings = {"ford A (top-left)": cells_in(FORD_POLYS[0]), "ford B (bottom-right)": cells_in(FORD_POLYS[1]),
+                 "island bridges": cells_in(BRIDGE_POLYS[0]) | cells_in(BRIDGE_POLYS[1])}
+    ej = (int((ENEMY_START[0] + BOUND) / 100.0), int((ENEMY_START[1] + BOUND) / 100.0))
+    d_all = flood(H, solid, PLAYER_START)
+    out.append("player start -> enemy start: %s" % ("%d m on foot" % d_all[ej] if d_all[ej] >= 0 else "NO ROUTE"))
+    for name, mask in crossings.items():
+        others = np.zeros(H.shape, bool)
+        for k, m in crossings.items():
+            if k != name:
+                others |= m
+        d = flood(H, solid | others, PLAYER_START)
+        wet = int((mask & ~solid).sum())
+        out.append("  only %-22s %s (%d walkable cells on it)" % (name + ":", "%d m" % d[ej] if d[ej] >= 0 else "NO ROUTE", wet))
+    every = np.zeros(H.shape, bool)
+    for m in crossings.values():
+        every |= m
+    out.append("  all crossings closed:      %s" % ("river holds" if flood(H, solid | every, PLAYER_START)[ej] < 0 else "LEAK: the river can be crossed elsewhere"))
+    inside = (np.abs(Xc) < BOUND - 500) & (np.abs(Yc) < BOUND - 500)
+    cut_off = int(((d_all < 0) & ~solid & inside).sum())
+    out.append("walkable cells cut off from the player's start (inside the edge strip): %d" % cut_off)
+    # fairness: the walkable mask and the heights against their own half turn
+    walk = ~blocked
+    diff = walk != walk[::-1, ::-1]
+    hdiff = (np.abs(H - H[::-1, ::-1]) > 20.0) & walk & walk[::-1, ::-1]
+    out.append("symmetry: %d of %d cells differ in walkability under a half turn (%d away from the 5 m edge strip), %d differ in height by more than 20 cm (%d inside)" % (
+        int(diff.sum()), n * n, int((diff & inside).sum()), int(hdiff.sum()), int((hdiff & inside).sum())))
+
+    def footprint_ok(kind, x, y, margin=True):
+        x0, y0, x1, y1 = building_meta(kind)["footprint"]
+        m = (Xc >= x + x0) & (Xc <= x + x1) & (Yc >= y + y0) & (Yc <= y + y1)
+        if not m.any() or blocked[m].any() or (H[m].max() - H[m].min()) > 30.0:
+            return False
+        if margin:
+            g = (Xc >= x + x0 - 100) & (Xc <= x + x1 + 100) & (Yc >= y + y0 - 100) & (Yc <= y + y1 + 100)
+            if built[g].any():
+                return False
+        return bool((np.abs(Xc[m]) < BOUND).all() and x + x0 > -BOUND and x + x1 < BOUND and y + y0 > -BOUND and y + y1 < BOUND)
+
+    for i, (x, y) in enumerate(GOLD_VEINS):
+        ok = footprint_ok("mine", x, y, margin=i >= 2)
+        reach = d_all[int((x + BOUND) / 100.0) - 6, int((y + BOUND) / 100.0)] >= 0
+        out.append("vein %d at (%6.0f, %6.0f) z %3.0f, %-8s: mine %s, %s" % (i, x, y, height_at(x, y), zone_of(x, y), "fits" if ok else "DOES NOT FIT",
+                                                                              "reachable" if reach else "UNREACHABLE"))
+    for team, anchor in ((0, P_ANCHOR), (1, E_ANCHOR)):
+        counts = {}
+        for kind in ("farm", "castle"):                        # castle footprint stands in for the largest thing built (barracks)
+            c = 0
+            for x in np.arange(anchor[0] - 3800, anchor[0] + 3801, 200.0):
+                for y in np.arange(anchor[1] - 3800, anchor[1] + 3801, 200.0):
+                    if math.hypot(x - anchor[0], y - anchor[1]) <= 3800 and footprint_ok(kind, x, y):
+                        c += 1
+            counts[kind] = c
+        out.append("%s castle territory (38 m): %d farm-sized and %d castle-sized building spots on a 2 m raster" % ("player" if team == 0 else "enemy", counts["farm"], counts["castle"]))
+    for line in out:
+        print(line)
+    return out, (Xc, Yc, H, blocked, built, d_all)
+
+
+ZONE_TINT = {"home": (132, 142, 84), "back": (118, 132, 80), "wood": (92, 122, 76), "plain": (158, 156, 92), "stone": (146, 140, 112), "highland": (172, 152, 112)}
+
+
+def write_layout_preview(path, grid, report):
+    """Saved/MapPreview/layout.png: the plan of the field as the game will read it (+X up, +Y right, like the camera):
+    regions, river, fords, bridges, belts and their gaps, blocked ground, veins, kingdoms, roads."""
+    from PIL import ImageFont
+    Xc, Yc, H, blocked, built, d_all = grid
+    S = 0.05
+    half = BOUND + 1000.0
+    w = int(2 * half * S)
+    xs = half - (np.arange(w) + 0.5) / S
+    ys = -half + (np.arange(w) + 0.5) / S
+    Yg, Xg = np.meshgrid(ys, xs)
+    z = HM[np.clip(((Xg - WX0) / HM_RES).astype(int), 0, HM.shape[0] - 1), np.clip(((Yg - WY0) / HM_RES).astype(int), 0, HM.shape[1] - 1)]
+    col = np.zeros((w, w, 3), np.float32)
+    zc = {}
+    for i in range(0, w, 4):                                   # region tint, on a coarse raster
+        for j in range(0, w, 4):
+            col[i:i + 4, j:j + 4] = ZONE_TINT[zone_of(float(Xg[i, j]), float(Yg[i, j]))]
+    col *= (1.0 + np.clip(z, 0, 300)[..., None] / 300.0 * 0.45)
+    zs = HM[np.clip(((Xg - 30 - WX0) / HM_RES).astype(int), 0, HM.shape[0] - 1), np.clip(((Yg + 30 - WY0) / HM_RES).astype(int), 0, HM.shape[1] - 1)]
+    col = np.where((zs > z + 45)[..., None], col * 0.45, np.where((zs < z - 45)[..., None], col * 1.2, np.where((np.abs(zs - z) > 5)[..., None], col * 0.82, col)))
+    col = np.where((z < -1)[..., None], np.array([170, 205, 200], np.float32), col)       # ford: pale
+    col = np.where((z < -30)[..., None], np.array([44, 96, 132], np.float32), col)        # deep water
+    gi = np.clip(((Xg + BOUND) / 100.0).astype(int), 0, H.shape[0] - 1)
+    gj = np.clip(((Yg + BOUND) / 100.0).astype(int), 0, H.shape[0] - 1)
+    ingrid = (np.abs(Xg) < BOUND) & (np.abs(Yg) < BOUND)
+    blk = blocked[gi, gj] & ingrid & (z >= -30)
+    col = np.where(blk[..., None], col * 0.35 + np.array([150, 40, 30], np.float32) * 0.65, col)
+    lost = (d_all[gi, gj] < 0) & ~blocked[gi, gj] & ~built[gi, gj] & ingrid
+    col = np.where((lost & (z > 50))[..., None], np.array([112, 100, 86], np.float32) * (0.8 + np.clip(z, 0, 300)[..., None] / 600.0), col)   # bluffs, knolls, ridge
+    col = np.where((lost & (z <= 50))[..., None], col * 0.4 + np.array([230, 40, 230], np.float32) * 0.6, col)                               # a pocket nobody can reach
+    col = np.where(ingrid[..., None], col, col * 0.55)
+    img = Image.fromarray(np.clip(col, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(img)
+    font, small = ImageFont.load_default(size=17), ImageFont.load_default(size=13)
+
+    def P(x, y):
+        return ((y + half) * S, (half - x) * S)
+
+    def label(x, y, text, fill=(255, 255, 255), f=None, anchor="mm"):
+        px_, py_ = P(x, y)
+        f = f or font
+        for ox, oy in ((-1, 0), (1, 0), (0, -1), (0, 1), (1, 1), (-1, -1)):
+            d.text((px_ + ox, py_ + oy), text, fill=(0, 0, 0), font=f, anchor=anchor)
+        d.text((px_, py_), text, fill=fill, font=f, anchor=anchor)
+
+    for mesh, lst in INSTANCES.items():
+        if mesh.startswith("SM_Conifer"):
+            for x, y, zz, yaw, s in lst:
+                cx, cy = P(x, y)
+                d.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=(22, 62, 30))
+    d.line([P(x, y) for x, y in ROAD_MAIN], fill=(232, 208, 150), width=4)
+    for r in FLANK_ROADS:
+        pts = [P(x, y) for x, y in r]
+        for k in range(0, len(pts) - 1, 2):
+            d.line(pts[k:k + 2], fill=(214, 180, 120), width=3)
+    d.rectangle([P(BOUND, -BOUND), P(-BOUND, BOUND)], outline=(255, 255, 255))
+    for g in BELT_GAPS + [mir(g) for g in BELT_GAPS]:
+        cx, cy = P(*g)
+        d.ellipse([cx - BELT_GAP * 0.5 * S, cy - BELT_GAP * 0.5 * S, cx + BELT_GAP * 0.5 * S, cy + BELT_GAP * 0.5 * S], outline=(255, 255, 255))
+        label(g[0] - 520, g[1], "gap 13 m", f=small)
+    for kind, bx, by, yaw, team, lab in BUILDINGS:
+        c = (70, 130, 255) if team == 0 else (255, 70, 50)
+        d.polygon([P(x, y) for x, y in footprint_poly(kind, bx, by, yaw).exterior.coords], fill=c, outline=(255, 255, 255))
+        if kind == "castle":
+            for rad, wd in ((3400.0, 1), (3800.0, 1)):
+                cx, cy = P(bx, by)
+                d.ellipse([cx - rad * S, cy - rad * S, cx + rad * S, cy + rad * S], outline=c, width=wd)
+    for (x, y), c in ((PLAYER_START, (70, 130, 255)), (ENEMY_START, (255, 70, 50))):
+        cx, cy = P(x, y)
+        d.ellipse([cx - 9, cy - 9, cx + 9, cy + 9], outline=c, width=3)
+    for i, (x, y) in enumerate(GOLD_VEINS):
+        cx, cy = P(x, y)
+        d.polygon([(cx, cy - 11), (cx + 11, cy), (cx, cy + 11), (cx - 11, cy)], fill=(255, 205, 40), outline=(60, 40, 0))
+        label(x - 420, y, "vein %d" % i, fill=(255, 225, 120), f=small)
+    label(FORD_A[0] + 900, FORD_A[1] - 300, "FORD A  14 m")
+    label(FORD_B[0] - 900, FORD_B[1] + 300, "FORD B  14 m")
+    for b in BRIDGE_POLYS:
+        label(b.centroid.x * 1.45, b.centroid.y * 1.45, "bridge 7 m", f=small)
+    label(0, 0, "SHRINE ISLE")
+    label(-1400, -2500, "CENTRE LANE: king's road, open plain", f=small)
+    label(1400, 2500, "CENTRE LANE", f=small)
+    label(-700, -6500, "TOP-LEFT LANE (wooded flank)", f=small)
+    label(7900, 800, "TOP-LEFT LANE (rocky flank)", f=small)
+    label(-7900, -800, "BOTTOM-RIGHT LANE (rocky flank)", f=small)
+    label(700, 6500, "BOTTOM-RIGHT LANE (wooded flank)", f=small)
+    label(HIGHLAND_P[0] + 1700, HIGHLAND_P[1], "HIGHLAND (player's bank)")
+    label(-HIGHLAND_P[0] - 1700, -HIGHLAND_P[1], "HIGHLAND (enemy's bank)")
+    for parts, text, c in ((WOOD_PARTS, "fir-wood belt", (190, 255, 190)), (RIDGE_PARTS, "ridge", (255, 235, 200))):
+        m = parts[0].interpolate(0.5, normalized=True)
+        label(m.x + 420, m.y, text, fill=c, f=small)
+        label(-m.x - 420, -m.y, text, fill=c, f=small)
+    label(P_ANCHOR[0] - 1100, P_ANCHOR[1], "PLAYER", fill=(150, 190, 255))
+    label(E_ANCHOR[0] + 1100, E_ANCHOR[1], "ENEMY", fill=(255, 160, 150))
+    y0 = 8
+    for text, c in (("deep water (blocked)", (44, 96, 132)), ("ford (walkable)", (170, 205, 200)), ("blocker boxes (rocks, trunks, wood belt, stones)", (150, 40, 30)),
+                    ("ground too high to climb (ridge, knolls, bluffs, tors)", (112, 100, 86)), ("magenta: flat ground nobody can reach", (230, 40, 230)), ("circles: apron 34 m, territory 38 m; +X is up, +Y right", (255, 255, 255))):
+        d.rectangle([8, y0, 22, y0 + 14], fill=c, outline=(0, 0, 0))
+        d.text((28, y0), text, fill=(255, 255, 255), font=small)
+        y0 += 18
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img.save(path)
+
+
+def raster_dist(geoms, lines=False):
+    """Distance in cm from every splat texel to the nearest of `geoms` (polygons, filled; or polylines), and the mask."""
+    px = SPLAT_SIZE / SPLAT_RES
+    img = Image.new("L", (SPLAT_RES, SPLAT_RES), 0)
+    d = ImageDraw.Draw(img)
+
+    def to_px(pts):
+        return [((x - SPLAT_ORIGIN[0]) / px - 0.5, (y - SPLAT_ORIGIN[1]) / px - 0.5) for x, y in pts]
+
+    for g in geoms:
+        if lines:
+            d.line(to_px(g), fill=255, width=1)
+        else:
+            d.polygon(to_px(g.exterior.coords), fill=255)
+    if not lines:
+        for g in geoms:
+            for hole in g.interiors:
+                d.polygon(to_px(hole.coords), fill=0)
+    mask = np.array(img) > 0
+    return ndimage.distance_transform_edt(~mask).astype(np.float32) * px, mask
+
+
+def build_water_map():
+    """T_WaterMap, read by M_Water. World-aligned over the same square as the splat map, half its resolution.
+    R = distance in from the bank (0 at the bank .. 1 at 256 cm and beyond), G = ford (1 over a ford's gravel bed),
+    B = current (1 in the river, 0 out in the still lake beyond the field)."""
+    px = SPLAT_SIZE / SPLAT_RES
+    _, water = raster_dist(list(LAKE.geoms))
+    d_in = np.maximum(ndimage.distance_transform_edt(water).astype(np.float32) * px - px * 0.5, 0.0)
+    d_ford, _ = raster_dist(FORD_POLYS)
+    ford = np.clip(1.0 - d_ford / 160.0, 0.0, 1.0) * water
+    d_riv, _ = raster_dist([RIVER_UP, RIVER_DOWN, CHANNEL_P, CHANNEL_E], lines=True)
+    cur = np.clip(1.0 - (d_riv - 700.0) / 900.0, 0.0, 1.0)
+    img = np.dstack([np.clip(d_in / 256.0, 0, 1), ford, cur, np.ones_like(cur)])
+    h = SPLAT_RES // 2
+    img = img.reshape(h, 2, h, 2, 4).mean(axis=(1, 3))
+    return (img * 255 + 0.5).astype(np.uint8)
+
+
 # ============================================================================================ main
 def main():
     global ROAD_DIST, SPLAT_DRY, HM
+    plan_water()
+    plan_belts()
     X, Y, R, moss, dry, road_d = build_splat_fields()
     px = SPLAT_SIZE / SPLAT_RES
 
@@ -1259,6 +1985,15 @@ def main():
 
     build_layout()
     buildings = apply_kingdoms()
+    report, grid = validate()
+    write_layout_preview(os.path.join(ROOT, "Saved", "MapPreview", "layout.png"), grid, report)
+    with open(os.path.join(ROOT, "Saved", "MapPreview", "report.txt"), "w") as f:
+        f.write("\n".join(report) + "\n")
+    if FAST:
+        os.makedirs(os.path.join(ROOT, "Saved", "WorldPreview"), exist_ok=True)
+        write_preview(finish_splat(X, Y, R, moss, dry), os.path.join(ROOT, "Saved", "WorldPreview", "map.png"))
+        print("plan only: nothing written to SourceArt")
+        return
 
     if "--minimap" in sys.argv:                                # only the HUD's minimap base; nothing else is rewritten
         write_preview(finish_splat(X, Y, R, moss, dry), os.path.join(ROOT, "SourceArt", "Textures", "T_MinimapBase.png"), minimap=512)
@@ -1291,6 +2026,8 @@ def main():
     shore = Mesh("SM_T_Shore")
     for part in LAKE.geoms:
         add_wall(shore, ring_ccw(list(part.exterior.coords), False), 0.0, LAKE_BED)
+        for hole in part.interiors:                            # the island's banks
+            add_wall(shore, ring_ccw(list(hole.coords), True), 0.0, LAKE_BED)
         for cap in largest(part.buffer(30), 10.0, all_parts=True):
             add_cap(shore, cap, LAKE_BED)
     pivot = shore.recenter()
@@ -1324,13 +2061,26 @@ def main():
     # ---- splat
     splat = finish_splat(X, Y, R, moss, dry)
     Image.fromarray(splat).save(os.path.join(ROOT, "SourceArt", "Textures", "T_Splat.png"))
+    Image.fromarray(build_water_map()).save(os.path.join(ROOT, "SourceArt", "Textures", "T_WaterMap.png"))
 
     # ---- layout
     layout = {
         "texel_cm": TEXEL, "bound": BOUND,
         "splat": {"origin": list(SPLAT_ORIGIN), "size": SPLAT_SIZE},
         "terrain": layout_terrain,
-        "water": {"mesh": "SM_Water", "pos": list(wpivot), "surface": LAKE_SURFACE},
+        # water: one sheet over the river, its channels and the far lake. "map" is the world square T_WaterMap covers
+        # (the splat map's); "flow" the downstream direction the material slides its ripples along.
+        "water": {"mesh": "SM_Water", "pos": list(wpivot), "surface": LAKE_SURFACE, "bed": LAKE_BED, "ford_bed": FORD_BED,
+                  "map": {"origin": list(SPLAT_ORIGIN), "size": SPLAT_SIZE}, "flow": [FLOW_DIR[0], FLOW_DIR[1]]},
+        # the map's structure, for the minimap, the AI or anything else that wants it (nothing in C++ needs it to play)
+        "river": {"centre": [[round(x, 1), round(y, 1)] for x, y in RIVER_DOWN[::-1] + RIVER_UP],
+                  "channels": [[[round(x, 1), round(y, 1)] for x, y in c] for c in (CHANNEL_P, CHANNEL_E)],
+                  "fords": [{"pos": [round(f.centroid.x, 1), round(f.centroid.y, 1)], "width": 2 * FORD_HALF} for f in FORD_POLYS],
+                  "bridges": [{"pos": [round(b.centroid.x, 1), round(b.centroid.y, 1)], "width": 2 * BRIDGE_HALF} for b in BRIDGE_POLYS]},
+        "lanes": {"centre": [[x, y] for x, y in ROAD_MAIN_KEYS], "top_left": [[round(x, 1), round(y, 1)] for x, y in ROAD_TL_KEYS],
+                  "bottom_right": [[round(-x, 1), round(-y, 1)] for x, y in ROAD_TL_KEYS[::-1]]},
+        "landmark": {"name": "shrine", "pos": [0.0, 0.0], "radius": 780.0},
+        "belt_gaps": [[round(x, 1), round(y, 1)] for x, y in BELT_GAPS + [mir(g) for g in BELT_GAPS]],
         "instances": INSTANCES, "actors": ACTORS, "blockers": BLOCKERS, "buildings": buildings,
         "veins": [[x, y, round(height_at(x, y), 1)] for x, y in GOLD_VEINS],
         "starts": {"player": list(PLAYER_START), "enemy": list(ENEMY_START)},

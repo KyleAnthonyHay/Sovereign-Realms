@@ -25,7 +25,16 @@ public:
 
 	static const USRFeelSettings& Get() { return *GetDefault<USRFeelSettings>(); }
 
-	const FSRUnitStats& StatsFor(ESRUnitType Type) const { return Type == ESRUnitType::Archer ? Archer : Shieldbearer; }
+	const FSRUnitStats& StatsFor(ESRUnitType Type) const
+	{
+		switch (Type)
+		{
+		case ESRUnitType::Archer: return Archer;
+		case ESRUnitType::Horseman: return Horseman;
+		case ESRUnitType::Catapult: return Catapult;
+		default: return Shieldbearer;
+		}
+	}
 
 	// ---------------------------------------------------------------- Camera
 	/** World yaw the camera looks along. 0 = +X is "up the screen". */
@@ -357,6 +366,12 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Units")
 	FSRUnitStats Archer;
 
+	UPROPERTY(EditAnywhere, Config, Category = "Units")
+	FSRUnitStats Horseman;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Units")
+	FSRUnitStats Catapult;
+
 	// -------------------------------------------------------------- Scenario
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
 	FLinearColor PlayerTeamColor = FLinearColor(0.05f, 0.22f, 0.8f);
@@ -419,6 +434,19 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
 	FSRCost ArcherCost = FSRCost(0, 85);
 
+	/** Horse Riders and Catapults cost gold as well as food. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
+	FSRCost HorsemanCost = FSRCost(40, 110);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
+	FSRCost CatapultCost = FSRCost(120, 120);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
+	float HorsemanBuildTime = 11.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
+	float CatapultBuildTime = 18.f;
+
 	/** Seconds the barracks takes to train one Shieldbearer. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
 	float ShieldbearerBuildTime = 9.f;
@@ -476,6 +504,12 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
 	FSRBuildingStats RangeStats;
 
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats StableStats;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats WorkshopStats;
+
 	/** A finished building shows its battle-damaged model below this fraction of its health. */
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
 	float DamagedStateFraction = 0.5f;
@@ -509,6 +543,8 @@ public:
 		case ESRBuildingType::Mine: return MineStats;
 		case ESRBuildingType::Barracks: return BarracksStats;
 		case ESRBuildingType::Range: return RangeStats;
+		case ESRBuildingType::Stable: return StableStats;
+		case ESRBuildingType::Workshop: return WorkshopStats;
 		default: return TowerStats;
 		}
 	}
@@ -517,12 +553,21 @@ public:
 	static const TArray<ESRBuildingType>& AllBuildingTypes()
 	{
 		static const TArray<ESRBuildingType> Types = { ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Barracks, ESRBuildingType::Range,
-			ESRBuildingType::Tower, ESRBuildingType::Castle };
+			ESRBuildingType::Stable, ESRBuildingType::Workshop, ESRBuildingType::Tower, ESRBuildingType::Castle };
 		return Types;
 	}
 
 	/** The building that trains a unit type. */
-	static ESRBuildingType TrainerOf(ESRUnitType Type) { return Type == ESRUnitType::Archer ? ESRBuildingType::Range : ESRBuildingType::Barracks; }
+	static ESRBuildingType TrainerOf(ESRUnitType Type)
+	{
+		switch (Type)
+		{
+		case ESRUnitType::Archer: return ESRBuildingType::Range;
+		case ESRUnitType::Horseman: return ESRBuildingType::Stable;
+		case ESRUnitType::Catapult: return ESRBuildingType::Workshop;
+		default: return ESRBuildingType::Barracks;
+		}
+	}
 
 	// ------------------------------------------------------------------ Grid
 	/** Build grid cell size (cm). Buildings snap to it; the pathfinder walks it. */
@@ -675,8 +720,26 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "500"))
 	float AudibleDistance = 5200.f;
 
-	const FSRCost& CostFor(ESRUnitType Type) const { return Type == ESRUnitType::Archer ? ArcherCost : ShieldbearerCost; }
-	float BuildTimeFor(ESRUnitType Type) const { return Type == ESRUnitType::Archer ? ArcherBuildTime : ShieldbearerBuildTime; }
+	const FSRCost& CostFor(ESRUnitType Type) const
+	{
+		switch (Type)
+		{
+		case ESRUnitType::Archer: return ArcherCost;
+		case ESRUnitType::Horseman: return HorsemanCost;
+		case ESRUnitType::Catapult: return CatapultCost;
+		default: return ShieldbearerCost;
+		}
+	}
+	float BuildTimeFor(ESRUnitType Type) const
+	{
+		switch (Type)
+		{
+		case ESRUnitType::Archer: return ArcherBuildTime;
+		case ESRUnitType::Horseman: return HorsemanBuildTime;
+		case ESRUnitType::Catapult: return CatapultBuildTime;
+		default: return ShieldbearerBuildTime;
+		}
+	}
 
 	// --------------------------------------------------------------- Visuals
 	// Troop sprites: /Game/SR/Materials/M_UnitSprite on a camera-facing card. The three look values below are pushed

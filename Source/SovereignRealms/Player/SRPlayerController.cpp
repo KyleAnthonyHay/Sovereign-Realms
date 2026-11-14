@@ -91,6 +91,8 @@ void ASRPlayerController::BuildInput()
 	DeleteAction = MakeAction(TEXT("IA_Delete"), EInputActionValueType::Boolean);
 	RecruitActions[0] = MakeAction(TEXT("IA_RecruitShieldbearer"), EInputActionValueType::Boolean);
 	RecruitActions[1] = MakeAction(TEXT("IA_RecruitArcher"), EInputActionValueType::Boolean);
+	RecruitActions[2] = MakeAction(TEXT("IA_RecruitHorseman"), EInputActionValueType::Boolean);
+	RecruitActions[3] = MakeAction(TEXT("IA_RecruitCatapult"), EInputActionValueType::Boolean);
 
 	// A key gives +X. Swizzle moves it onto Y (up/down keys), Negate flips it (left/down keys).
 	auto MapAxisKey = [this](UInputAction* Action, FKey Key, bool bVertical, bool bNegative)
@@ -135,6 +137,8 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(DeleteAction, EKeys::BackSpace);
 	MappingContext->MapKey(RecruitActions[0], EKeys::Q);
 	MappingContext->MapKey(RecruitActions[1], EKeys::E);
+	MappingContext->MapKey(RecruitActions[2], EKeys::R);
+	MappingContext->MapKey(RecruitActions[3], EKeys::T);
 }
 
 void ASRPlayerController::SetupInputComponent()
@@ -178,6 +182,8 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(DeleteAction, ETriggerEvent::Started, this, &ASRPlayerController::OnDeleteBuilding);
 	Input->BindAction(RecruitActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitShieldbearer);
 	Input->BindAction(RecruitActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitArcher);
+	Input->BindAction(RecruitActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitHorseman);
+	Input->BindAction(RecruitActions[3], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitCatapult);
 }
 
 void ASRPlayerController::PlayerTick(float DeltaTime)
@@ -584,16 +590,16 @@ bool ASRPlayerController::RecruitTroop(ESRUnitType Type)
 {
 	ASRBuilding* Trainer = SelectedBuilding.Get();
 	if (!Trainer || !Trainer->CanRecruit() || !Trainer->Trains(Type) || Trainer->Team != ESRTeam::Player) { Trainer = FindTrainer(Type); }
-	LastRecruitButton = Type == ESRUnitType::Archer ? 1 : 0;
+	LastRecruitButton = int32(Type);
 	LastRecruitTime = GetWorld()->GetRealTimeSeconds();
 	bLastRecruitAccepted = Trainer && Trainer->QueueRecruit(Type);
 	if (!Trainer)
 	{
 		if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this))
 		{
-			const FText Msg = Type == ESRUnitType::Archer
-				? NSLOCTEXT("SRPC", "NoRange", "Build an Archery Range to train Archers.")
-				: NSLOCTEXT("SRPC", "NoBarracks", "Build a Barracks to train Shieldbearers.");
+			const USRFeelSettings& F = USRFeelSettings::Get();
+			const FText Msg = FText::Format(NSLOCTEXT("SRPC", "NoTrainer", "Build a {0} to train {1}s."),
+				FText::FromString(F.BuildingStatsFor(USRFeelSettings::TrainerOf(Type)).DisplayName), FText::FromString(F.StatsFor(Type).DisplayName));
 			Economy->PushAlert(ESRAlertKind::Info, Msg);
 		}
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }

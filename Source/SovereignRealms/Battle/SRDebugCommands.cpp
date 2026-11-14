@@ -44,6 +44,8 @@ namespace
 		if (N == TEXT("tower")) { return ESRBuildingType::Tower; }
 		if (N == TEXT("barracks")) { return ESRBuildingType::Barracks; }
 		if (N == TEXT("range")) { return ESRBuildingType::Range; }
+		if (N == TEXT("stable")) { return ESRBuildingType::Stable; }
+		if (N == TEXT("workshop")) { return ESRBuildingType::Workshop; }
 		if (N == TEXT("castle")) { return ESRBuildingType::Castle; }
 		return ESRBuildingType::Farm;
 	}
@@ -293,7 +295,8 @@ namespace
 		{
 			ASRPlayerController* PC = GetSRController(World);
 			if (!PC || Args.Num() < 1) { return; }
-			const ESRUnitType Type = Args[0].StartsWith(TEXT("a"), ESearchCase::IgnoreCase) ? ESRUnitType::Archer : ESRUnitType::Shieldbearer;
+			const FString W = Args[0].ToLower();
+			const ESRUnitType Type = W.StartsWith(TEXT("a")) ? ESRUnitType::Archer : (W.StartsWith(TEXT("h")) ? ESRUnitType::Horseman : (W.StartsWith(TEXT("c")) ? ESRUnitType::Catapult : ESRUnitType::Shieldbearer));
 			const bool bOk = PC->RecruitTroop(Type);
 			UE_LOG(LogSovereign, Log, TEXT("sr.Recruit %s: %s"), *Args[0], bOk ? TEXT("queued") : TEXT("REFUSED"));
 		}));

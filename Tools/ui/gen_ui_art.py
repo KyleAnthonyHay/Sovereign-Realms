@@ -471,6 +471,53 @@ uuu.......u.
 .n......r..r
 .n..........
 .n.........."""),
+    ("PortraitHorse", """
+......nn....
+.....nBBn...
+....nBBBBn..
+...nBBkBBBn.
+..nBBBBBBBBn
+.nBBBnnBBBBn
+.nBBn..nBBBn
+..nn...nBBBn
+......nBBBBn
+.....nttttBn
+.....ntTTtBn
+.....nttttBn"""),
+    ("PortraitCatapult", """
+..........gg
+.........gg.
+........bb..
+.......bb...
+......bb....
+.....bb.....
+....bbbbbbb.
+...bbbbbbbbb
+..bnbbbbbnbb
+..nnn...nnn.
+...n.....n.."""),
+    ("Stable", """
+....rrrrrr..
+...rrRRRRrr.
+..rrRRRRRRrr
+.rrrrrrrrrrr
+.pbpppbpppbp
+.pbnnnbnnnbp
+.pbnBnbnBnbp
+.pbnnnbnnnbp
+.pbbbbbbbbbp
+yeyeyeyeyeye"""),
+    ("Workshop", """
+..rrrrrrrr..
+.rrRRRRRRrr.
+rrrrrrrrrrrr
+.b..g...b...
+.b.gg...b...
+.b..bb..b...
+.b...bb.b...
+.b.bbbbbb...
+.b.n.bb.nb..
+nnnnnnnnnnnn"""),
 ]
 
 

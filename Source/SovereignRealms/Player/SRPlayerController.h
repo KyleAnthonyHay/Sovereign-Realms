@@ -42,7 +42,8 @@ struct FInputActionValue;
  *                                                    selection, then pause
  *   F1                                               the controls overlay
  *   LMB on a building                                select it (info panel; barracks and range show recruit commands)
- *   Q / E                                            recruit a Shieldbearer (at a barracks) / an Archer (at a range):
+ *   Q / E / R / T                                    recruit a Shieldbearer (barracks) / Archer (range) / Horse Rider
+ *                                                    (stable) / Catapult (siege workshop):
  *                                                    the selected one, or the one with the shortest queue
  *   RMB, barracks or range selected                  set where its recruits muster (its rally point)
  *   Minimap: LMB (drag) moves the camera, RMB orders the selection there
@@ -203,6 +204,8 @@ private:
 	void TryPlace();
 	void OnRecruitShieldbearer() { RecruitHotkey(ESRUnitType::Shieldbearer); }
 	void OnRecruitArcher() { RecruitHotkey(ESRUnitType::Archer); }
+	void OnRecruitHorseman() { RecruitHotkey(ESRUnitType::Horseman); }
+	void OnRecruitCatapult() { RecruitHotkey(ESRUnitType::Catapult); }
 	void RecruitHotkey(ESRUnitType Type);
 	ASRBuilding* PickBuildingUnderCursor() const;
 
@@ -229,7 +232,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CancelAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DeleteAction;
 	UPROPERTY(Transient) TObjectPtr<ASRPlacementPreview> Preview;
-	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[2];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[4];
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
 

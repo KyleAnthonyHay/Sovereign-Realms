@@ -1,6 +1,9 @@
 // Copyright Sovereign Realms.
 
 #include "Units/SRProjectile.h"
+#include "FX/SRFXSprite.h"
+#include "Battle/SREconomySubsystem.h"
+#include "Buildings/SRBuilding.h"
 #include "Units/SRUnit.h"
 #include "Buildings/SRBuilding.h"
 #include "Common/SRAudioSubsystem.h"
@@ -19,11 +22,11 @@ ASRProjectile::ASRProjectile()
 ASRProjectile* ASRProjectile::Launch(ASRUnit* Shooter, ASRUnit* Target, const FVector& From, const FSRUnitStats& ShooterStats)
 {
 	return LaunchArrow(Shooter->GetWorld(), Shooter->GetTeam(), Shooter, Target, nullptr, From, ShooterStats.Damage, ShooterStats.KnockbackImpulse,
-		ShooterStats.ProjectileSpeed, ShooterStats.ProjectileArc);
+		ShooterStats.ProjectileSpeed, ShooterStats.ProjectileArc, ShooterStats.SplashRadius, ShooterStats.bStoneProjectile, ShooterStats.BuildingDamageScale);
 }
 
 ASRProjectile* ASRProjectile::LaunchArrow(UWorld* World, ESRTeam Team, ASRUnit* ShooterUnit, ASRUnit* TargetUnit, ASRBuilding* TargetBuilding,
-	const FVector& From, float Damage, float Knockback, float Speed, float Arc)
+	const FVector& From, float Damage, float Knockback, float Speed, float Arc, float Splash, bool bStone, float SplashBuildingScale)
 {
 	if (!World || (!TargetUnit && !TargetBuilding)) { return nullptr; }
 	ASRProjectile* Arrow = World->SpawnActor<ASRProjectile>(From, FRotator::ZeroRotator);
@@ -39,6 +42,10 @@ ASRProjectile* ASRProjectile::LaunchArrow(UWorld* World, ESRTeam Team, ASRUnit* 
 	Arrow->ArcHeight = Dist * Arc;
 	Arrow->Damage = Damage;
 	Arrow->Knockback = Knockback;
+	Arrow->Splash = Splash;
+	Arrow->bStone = bStone;
+	Arrow->SplashBuildingScale = SplashBuildingScale;
+	Arrow->ShooterTeam = Team;
 	Arrow->BuildVisuals(Team);
 	Arrow->Tick(0.f);
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(World)) { Audio->PlayAt(ESRSound::BowRelease, From); }
@@ -54,7 +61,8 @@ void ASRProjectile::BuildVisuals(ESRTeam Team)
 	{
 		UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this);
 		Part->SetMobility(EComponentMobility::Movable);
-		Part->SetStaticMesh(Battle->ArrowCardMesh);
+		Part->SetStaticMesh(bStone && Battle->StoneMaterial ? Battle->UnitCardMesh.Get() : Battle->ArrowCardMesh.Get());
+		if (bStone && Battle->StoneMaterial) { Part->SetRelativeScale3D(FVector(1.f, 0.16f, 0.16f)); }   // a 20 px stone on a 160 px card, a little enlarged
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Part->SetGenerateOverlapEvents(false);
 		Part->bReceivesDecals = false;
@@ -76,7 +84,7 @@ void ASRProjectile::BuildVisuals(ESRTeam Team)
 		return Part;
 	};
 
-	Card = MakeCard(Battle->ArrowMaterial, false);
+	Card = MakeCard(bStone && Battle->StoneMaterial ? Battle->StoneMaterial.Get() : Battle->ArrowMaterial.Get(), false);
 	ShadowCard = MakeCard(Battle->ArrowShadowMaterial, true);
 	const FLinearColor TeamCol = Battle->TeamColor(Team);
 	Card->SetCustomPrimitiveDataVector4(SRSprite::DataTeamColor, FVector4(TeamCol.R, TeamCol.G, TeamCol.B, 1.f));
@@ -100,6 +108,13 @@ void ASRProjectile::OrientCards(const FVector& Direction)
 		return FMatrix(Direction, FVector::CrossProduct(Normal, Direction), Normal, FVector::ZeroVector).ToQuat();
 	};
 	const FSRSpriteView& View = Battle->GetSpriteView();
+	if (bStone && Battle->StoneMaterial)
+	{
+		// a stone is round: it just faces the camera like a troop
+		Card->SetWorldRotation(View.CardRotation);
+		ShadowCard->SetWorldRotation(View.ShadowRotation);
+		return;
+	}
 	Card->SetWorldRotation(Facing(-View.ViewForward));
 	ShadowCard->SetWorldRotation(Facing(-View.SunDir));
 }
@@ -130,7 +145,11 @@ void ASRProjectile::Tick(float DeltaSeconds)
 
 	ASRUnit* Target = TargetUnit.Get();
 	ASRBuilding* TargetB = TargetBuilding.Get();
-	if (Target && Target->IsAlive())
+	if (bStone)
+	{
+		// a stone does not home: it comes down where it was aimed
+	}
+	else if (Target && Target->IsAlive())
 	{
 		AimPoint = Target->GetAimPoint(); // gentle homing: the arc bends with a moving target
 	}
@@ -164,6 +183,12 @@ void ASRProjectile::Tick(float DeltaSeconds)
 	SetActorLocation(Pos);
 	OrientCards((Ahead - Pos).GetSafeNormal());
 
+	if (T >= 1.f && bStone)
+	{
+		Burst();
+		Destroy();
+		return;
+	}
 	if (T >= 1.f)
 	{
 		if (Target && Target->IsAlive())
@@ -185,4 +210,39 @@ void ASRProjectile::Tick(float DeltaSeconds)
 			bStuck = true;
 		}
 	}
+}
+
+void ASRProjectile::Burst()
+{
+	// Everything of the other side round the landing spot is hurt, the full blow at the centre, half at the edge.
+	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	const FVector2D At(AimPoint.X, AimPoint.Y);
+	if (Battle && Splash > 0.f)
+	{
+		TArray<ASRUnit*> Near;
+		Battle->QueryUnits(At, Splash + 80.f, Near);
+		for (ASRUnit* U : Near)
+		{
+			if (!U || !U->IsAlive() || U->GetTeam() == ShooterTeam) { continue; }
+			const float D = FVector2D::Distance(U->GetPos2D(), At);
+			if (D > Splash + U->GetRadius()) { continue; }
+			const float Falloff = 1.f - 0.5f * FMath::Clamp(D / Splash, 0.f, 1.f);
+			U->ReceiveDamage(Damage * Falloff, ShooterUnit.Get(), (U->GetPos2D() - At).GetSafeNormal(), Knockback * Falloff, true);
+		}
+	}
+	// a building under the stone (the target, or any other in the blast)
+	if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
+	{
+		for (ASRBuilding* B : Eco->GetBuildings())
+		{
+			if (B && B->IsAlive() && B->Team != ShooterTeam && B->DistanceToFootprint(At) <= FMath::Max(Splash, 60.f))
+			{
+				// a stone thrown at a building already carries the building multiplier; one thrown at troops gets it here
+				B->ReceiveDamage(TargetBuilding.Get() == B ? Damage : Damage * SplashBuildingScale, ShooterUnit.Get());
+			}
+		}
+	}
+	if (Battle) { Battle->AddCameraTrauma(AimPoint, 0.25f); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildingHit, AimPoint, 1.f); }
+	if (Battle) { Battle->SpawnFX(ESRFX::Impact, AimPoint); }
 }

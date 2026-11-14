@@ -32,7 +32,7 @@ public:
 
 	/** Any arrow: from a troop or a building, at a troop or a building (exactly one of the two targets). */
 	static ASRProjectile* LaunchArrow(UWorld* World, ESRTeam Team, ASRUnit* ShooterUnit, ASRUnit* TargetUnit, ASRBuilding* TargetBuilding,
-		const FVector& From, float Damage, float Knockback, float Speed, float Arc);
+		const FVector& From, float Damage, float Knockback, float Speed, float Arc, float Splash = 0.f, bool bStone = false, float SplashBuildingScale = 1.f);
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -54,6 +54,12 @@ private:
 	float ArcHeight = 0.f;
 	float Damage = 0.f;
 	float Knockback = 0.f;
+	/** A catapult stone: it does not home, it lands where it was thrown and hurts everything round that spot. */
+	float Splash = 0.f;
+	bool bStone = false;
+	float SplashBuildingScale = 1.f;
+	ESRTeam ShooterTeam = ESRTeam::Player;
+	void Burst();
 	bool bStuck = false;
 	bool bTargetLost = false;
 	float StuckTime = 0.f;

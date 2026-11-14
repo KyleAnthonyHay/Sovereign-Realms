@@ -50,6 +50,56 @@ USRFeelSettings::USRFeelSettings()
 	Archer.BuildingDamageScale = 0.35f;
 	Archer.PopCost = 1;
 
+	// Horse Rider: fast light cavalry. Hits and runs; the first blow of a charge lands double.
+	Horseman.DisplayName = TEXT("Horse Rider");
+	Horseman.MaxHealth = 230.f;
+	Horseman.Radius = 70.f;
+	Horseman.Mass = 2.4f;
+	Horseman.MaxSpeed = 640.f;
+	Horseman.Acceleration = 2600.f;
+	Horseman.Deceleration = 3200.f;
+	Horseman.TurnRateDeg = 420.f;
+	Horseman.bRanged = false;
+	Horseman.AttackRange = 55.f;
+	Horseman.AcquireRange = 1500.f;
+	Horseman.Damage = 24.f;
+	Horseman.AttackInterval = 1.3f;
+	Horseman.WindupTime = 0.30f;
+	Horseman.RecoveryTime = 0.40f;
+	Horseman.KnockbackImpulse = 320.f;
+	Horseman.bHeavyHits = true;
+	Horseman.BuildingDamageScale = 0.5f;
+	Horseman.PopCost = 2;
+	Horseman.ChargeMultiplier = 2.2f;
+	Horseman.ChargeRestTime = 4.f;
+
+	// Catapult: slow, fragile up close, deadly at range; wrecks buildings and scatters packed troops.
+	Catapult.DisplayName = TEXT("Catapult");
+	Catapult.MaxHealth = 260.f;
+	Catapult.Radius = 110.f;
+	Catapult.Mass = 4.f;
+	Catapult.MaxSpeed = 170.f;
+	Catapult.Acceleration = 900.f;
+	Catapult.Deceleration = 1500.f;
+	Catapult.TurnRateDeg = 110.f;
+	Catapult.bRanged = true;
+	Catapult.AttackRange = 1700.f;
+	Catapult.AcquireRange = 1800.f;
+	Catapult.MinRange = 450.f;
+	Catapult.Damage = 70.f;
+	Catapult.AttackInterval = 4.5f;
+	Catapult.WindupTime = 1.6f;
+	Catapult.RecoveryTime = 0.6f;
+	Catapult.KnockbackImpulse = 260.f;
+	Catapult.bHeavyHits = true;
+	Catapult.ProjectileSpeed = 1300.f;
+	Catapult.ProjectileArc = 0.33f;
+	Catapult.SplashRadius = 230.f;
+	Catapult.bStoneProjectile = true;
+	Catapult.bPrefersBuildings = true;
+	Catapult.BuildingDamageScale = 3.f;
+	Catapult.PopCost = 3;
+
 	// ---- buildings (shapes from SourceArt/Buildings/<type>.json; the tower is SM_Bld_Tower) ----
 	auto Mesh = [](const TCHAR* Name) { return TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(FString::Printf(TEXT("/Game/SR/Buildings/%s.%s"), Name, Name))); };
 
@@ -159,6 +209,37 @@ USRFeelSettings::USRFeelSettings()
 	RangeStats.GateOffset = FVector(-460.f, -190.f, 0.f);
 	RangeStats.LabelOffset = FVector(120.f, 0.f, 520.f);
 	RangeStats.PopupOffset = FVector(0.f, 0.f, 320.f);
+
+	// Stable and siege workshop: SourceArt/Buildings/stable.json, workshop.json (Tools/blender/bld_stable.py, bld_workshop.py).
+	StableStats = BarracksStats;
+	StableStats.DisplayName = TEXT("Stable");
+	StableStats.MaxHealth = 1500.f;
+	StableStats.Cost = FSRCost(150, 0);
+	StableStats.BuildTime = 20.f;
+	StableStats.Mesh = Mesh(TEXT("SM_Bld_Stable"));
+	StableStats.Blurb = TEXT("Trains Horse Riders: fast cavalry whose charge lands double. Right-click with it selected to set their muster.");
+	StableStats.RecruitType = ESRUnitType::Horseman;
+	StableStats.FootprintMin = FVector2D(-500.f, -450.f);
+	StableStats.FootprintMax = FVector2D(500.f, 450.f);
+	StableStats.BlockHeight = 320.f;
+	StableStats.GateOffset = FVector(-570.f, 0.f, 0.f);
+	StableStats.LabelOffset = FVector(200.f, 0.f, 640.f);
+	StableStats.PopupOffset = FVector(0.f, 0.f, 420.f);
+
+	WorkshopStats = BarracksStats;
+	WorkshopStats.DisplayName = TEXT("Siege Workshop");
+	WorkshopStats.MaxHealth = 1600.f;
+	WorkshopStats.Cost = FSRCost(200, 0);
+	WorkshopStats.BuildTime = 24.f;
+	WorkshopStats.Mesh = Mesh(TEXT("SM_Bld_Workshop"));
+	WorkshopStats.Blurb = TEXT("Builds Catapults: long range, splash, wreck buildings; slow and weak up close.");
+	WorkshopStats.RecruitType = ESRUnitType::Catapult;
+	WorkshopStats.FootprintMin = FVector2D(-500.f, -500.f);
+	WorkshopStats.FootprintMax = FVector2D(500.f, 500.f);
+	WorkshopStats.BlockHeight = 360.f;
+	WorkshopStats.GateOffset = FVector(-570.f, 0.f, 0.f);
+	WorkshopStats.LabelOffset = FVector(200.f, 0.f, 680.f);
+	WorkshopStats.PopupOffset = FVector(0.f, 0.f, 460.f);
 
 	AIBuildOrder = { ESRBuildingType::Barracks, ESRBuildingType::Farm, ESRBuildingType::Range, ESRBuildingType::Mine, ESRBuildingType::Farm,
 		ESRBuildingType::Tower, ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Farm };

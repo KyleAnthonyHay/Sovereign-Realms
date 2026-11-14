@@ -1,6 +1,7 @@
 // Copyright Sovereign Realms.
 
 #include "Units/SRUnit.h"
+#include "FX/SRFXSprite.h"
 #include "Units/SRProjectile.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SRGridSubsystem.h"
@@ -422,6 +423,22 @@ void ASRUnit::UpdateTargeting(float Dt)
 	}
 
 	ASRUnit* Nearest = Battle->FindNearestEnemy(this, Range);
+	// A catapult cannot lob at what is right under it.
+	if (S.MinRange > 0.f)
+	{
+		if (Nearest && FVector2D::Distance(Pos, Nearest->GetPos2D()) < S.MinRange) { Nearest = nullptr; }
+		if (T && FVector2D::Distance(Pos, T->GetPos2D()) < S.MinRange) { Target = nullptr; T = nullptr; }
+	}
+	// Siege: a building in sight comes before troops.
+	if (S.bPrefersBuildings && !bHold && (Order == ESROrder::AttackMove || Order == ESROrder::Idle))
+	{
+		if (ASRBuilding* B = Battle->FindNearestEnemyBuilding(this, S.AcquireRange))
+		{
+			Target = nullptr;
+			TargetBuilding = B;
+			return;
+		}
+	}
 	if (!T)
 	{
 		Target = Nearest;
@@ -501,7 +518,13 @@ void ASRUnit::Strike(ASRUnit* T)
 	const float Reach = S.AttackRange + GetRadius() + T->GetRadius();
 	if (To.Size() <= Reach * 1.35f)
 	{
-		T->ReceiveDamage(S.Damage, this, Dir, S.KnockbackImpulse, S.bHeavyHits);
+		// Cavalry: the first blow after a rest is a charge.
+		const double Now = GetWorld()->GetTimeSeconds();
+		const bool bCharge = S.ChargeMultiplier > 1.f && (Now - LastStrikeTime) > S.ChargeRestTime;
+		LastStrikeTime = Now;
+		const float Dmg = S.Damage * (bCharge ? S.ChargeMultiplier : 1.f);
+		T->ReceiveDamage(Dmg, this, Dir, S.KnockbackImpulse * (bCharge ? 1.6f : 1.f), S.bHeavyHits);
+		if (bCharge) { Battle->AddCameraTrauma(T->GetSimPos(), F.ShakeTraumaHeavyHit * 1.3f); }
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(S.bHeavyHits ? ESRSound::ShieldBash : ESRSound::SwordHit, T->GetSimPos()); }
 		if (S.bHeavyHits)
 		{
@@ -571,6 +594,7 @@ void ASRUnit::AlertTo(ASRUnit* Threat)
 
 void ASRUnit::Die(ASRUnit* Killer, const FVector2D& HitDir)
 {
+	if (Battle) { Battle->SpawnFX(ESRFX::Dust, SimPos + FVector(0.f, 0.f, 20.f), UnitType == ESRUnitType::Catapult || UnitType == ESRUnitType::Horseman ? 1.6f : 1.f); }
 	if (SpriteCard) { SpriteCard->SetRenderCustomDepth(false); }   // the fallen do not show through walls
 	const USRFeelSettings& F = USRFeelSettings::Get();
 
@@ -735,7 +759,7 @@ void ASRUnit::StrikeBuilding(ASRBuilding* B)
 	const float Damage = S.Damage * S.BuildingDamageScale;
 	if (S.bRanged)
 	{
-		ASRProjectile::LaunchArrow(GetWorld(), Team, this, nullptr, B, GetMuzzleLocation(), Damage, 0.f, S.ProjectileSpeed, S.ProjectileArc);
+		ASRProjectile::LaunchArrow(GetWorld(), Team, this, nullptr, B, GetMuzzleLocation(), Damage, 0.f, S.ProjectileSpeed, S.ProjectileArc, S.SplashRadius, S.bStoneProjectile, 1.f);
 		return;
 	}
 	if (B->DistanceToFootprint(GetPos2D()) <= (S.AttackRange + GetRadius()) * 1.35f)

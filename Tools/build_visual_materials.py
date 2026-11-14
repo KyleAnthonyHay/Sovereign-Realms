@@ -258,7 +258,7 @@ if (N.z > 0.5)
 	float4 sp = Splat.SampleLevel(View.SharedBilinearClampedSampler, (wc - SplatRect.xy) / SplatRect.z, 0);
 	float hx = px.h(tc);
 	float3 g0 = px.S(Grass, uv, 128).rgb;
-	float tip = saturate((px.lum(px.Texel(Grass, uv, 128).rgb) - 0.045) / 0.16);     // 0 thatch .. 1 blade tip, per texel
+	float tip = saturate((px.lum(px.Texel(Grass, uv, 128).rgb) - 0.06) / 0.12);      // 0 thatch .. 1 blade tip, per texel (T_Grass spans 0.062 .. 0.185)
 	col = g0;
 	// moss and straw take over tuft by tuft (blade tips hold out longest), never as a soft blend
 	if (sp.g > 0.5 + (hx - 0.5) * 0.35 + (tip - 0.5) * 0.2) col = px.S(GrassMoss, uv, 128).rgb;
@@ -495,39 +495,131 @@ def build_card():
 
 
 # ----------------------------------------------------------------------------- water
+# The river, its channels and the far lake are one sheet (SM_Water). Everything that varies across it comes from
+# T_WaterMap, a world-aligned data map the world generator bakes over the splat map's square:
+#   R = distance in from the bank (0 at the bank .. 1 at 256 cm and beyond)   G = ford   B = current (0 in the still lake)
+# so the water has shallows and a foam line along every bank, and a ford shows its gravel bed. All of it is evaluated per
+# world texel (4 cm), like the ground: edges are stepped and dithered, never soft gradients.
+def _water_info():
+    """(MapRect, flow in texel space) from the generator's layout. MapRect: XY = world origin of T_WaterMap, Z = its world size."""
+    import json as _json
+    rect, flow = (-16000.0, -20480.0, 40960.0, 0.0), (-0.816, 0.578)
+    try:
+        with open(os.path.join(os.path.abspath(unreal.Paths.project_dir()), "SourceArt", "World", "layout.json")) as f:
+            w = _json.load(f)["water"]
+        rect = (float(w["map"]["origin"][0]), float(w["map"]["origin"][1]), float(w["map"]["size"]), 0.0)
+        flow = (float(w["flow"][0]), float(w["flow"][1]))
+    except Exception:
+        pass
+    # texel space is (world Y, -world X): texture 'down' is toward the camera
+    return rect, (flow[1], -flow[0], 0.0, 0.0)
+
+
+def _data_map(name):
+    """A world-space data map (not pixel art): linear, uncompressed, bilinear, clamped, no mips. The importer brings every
+    new PNG in as point-filtered sRGB pixel art, so it is put right here before a material samples it."""
+    t = eal.load_asset(TEX + name)
+    if t is None:
+        raise RuntimeError("missing texture " + TEX + name + " (run Tools/world/gen_battlefield.py, then Tools/import_world_assets.py)")
+    t.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_VECTOR_DISPLACEMENTMAP)
+    t.set_editor_property("srgb", False)
+    t.set_editor_property("filter", unreal.TextureFilter.TF_BILINEAR)
+    t.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
+    t.set_editor_property("address_x", unreal.TextureAddress.TA_CLAMP)
+    t.set_editor_property("address_y", unreal.TextureAddress.TA_CLAMP)
+    t.set_editor_property("never_stream", True)
+    eal.save_loaded_asset(t, False)
+    return t
+
+
 WATER_CODE = PIX + r"""
 float T = max(Texel, 0.5);
 float2 uv = float2(P.y, -P.x) / T;
-// two ripple layers sliding past each other, stepped a whole texel at a time so the pixels stay pixels
-float2 a = uv + floor(float2(Time * Speed.x, Time * Speed.y));
-float2 b = uv * 1.0 + float2(31.0, 17.0) - floor(float2(Time * Speed.z, -Time * Speed.w));
-float3 ca = px.S(Tex, a, 64).rgb;
-float3 cb = px.S(Tex, b, 64).rgb;
-float3 col = max(ca, cb * 0.85);
-float glint = saturate((px.lum(col) - GlintLevel) * 6.0);
-OutEmissive = Glint.rgb * glint * Glint.a;
-return lerp(col * Tint.rgb, Deep.rgb, DeepMix);
+float2 tc = floor(uv) + 0.5;                                    // this texel
+float2 wc = float2(-tc.y, tc.x) * T;                            // its world XY
+float4 m = Map.SampleLevel(View.SharedBilinearClampedSampler, (wc - MapRect.xy) / MapRect.z, 0);
+float bank = m.r * 256.0;                                       // cm in from the bank
+float hx = px.h(tc);
+float2 fd = normalize(Flow.xy + float2(1e-4, 0.0));             // downstream, in texel space
+float2 side = float2(-fd.y, fd.x);
+
+// ---- open water: two layers of ripple streaks carried downstream at different speeds (the second also drifts a
+// little across the current), each stepped a whole texel at a time so the pixels stay pixels
+float2 a = uv - floor(fd * Time * Speed.x);
+float2 b = uv + float2(37.0, 71.0) - floor(fd * Time * Speed.y + side * sin(Time * 0.23) * 3.0);
+float3 ca = px.S(Tex, a, 128).rgb;
+float3 cb = px.S(Tex, b, 128).rgb;
+float3 rip = max(ca, cb * 0.85);
+float ripL = px.lum(rip);
+float3 col = lerp(rip * Tint.rgb, Deep.rgb, DeepMix);
+
+// ---- shallows: the bed shows through near the bank, in three stepped bands with a dithered edge
+float sh = saturate(1.0 - (bank + (hx - 0.5) * 14.0) / max(ShallowWidth, 1.0));
+float band = ceil(sh * 3.0 - 0.001) / 3.0;
+col = lerp(col, Shallow.rgb * (0.8 + 0.6 * saturate(ripL * 3.0)), band * Shallow.a);
+
+// ---- ford: ankle-deep water over pale gravel, with quick bright ripples running across it
+float foamAmt = 0.0;
+if (m.g > 0.5 + (hx - 0.5) * 0.3)
+{
+	float3 bed = px.S(Gravel, uv, 128).rgb * FordTint.rgb;
+	col = lerp(bed, Shallow.rgb, FordTint.a);
+	float2 r = uv + float2(11.0, 53.0) - floor(fd * Time * Speed.z);
+	float rl = px.lum(px.Texel(Tex, r, 128).rgb);
+	foamAmt = saturate((rl - RippleLevel) * 12.0) * 0.75;
+}
+
+// ---- foam along the bank: a broken line that laps in and out, each stretch in its own time, and a fainter one behind it
+float lap = 0.5 + 0.5 * sin(Time * FoamSpeed + px.h(floor(tc / 8.0)) * 6.2832);
+float foamW = FoamWidth * (0.5 + 0.5 * lap);
+if (bank < foamW && px.h(floor(tc / 5.0) + 17.0) > FoamBreak) foamAmt = max(foamAmt, 1.0);
+float d2 = bank - foamW - FoamWidth * 0.7;
+if (d2 > 0.0 && d2 < T * 1.2 && px.h(floor(tc / float2(7.0, 3.0)) + 41.0) > 0.55) foamAmt = max(foamAmt, 0.45);
+col = lerp(col, Foam.rgb, foamAmt * Foam.a);
+
+// ---- glints: the brightest ripple crests, and a few sun sparkles that wink on and off
+float glint = saturate((ripL - GlintLevel) * 6.0) * (1.0 - m.g);
+float sparkle = step(1.0 - Sparkle, px.h(tc + floor(Time * 3.0) * 13.7)) * saturate(ripL * 6.0);
+OutEmissive = Glint.rgb * (glint + sparkle * 2.5) * Glint.a * (1.0 - foamAmt);
+OutRough = lerp(Rough, 0.7, saturate(foamAmt + m.g * 0.4));
+return col;
 """
 
 
 def build_water():
+    rect, flow = _water_info()
+    _data_map("T_WaterMap")
     mat = get_material("M_Water")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
     g = G(mat)
     colour = g.custom(WATER_CODE, F3, [
         ("P", g.node(unreal.MaterialExpressionWorldPosition)), ("Time", g.node(unreal.MaterialExpressionTime)),
-        ("Tex", g.tex("Tex", "T_Water")),
+        ("Tex", g.tex("Tex", "T_Water")), ("Gravel", g.tex("Gravel", "T_Gravel")), ("Map", g.tex("WaterMap", "T_WaterMap", True)),
         ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
-        ("Speed", g.vector("ScrollTexelsPerSecond", lin(1.6, 0.5, 1.1, 0.8), "Motion"), "RGBA"),
+        # MapRect: XY = world origin of T_WaterMap, Z = its world size (cm). Flow: downstream in texel space. Both from layout.json.
+        ("MapRect", g.vector("MapRect", lin(*rect), "Map"), "RGBA"),
+        ("Flow", g.vector("Flow", lin(*flow), "Motion"), "RGBA"),
+        # texels per second: ripple layer A, ripple layer B, the fords' quick ripples
+        ("Speed", g.vector("ScrollTexelsPerSecond", lin(2.2, 1.3, 5.0, 0.0), "Motion"), "RGBA"),
         ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Colour")),
         ("Deep", g.vector("Deep", srgb("#12303a"), "Colour")),
         ("DeepMix", g.scalar("DeepMix", 0.25, "Colour")),
+        ("Shallow", g.vector("Shallow", unreal.LinearColor(0.085, 0.235, 0.2, 0.62), "Shallows"), "RGBA"),      # A = how far the nearest band goes to it
+        ("ShallowWidth", g.scalar("ShallowWidth", 150.0, "Shallows")),
+        ("FordTint", g.vector("FordTint", unreal.LinearColor(0.74, 0.9, 0.84, 0.28), "Shallows"), "RGBA"),      # RGB wets the gravel, A = water colour over it
+        ("RippleLevel", g.scalar("FordRippleLevel", 0.12, "Shallows")),
+        ("Foam", g.vector("Foam", unreal.LinearColor(0.62, 0.76, 0.7, 0.8), "Foam"), "RGBA"),
+        ("FoamWidth", g.scalar("FoamWidth", 12.0, "Foam")),
+        ("FoamSpeed", g.scalar("FoamSpeed", 1.1, "Foam")),
+        ("FoamBreak", g.scalar("FoamBreak", 0.42, "Foam")),
         ("Glint", g.vector("Glint", lin(1.0, 0.92, 0.75, 0.6), "Colour"), "RGBA"),
         ("GlintLevel", g.scalar("GlintLevel", 0.32, "Colour")),
-    ], "Water colour", outputs=[("OutEmissive", F3)])
+        ("Sparkle", g.scalar("Sparkle", 0.004, "Colour")),
+        ("Rough", g.scalar("Roughness", 0.1, "Surface")),
+    ], "Water: ripples, shallows, ford, bank foam, glints", outputs=[("OutEmissive", F3), ("OutRough", F1)])
     g.out(colour, MP.MP_BASE_COLOR)
     g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
-    g.out(g.scalar("Roughness", 0.1, "Surface"), MP.MP_ROUGHNESS)
+    g.out(colour, MP.MP_ROUGHNESS, "OutRough")
     g.out(g.scalar("Specular", 0.6, "Surface"), MP.MP_SPECULAR)
     g.finish()
 
@@ -697,6 +789,22 @@ def make_sprite_instances(sprite, shadow):
     make_instance("MI_ArrowSprite", sprite, scalars={"NormalStrength": 0.0, "Billboard": 0.0}, vectors=arrow,
                   textures={"SpriteSheet": CHAR + "T_Arrow_Color", "TeamMask": CHAR + "T_Arrow_TeamMask"})
     make_instance("MI_ArrowShadow", shadow, vectors=arrow, textures={"SpriteSheet": CHAR + "T_Arrow_Color"})
+    # horse and catapult: 256 px cells at the same cm per pixel (the code scales their cards 1.6x), pivot row 184
+    big = {"CellPx": lin(256, 256, 0, 0)}
+    for troop in ("Horseman", "Catapult"):
+        make_instance("MI_UnitSprite_" + troop, sprite, scalars={"PivotV": 184.0 / 256.0}, vectors=big, textures={
+            "SpriteSheet": CHAR + "T_%s_Color" % troop, "TeamMask": CHAR + "T_%s_TeamMask" % troop, "NormalSheet": CHAR + "T_%s_Normal" % troop})
+        make_instance("MI_UnitSpriteShadow_" + troop, shadow, scalars={"PivotV": 184.0 / 256.0}, vectors=big, textures={"SpriteSheet": CHAR + "T_%s_Color" % troop})
+    # the catapult stone: one 20 x 20 frame on a small camera-facing card
+    stone = {"SheetCells": lin(1, 1, 0, 0), "CellPx": lin(20, 20, 0, 0)}
+    make_instance("MI_StoneSprite", sprite, scalars={"NormalStrength": 0.0, "Billboard": 0.0, "PivotV": 0.5}, vectors=stone,
+                  textures={"SpriteSheet": CHAR + "T_Stone_Color", "TeamMask": CHAR + "T_Stone_TeamMask"})
+    # battlefield effects: a strip of frames, shown flat (no relight: fire and smoke carry their own light)
+    for fx, (w, h, n, pv) in {"Fire": (64, 96, 8, 88), "Smoke": (64, 96, 8, 88), "Dust": (64, 40, 6, 33),
+                              "Debris": (96, 96, 6, 60), "Impact": (128, 96, 6, 78)}.items():
+        make_instance("MI_FX_" + fx, sprite, scalars={"NormalStrength": 0.0, "Billboard": 0.0, "Relight": 0.0, "PivotV": pv / float(h)},
+                      vectors={"SheetCells": lin(n, 1, 0, 0), "CellPx": lin(w, h, 0, 0)},
+                      textures={"SpriteSheet": CHAR + "T_FX_" + fx, "TeamMask": CHAR + "T_Stone_TeamMask"})
 
 
 # ----------------------------------------------------------------------------- buildings (castle, farm, mine)
@@ -821,6 +929,7 @@ BUILDING_SLOTS = {
     "Target": ("opaque", "T_Bld_Target", (32, 32), None, {"Damp": 0.0, "Bleach": 0.0, "Roughness": 0.9}, {}),
     "Char": ("opaque", "T_Bld_Char", (64, 64), None, {"Damp": 0.0, "Bleach": 0.0, "Moss": 0.0, "Roughness": 1.0, "Specular": 0.1}, {}),
     "Scorch": ("card", "T_Bld_Scorch", (256, 128), None, {"UpNormal": 0.0, "SwayAmount": 0.0, "SwaySpeed": 0.0}, {}),
+    "Water": ("opaque", "T_Bld_Water", (32, 32), None, {"Damp": 0.0, "Bleach": 0.0, "Moss": 0.0, "Roughness": 0.3, "Specular": 0.6}, {}),  # stable trough
 }
 
 

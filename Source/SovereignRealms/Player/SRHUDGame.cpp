@@ -54,6 +54,8 @@ namespace
 		case ESRBuildingType::Tower: return ESRIcon::Tower;
 		case ESRBuildingType::Barracks: return ESRIcon::Barracks;
 		case ESRBuildingType::Range: return ESRIcon::Range;
+		case ESRBuildingType::Stable: return ESRIcon::Stable;
+		case ESRBuildingType::Workshop: return ESRIcon::Workshop;
 		default: return ESRIcon::Castle;
 		}
 	}
@@ -411,7 +413,7 @@ void ASRHUD::DrawBuildMenu(float X, float Bottom)
 	static const TCHAR* TabNames[3] = { TEXT("Economy"), TEXT("Military"), TEXT("Defence") };
 	static const ESRIcon TabIcons[3] = { ESRIcon::Coin, ESRIcon::Swords, ESRIcon::Tower };
 	const float Pad = U(12.f), TabH = U(42.f), CardW = U(118.f), CardH = U(132.f), Gap = U(8.f);
-	const float PW = Pad * 2.f + 3.f * CardW + 2.f * Gap, PH = Pad * 2.f + TabH + Gap + CardH + U(24.f);
+	const float PW = Pad * 2.f + 4.f * CardW + 3.f * Gap, PH = Pad * 2.f + TabH + Gap + CardH + U(24.f);   // room for four cards a tab
 	const float PX = Toggle.Max.X + U(10.f), PY = Bottom - U(152.f) - U(10.f) - PH;
 	const FBox2D Box(FVector2D(PX, PY), FVector2D(PX + PW, PY + PH));
 	HudPanel(Box);
@@ -492,7 +494,7 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
-	int32 Count[2] = { 0, 0 }, Total = 0, Engaged = 0;
+	int32 Count[4] = { 0, 0, 0, 0 }, Total = 0, Engaged = 0;
 	float HealthSum = 0.f;
 	bool bEnemy = false;
 	const ASRUnit* First = nullptr;
@@ -501,7 +503,7 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 		if (!Unit.IsValid() || !Unit->IsAlive()) { continue; }
 		if (!First) { First = Unit.Get(); }
 		bEnemy |= Unit->GetTeam() == ESRTeam::Enemy;
-		++Count[Unit->GetUnitType() == ESRUnitType::Archer ? 1 : 0];
+		++Count[FMath::Clamp(int32(Unit->GetUnitType()), 0, 3)];
 		++Total;
 		Engaged += Unit->IsEngaged() ? 1 : 0;
 		HealthSum += Unit->GetHealthFrac();
@@ -524,10 +526,10 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 
 	// who is in the selection: a portrait and a count per troop type
 	float PX = X;
-	for (int32 t = 0; t < 2; ++t)
+	for (int32 t = 0; t < 4; ++t)
 	{
 		if (Count[t] == 0) { continue; }
-		Icon(t == 1 ? ESRIcon::PortraitArcher : ESRIcon::PortraitShield, PX, Y + U(52.f), U(46.f), FLinearColor::White, bEnemy);
+		Icon(SRUnitIcon(ESRUnitType(t)), PX, Y + U(52.f), U(46.f), FLinearColor::White, bEnemy);
 		PX += U(52.f);
 		PX += Text(FString::Printf(TEXT("×%d"), Count[t]), PX, Y + U(61.f), U(23.f), Parchment, AlignLeft, Bold) + U(22.f);
 	}
@@ -557,7 +559,7 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 			for (float d = 0.f; d < KS; d += bDashed ? U(6.f) : KS) { Fill(KX + d, KY, bDashed ? U(4.f) : KS, FMath::Max(1.f, U(2.f)), A(Color, 1.f)); }
 			KX -= U(14.f);
 		};
-		if (Count[1] > 0) { Key(TEXT("bow range"), F.RangeCircleColor, false); }
+		if (Count[1] > 0 || Count[3] > 0) { Key(TEXT("range"), F.RangeCircleColor, false); }
 		Key(TEXT("sight"), F.SightCircleColor, true);
 	}
 
@@ -683,7 +685,7 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 		{
 			// the one in training is drawn larger and bright, the ones waiting smaller and dimmer
 			const float S = U(i == 0 ? 26.f : 20.f);
-			Icon(Queue[i] == ESRUnitType::Archer ? ESRIcon::PortraitArcher : ESRIcon::PortraitShield, QX, LY + (i == 0 ? -U(2.f) : U(2.f)), S, FLinearColor(1.f, 1.f, 1.f, i == 0 ? 1.f : 0.7f));
+			Icon(SRUnitIcon(Queue[i]), QX, LY + (i == 0 ? -U(2.f) : U(2.f)), S, FLinearColor(1.f, 1.f, 1.f, i == 0 ? 1.f : 0.7f));
 			QX += S + U(3.f);
 		}
 		Meter(X, LY + U(30.f), U(240.f), U(8.f), Building->GetBuildFraction(), GoldBright);
@@ -691,9 +693,9 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 
 	const int32 Pop = Economy->GetPopulation(ESRTeam::Player) + Economy->GetQueuedPopulation(ESRTeam::Player), Cap = Economy->GetPopulationCap(ESRTeam::Player);
 	const float RW = U(190.f);
-	for (int32 i = 0; i < 2; ++i)
+	for (const ESRUnitType Type : SRAllUnitTypes())
 	{
-		const ESRUnitType Type = i == 1 ? ESRUnitType::Archer : ESRUnitType::Shieldbearer;
+		const int32 i = int32(Type);
 		if (!Building->Trains(Type)) { continue; }
 		const FSRUnitStats& Unit = F.StatsFor(Type);
 		const FSRCost& Cost = F.CostFor(Type);
@@ -715,10 +717,10 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 			Fill(R.Min.X, R.Min.Y, RW, R.Max.Y - R.Min.Y, A(PC->WasLastRecruitAccepted() ? GoldBright : Refuse, 0.45f * (1.f - Since / 0.22f)));
 		}
 		const float Lift = B.bHeld ? U(1.f) : 0.f;
-		Icon(i == 1 ? ESRIcon::PortraitArcher : ESRIcon::PortraitShield, R.Min.X + U(9.f), R.Min.Y + U(12.f) + Lift, U(48.f), bEnabled ? FLinearColor::White : FLinearColor(0.45f, 0.45f, 0.5f, 0.85f));
+		Icon(SRUnitIcon(Type), R.Min.X + U(9.f), R.Min.Y + U(12.f) + Lift, U(48.f), bEnabled ? FLinearColor::White : FLinearColor(0.45f, 0.45f, 0.5f, 0.85f));
 		const float TX = R.Min.X + U(64.f);
 		Text(Unit.DisplayName, TX, R.Min.Y + U(30.f) + Lift, U(14.f), bEnabled ? Parchment : Dim, AlignLeft, Bold);
-		KeyCap(i == 1 ? TEXT("E") : TEXT("Q"), R.Max.X - U(6.f), R.Min.Y + U(6.f), bEnabled);
+		KeyCap(SRUnitKey(Type), R.Max.X - U(6.f), R.Min.Y + U(6.f), bEnabled);
 		float CX = TX;
 		const float CY = R.Min.Y + U(52.f) + Lift;
 		if (Cost.Gold > 0)
@@ -735,10 +737,14 @@ void ASRHUD::DrawBuildingSelection(const FBox2D& Box, ASRBuilding* Building)
 		if (B.bHover)
 		{
 			TArray<FString> Lines;
-			Lines.Add(i == 1 ? TEXT("Light and quick, with a long reach. Weak up close.") : TEXT("Heavy infantry: holds the line and hits hard."));
-			Lines.Add(FString::Printf(TEXT("Cost %d food   ·   trains in %.0f s   ·   %d housing"), Cost.Food, F.BuildTimeFor(Type), Unit.PopCost));
+			static const TCHAR* Blurbs[4] = { TEXT("Heavy infantry: holds the line and hits hard."), TEXT("Light and quick, with a long reach. Weak up close."),
+				TEXT("Fast cavalry: its charge lands double. Raids and runs down archers."), TEXT("Siege: long range, splash, wrecks buildings. Slow, weak up close.") };
+			Lines.Add(Blurbs[i]);
+			Lines.Add(Cost.Gold > 0
+				? FString::Printf(TEXT("Cost %d food + %d gold   ·   trains in %.0f s   ·   %d housing"), Cost.Food, Cost.Gold, F.BuildTimeFor(Type), Unit.PopCost)
+				: FString::Printf(TEXT("Cost %d food   ·   trains in %.0f s   ·   %d housing"), Cost.Food, F.BuildTimeFor(Type), Unit.PopCost));
 			if (!bHoused) { Lines.Add(TEXT("Housing is full: build more farms.")); }
-			SetTooltip(R, FString::Printf(TEXT("%s   [%s]"), *Unit.DisplayName, i == 1 ? TEXT("E") : TEXT("Q")), Lines);
+			SetTooltip(R, FString::Printf(TEXT("%s   [%s]"), *Unit.DisplayName, SRUnitKey(Type)), Lines);
 		}
 	}
 }
@@ -828,10 +834,14 @@ void ASRHUD::DrawPlatoonPanel()
 		Text(Name, TX, Row.Min.Y + U(4.f), U(14.f), Parchment, AlignLeft, Bold);
 		float CX = TX;
 		const float CY = Row.Min.Y + U(24.f);
-		Icon(ESRIcon::Shield, CX, CY, U(16.f));
-		CX += U(18.f) + Text(FString::FromInt(Info.Shieldbearers), CX + U(18.f), CY - U(1.f), U(14.f), Parchment) + U(8.f);
-		Icon(ESRIcon::Bow, CX, CY, U(16.f));
-		CX += U(18.f) + Text(FString::FromInt(Info.Archers), CX + U(18.f), CY - U(1.f), U(14.f), Parchment) + U(8.f);
+		const int32 Counts[4] = { Info.Shieldbearers, Info.Archers, Info.Riders, Info.Catapults };
+		const ESRIcon Icons[4] = { ESRIcon::Shield, ESRIcon::Bow, ESRIcon::PortraitHorse, ESRIcon::PortraitCatapult };
+		for (int32 k = 0; k < 4; ++k)
+		{
+			if (k >= 2 && Counts[k] == 0) { continue; }
+			Icon(Icons[k], CX, CY, U(16.f));
+			CX += U(18.f) + Text(FString::FromInt(Counts[k]), CX + U(18.f), CY - U(1.f), U(14.f), Parchment) + U(7.f);
+		}
 		if (Info.Engaged > 0) { Icon(ESRIcon::Swords, CX, CY, U(16.f), FLinearColor(1.f, 1.f, 1.f, 0.65f + 0.35f * FMath::Sin(float(Now) * 8.f))); }
 		Meter(TX, Row.Max.Y - U(9.f), TW - U(4.f), U(4.f), Info.Health, Health(Info.Health));
 
@@ -862,7 +872,7 @@ void ASRHUD::DrawPlatoonPanel()
 		}
 		if (RB.bHover && !SmallB[0].bHover && !SmallB[1].bHover && !SmallB[2].bHover)
 		{
-			SetTooltip(Row, Info.Name, { FString::Printf(TEXT("%s  ·  %d troops  ·  %d%% health"), *USRPlatoonSubsystem::KindName(Info.Kind).ToString(), Info.Shieldbearers + Info.Archers, FMath::RoundToInt(Info.Health * 100.f)),
+			SetTooltip(Row, Info.Name, { FString::Printf(TEXT("%s  ·  %d troops  ·  %d%% health"), *USRPlatoonSubsystem::KindName(Info.Kind).ToString(), Info.Shieldbearers + Info.Archers + Info.Riders + Info.Catapults, FMath::RoundToInt(Info.Health * 100.f)),
 				FString::Printf(TEXT("Click or press %d to select; twice to go there."), i + 1) });
 		}
 	}

@@ -12,7 +12,7 @@ sheets, and can restyle everything below without touching C++.
 | Map | `/Game/Maps/L_Battlefield` (editor startup map and game default map) |
 | Game mode | `/Script/SovereignRealms.SRGameMode` (global default) |
 | Map contents | Dressed by the visual pass, see "Visual pass" at the end: outliner folders `Terrain`, `Props`, `Water`, `Lighting`. The open ground is at Z = 0; terraces step up from it. |
-| Playable bounds | +/-3000 cm in X and Y around the origin (`MapHalfExtent` in Sovereign Feel). Camera focus and move orders are clamped to it. |
+| Playable bounds | +/-12000 cm in X and Y around the origin (`MapHalfExtent` in Sovereign Feel). Camera focus and move orders are clamped to it. |
 | Spawned at runtime | Units, arrows, order markers, camera pawn. The three grey test blocks (tag `SRGreyboxObstacle`) are switched off in `Config/DefaultGame.ini`; boulders in the map stand in the same places. |
 
 The empty map was first made by `Tools/create_battlefield_map.py`; everything in it now comes from the
@@ -62,8 +62,8 @@ The camera pawn overrides three things on its own post-process settings and noth
 - The tilt-shift depth of field (focal distance, f-stop, sensor width; see "Tilt-shift" below).
 - It also moves the level's Exponential Height Fog start distance every frame (see "Haze" below).
 
-The sun travels toward screen right and slightly up-screen (actor rotation pitch -33, yaw 75; travel
-direction about (0.22, 0.81, -0.54)). So the lit side of everything is its **screen-left** side, shadows
+The sun travels toward screen right and slightly up-screen (actor rotation pitch -42, yaw 75; travel
+direction about (0.19, 0.72, -0.67)). So the lit side of everything is its **screen-left** side, shadows
 fall to the right and a little up-screen, and faces turned toward the camera sit half in warm grazing light,
 half in cool sky fill.
 
@@ -144,7 +144,7 @@ haze with light shafts past the focus point, bloom, and a tilt-shift band of sha
 | Step | Command | Produces |
 | --- | --- | --- |
 | 1. Textures | `Tools/.venv/bin/python Tools/textures/gen_world_textures.py` | `SourceArt/Textures/*.png`: drawn in code from small fixed palettes (placed blade marks, laid stone courses, set cobbles). Preview sheet in `Saved/TexturePreview/`. |
-| 2. World | `Tools/.venv/bin/python Tools/world/gen_battlefield.py` | `SourceArt/Meshes/battlefield.gltf` (every static mesh), `SourceArt/Textures/T_Splat.png` (ground blend map), `SourceArt/World/layout.json` (placements), `Saved/WorldPreview/map.png` (top-down preview). |
+| 2. World | `Tools/.venv/bin/python Tools/world/gen_battlefield.py` (`--plan`: previews only, 20 s) | `SourceArt/Meshes/battlefield.gltf` (every static mesh), `SourceArt/Textures/T_Splat.png` (ground blend map), `T_WaterMap.png` (water data map), `T_MinimapBase.png`, `SourceArt/World/layout.json` (placements, veins, river, lanes), `Saved/WorldPreview/map.png` (top-down preview), `Saved/MapPreview/layout.png` + `report.txt` (the plan as the walkability grid will read it, with the route, symmetry and building-spot checks). |
 | 3. Import | `Tools/ue_py.py Tools/import_world_assets.py` | `/Game/SR/Textures`, `/Game/SR/Meshes` (re-imports in place, deletes meshes the generator dropped). |
 | 4. Materials | `Tools/ue_py.py Tools/build_visual_materials.py` | `/Game/SR/Materials` (graphs cleared and rebuilt in place, references survive). |
 | 5. Level | `Tools/ue_py.py Tools/build_battlefield_visuals.py` | Rebuilds the outliner folders `Terrain`, `Props`, `Water`, `Lighting`. Anything placed by hand belongs in another folder. |
@@ -175,15 +175,17 @@ does not crawl when the camera pans. `*_N` normal maps and `T_Splat` are linear 
 
 | Texture | Size | What it is |
 | --- | --- | --- |
-| `T_Grass`, `T_GrassMoss`, `T_GrassDry` | 128 x 128 | Turf: authored blade marks laid like shingles; five close olive tones. Moss and straw variants take over tuft by tuft through the splat map. |
+| `T_Grass`, `T_GrassMoss`, `T_GrassDry` | 128 x 128 | Turf: authored blade marks laid like shingles; five close olive tones. Kept calm so sprites read on it: the palette is drawn toward its middle tone (`GRASS_CALM` 0.74), a blade mark spans three neighbouring tones, and light and dark come in clumps 6 to 10 texels across rather than texel by texel (a third less step between neighbouring texels than the first pass). Moss and straw variants take over tuft by tuft through the splat map. |
 | `T_Dirt` (+`_N`), `T_Cobble` (+`_N`) | 128 x 128 | Packed earth with pebbles; old road stones in uneven rows. |
 | `T_Cliff` (+`_N`) | 128 x 128 | Terrace face: a thin soil band under the turf, then coursed stone. v = depth below the turf. |
 | `T_Lip` | 128 x 24 | The turf hanging over a cliff top (alpha 1 = grass, about 0.4 = its contact shadow). |
 | `T_Rock` (+`_N`), `T_Sandstone` (+`_N`) | 64 x 64, 128 x 64 | Boulder skin; weathered ashlar for the ruin. (Their normal maps are imported but `M_Prop` does not use them yet.) |
 | `T_Needles`, `T_Bark` | 64 x 48, 32 x 64 | One conifer bough tier (dark body, lit tips, ragged alpha rim); trunk. |
 | `T_Tufts` | 96 x 24 | Sprite strip: tall grass, short grass, dry reeds (16 px cells), fern, flowers (24 px cells). |
-| `T_Wood`, `T_LogEnd`, `T_Banner`, `T_Water` | 64 x 32, 16 x 16, 16 x 40, 64 x 64 | Planks, sawn log end, cloth banner, pond ripples. |
-| `T_Splat` | 1024 x 1024 | Ground blend map over the world square with origin (-5600, -6144) and size 12288 cm: R = road (0 turf, 0.5 bare earth, 1 set stones), G = moss, B = dry straw, A = shade baked at cliff feet. |
+| `T_Wood`, `T_LogEnd`, `T_Banner` | 64 x 32, 16 x 16, 16 x 40 | Planks, sawn log end, cloth banner. |
+| `T_Water`, `T_Gravel` | 128 x 128 | Running water: broad pools of two close teals with sparse ripple streaks lying along the current (2 texels across per 3 down, `FLOW_TEXELS`; must agree with `FLOW_DIR` in the world generator). The pale pebble bed of a ford. |
+| `T_WaterMap` | 2048 x 2048, linear data | World-aligned over the splat map's square (`layout.json` `water.map`). R = distance in from the bank (0 .. 1 over 256 cm), G = ford, B = current (0 in the still lake). Sampled bilinear and clamped; `build_visual_materials.py` sets those texture properties itself (the importer brings new PNGs in as pixel art), so run it after every texture import. |
+| `T_Splat` | 4096 x 4096 | Ground blend map over the world square in `layout.json` `splat` (origin (-16000, -20480), size 40960 cm): R = road (0 turf, 0.5 bare earth, 1 set stones), G = moss, B = dry straw, A = shade baked at cliff feet. The regions are painted here: straw-gold on the centre plain, parched and stony on the highlands, moss under the fir belts and along the river, mud at the water's edge, gravel bars at the fords, set stone on the bridges and the shrine's dais. |
 
 ### Materials (`/Game/SR/Materials`)
 
@@ -198,33 +200,36 @@ does not crawl when the camera pans. `*_N` normal maps and `T_Splat` are linear 
 | `M_Prop` + `MI_Prop_Rock`, `MI_Prop_Sandstone`, `MI_Prop_Wood`, `MI_Prop_Log` | Boulders, standing stones, the ruin, fences, logs, stumps | UV0 in cm. `TexA` / `SizeA` where vertex colour B = 1, `TexB` / `SizeB` where it is 0 (log: ends / bark). `Moss` + `MossSlope`: turf on up-facing facets, a whole facet at a time. `FootShade`, `Tint`, `Roughness`. |
 | `M_Foliage` | Conifers (`SM_Conifer_*`) | Masked, two-sided foliage shading with subsurface. Needles or bark by vertex colour B; UV1.x = baked shade (dark under each tier and at the base, lit toward the crown: `ShadeFloor`, `TipTint`), UV1.y = sway weight (`SwayAmount`, `SwaySpeed`). Per-instance random tint. |
 | `M_Card` + `MI_Card_Banner` | Grass, fern and flower cards; the banner cloth | Masked, two-sided, normal forced to world up so a card is lit like the turf it stands in. UV0 is 0..1 into `Tex` (`Size` in texels). `RootShade`, `Tint`, sway. |
-| `M_Water` | Pond | Two layers of `T_Water` sliding past each other a whole texel at a time (`ScrollTexelsPerSecond`), `Deep` / `DeepMix`, `Glint`. Opaque, low roughness, so Lumen reflects the haze. |
+| `M_Water` | The river sheet (`SM_Water`) | Per world texel, from `T_WaterMap` (`MapRect`): two layers of `T_Water` streaks carried downstream (`Flow`, `ScrollTexelsPerSecond` x / y) a whole texel at a time; `Deep` / `DeepMix`; **shallows** in three stepped, dithered bands within `ShallowWidth` (150 cm) of a bank (`Shallow`, A = strength); a broken **foam line** that laps in and out along every bank (`Foam`, `FoamWidth`, `FoamSpeed`, `FoamBreak`) with a fainter second line; **fords** drawn as `T_Gravel` wetted by `FordTint` under quick bright ripples (`ScrollTexelsPerSecond` z, `FordRippleLevel`); `Glint` on the brightest crests plus winking sun sparkles (`Sparkle`). Opaque, roughness 0.1 (0.7 on foam), so Lumen reflects the haze. |
 
 ### Level contents
 
 | Folder | Contents | Collision |
 | --- | --- | --- |
-| `Terrain/Ground` | 64 ground chunks covering X -5200..12600, Y -9600..9600 (the low camera sees far up-screen), with the pond cut out. | WorldStatic, blocks (render mesh used as collision) |
-| `Terrain/FieldTerraces` | Twelve irregular terraces inside the field. Each starts with one or two **40 cm steps** units climb (`StepHeight` is 45); eight of them carry a taller bluff (60 to 100 cm tiers, with firs on top) that blocks. All clear of both spawn areas, the lane between them, the road and the blocking rocks. | WorldStatic; aprons walkable, bluffs block |
-| `Terrain/Knolls` | Ten small blocking outcrops (96 to 140 cm) near the field edges, each with a fir or two. | WorldStatic, blocks |
-| `Terrain/Plateaus` | Stepped plateaus framing the field: tall and many-tiered on the far side (+X, two ranks) and the flanks, one low step on the camera side so nothing hides the field. Each starts with a walkable 34 to 40 cm apron that may lap into the field; every taller tier stays at least 95 cm outside the +/-3000 bound. | WorldStatic, blocks |
+| `Terrain/Ground` | Ground chunks (2500 cm squares) over the dressed world X -15500..24000, Y -16500..16500, with the river, its channels and the far lake cut out. | WorldStatic, blocks (render mesh used as collision) |
+| `Terrain/FieldTerraces` | About 26 irregular terraces a side (the enemy's half is the player's turned 180 degrees). Each starts with one or two **40 cm steps** units climb (`StepHeight` is 45); most outside the centre plain carry a taller bluff (70 to 110 cm tiers, with firs on top) that blocks. The centre plain has low single steps only. All clear of the aprons, the roads, the fords, the island and the belts' openings. | WorldStatic; aprons walkable, bluffs block |
+| `Terrain/Ridges` | The rock ridge between the centre lane and each kingdom's rocky flank lane: 39 m long, 78 cm at the foot with a crest to about 140 cm. Unbroken from the apron's edge to 13 m short of the river bank. | WorldStatic, blocks (too tall to climb) |
+| `Terrain/Highland` | A stepped upland in the far-left corner (player's bank) and the near-right (enemy's): two broad walkable 40 cm steps, two gold veins on the upper one, four or five blocking rock tors. | WorldStatic; steps walkable, tors block |
+| `Terrain/Shrine`, `Terrain/Bridges` | The shrine's round paved dais at the map centre (24 cm, walkable). Two bridge slabs, 7 m wide, carrying the king's road over the island's channels at ground level (underside just clear of the water). | WorldStatic, walkable |
+| `Terrain/Knolls` | About 18 small blocking outcrops a side (95 to 140 cm), each with a fir or two. | WorldStatic, blocks |
+| `Terrain/Plateaus` | Stepped plateaus framing the field: tall and many-tiered on the far side (+X, two ranks) and the flanks, one low step on the camera side so nothing hides the field. Each starts with a walkable 34 to 40 cm apron that may lap into the field; every taller tier stays at least 95 cm outside the +/-12000 bound. | WorldStatic, blocks |
 | `Terrain/Backdrop` | Eight big simple hills at X 7000..12000 that only ever show through the haze. | WorldStatic |
-| `Terrain/Shore` | The pond's bank wall and bed (far-left corner, X > 3150, outside the bound). | WorldStatic |
-| `Props/Rocks` | Four blocking boulders: `Rock_Centre`, `Rock_East`, `Rock_West`, `Rock_NE` (`Rock_SW` made way for the castle). Each has one invisible convex box `<name>_Collision` (tag `SRBlocker`); the visible stone has no collision. Standing stones by the water. Instanced actors `Stones` (scree, outcrops) and `Deadwood` (logs). | Only the `_Collision` boxes |
-| `Props/Ruin` | The landmark: a sandstone ruin by the lane at about (-560, -900) (two pillars, a broken wall, fallen blocks, standing stones, a banner pole), and a ruined gate where the road leaves the field at about (3560, 860). In-field pieces have `<name>_Collision` boxes. | Only the `_Collision` boxes |
-| `Props/Foliage` | Instanced actors `Conifers` (about 380 firs, five sizes 4.3 to 12.5 m) and `Grass` (about 15,000 blade / fern / flower cards, no shadows). 24 firs stand inside the field off the lane; each has a 46 x 46 cm box `Fir_NN_Collision` (tag `SRBlocker`). Two stand just behind the player's start so their tops blur into the bottom of the opening view. | Only the `_Collision` boxes |
+| `Terrain/Shore` | The banks and bed of the river and the far lake (bed at Z = -170), and the two fords' beds (`Ford_0`, `Ford_1`, Z = -24). The walkability grid reads water from this: ground below -30 cm is water and blocked, so a ford (8 cm under the surface) is wet but walkable. | WorldStatic |
+| `Props/Rocks` | Blocking boulders (`Rock_NN`, and `Rock_NNm` for its twin on the other side), thickest on the highlands and the rocky flank. Each has one invisible convex box `<name>_Collision` (an instance in the `Blockers` actor, tag `SRBlocker`); the visible stone has no collision. Standing stones at the corners of each ford (dressing). Instanced actors `Stones` (scree, outcrops) and `Deadwood` (logs). | Only the `_Collision` boxes |
+| `Props/Ruin` | The landmark: the shrine on the river island at the map centre. Eight standing stones ring the dais (radius 7.8 m, open along the king's road and toward the two island veins), four pillars flank the road, fallen blocks and two banners. A pillar pair at each end of both bridges and kerb stones on the slabs. A ruined gate where the road leaves the field at about (6700, 10400) (dressing). Stones and pillars have `<name>_Collision` boxes. | Only the `_Collision` boxes |
+| `Props/Foliage` | Instanced actors `Conifers` (about 1100 firs, five sizes 4.3 to 12.5 m) and `Grass` (blade / fern / flower cards and the reeds along the river banks, no shadows). Inside the field every fir has a 46 x 46 cm trunk box (`Fir_NNN`, `Stand_NNNN`, tag `SRBlocker`), placed in pairs across the centre. The two **fir-wood belts** (between the centre lane and each kingdom's wooded flank lane, low firs, one 13 m opening part-way and 13 m left to the river bank) are blocked by a row of boxes `Wood_k_NN` along their middle line. | Only the `_Collision` boxes |
 | `Props/Fences`, `Props/Logs` | Fence runs, stumps and logs along the road and behind the player's start. Dressing only. | none |
-| `Water` | `Pond` at Z = -48. | none |
+| `Water` | `River`: one sheet at Z = -16 over the river, its channels and the far lake. | none (the grid's ground trace must reach the bed) |
 | `Lighting` | `Sun`, `SkyLight`, `SkyAtmosphere`, `HeightFog`, `PostProcess`. Values below. | n/a |
 
 ### Lighting, haze, post (the `LOOK` table in `Tools/build_battlefield_visuals.py`)
 
 | Thing | Value |
 | --- | --- |
-| `Sun` | Movable directional, pitch -33, yaw 75, 11 lux, warm (255, 214, 165), source angle 1.8 for soft miniature-scale penumbrae, volumetric scattering 11 (the light shafts). Virtual shadow maps. |
-| `SkyLight` | Movable, real-time capture of the `SkyAtmosphere`, intensity 7.5, cool tint (205, 225, 255), volumetric scattering 0.3 (low, so shadowed haze stays dark and the shafts show). |
+| `Sun` | Movable directional, pitch -42, yaw 75, 10.5 lux, warm (255, 214, 165), source angle 1.8 for soft miniature-scale penumbrae, volumetric scattering 11 (the light shafts). Virtual shadow maps. At 42 degrees a shadow is 1.1x its caster's height (1.5x at the old 33), so trees and castles no longer lay black bars across the lanes. |
+| `SkyLight` | Movable, real-time capture of the `SkyAtmosphere`, intensity 9.5, cool tint (208, 226, 255), volumetric scattering 0.3 (low, so shadowed haze stays dark and the shafts show). Raised with the sun so shadowed ground sits near 35-40% of lit ground. |
 | `HeightFog` | Density 0.55, height falloff 0.3, **volumetric** (albedo (255, 242, 224), scattering distribution 0.35, view distance 16000). Its start distance is driven by the camera, see "Haze". |
-| `PostProcess` (unbound) | Manual exposure (bias -0.6, never adapts). Bloom 1.3 with a wide kernel and a lens-dirt mask (`T_LensDirt`, intensity 6), light lens flare, vignette 0.5, fringe 0.35, grain 0.12. Grade: saturation 0.9, contrast 1.0, shadow gain (0.88, 1.0, 1.12) = teal-cool, highlight gain (1.08, 1.0, 0.88) = warm, small positive offset so blacks are lifted, film toe 0.4 / slope 0.84 / shoulder 0.3. Motion blur 0. |
+| `PostProcess` (unbound) | Manual exposure (bias -0.7, never adapts). Bloom 1.3 with a wide kernel and a lens-dirt mask (`T_LensDirt`, intensity 6), light lens flare, vignette 0.5, fringe 0.35, grain 0.12. Grade: saturation 0.9, contrast 1.0, shadow gain (0.88, 1.0, 1.12) = teal-cool, highlight gain (1.08, 1.0, 0.88) = warm, small positive offset so blacks are lifted, film toe 0.4 / slope 0.84 / shoulder 0.3. Motion blur 0. |
 | Lumen | Global illumination and reflections (project default). |
 
 Exposure, sun, sky and grade are tuned as a set; change them together.
@@ -295,7 +300,7 @@ No mips: the sheets are not powers of two and a sprite pixel is never much small
 | Component | What it does |
 | --- | --- |
 | `SpriteCard` | `SM_UnitCard` with `MI_UnitSprite_<Troop>`, given the camera's rotation every frame, so it is parallel to the view plane and the sprite keeps its proportions anywhere on screen. Its world size is the sheet's (1.75 cm per pixel), so the figure stands at its gameplay height. Casts no shadow, receives no decals, is kept out of Lumen's scene and the distance fields. |
-| `ShadowCard` | The same mesh with `MI_UnitSpriteShadow_<Troop>`, hidden in game, `bCastHiddenShadow`. Shows the **frame as the sun sees it**: the facing row is chosen from the unit's yaw relative to the sun's yaw instead of the camera's (the sheets were rendered from 30 degrees above the horizon and the sun stands at 33, so that row is very nearly the true silhouette). |
+| `ShadowCard` | The same mesh with `MI_UnitSpriteShadow_<Troop>`, hidden in game, `bCastHiddenShadow`. Shows the **frame as the sun sees it**: the facing row is chosen from the unit's yaw relative to the sun's yaw instead of the camera's (the sheets were rendered from 30 degrees above the horizon and the sun stands at 42, so that row is close to the true silhouette, a little long). |
 | `Blob` | `M_UnitBlob` decal projected straight down under the feet, for contact in shade. |
 | `Ring` | Unchanged (`USRRingComponent`). |
 

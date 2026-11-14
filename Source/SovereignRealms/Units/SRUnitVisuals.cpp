@@ -17,6 +17,7 @@
 // strike lunge, hit-stop (which simply holds whatever frame is up).
 
 #include "Units/SRUnit.h"
+#include "FX/SRFXSprite.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "Common/SRRingComponent.h"
@@ -184,7 +185,8 @@ void ASRUnit::ApplySprite(ESRSpriteAnim Anim, int32 Frame, float Fade, const FVe
 	// --- where the cards stand ---
 	VisualRoot->SetRelativeLocation(Offset);
 	SpriteCard->SetWorldRotation(View.CardRotation);
-	SpriteCard->SetRelativeScale3D(FVector(1.f, CardScale.X, CardScale.Y));
+	const float K = FSRSpriteSheet::For(UnitType).CardScale;
+	SpriteCard->SetRelativeScale3D(FVector(1.f, CardScale.X * K, CardScale.Y * K));
 
 	const bool bCast = F.bSpriteShadows && bSpriteShown && Fade > 0.02f;
 	if (bCast != bShadowCasting)
@@ -197,7 +199,7 @@ void ASRUnit::ApplySprite(ESRSpriteAnim Anim, int32 Frame, float Fade, const FVe
 		// The shadow follows the lunge but stays on the ground through a hop.
 		ShadowCard->SetRelativeLocation(FVector(Offset.X, Offset.Y, ShadowCardLift));
 		ShadowCard->SetWorldRotation(View.ShadowRotation);
-		ShadowCard->SetRelativeScale3D(View.ShadowScale * FVector(1.f, CardScale.X, CardScale.Y));
+		ShadowCard->SetRelativeScale3D(View.ShadowScale * FVector(1.f, CardScale.X * K, CardScale.Y * K));
 	}
 
 	const float BlobAlpha = F.SpriteBlobStrength * Fade;
@@ -242,6 +244,17 @@ void ASRUnit::StepVisual(float Dt)
 	{
 		StepDeathVisual(Dt);
 		return;
+	}
+
+	// Hooves at a gallop and catapult wheels kick up dust.
+	if ((UnitType == ESRUnitType::Horseman || UnitType == ESRUnitType::Catapult) && Velocity.SizeSquared() > FMath::Square(S.MaxSpeed * 0.6f))
+	{
+		DustClock -= Dt;
+		if (DustClock <= 0.f)
+		{
+			DustClock = FMath::FRandRange(0.22f, 0.36f);
+			Battle->SpawnFX(ESRFX::Dust, SimPos - FVector(Velocity.GetSafeNormal() * GetRadius(), -10.f), 0.75f);
+		}
 	}
 
 	SetActorLocationAndRotation(SimPos, FRotator(0.f, FacingYaw, 0.f));

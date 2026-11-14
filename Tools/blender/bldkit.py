@@ -68,6 +68,7 @@ MATERIALS = {
     "Bld_Target": ("T_Bld_Target", "opaque"),         # the painted face of a straw archery butt
     "Bld_Char": ("T_Bld_Char", "opaque"),             # charred timber, burnt thatch (damaged, ruin)
     "Bld_Scorch": ("T_Bld_Scorch", "card"),           # soot marks: cut-out decals a few cm proud of a surface
+    "Bld_Water": ("T_Bld_Water", "opaque"),           # still water in a trough or bucket (stable)
 }
 
 # A building comes in four meshes with one origin and footprint: the finished one, its construction site (shown

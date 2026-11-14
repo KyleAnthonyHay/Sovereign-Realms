@@ -922,6 +922,31 @@ def roof_tile(seed):
     return t
 
 
+WATER = pal("#1c3a3c", "#28524f", "#376b63", "#4c887a", "#7fb3a0", "#c8e2cf")     # still trough water, muted teal
+
+
+def water(seed):
+    """Still water in a trough, 32 x 32, tiles: dark teal with a few short pale ripples and glints."""
+    rng = np.random.default_rng(seed)
+    W = H = 32
+    t = Tile(W, H, WATER[1])
+    n = value_noise(rng, W, H, 8)
+    for y in range(H):
+        for x in range(W):
+            t.put(x, y, WATER[0] if n[y, x] < 0.3 else (WATER[2] if n[y, x] > 0.68 else WATER[1]))
+    for _ in range(11):                                       # ripples: short horizontal dashes, lit above, dark below
+        x, y, L = int(rng.integers(W)), int(rng.integers(H)), int(rng.integers(3, 8))
+        for i in range(L):
+            t.put(x + i, y, WATER[3])
+            t.put(x + i, y + 1, WATER[0])
+        if rng.random() < 0.5:
+            t.put(x + L // 2, y, WATER[4])
+    for _ in range(4):
+        t.put(int(rng.integers(W)), int(rng.integers(H)), WATER[5])
+    return t
+
+
+
 # ---------------------------------------------------------------------------------------- build
 def build():
     os.makedirs(OUT, exist_ok=True)
@@ -959,6 +984,7 @@ def build():
         "T_Bld_Scorch": scorch(162),
         "T_Bld_Target": target(163),
         "T_Bld_RoofTile": roof_tile(164),
+        "T_Bld_Water": water(165),
     }
     normals = {"T_Bld_Ashlar": 1.7, "T_Bld_AshlarLarge": 1.9, "T_Bld_Trim": 1.4, "T_Bld_Mudbrick": 1.3, "T_Bld_Plaster": 1.2,
                "T_Bld_RoofClay": 1.0, "T_Bld_Thatch": 1.6, "T_Bld_Soil": 1.8,

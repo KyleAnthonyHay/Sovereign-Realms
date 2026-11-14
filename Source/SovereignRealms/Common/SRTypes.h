@@ -25,7 +25,9 @@ enum class ESRBuildingType : uint8
 	Mine,
 	Tower,
 	Barracks,
-	Range
+	Range,
+	Stable,       // trains Horse Riders
+	Workshop      // builds Catapults
 };
 
 /** The build menu's tabs. */
@@ -92,8 +94,17 @@ UENUM()
 enum class ESRUnitType : uint8
 {
 	Shieldbearer,
-	Archer
+	Archer,
+	Horseman,     // fast cavalry: a charge doubles its first blow
+	Catapult      // slow siege engine: long range, splash, wrecks buildings
 };
+
+/** Every troop type, in recruit-menu order. */
+inline const TArray<ESRUnitType>& SRAllUnitTypes()
+{
+	static const TArray<ESRUnitType> Types = { ESRUnitType::Shieldbearer, ESRUnitType::Archer, ESRUnitType::Horseman, ESRUnitType::Catapult };
+	return Types;
+}
 
 class UStaticMesh;
 
@@ -291,4 +302,27 @@ struct FSRUnitStats
 	/** Arc apex height as a fraction of the shot distance. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Ranged", meta = (ClampMin = "0"))
 	float ProjectileArc = 0.16f;
+
+	/** Ranged: the shot hurts every foe within this radius (cm) of where it lands, less toward the edge (0 = none). */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|Ranged", meta = (ClampMin = "0"))
+	float SplashRadius = 0.f;
+
+	/** Ranged: cannot shoot at anything closer than this (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|Ranged", meta = (ClampMin = "0"))
+	float MinRange = 0.f;
+
+	/** Throws stones (the catapult) rather than arrows. */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|Ranged")
+	bool bStoneProjectile = false;
+
+	/** Goes for buildings before troops when both are in sight (siege). */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat")
+	bool bPrefersBuildings = false;
+
+	/** Melee: the first blow after ChargeRestTime without striking does this x damage (cavalry charge). */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat", meta = (ClampMin = "1"))
+	float ChargeMultiplier = 1.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Combat", meta = (ClampMin = "0"))
+	float ChargeRestTime = 4.f;
 };
