@@ -54,7 +54,7 @@ namespace
 		{ TEXT("LMB / RMB"), TEXT("Place it (Shift: keep placing) / cancel") },
 		{ TEXT("Delete"), TEXT("Cancel construction (75% refund)") },
 		{ nullptr, TEXT("TROOPS") },
-		{ TEXT("Q / E"), TEXT("Train a Shieldbearer (Barracks) / Archer (Range)") },
+		{ TEXT("Q / E / R / T"), TEXT("Train Shieldbearer / Archer / Rider / Catapult") },
 		{ TEXT("RMB"), TEXT("Rally point (Barracks or Range selected)") },
 		{ nullptr, TEXT("GAME") },
 		{ TEXT("Esc"), TEXT("Cancel, then deselect, then pause") },

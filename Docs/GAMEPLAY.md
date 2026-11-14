@@ -39,10 +39,14 @@ Sovereign Feel** (`Source/SovereignRealms/Common/SRFeelSettings.{h,cpp}`, overri
 | --- | --- | --- | --- | --- |
 | Shieldbearer | 100 food | 9 s at a Barracks | 280 | melee, 27 dmg / 1.15 s, heavy hits |
 | Archer | 85 food | 8 s at an Archery Range | 125 | ranged, 18 dmg / 1.5 s; 0.35x damage to buildings |
-| Farm | 90 gold | 14 s | 1000 | 9 food / 6 s, houses 4 |
+| Farm | 90 gold | 14 s | 1000 | 14 food / 6 s, houses 4 |
 | Gold Mine | 140 gold | 16 s | 1250 | 10 gold / 6 s; only on a free gold vein |
 | Barracks | 110 gold | 16 s | 1600 | trains Shieldbearers; own rally point |
 | Archery Range | 125 gold | 16 s | 1400 | trains Archers; own rally point |
+| Horse Rider | 110 food + 40 gold | 11 s at a Stable | 230 | fast (6.4 m/s); the first blow after 4 s without striking is a charge, 2.2x; 2 housing |
+| Catapult | 120 food + 120 gold | 18 s at a Siege Workshop | 260 | 17 m range (none under 4.5 m), 70 dmg stones with 2.3 m splash, 3x vs buildings, goes for buildings first; slow; 3 housing |
+| Stable | 150 gold | 20 s | 1500 | trains Horse Riders |
+| Siege Workshop | 200 gold | 24 s | 1600 | builds Catapults |
 | Watchtower | 160 gold | 18 s | 1800 | shoots 40 dmg / 1.2 s at 14 m |
 | Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8; if it falls, the kingdom falls |
 
@@ -150,6 +154,23 @@ health left; towers and the castle count as defenders where they reach. Difficul
 - **Passive player**: see the difficulty table above. A player who builds a barracks and a tower holds the early
   attacks at Normal.
 - Towers: 40 damage an arrow: a Shieldbearer dies to 7, an Archer to 4; three towers make an assault expensive.
+
+## Fog of war, saves, effects
+
+- **Fog of war** (`USRFogSubsystem`, post-process `M_FogOfWar` from `Tools/build_fog_material.py`): the player sees
+  what their troops (line of sight) and buildings see. Enemy troops outside it are hidden (world, minimap, picking,
+  health bars); an enemy building stays hidden until first seen, then is remembered. Unexplored land is dark,
+  explored land dimmed and greyed. `sr.Fog 0|1` toggles it for tests. The enemy commander keeps its own sight memory.
+- **Saved games** (`USRGameFlowSubsystem::SaveMatch / LoadMatch`, `USRSaveGame`): pause menu Save / Load, an autosave
+  every 2 minutes, Continue on the title screen. Saved: troops (type, place, health, stance, platoon), buildings
+  (construction, damage, ruins, queues, rally points; the level's by name, the match's re-spawned), resources,
+  platoons, explored fog, the commander's progress, the clock, the camera. `sr.Save` / `sr.Load`.
+- **Behind buildings**: troops render custom depth with the team in the stencil; `M_Occlusion`
+  (`Tools/build_occlusion_material.py`) shows a hidden troop as a team-coloured checker silhouette.
+- **Effects** (`ASRFXSprite`, strips in `SourceArt/FX`, instances `MI_FX_*`): a building below half health burns and
+  smokes, a ruin smokes for 25 s, struck walls throw chips, catapult stones burst, fallen troops and galloping horses
+  raise dust.
+- **Zoomed far out**, a team-coloured pip marks every visible troop.
 
 ## Sound
 
