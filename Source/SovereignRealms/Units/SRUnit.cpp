@@ -440,7 +440,10 @@ void ASRUnit::UpdateTargeting(float Dt)
 	{
 		if (!TargetBuilding.IsValid() && (Order == ESROrder::AttackMove || Order == ESROrder::Idle || Order == ESROrder::Hold))
 		{
-			TargetBuilding = Battle->FindNearestEnemyBuilding(this, bHold ? S.AttackRange + GetRadius() + 20.f : S.AcquireRange * 0.8f);
+			// In sight and not told otherwise (idle, attack-moving): go for it, like a troop.
+			const bool bSeekBuildings = Stance == ESRStance::Aggressive || Order == ESROrder::AttackMove;
+			const float BuildingRange = bHold ? S.AttackRange + GetRadius() + 20.f : (bSeekBuildings ? S.AcquireRange : S.AttackRange + 200.f);
+			TargetBuilding = Battle->FindNearestEnemyBuilding(this, BuildingRange);
 		}
 	}
 	else

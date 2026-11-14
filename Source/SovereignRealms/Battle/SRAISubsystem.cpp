@@ -52,6 +52,43 @@ float USRAISubsystem::DifficultyScale(float Easy, float Normal, float Hard) cons
 	return D <= 0 ? Easy : (D >= 2 ? Hard : Normal);
 }
 
+FSRAIProfile USRAISubsystem::Profile()
+{
+	// The timing / odds settings are the Normal values; Easy and Hard scale them. See Docs/GAMEPLAY.md.
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	FSRAIProfile P;
+	P.FirstAttack = F.AIFirstWaveTime;
+	P.Advantage = F.AIAttackAdvantage;
+	P.Regroup = F.AIWaveInterval;
+	P.RaidInterval = F.AIRaidInterval;
+	P.FirstRaid = F.AIFirstWaveTime * 1.5f;
+	if (F.AIDifficulty <= 0)
+	{
+		P.FirstAttack *= 1.75f;  P.Advantage *= 1.35f;  P.Regroup *= 1.7f;
+		P.AttackCap = 5;  P.AttackCapGrowth = 2;  P.AttackCapMax = 14;
+		P.bRaids = false;
+		P.AdaptWeight = 0.f;  P.IncomeScale = 0.6f;  P.BuildCadence = 8.f;
+		P.MaxTowers = 2;  P.MaxFarms = 6;  P.RecruitQueue = 1;  P.Think = 1.5f;
+		P.Garrison = 0.35f;  P.RetreatHold = 0.9f;  P.bReinforce = false;  P.bImpatient = false;
+	}
+	else if (F.AIDifficulty >= 2)
+	{
+		P.FirstAttack *= 0.6f;  P.Advantage *= 0.77f;  P.Regroup *= 0.45f;
+		P.AttackCap = 10;  P.AttackCapGrowth = 4;  P.AttackCapMax = F.AIWaveSizeMax;
+		P.FirstRaid = P.FirstAttack;  P.RaidInterval *= 0.5f;
+		P.AdaptWeight = 1.f;  P.IncomeScale = 1.f;  P.BuildCadence = 2.f;
+		P.MaxTowers = 7;  P.MaxFarms = 14;  P.RecruitQueue = 2;  P.Think = 0.6f;
+		P.Garrison = 0.2f;  P.RetreatHold = 0.55f;
+	}
+	return P;
+}
+
+float USRAISubsystem::IncomeScale(ESRTeam Team) const
+{
+	const FSRCommander& C = Commanders[Team == ESRTeam::Player ? 0 : 1];
+	return C.bActive ? Profile().IncomeScale : 1.f;
+}
+
 void USRAISubsystem::Reset()
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
@@ -63,9 +100,10 @@ void USRAISubsystem::Reset()
 		C = FSRCommander();
 		C.Team = t == 0 ? ESRTeam::Player : ESRTeam::Enemy;
 		C.bActive = t == 1 || bPlayerAI;
-		C.ThinkClock = FMath::FRandRange(0.f, F.AIThinkInterval);
-		C.NextWaveTime = F.AIFirstWaveTime * DifficultyScale(1.45f, 1.f, 0.72f);
-		C.NextRaidTime = C.NextWaveTime * 0.75f;
+		const FSRAIProfile P = Profile();
+		C.ThinkClock = FMath::FRandRange(0.f, P.Think);
+		C.NextWaveTime = P.FirstAttack;
+		C.NextRaidTime = P.bRaids ? P.FirstRaid : 1e9f;
 		C.NextBuildTry = 2.f;
 		C.ShieldRatio = F.AIShieldRatio;
 		// It knows the foe starts as it does.
@@ -103,7 +141,7 @@ void USRAISubsystem::Step(float Dt)
 		if (!C.bActive) { continue; }
 		C.ThinkClock -= Dt;
 		if (C.ThinkClock > 0.f) { continue; }
-		C.ThinkClock = F.AIThinkInterval;
+		C.ThinkClock = Profile().Think;
 		Think(C);
 	}
 }
@@ -349,7 +387,7 @@ void USRAISubsystem::Observe(FSRCommander& C)
 	// Unseen, it assumes the foe has kept up with it at least by half.
 	float OurPower = 0.f;
 	for (const ASRUnit* U : Battle->GetUnits()) { if (U && U->IsActive() && U->GetTeam() == C.Team) { OurPower += UnitPower(U); } }
-	C.FoeArmyEstimate = FMath::Max3(SeenNow, C.FoeArmyEstimate * FMath::Pow(0.5f, F.AIThinkInterval / 240.f), OurPower * 0.5f);
+	C.FoeArmyEstimate = FMath::Max3(SeenNow, C.FoeArmyEstimate * FMath::Pow(0.5f, Profile().Think / 240.f), OurPower * 0.5f);
 
 	// Is the foe at our door?
 	bool bAtHome = false;
@@ -373,14 +411,14 @@ void USRAISubsystem::Adapt(FSRCommander& C)
 	// of shields from behind their own.
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
-	const float Weight = DifficultyScale(0.4f, 0.8f, 1.f);   // how fully it adapts
+	const float Weight = Profile().AdaptWeight;   // how fully it adapts
 	float Want = F.AIShieldRatio;
 	if (C.FoeArcherShare > 0.55f) { Want += (C.FoeArcherShare - 0.55f) * 1.2f; }
 	if (C.FoeArcherShare < 0.3f) { Want -= (0.3f - C.FoeArcherShare) * 1.1f; }
 	const int32 FoeTowers = Eco ? Eco->CountBuildings(ESRBuildingType::Tower, Foe(C.Team)) : 0;
 	Want += FMath::Min(FoeTowers, 4) * 0.03f;                 // towers: bring wall-breakers
 	Want = FMath::Lerp(F.AIShieldRatio, FMath::Clamp(Want, 0.3f, 0.8f), Weight);
-	C.ShieldRatio = FMath::FInterpTo(C.ShieldRatio, Want, F.AIThinkInterval, 0.5f);
+	C.ShieldRatio = FMath::FInterpTo(C.ShieldRatio, Want, Profile().Think, 0.5f);
 }
 
 // ------------------------------------------------------------------ economy
@@ -458,6 +496,7 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		const int32 Farms = Eco->CountBuildings(ESRBuildingType::Farm, C.Team);
 		const int32 Towers = Eco->CountBuildings(ESRBuildingType::Tower, C.Team);
 		const bool bPastOrder = !F.AIBuildOrder.IsValidIndex(C.BuildStep);
+		const FSRAIProfile Prof = Profile();
 
 		// Candidates in priority order; the first that can be placed is built. One that finds no room cools down.
 		TArray<TPair<ESRBuildingType, bool>, TInlineAllocator<8>> Wants;   // type, from the build order
@@ -476,14 +515,14 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		if (!bPastOrder) { Want(F.AIBuildOrder[C.BuildStep], true); }
 		else
 		{
-			if (Cap < F.MaxPopulation && Pop >= Cap - 2) { Want(ESRBuildingType::Farm); }
-			if (Food < 200.f && Gold > 300.f && Farms < 14) { Want(ESRBuildingType::Farm); }   // food is what troops cost
+			if (Cap < F.MaxPopulation && Pop >= Cap - 2 && Farms < Prof.MaxFarms) { Want(ESRBuildingType::Farm); }
+			if (Food < 200.f && Gold > 300.f && Farms < Prof.MaxFarms) { Want(ESRBuildingType::Farm); }   // food is what troops cost
 			if (Farms > Mines * 2 + 1 || Gold < 150.f) { Want(ESRBuildingType::Mine); }
-			if (Towers < FMath::Min(1 + Mines / 2 + FMath::Min(C.FoeAttacks, 2), 5)) { Want(ESRBuildingType::Tower); }
+			if (Towers < FMath::Min(1 + Mines / 2 + FMath::Min(C.FoeAttacks, 2), Prof.MaxTowers)) { Want(ESRBuildingType::Tower); }
 			if (Food > 450 && Barracks < 2) { Want(ESRBuildingType::Barracks); }  // food piling up: train faster
 			if (Food > 450 && Ranges < 2) { Want(ESRBuildingType::Range); }
-			if (Farms < 8) { Want(ESRBuildingType::Farm); }
-			if (Gold > 600.f) { Want(ESRBuildingType::Mine); if (Towers < 7) { Want(ESRBuildingType::Tower); } }  // gold to spare
+			if (Farms < FMath::Min(8, Prof.MaxFarms)) { Want(ESRBuildingType::Farm); }
+			if (Gold > 600.f) { Want(ESRBuildingType::Mine); if (Towers < Prof.MaxTowers) { Want(ESRBuildingType::Tower); } }  // gold to spare
 		}
 		for (const TPair<ESRBuildingType, bool>& W : Wants)
 		{
@@ -492,7 +531,7 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 			if (TryBuild(C, W.Key))
 			{
 				if (W.Value) { ++C.BuildStep; }
-				C.NextBuildTry = Clock + 3.f;
+				C.NextBuildTry = Clock + Prof.BuildCadence;
 				break;
 			}
 			// no room (or no free vein): skip it in the build order, and do not try it again for a while
@@ -528,7 +567,7 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 	for (ESRUnitType Type : Order)
 	{
 		ASRBuilding* Best = nullptr;
-		for (ASRBuilding* B : Trainers) { if (B->Trains(Type) && B->GetQueue().Num() < 2 && (!Best || B->GetQueue().Num() < Best->GetQueue().Num())) { Best = B; } }
+		for (ASRBuilding* B : Trainers) { if (B->Trains(Type) && B->GetQueue().Num() < Profile().RecruitQueue && (!Best || B->GetQueue().Num() < Best->GetQueue().Num())) { Best = B; } }
 		if (!Best) { continue; }
 		const bool bRoom = Eco->GetPopulation(C.Team) + Eco->GetQueuedPopulation(C.Team) + F.StatsFor(Type).PopCost <= Eco->GetPopulationCap(C.Team);
 		if (bRoom && Eco->CanAfford(C.Team, F.CostFor(Type))) { Best->QueueRecruit(Type); }
@@ -628,8 +667,8 @@ void USRAISubsystem::ManageDefence(FSRCommander& C, TArray<ASRUnit*>& Home)
 				Battle->CommandMove(W, ThreatAt, true, ESRFormationShape::Line, false);
 				UE_LOG(LogSovereign, Log, TEXT("AI %s recalls its %s to defend (threat %.1f vs home %.1f)"), Side(C), A->bRaid ? TEXT("raid") : TEXT("attack"), ThreatPower, HomePower);
 				A->Units.Reset();
-				if (A->bRaid) { C.NextRaidTime = Clock + F.AIRaidInterval * 0.5f; }
-				else { C.NextWaveTime = Clock + F.AIWaveInterval * 0.5f; }
+				if (A->bRaid) { C.NextRaidTime = Profile().bRaids ? Clock + Profile().RaidInterval * 0.5f : 1e9f; }
+				else { C.NextWaveTime = Clock + Profile().Regroup * 0.5f; }
 			}
 		}
 	}
@@ -644,7 +683,8 @@ void USRAISubsystem::ManageAttack(FSRCommander& C, TArray<ASRUnit*>& Home)
 	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
 
 	// Keep a garrison: more against a foe that has come at us lately.
-	const float GarrisonFrac = F.AIGarrisonFraction + (Clock - C.LastFoeAttack < 180.f ? 0.15f : 0.f);
+	const FSRAIProfile Prof = Profile();
+	const float GarrisonFrac = Prof.Garrison + (Clock - C.LastFoeAttack < 180.f ? 0.15f : 0.f);
 	const int32 Keep = FMath::FloorToInt(Home.Num() * GarrisonFrac);
 	TArray<ASRUnit*> Free;
 	{
@@ -655,7 +695,9 @@ void USRAISubsystem::ManageAttack(FSRCommander& C, TArray<ASRUnit*>& Home)
 		for (int32 k = 0; k < Keep; ++k) { Stay.Add((k * Sorted.Num()) / FMath::Max(Keep, 1) + Sorted.Num() / FMath::Max(2 * Keep, 1)); }
 		for (int32 i = 0; i < Sorted.Num(); ++i) { if (!Stay.Contains(i) && !Sorted[i]->IsEngaged()) { Free.Add(Sorted[i]); } }
 	}
-	while (Free.Num() > F.AIWaveSizeMax) { Free.Pop(); }
+	// How many it will commit grows with each attack it has made (a gentle opponent starts small).
+	const int32 Cap = FMath::Min3(Prof.AttackCap + Prof.AttackCapGrowth * C.WavesSent, Prof.AttackCapMax, F.AIWaveSizeMax);
+	while (Free.Num() > Cap) { Free.Pop(); }
 	const float FreePower = SumPower(Free);
 
 	// Reinforce an attack that is going well.
@@ -665,7 +707,7 @@ void USRAISubsystem::ManageAttack(FSRCommander& C, TArray<ASRUnit*>& Home)
 		FVector2D Centre;
 		C.Main.Gather(W, Centre);
 		const float Ours = SumPower(W), Theirs = LocalFoePower(C, Centre, 2200.f);
-		if (Free.Num() >= 3 && Ours > Theirs * 0.9f && Clock - C.LastReinforce > 20.f)
+		if (Prof.bReinforce && Free.Num() >= 3 && Ours > Theirs * 0.9f && Clock - C.LastReinforce > 20.f)
 		{
 			C.LastReinforce = Clock;
 			Battle->CommandMove(Free, Centre, true, ESRFormationShape::Column, false);
@@ -685,10 +727,10 @@ void USRAISubsystem::ManageAttack(FSRCommander& C, TArray<ASRUnit*>& Home)
 
 	// Go when the odds are good; sooner when the foe's army has been seen away from home; and once the army is at
 	// its housing cap, there is nothing to gain by waiting.
-	const float Advantage = F.AIAttackAdvantage * DifficultyScale(1.3f, 1.f, 0.85f);
+	const float Advantage = Prof.Advantage;
 	const bool bMaxed = Eco->GetPopulation(C.Team) >= Eco->GetPopulationCap(C.Team) - 1 && Eco->GetPopulationCap(C.Team) >= 20;
 	const bool bGood = FreePower >= Defence * Advantage;
-	const bool bWaitedLong = Clock > C.NextWaveTime + 150.f && FreePower >= Defence * 0.85f;
+	const bool bWaitedLong = Prof.bImpatient && Clock > C.NextWaveTime + 150.f && FreePower >= Defence * 0.85f;
 	if (!bGood && !bMaxed && !bWaitedLong) { return; }
 
 	C.Main = FSRAttack();
@@ -753,8 +795,9 @@ void USRAISubsystem::EndAttack(FSRCommander& C, FSRAttack& A, const TCHAR* Why)
 	A.Gather(W, Centre);
 	if (W.Num() > 0) { Battle->CommandMove(W, MusterPoint(C), false, ESRFormationShape::Column, false); }
 	UE_LOG(LogSovereign, Log, TEXT("AI %s %s ends (%s): %d of %d back"), Side(C), A.bRaid ? TEXT("raid") : TEXT("attack"), Why, W.Num(), A.StartSize);
-	if (A.bRaid) { C.NextRaidTime = Clock + F.AIRaidInterval * DifficultyScale(1.5f, 1.f, 0.7f); }
-	else { C.NextWaveTime = Clock + F.AIWaveInterval * DifficultyScale(1.5f, 1.f, 0.7f); }
+	const FSRAIProfile Prof = Profile();
+	if (A.bRaid) { C.NextRaidTime = Prof.bRaids ? Clock + Prof.RaidInterval : 1e9f; }
+	else { C.NextWaveTime = Clock + Prof.Regroup; }
 	A.Units.Reset();
 }
 
@@ -781,7 +824,7 @@ void USRAISubsystem::StepAttack(FSRCommander& C, FSRAttack& A)
 	if (bFighting || Theirs > 0.f) { A.LastFight = Clock; }
 
 	// Losing: fall back and regroup rather than feed the foe one troop at a time. A raid gives up sooner.
-	const float Hold = A.bRaid ? 0.9f : DifficultyScale(0.8f, 0.65f, 0.55f);
+	const float Hold = A.bRaid ? 0.9f : Profile().RetreatHold;
 	if (Theirs > 0.f && Ours < Theirs * Hold && (A.bRaid || W.Num() <= FMath::CeilToInt(A.StartSize * 0.7f)))
 	{
 		EndAttack(C, A, *FString::Printf(TEXT("outmatched %.1f vs %.1f"), Ours, Theirs));
@@ -800,7 +843,7 @@ void USRAISubsystem::StepAttack(FSRCommander& C, FSRAttack& A)
 	}
 
 	// Target fell (or we got there and stand idle): on to the next, chosen from here.
-	A.Reorder -= F.AIThinkInterval;
+	A.Reorder -= Profile().Think;
 	bool bIdle = true;
 	for (const ASRUnit* U : W) { if (U->IsEngaged() || U->GetOrder() != ESROrder::Idle) { bIdle = false; break; } }
 	if (!A.Target.IsValid() || !A.Target->IsAlive() || (bIdle && A.Reorder <= 0.f && !A.Target.IsValid()))

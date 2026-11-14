@@ -12,6 +12,7 @@ class ASRPlayerController;
 class ASRBuilding;
 class UTexture2D;
 class UFont;
+class ASRUnit;
 
 /** Cells of the icon atlas /Game/SR/UI/T_UI_Icons, in the order Tools/ui/gen_ui_art.py draws them. */
 enum class ESRIcon : uint8
@@ -123,6 +124,10 @@ private:
 	void DrawPayoutPopups();
 	void DrawTrainingBars();
 	void DrawRouteLines();
+	/** Ground circles round selected troops: line of sight, and an archer's bow range. */
+	void DrawRangeCircles();
+	struct FRangeCircle { FVector2D At = FVector2D(1e9, 1e9); TArray<FVector> Sight, Reach; };
+	TMap<TWeakObjectPtr<ASRUnit>, FRangeCircle> RangeCircles;
 
 	// ---- in-game HUD (SRHUDGame.cpp) ----
 	void DrawGameHUD();

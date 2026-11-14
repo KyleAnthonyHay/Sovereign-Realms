@@ -63,7 +63,7 @@ namespace
 
 	const TCHAR* DifficultyNames[3] = { TEXT("Easy"), TEXT("Normal"), TEXT("Hard") };
 	const TCHAR* DifficultyNotes[3] = {
-		TEXT("The enemy is slow to attack and waits for big odds."),
+		TEXT("A gentle enemy: a small economy, late, small attacks."),
 		TEXT("A fair fight: it attacks when it thinks it can win."),
 		TEXT("The enemy strikes early, raids often, adapts fully.") };
 }

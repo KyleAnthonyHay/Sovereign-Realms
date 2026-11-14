@@ -548,6 +548,24 @@ void ASRHUD::DrawTroopSelection(const FBox2D& Box)
 	}
 	if (bEnemy) { return; }
 
+	// key for the ground circles: dashed = line of sight, solid = bow range
+	if (F.bShowRangeCircles)
+	{
+		const float KY = Box.Max.Y - U(20.f), KS = U(18.f);
+		float KX = Box.Max.X - U(16.f);
+		auto Key = [&](const TCHAR* Label, const FLinearColor& Color, bool bDashed)
+		{
+			const float TW = TextSize(Label, U(12.f)).X;
+			KX -= TW;
+			Text(Label, KX, KY - U(7.f), U(12.f), Dim);
+			KX -= U(6.f) + KS;
+			for (float d = 0.f; d < KS; d += bDashed ? U(6.f) : KS) { Fill(KX + d, KY, bDashed ? U(4.f) : KS, FMath::Max(1.f, U(2.f)), A(Color, 1.f)); }
+			KX -= U(14.f);
+		};
+		if (Count[1] > 0) { Key(TEXT("bow range"), F.RangeCircleColor, false); }
+		Key(TEXT("sight"), F.SightCircleColor, true);
+	}
+
 	// command buttons, right-aligned
 	enum ECmd { CmdAttack, CmdStop, CmdHold, CmdPatrol, CmdStance, CmdForm, CmdDisband };
 	struct FCommand { ECmd Kind; ESRIcon Which; const TCHAR* Key; const TCHAR* Label; const TCHAR* Title; const TCHAR* Line; bool bActive; };

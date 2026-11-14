@@ -10,9 +10,9 @@
 
 namespace
 {
-	const FLinearColor Good(0.25f, 1.f, 0.4f);
-	const FLinearColor Bad(1.f, 0.18f, 0.12f);
-	const FLinearColor Free(0.9f, 0.95f, 0.85f);
+	const FLinearColor GhostGood(0.25f, 1.f, 0.4f);
+	const FLinearColor GhostBad(1.f, 0.18f, 0.12f);
+	const FLinearColor GhostFree(0.9f, 0.95f, 0.85f);
 	constexpr int32 Fringe = 4;   // cells shown round the footprint
 }
 
@@ -63,7 +63,7 @@ void ASRPlacementPreview::Show(ESRBuildingType Type, const FSRPlacement& P)
 	}
 	SetActorHiddenInGame(false);
 	SetActorLocation(P.Location + FVector(0.f, 0.f, 2.f));
-	const FLinearColor C = P.bValid ? Good : Bad;
+	const FLinearColor C = P.bValid ? GhostGood : GhostBad;
 	Ghost->SetCustomPrimitiveDataVector4(0, FVector4(C.R, C.G, C.B, P.bValid ? 0.42f : 0.5f));
 
 	// The cell plates only need rebuilding when the footprint moves to another cell (or its validity flips).
@@ -94,16 +94,16 @@ void ASRPlacementPreview::Show(ESRBuildingType Type, const FSRPlacement& P)
 			{
 				// open ground round the footprint: a faint plate, fading out toward the edge of the fringe
 				const int32 Ring = FMath::Max(FMath::Max(Lo.X - x, x - Hi.X), FMath::Max(Lo.Y - y, y - Hi.Y));
-				Colors.Add(FLinearColor(Free.R, Free.G, Free.B, 0.22f * (1.f - float(Ring - 1) / Fringe)));
+				Colors.Add(FLinearColor(GhostFree.R, GhostFree.G, GhostFree.B, 0.22f * (1.f - float(Ring - 1) / Fringe)));
 			}
 			else if (bFoot)
 			{
-				const FLinearColor Cc = P.CellOk[K] ? Good : Bad;
+				const FLinearColor Cc = P.CellOk[K] ? GhostGood : GhostBad;
 				Colors.Add(FLinearColor(Cc.R, Cc.G, Cc.B, P.CellOk[K] ? 0.55f : 0.8f));
 			}
 			else
 			{
-				Colors.Add(FLinearColor(Bad.R, Bad.G, Bad.B, Grid->IsBuildingCell(Cl) ? 0.35f : 0.5f));
+				Colors.Add(FLinearColor(GhostBad.R, GhostBad.G, GhostBad.B, Grid->IsBuildingCell(Cl) ? 0.35f : 0.5f));
 			}
 			const FVector2D Ctr = Grid->CellCentre(Cl);
 			Xfs.Add(FTransform(FRotator::ZeroRotator, FVector(Ctr.X, Ctr.Y, Grid->CellHeight(Cl) + 4.f), FVector(Scale, Scale, 1.f)));

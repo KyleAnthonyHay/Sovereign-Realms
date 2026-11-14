@@ -16,7 +16,7 @@ USRFeelSettings::USRFeelSettings()
 	Shieldbearer.TurnRateDeg = 520.f;
 	Shieldbearer.bRanged = false;
 	Shieldbearer.AttackRange = 34.f;
-	Shieldbearer.AcquireRange = 760.f;
+	Shieldbearer.AcquireRange = 1300.f;   // line of sight: what it notices and goes for
 	Shieldbearer.Damage = 27.f;
 	Shieldbearer.AttackInterval = 1.15f;
 	Shieldbearer.WindupTime = 0.26f;
@@ -37,7 +37,7 @@ USRFeelSettings::USRFeelSettings()
 	Archer.TurnRateDeg = 640.f;
 	Archer.bRanged = true;
 	Archer.AttackRange = 880.f;
-	Archer.AcquireRange = 1050.f;
+	Archer.AcquireRange = 1500.f;
 	Archer.Damage = 18.f;
 	Archer.AttackInterval = 1.5f;
 	Archer.WindupTime = 0.42f;

@@ -97,6 +97,7 @@ void ASRHUD::DrawHUD()
 		bInputOpen = State == ESRGameState::Playing && !bLegend;
 		DrawHealthBars();
 		DrawTrainingBars();
+		DrawRangeCircles();
 		DrawRouteLines();
 		DrawPayoutPopups();
 		DrawSelectionBox();
@@ -471,6 +472,88 @@ void ASRHUD::DrawPayoutPopups()
 		const float X = S.X - (W + U(5.f) + IS) * 0.5f, Y = S.Y - P * 0.6f;
 		Text(Label, X, Y, P, A(Popup.Resource == ESRResource::Gold ? GoldBright : FoodColor, Alpha), AlignLeft, Bold);
 		Icon(Popup.Resource == ESRResource::Gold ? ESRIcon::Coin : ESRIcon::Food, X + W + U(5.f), Y + P * 0.12f, IS, FLinearColor(1.f, 1.f, 1.f, Alpha));
+	}
+}
+
+void ASRHUD::DrawRangeCircles()
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!F.bShowRangeCircles || !Battle || !PC)
+	{
+		RangeCircles.Reset();
+		return;
+	}
+	// The selected troops nearest the middle of the selection (a big blob of circles reads as nothing).
+	TArray<ASRUnit*> Units;
+	FVector2D Mid = FVector2D::ZeroVector;
+	for (const TWeakObjectPtr<ASRUnit>& U : PC->GetSelection()) { if (U.IsValid() && U->IsActive()) { Units.Add(U.Get()); Mid += U->GetPos2D(); } }
+	for (auto It = RangeCircles.CreateIterator(); It; ++It) { if (!It.Key().IsValid() || !Units.Contains(It.Key().Get())) { It.RemoveCurrent(); } }
+	if (Units.Num() == 0) { return; }
+	Mid /= Units.Num();
+	Units.Sort([&Mid](const ASRUnit& A, const ASRUnit& B) { return FVector2D::DistSquared(A.GetPos2D(), Mid) < FVector2D::DistSquared(B.GetPos2D(), Mid); });
+	if (Units.Num() > 12) { Units.SetNum(12); }
+
+	// Points hug the ground; they are re-sampled only once the troop has moved a little.
+	auto Ring = [Battle](const FVector2D& C, float R, float RefZ, TArray<FVector>& Out)
+	{
+		const int32 N = FMath::Clamp(FMath::RoundToInt(R / 22.f), 48, 96);
+		Out.Reset(N);
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float A = 2.f * PI * i / N;
+			const FVector2D P = C + FVector2D(FMath::Cos(A), FMath::Sin(A)) * R;
+			float Z = RefZ;
+			Battle->SampleGround(P, RefZ + 600.f, Z);
+			Out.Add(FVector(P.X, P.Y, Z + 15.f));
+		}
+	};
+	// Several troops' circles merge into one outline: a stretch inside another troop's circle of the same kind is skipped.
+	struct FDisc { FVector2D C; float R; };
+	TArray<FDisc> SightDiscs, ReachDiscs;
+	for (const ASRUnit* Unit : Units)
+	{
+		SightDiscs.Add({ Unit->GetPos2D(), Unit->Stats().AcquireRange });
+		if (Unit->Stats().bRanged) { ReachDiscs.Add({ Unit->GetPos2D(), Unit->Stats().AttackRange }); }
+	}
+	auto Covered = [](const TArray<FDisc>& Discs, const FVector2D& P, const FVector2D& Own)
+	{
+		for (const FDisc& D : Discs)
+		{
+			if (D.C.Equals(Own, 1.f)) { continue; }
+			if (FVector2D::DistSquared(D.C, P) < FMath::Square(D.R - 4.f)) { return true; }
+		}
+		return false;
+	};
+	auto Draw = [&](const TArray<FVector>& Pts, const FVector2D& Own, const TArray<FDisc>& Discs, const FLinearColor& Color, bool bDashed, float Width)
+	{
+		const int32 N = Pts.Num();
+		for (int32 i = 0; i < N; ++i)
+		{
+			if (bDashed && (i & 1)) { continue; }
+			const FVector Mid = (Pts[i] + Pts[(i + 1) % N]) * 0.5f;
+			if (Covered(Discs, FVector2D(Mid.X, Mid.Y), Own)) { continue; }
+			const FVector S0 = Canvas->Project(Pts[i]);
+			const FVector S1 = Canvas->Project(Pts[(i + 1) % N]);
+			if (S0.Z <= 0.f || S1.Z <= 0.f) { continue; }
+			DrawLine(S0.X, S0.Y, S1.X, S1.Y, Color, Width);
+		}
+	};
+	const float W = FMath::Max(1.f, U(2.f));
+	for (ASRUnit* Unit : Units)
+	{
+		FRangeCircle& C = RangeCircles.FindOrAdd(Unit);
+		const FVector2D P = Unit->GetPos2D();
+		if (FVector2D::DistSquared(P, C.At) > FMath::Square(60.f))
+		{
+			C.At = P;
+			const FSRUnitStats& S = Unit->Stats();
+			Ring(P, S.AcquireRange, Unit->GetSimPos().Z, C.Sight);
+			if (S.bRanged) { Ring(P, S.AttackRange, Unit->GetSimPos().Z, C.Reach); } else { C.Reach.Reset(); }
+		}
+		const bool bEnemy = Unit->GetTeam() == ESRTeam::Enemy;
+		Draw(C.Sight, P, SightDiscs, bEnemy ? FLinearColor(1.f, 0.4f, 0.35f, 0.45f) : F.SightCircleColor, true, W);
+		if (C.Reach.Num() > 0) { Draw(C.Reach, P, ReachDiscs, F.RangeCircleColor, false, W); }
 	}
 }
 

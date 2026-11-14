@@ -62,6 +62,11 @@ faces; a selection that is not a platoon has its own formation too. **Patrol**: 
 back and forth between where it stood and the point until it is given another order (the route is drawn on the ground
 while selected; `USRBattleSubsystem::CommandPatrol`).
 
+**Line of sight**: a troop notices (and, in Aggressive stance or on an attack-move, goes for) enemy troops and buildings
+within its sight: 13 m for Shieldbearers, 15 m for Archers (bow range 8.8 m). Selected troops show it on the ground: a
+dashed blue outline for sight, a solid orange one for archers' bow range (one merged outline per group; Sovereign Feel
+> Combat > Show Range Circles).
+
 **Stances** (per platoon or per selection, G cycles): Aggressive (chase anything in acquire range), Defensive (chase at
 most 9 m from the post, then return), Hold Ground (never move to fight; H gives a one-off hold order).
 
@@ -100,7 +105,22 @@ health left; towers and the castle count as defenders where they reach. Difficul
   target falls it re-picks from where it stands, and comes home if the next is too strong.
 - **Raids**: every 75 s (Hard 52 s) a party of 3-4 Shieldbearers slips at an outlying farm or mine where it has seen
   next to no defence (never near the castle), burns it and comes home, or turns back the moment it is outmatched.
-- **Timing**: earliest main attack 2:30 (Easy 3:38, Hard 1:48); between attacks it regroups 50 s (x1.5 / x0.7).
+- **Difficulty** (`USRAISubsystem::Profile`; the AI timing / odds settings are the Normal values):
+
+| | Easy | Normal | Hard |
+| --- | --- | --- | --- |
+| Income (share of its farms' and mines' output) | 60% | 90% | 100% |
+| Earliest attack | 7:00 | 4:00 | 2:24 |
+| Odds it waits for | 2.0x | 1.5x | 1.15x |
+| Regroup between attacks | 153 s | 90 s | 40 s |
+| Attack size (first, +per attack, max) | 5, +2, 14 | 8, +3, 24 | 10, +4, 30 |
+| Raids | none | every 120 s from 6:00 | every 60 s from 2:24 |
+| Adapts its army to yours | no | 60% | fully |
+| Reinforces / attacks at even odds after waiting | no | yes | yes |
+| Towers / farms at most, decisions every | 2 / 6, 1.5 s | 4 / 10, 1 s | 7 / 14, 0.6 s |
+
+  Passive-player tests (`sr.Speed 8`): Easy attacked first at 7:00 with 5 troops and twice in 20 minutes, the castle
+  still standing; Normal attacked at ~6:30 and took the castle at ~10 minutes.
 
 ## Balance, as tested (accelerated runs, `sr.Speed 8`)
 
@@ -109,8 +129,8 @@ health left; towers and the castle count as defenders where they reach. Difficul
   8 raids vs 7). Earlier builds ended in a base race at 5 minutes (fixed: a threatened castle recalls the attack, and
   buildings got health to match the stronger troops) and in a side that never attacked again after an attack was
   wiped out (fixed).
-- **Passive player, Normal**: the first attack (9 troops) comes at ~2:20 for the outlying mine; the castle falls at
-  **~9.5 minutes** (14 with the old wave timer). A player who builds a barracks and a tower holds it.
+- **Passive player**: see the difficulty table above. A player who builds a barracks and a tower holds the early
+  attacks at Normal.
 - Towers: 40 damage an arrow: a Shieldbearer dies to 7, an Archer to 4; three towers make an assault expensive.
 
 ## Sound

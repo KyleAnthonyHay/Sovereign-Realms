@@ -77,7 +77,8 @@ Use `U(designUnits)` for every size and position. Body text is 14-17 units, head
   away (remembered). A platoon whose troops all fall disappears with an alert.
 - **World-space**: health bars (selected or recently hurt troops; damaged buildings), the box-select rectangle,
   "+N" payout popups, training progress over a working barracks / range, dashed ground lines for the selected troops'
-  patrol route and the selected barracks' / range's rally point.
+  patrol route and the selected barracks' / range's rally point; round selected troops (up to 12), the merged
+  outline of their line of sight (dashed blue) and archers' bow range (solid orange), keyed in the troop panel.
 - **Top bar, enemy**: "Enemy ready in m:ss" until its first attack may leave, "Enemy watching" after, "Enemy
   attacking!" (pulsing red) while an attack or raid is out.
 

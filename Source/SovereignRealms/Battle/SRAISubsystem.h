@@ -37,6 +37,34 @@ struct FSRAttack
 	void Gather(TArray<ASRUnit*>& Out, FVector2D& Centre) const;
 };
 
+/**
+ * How hard the commander plays at one difficulty. Easy is a gentle opponent: a slower, smaller economy, late and
+ * small attacks that need big odds, no raids, no adapting, no reinforcing. Hard is the full commander.
+ */
+struct FSRAIProfile
+{
+	float FirstAttack = 240.f;     // earliest main attack (s)
+	float Advantage = 1.5f;        // strength it wants over the expected defence before attacking
+	float Regroup = 90.f;          // pause after an attack ends (s)
+	int32 AttackCap = 8;           // most troops in the first attack ...
+	int32 AttackCapGrowth = 3;     // ... growing by this much per attack ...
+	int32 AttackCapMax = 24;       // ... up to this
+	bool bRaids = true;
+	float FirstRaid = 360.f;
+	float RaidInterval = 120.f;
+	float AdaptWeight = 0.6f;      // how fully it answers the player's army mix (0 = never)
+	float IncomeScale = 0.9f;      // share of its farms' and mines' output it actually gets
+	float BuildCadence = 4.f;      // seconds between building decisions
+	int32 MaxTowers = 4;
+	int32 MaxFarms = 10;
+	int32 RecruitQueue = 2;        // recruits it keeps queued per barracks / range
+	float Think = 1.f;             // seconds between decisions
+	float Garrison = 0.25f;        // share of the army kept home
+	float RetreatHold = 0.7f;      // falls back when its local strength drops below this x the foe's
+	bool bReinforce = true;
+	bool bImpatient = true;        // attacks at even odds after waiting long
+};
+
 /** One kingdom's commander. Plain data + logic; owned by USRAISubsystem. */
 struct FSRCommander
 {
@@ -112,6 +140,11 @@ public:
 	/** The enemy's main attack (or a raid) is out right now. */
 	bool IsEnemyAttacking() const { return Commanders[1].Main.IsActive() || Commanders[1].Raid.IsActive(); }
 	void LogStatus() const;
+
+	/** The profile for the current difficulty (Sovereign Feel > AI > AI Difficulty). */
+	static FSRAIProfile Profile();
+	/** Share of a building's payout its kingdom gets: below 1 for an easier commander, 1 for the player. */
+	float IncomeScale(ESRTeam Team) const;
 
 	/** Fighting strength of one troop (health x damage, archers' reach counted), scaled by its health left. */
 	static float UnitPower(ESRUnitType Type, float HealthFrac = 1.f);

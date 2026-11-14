@@ -274,8 +274,19 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|AI", meta = (ClampMin = "0"))
 	float EnemyLeashDistance = 2400.f;
 
+	/** Old pre-commander behaviour: enemy troops give up a chase far from home. Off: the commander decides. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|AI")
-	bool bEnemyLeash = true;
+	bool bEnemyLeash = false;
+
+	/** Selected troops show their line of sight (and archers their bow range) as circles on the ground. */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|AI")
+	bool bShowRangeCircles = true;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|AI")
+	FLinearColor SightCircleColor = FLinearColor(0.55f, 0.85f, 1.f, 0.55f);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Combat|AI")
+	FLinearColor RangeCircleColor = FLinearColor(1.f, 0.55f, 0.18f, 0.85f);
 
 	/** Seconds a health bar stays visible after the unit was last damaged (selected / hovered units always show it). */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Health Bars", meta = (ClampMin = "0"))
@@ -539,7 +550,8 @@ public:
 	bool bDebugDrawPaths = false;
 
 	// -------------------------------------------------------------------- AI
-	/** 0 Easy, 1 Normal, 2 Hard. Scales the enemy's income, wave timing and wave size (no map cheats at any level). */
+	/** 0 Easy, 1 Normal, 2 Hard: the commander's profile (USRAISubsystem::Profile): its income share (60% / 90% / 100%),
+	 * attack timing, size and odds, raids, adapting. No map cheats or bonus resources at any level. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "2"))
 	int32 AIDifficulty = 1;
 
@@ -547,13 +559,13 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0.1"))
 	float AIThinkInterval = 0.75f;
 
-	/** The first main attack leaves no earlier than this (seconds into the match), at Normal (Easy x1.45, Hard x0.72). */
+	/** The first main attack leaves no earlier than this (seconds into the match), at Normal (Easy x1.75, Hard x0.6). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0"))
-	float AIFirstWaveTime = 150.f;
+	float AIFirstWaveTime = 240.f;
 
-	/** Seconds the commander regroups after an attack ends before it may launch the next, at Normal. */
+	/** Seconds the commander regroups after an attack ends before it may launch the next, at Normal (Easy x1.7, Hard x0.45). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "10"))
-	float AIWaveInterval = 50.f;
+	float AIWaveInterval = 90.f;
 
 	/** Troops in the first wave, growth per wave, and the most a wave will ever wait for. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
@@ -581,9 +593,9 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "1"))
 	float AIShieldRatio = 0.55f;
 
-	/** The commander attacks once its free army is this many times stronger than what it expects to meet at the target (Normal; Easy x1.3, Hard x0.85). */
+	/** The commander attacks once its free army is this many times stronger than what it expects to meet at the target (Normal; Easy x1.35, Hard x0.77). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0.5"))
-	float AIAttackAdvantage = 1.3f;
+	float AIAttackAdvantage = 1.5f;
 
 	/** Smallest force (troops) it sends on a main attack, and on a raid of an undefended farm or mine. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
@@ -592,9 +604,9 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
 	int32 AIRaidSize = 3;
 
-	/** Seconds between raids (Normal). */
+	/** Seconds between raids (Normal; Hard x0.5; Easy never raids). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "10"))
-	float AIRaidInterval = 75.f;
+	float AIRaidInterval = 120.f;
 
 	/** How far (cm) the commander's troops and buildings see. It only knows what it has seen (and remembers it for AIMemoryTime). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "500"))

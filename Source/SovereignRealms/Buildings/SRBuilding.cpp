@@ -3,6 +3,7 @@
 #include "Buildings/SRBuilding.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SRAISubsystem.h"
 #include "Battle/SRGridSubsystem.h"
 #include "Buildings/SRWorker.h"
 #include "Battle/SRPlatoonSubsystem.h"
@@ -209,7 +210,9 @@ void ASRBuilding::Deliver()
 	if (!IsFinished() || !Economy) { return; }
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const bool bFarm = BuildingType == ESRBuildingType::Farm;
-	const int32 Amount = bFarm ? F.FarmFoodPerPayout : F.MineGoldPerPayout;
+	int32 Amount = bFarm ? F.FarmFoodPerPayout : F.MineGoldPerPayout;
+	// An easier commander gets only a share of its output (USRAISubsystem::Profile).
+	if (const USRAISubsystem* AI = USRAISubsystem::Get(this)) { Amount = FMath::RoundToInt(Amount * AI->IncomeScale(Team)); }
 	if (Amount <= 0 || (BuildingType != ESRBuildingType::Farm && BuildingType != ESRBuildingType::Mine)) { return; }
 	const ESRResource Resource = bFarm ? ESRResource::Food : ESRResource::Gold;
 	Economy->AddResource(Team, Resource, Amount);
