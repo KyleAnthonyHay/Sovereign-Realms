@@ -8,6 +8,10 @@ venv: Tools/.venv/bin/python Tools/audio/prep_recorded.py, then import (Tools/ue
   sword_swing.wav      -> S_SwordSwing                       (melee wind-up)
   horse_snort_1/2.wav  -> S_HorseSnort, S_HorseSnort_2
   horse_pass_by.wav    -> S_GallopLoop                       (its loudest two seconds, cross-faded into a loop)
+  fire_crackle.wav     -> S_FireCrackle                      (a flare-up: when a building catches, and now and then)
+                       -> S_FireLoop                         (a steady burn: a low flame roar from shaped noise with
+                                                              crackle grains cut from the recording scattered through
+                                                              it; built circular, so it loops without a seam)
   catapult_break.wav   -> S_CatapultBreak                    (a catapult destroyed: timber bursting apart)
   hammer_nail.wav      -> S_BuildHammer, S_BuildHammer_2..5  (its five blows, one take each; replaces the synthesised one)
 Uses macOS afconvert to read the 24-bit / 96 kHz / stereo originals.
@@ -75,6 +79,33 @@ def split_hits(x, threshold=0.5, min_gap=0.15):
     return [x[max(cuts[k] - int(0.002 * SR), 0): cuts[k + 1] - int(0.01 * SR)] for k in range(len(onsets))]
 
 
+def fire_loop(x, seconds=6.0, grains=46, seed=7):
+    """A seamless burning-fire bed: periodic low noise (the roar), slowly breathing, with crackles from x."""
+    rng = np.random.default_rng(seed)
+    n = int(seconds * SR)
+    # the roar: noise shaped in the frequency domain (1/f, 70-900 Hz) and turned back with an inverse FFT, which
+    # makes it exactly periodic over n samples
+    f = np.fft.rfftfreq(n, 1.0 / SR)
+    spec = (rng.normal(size=len(f)) + 1j * rng.normal(size=len(f))) / np.maximum(f, 20.0) ** 0.5
+    spec *= 1.0 / (1.0 + (f / 900.0) ** 4) * (1.0 - 1.0 / (1.0 + (f / 70.0) ** 4))
+    roar = np.fft.irfft(spec, n)
+    roar /= np.sqrt(np.mean(roar ** 2))
+    t = np.arange(n) / n
+    breathe = 0.78 + 0.12 * np.sin(2 * np.pi * 2 * t + 0.4) + 0.08 * np.sin(2 * np.pi * 5 * t + 1.3)   # whole cycles: periodic
+    out = roar * breathe * 0.09
+    # crackles: short grains round the recording's transients, placed at random (wrapping round the end)
+    env = np.abs(x)
+    peaks = [i for i in range(int(0.05 * SR), len(x) - int(0.06 * SR), int(0.004 * SR)) if env[i] > 0.12]
+    for _ in range(grains):
+        c = peaks[rng.integers(len(peaks))]
+        g_len = int(rng.uniform(0.03, 0.09) * SR)
+        g = x[c - g_len // 4: c - g_len // 4 + g_len] * np.hanning(g_len)
+        at = rng.integers(n)
+        idx = (at + np.arange(g_len)) % n
+        out[idx] += g * rng.uniform(0.15, 0.7)
+    return out
+
+
 def main():
     write("BowRelease", trim(read("bow_release_1.wav")))
     write("BowRelease_2", trim(read("bow_release_2.wav")))
@@ -84,6 +115,9 @@ def main():
     write("HorseSnort_2", trim(read("horse_snort_2.wav")), peak=0.8)
     write("GallopLoop", loop(read("horse_pass_by.wav"), 0.95, 3.15, 0.25), peak=0.8)
     write("CatapultBreak", trim(read("catapult_break.wav")))
+    fire = read("fire_crackle.wav")
+    write("FireCrackle", trim(fire), peak=0.8)
+    write("FireLoop", fire_loop(fire / max(np.abs(fire).max(), 1e-6)), peak=0.7)
     for k, hit in enumerate(split_hits(read("hammer_nail.wav"))[:6]):
         write("BuildHammer" if k == 0 else "BuildHammer_%d" % (k + 1), trim(hit), peak=0.8)
 

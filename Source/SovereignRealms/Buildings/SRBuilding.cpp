@@ -19,6 +19,7 @@
 #include "Engine/World.h"
 #include "Misc/PackageName.h"
 #include "FX/SRFXSprite.h"
+#include "Components/AudioComponent.h"
 
 ASRBuilding::ASRBuilding()
 {
@@ -117,6 +118,7 @@ void ASRBuilding::BeginPlay()
 
 void ASRBuilding::EndPlay(const EEndPlayReason::Type Reason)
 {
+	StopFireSound(0.1f);
 	ClearStateFX(false);
 	if (Economy) { Economy->UnregisterBuilding(this); }
 	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this); Grid && !bDestroyed) { Grid->SetFootprint(this, false); }
@@ -176,6 +178,7 @@ void ASRBuilding::StepBuilding(float Dt)
 	if (BuildProgress < 1.f) { StepConstruction(Dt); UpdateFeedback(Dt); return; }
 	StepRepair(Dt);
 	StepUpgrade(Dt);
+	StepFireSound(Dt);
 
 	if (BuildingType == ESRBuildingType::Farm || BuildingType == ESRBuildingType::Mine)
 	{
@@ -672,6 +675,42 @@ void ASRBuilding::CountBuilders()
 	BuildersWorking = FMath::Min(BuildersWorking, USRFeelSettings::Get().BuildersPerBuilding);
 }
 
+void ASRBuilding::StepFireSound(float Dt)
+{
+	USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this);
+	if (!Audio) { return; }
+	if (State != ESRBuildingState::Damaged || bDestroyed) { StopFireSound(1.2f); return; }
+	const FVector Flames = GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + FMath::Min(BlockHeight * 0.7f, 450.f));
+	UAudioComponent* F = FireSound.Get();
+	if (!F)
+	{
+		// the roar starts (fading in) once the fire is in earshot; until then it is checked now and then
+		FireRetry -= Dt;
+		if (FireRetry <= 0.f)
+		{
+			FireRetry = 0.75f;
+			FireSound = Audio->PlayAttached(ESRSound::FireLoop, Mesh, 1.f, FMath::FRandRange(0.92f, 1.08f), 1.5f);
+			if (UAudioComponent* New = FireSound.Get()) { New->SetWorldLocation(Flames); }
+		}
+	}
+	else if (!Audio->IsInRange(ESRSound::FireLoop, Flames, 1.15f))
+	{
+		StopFireSound(0.3f);   // well past the range, where it is already silent: give the voice back
+	}
+	CrackleClock -= Dt;
+	if (CrackleClock <= 0.f)
+	{
+		CrackleClock = FMath::FRandRange(2.5f, 7.f);
+		Audio->PlayAt(ESRSound::FireCrackle, Flames, FMath::FRandRange(0.6f, 1.f));
+	}
+}
+
+void ASRBuilding::StopFireSound(float Fade)
+{
+	if (UAudioComponent* F = FireSound.Get()) { F->FadeOut(Fade, 0.f); }
+	FireSound = nullptr;
+}
+
 void ASRBuilding::StepRepair(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
@@ -792,6 +831,7 @@ void ASRBuilding::ReceiveDamage(float Amount, ASRUnit* From)
 void ASRBuilding::Collapse(ASRUnit* Killer)
 {
 	if (bDestroyed) { return; }
+	StopFireSound(0.8f);
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { Grid->SetFootprint(this, false); }
 	bDestroyed = true;
@@ -947,6 +987,8 @@ void ASRBuilding::SetState(ESRBuildingState NewState)
 	if (NewState == ESRBuildingState::Damaged)
 	{
 		ClearStateFX(false);
+		CrackleClock = 0.f;   // it catches with a flare-up
+		FireRetry = 0.f;
 		const FVector2D H = (FootprintMax - FootprintMin) * 0.32f;
 		const FVector2D C = GetFootprintCentre();
 		const float Top = GetActorLocation().Z + FMath::Min(BlockHeight * 0.8f, 520.f);

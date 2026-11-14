@@ -259,7 +259,13 @@ private:
 	int8 NeedsBuilderState = -1;
 	int32 Level = 1;
 	float UpgradeProgress = -1.f;    // 0..1 while the next level is being built, -1 otherwise
-	void StepUpgrade(float Dt);     // -1 = not worked out yet (a saved game): asked of the economy on first need
+	void StepUpgrade(float Dt);
+	/** While it burns (damaged): the fire's steady roar (started in earshot, stopped out of it) and the odd flare-up. */
+	void StepFireSound(float Dt);
+	void StopFireSound(float Fade);
+	TWeakObjectPtr<class UAudioComponent> FireSound;
+	float FireRetry = 0.f;
+	float CrackleClock = 0.f;     // -1 = not worked out yet (a saved game): asked of the economy on first need
 	int32 BuildersWorking = 0;
 	void CountBuilders();
 	void StepRepair(float Dt);

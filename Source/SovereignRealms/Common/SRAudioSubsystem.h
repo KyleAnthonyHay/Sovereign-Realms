@@ -46,6 +46,8 @@ enum class ESRSound : uint8
 	HorseSnort,
 	GallopLoop,    // under a galloping rider (looping, attached)
 	CatapultBreak, // a catapult destroyed
+	FireLoop,      // a burning building's steady fire (looping, attached)
+	FireCrackle,   // a flare-up of the fire
 	Count UMETA(Hidden)
 };
 

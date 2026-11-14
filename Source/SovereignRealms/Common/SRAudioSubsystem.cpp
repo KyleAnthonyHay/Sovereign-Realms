@@ -58,9 +58,9 @@ namespace
 		{ TEXT("HorseSnort"),      0.80f,  2.f, 0.55f, 0.08f, 2000.f },
 		{ TEXT("GallopLoop"),      0.00f,  3.f, 0.55f, 0.06f, 3800.f },
 		{ TEXT("CatapultBreak"),   0.20f,  2.f, 0.90f, 0.06f, 5000.f },
+		{ TEXT("FireLoop"),        0.00f,  4.f, 0.50f, 0.05f, 2600.f },
+		{ TEXT("FireCrackle"),     0.40f,  2.f, 0.55f, 0.10f, 3000.f },
 	};
-	/** Attached loops of one sound playing at once. */
-	const int32 MaxLoopsPerSound = 3;
 }
 
 USRAudioSubsystem* USRAudioSubsystem::Get(const UObject* WorldContext)
@@ -176,7 +176,7 @@ UAudioComponent* USRAudioSubsystem::PlayAttached(ESRSound Sound, USceneComponent
 	{
 		int32 Running = 0;
 		for (const TWeakObjectPtr<UAudioComponent>& C : Loops) { Running += (C.IsValid() && C->Sound && C->IsPlaying() && Variants[I].Contains(C->Sound.Get())) ? 1 : 0; }
-		if (Running >= MaxLoopsPerSound) { return nullptr; }
+		if (Running >= FMath::RoundToInt(Rules[I].MaxLoad)) { return nullptr; }   // for a loop, MaxLoad caps how many play at once
 	}
 	else if (!Allow(Sound)) { return nullptr; }
 	const FSoundRule& R = Rules[I];
