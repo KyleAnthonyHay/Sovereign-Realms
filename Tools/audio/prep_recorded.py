@@ -202,6 +202,26 @@ def main():
         write("BuildHammer" if k == 0 else "BuildHammer_%d" % (k + 1), trim(hit), peak=0.8)
 
 
+def main_music():
+    """SourceArt/Audio/Music/*.mp3 (in name order) -> S_Music_1.wav, _2, ...: 48 kHz 16-bit stereo, loudness matched,
+    a short fade at each end (the game cross-fades between songs itself). The wavs are generated (not committed)."""
+    src = os.path.join(ROOT, "SourceArt", "Audio", "Music")
+    songs = sorted(f for f in os.listdir(src) if f.lower().endswith((".mp3", ".wav", ".m4a", ".flac")))
+    for k, name in enumerate(songs):
+        tmp = os.path.join(tempfile.mkdtemp(), "x.wav")
+        subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@%d" % SR, "-c", "2", os.path.join(src, name), tmp], check=True)
+        a, _ = sf.read(tmp)
+        a = a * (10 ** (-16.0 / 20.0) / max(np.sqrt(np.mean(a ** 2)), 1e-6))   # same loudness (about -16 dB RMS)
+        a = np.clip(a, -0.98, 0.98)
+        f = int(0.5 * SR)
+        a[:f] *= np.linspace(0, 1, f)[:, None]
+        a[-f:] *= np.linspace(1, 0, f)[:, None]
+        out = os.path.join(OUT, "S_Music_%d.wav" % (k + 1))
+        sf.write(out, a, SR, subtype="PCM_16")
+        print("wrote S_Music_%d.wav  %.0f s  (%s)" % (k + 1, len(a) / SR, name))
+
+
 if __name__ == "__main__":
     main()
     main_cc0()
+    main_music()

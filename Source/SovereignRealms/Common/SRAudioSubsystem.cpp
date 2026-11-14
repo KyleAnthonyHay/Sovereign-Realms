@@ -131,6 +131,14 @@ void USRAudioSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 		A.NonSpatializedRadiusMode = ENonSpatializedRadiusSpeakerMapMode::OmniDirectional;
 		Attenuations[i] = Att;
 	}
+	MusicTracks.Reset();
+	for (int32 k = 1; k <= 20; ++k)
+	{
+		const FString Name = FString::Printf(TEXT("S_Music_%d"), k);
+		USoundBase* Song = LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/SR/Audio/%s.%s"), *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Song) { break; }
+		MusicTracks.Add(Song);
+	}
 	bLoaded = true;
 
 	int32 Missing = 0;
@@ -144,6 +152,15 @@ void USRAudioSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 void USRAudioSubsystem::Tick(float DeltaTime)
 {
 	for (float& L : VoiceLoad) { L = FMath::Max(0.f, L - DeltaTime); }
+	// the soundtrack: a few seconds before a song ends, the next fades in over it
+	if (MusicComp && MusicTracks.Num() > 0 && MusicLength > 0.f)
+	{
+		const float Crossfade = FMath::Min(6.f, MusicLength * 0.25f);
+		if (GetWorld()->GetRealTimeSeconds() - MusicStarted >= MusicLength - Crossfade)
+		{
+			PlayTrack((MusicIndex + 1) % MusicTracks.Num(), Crossfade);
+		}
+	}
 	Loops.RemoveAll([](const TWeakObjectPtr<UAudioComponent>& C) { return !C.IsValid() || !C->IsPlaying(); });
 
 	// Listen from just above the camera's focus point, facing up the screen, so panning matches the view.
@@ -296,11 +313,30 @@ void USRAudioSubsystem::StartLoops()
 		WindComp = UGameplayStatics::CreateSound2D(this, GetSound(ESRSound::WindLoop), 0.f, 1.f, 0.f, nullptr, true, false);
 		if (WindComp) { WindComp->Play(FMath::FRandRange(0.f, 20.f)); }
 	}
-	if (!MusicComp && GetSound(ESRSound::MusicLoop))
+	if (!MusicComp && MusicTracks.Num() > 0)
+	{
+		PlayTrack(FMath::RandRange(0, MusicTracks.Num() - 1), 4.f);   // the soundtrack, starting with either song
+	}
+	else if (!MusicComp && GetSound(ESRSound::MusicLoop))
 	{
 		MusicComp = UGameplayStatics::CreateSound2D(this, GetSound(ESRSound::MusicLoop), F.MasterVolume * F.MusicVolume, 1.f, 0.f, nullptr, true, false);
 		if (MusicComp) { MusicComp->FadeIn(4.f, F.MasterVolume * F.MusicVolume); }
 	}
+}
+
+void USRAudioSubsystem::PlayTrack(int32 Index, float Fade)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (!MusicTracks.IsValidIndex(Index) || !MusicTracks[Index]) { return; }
+	// the song that is ending fades out under the new one, then cleans itself up
+	if (MusicComp) { MusicComp->bAutoDestroy = true; MusicComp->FadeOut(Fade, 0.f); }
+	MusicIndex = Index;
+	USoundBase* Song = MusicTracks[Index];
+	MusicComp = UGameplayStatics::CreateSound2D(this, Song, F.MasterVolume * F.MusicVolume, 1.f, 0.f, nullptr, true, false);
+	if (MusicComp) { MusicComp->FadeIn(Fade, 1.f); }
+	MusicStarted = GetWorld()->GetRealTimeSeconds();
+	MusicLength = Song->GetDuration();
+	UE_LOG(LogSovereign, Log, TEXT("MUSIC %s (%.0f s)"), *Song->GetName(), MusicLength);
 }
 
 void USRAudioSubsystem::StopLoops()

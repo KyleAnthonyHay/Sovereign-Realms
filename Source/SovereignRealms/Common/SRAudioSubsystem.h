@@ -123,6 +123,14 @@ private:
 	TArray<TWeakObjectPtr<UAudioComponent>> Loops;
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> AmbientComp;
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> MusicComp;
+	/** The soundtrack: /Game/SR/Audio/S_Music_1, _2, ... (from SourceArt/Audio/Music). Played in turn, each song
+	 * cross-fading into the next; with none imported, the synthesised S_MusicLoop loops instead. */
+	UPROPERTY(Transient) TArray<TObjectPtr<USoundBase>> MusicTracks;
+	int32 MusicIndex = 0;
+	double MusicStarted = 0.0;   // real time the current song began
+	float MusicLength = 0.f;
+	/** Starts song Index (fading in over Fade s) and lets the one playing fade out under it. */
+	void PlayTrack(int32 Index, float Fade);
 	UPROPERTY(Transient) TObjectPtr<UAudioComponent> WindComp;
 
 	float LastPlayed[int32(ESRSound::Count)] = {};

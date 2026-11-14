@@ -70,3 +70,4 @@ $RECYCLE.BIN/
 *.p12
 *.pfx
 Builds/
+SourceArt/Audio/S_Music_*.wav
