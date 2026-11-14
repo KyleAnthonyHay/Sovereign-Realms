@@ -170,7 +170,9 @@ void ASRBuilding::StepBuilding(float Dt)
 	HitShake = FMath::Max(0.f, HitShake - Dt * 5.f);
 
 	if (bDestroyed) { StepCollapse(Dt); return; }
+	CountBuilders();
 	if (BuildProgress < 1.f) { StepConstruction(Dt); UpdateFeedback(Dt); return; }
+	StepRepair(Dt);
 
 	if (BuildingType == ESRBuildingType::Farm || BuildingType == ESRBuildingType::Mine)
 	{
@@ -243,6 +245,21 @@ bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s queue full (%d)"), Name, Queue.Num());
 		Economy->NotifyRefused();
 		return false;
+	}
+	if (Type == ESRUnitType::Builder)
+	{
+		int32 Queued = 0;
+		const int32 Alive = Economy->GetBuilderCount(Team, &Queued);
+		if (Alive + Queued >= F.MaxBuilders)
+		{
+			UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: Builder limit %d reached"), F.MaxBuilders);
+			if (Team == ESRTeam::Player)
+			{
+				Economy->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRBuilding", "BuilderCap", "You can have at most {0} Builders"), FText::AsNumber(F.MaxBuilders)));
+			}
+			Economy->NotifyRefused();
+			return false;
+		}
 	}
 	const int32 PopNeeded = Economy->GetPopulation(Team) + Economy->GetQueuedPopulation(Team) + F.StatsFor(Type).PopCost;
 	if (PopNeeded > Economy->GetPopulationCap(Team))
@@ -550,12 +567,55 @@ float ASRBuilding::GetHealthFrac() const
 	return FMath::Clamp(Health / FMath::Max(Stats().MaxHealth, 1.f), 0.f, 1.f);
 }
 
+bool ASRBuilding::NeedsBuilder() const
+{
+	if (NeedsBuilderState < 0)
+	{
+		const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+		const_cast<ASRBuilding*>(this)->NeedsBuilderState = (Eco && !Eco->IsInBuildZone(Team, GetFootprintCentre())) ? 1 : 0;
+	}
+	return NeedsBuilderState > 0;
+}
+
+void ASRBuilding::CountBuilders()
+{
+	BuildersWorking = 0;
+	if (!NeedsWork()) { return; }
+	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
+	{
+		for (const ASRUnit* U : Battle->GetUnits())
+		{
+			if (U && U->GetTeam() == Team && U->IsWorkingOn(this)) { ++BuildersWorking; }
+		}
+	}
+	BuildersWorking = FMath::Min(BuildersWorking, USRFeelSettings::Get().BuildersPerBuilding);
+}
+
+void ASRBuilding::StepRepair(float Dt)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (BuildersWorking <= 0 || Health >= Stats().MaxHealth) { return; }
+	Health = FMath::Min(Stats().MaxHealth, Health + BuildersWorking * F.BuilderRepairPerSecond * Dt);
+	if (State == ESRBuildingState::Damaged && GetHealthFrac() >= F.DamagedStateFraction) { SetState(ESRBuildingState::Complete); }
+	HammerClock -= Dt;
+	if (HammerClock <= 0.f)
+	{
+		HammerClock = FMath::FRandRange(0.5f, 0.9f);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 150.f)); }
+	}
+}
+
 void ASRBuilding::StepConstruction(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const FSRBuildingStats& S = Stats();
+	// Inside the castle's zone it rises by itself and builders speed it up; outside, only while a builder works on it.
+	const float Rate = NeedsBuilder()
+		? (BuildersWorking > 0 ? 1.f + F.BuilderExtraSpeed * (BuildersWorking - 1) : 0.f)
+		: 1.f + F.BuilderExtraSpeed * BuildersWorking;
+	if (Rate <= 0.f) { return; }   // waiting for a builder
 	const float Before = BuildProgress;
-	BuildProgress = FMath::Min(1.f, BuildProgress + Dt / FMath::Max(S.BuildTime, 0.5f));
+	BuildProgress = FMath::Min(1.f, BuildProgress + Rate * Dt / FMath::Max(S.BuildTime, 0.5f));
 	Health = FMath::Min(S.MaxHealth, Health + S.MaxHealth * (1.f - F.ConstructionStartHealth) * (BuildProgress - Before));
 	ApplyBuildVisual();
 
@@ -866,6 +926,7 @@ void ASRBuilding::ApplySaved(float InHealth, float InProgress, bool bInDestroyed
 		return;
 	}
 	BuildProgress = FMath::Clamp(InProgress, 0.f, 1.f);
+	NeedsBuilderState = -1;
 	Health = FMath::Clamp(InHealth, 1.f, Stats().MaxHealth);
 	Queue = InQueue;
 	BuildClock = 0.f;

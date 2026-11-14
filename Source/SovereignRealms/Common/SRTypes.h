@@ -96,13 +96,14 @@ enum class ESRUnitType : uint8
 	Shieldbearer,
 	Archer,
 	Horseman,     // fast cavalry: a charge doubles its first blow
-	Catapult      // slow siege engine: long range, splash, wrecks buildings
+	Catapult,     // slow siege engine: long range, splash, wrecks buildings
+	Builder       // trained at the castle: raises buildings outside the castle's reach, repairs; does not fight
 };
 
 /** Every troop type, in recruit-menu order. */
 inline const TArray<ESRUnitType>& SRAllUnitTypes()
 {
-	static const TArray<ESRUnitType> Types = { ESRUnitType::Shieldbearer, ESRUnitType::Archer, ESRUnitType::Horseman, ESRUnitType::Catapult };
+	static const TArray<ESRUnitType> Types = { ESRUnitType::Shieldbearer, ESRUnitType::Archer, ESRUnitType::Horseman, ESRUnitType::Catapult, ESRUnitType::Builder };
 	return Types;
 }
 
@@ -136,7 +137,8 @@ struct FSRBuildingStats
 	UPROPERTY(EditAnywhere, Config, Category = "Building", meta = (ClampMin = "0"))
 	int32 PopProvided = 0;
 
-	/** New buildings must stand within this distance (cm) of one of their kingdom's finished buildings. 0 = no territory. */
+	/** The building zone round it (cm): new buildings inside it raise themselves; outside every zone a Builder must go
+	 * and build them. Only the castle has one by default. 0 = none. */
 	UPROPERTY(EditAnywhere, Config, Category = "Building", meta = (ClampMin = "0"))
 	float TerritoryRadius = 0.f;
 
@@ -205,7 +207,8 @@ enum class ESROrder : uint8
 	Move,         // go to destination, ignore enemies
 	AttackMove,   // go to destination, engage enemies met on the way
 	AttackTarget, // chase and attack one specific unit (or building)
-	Hold          // stand here; strike only what is in reach (Hold Ground stance, or the H key)
+	Hold,         // stand here; strike only what is in reach (Hold Ground stance, or the H key)
+	Build         // builders: walk to a building site (or a damaged building) and work on it
 };
 
 enum class ESRAttackPhase : uint8
@@ -325,4 +328,14 @@ struct FSRUnitStats
 
 	UPROPERTY(EditAnywhere, Config, Category = "Combat", meta = (ClampMin = "0"))
 	float ChargeRestTime = 4.f;
+
+	/** A builder: raises and repairs its kingdom's buildings, never picks a fight on its own. */
+	UPROPERTY(EditAnywhere, Config, Category = "Unit")
+	bool bBuilder = false;
+
+	/** How far it sees (fog of war, cm). 0 = its AcquireRange. */
+	UPROPERTY(EditAnywhere, Config, Category = "Unit", meta = (ClampMin = "0"))
+	float SightRange = 0.f;
+
+	float Sight() const { return SightRange > 0.f ? SightRange : AcquireRange; }
 };

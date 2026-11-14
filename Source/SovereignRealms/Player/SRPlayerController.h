@@ -125,6 +125,7 @@ public:
 	/** Why the spot under the cursor is refused (empty when it is fine). */
 	const FText& GetPlacementReason() const { return PlacementReason; }
 	bool IsPlacementValid() const { return bPlacementValid; }
+	bool PlacementNeedsBuilder() const { return bPlacementNeedsBuilder; }
 	/** Where the building in hand would stand (its origin), while placing. */
 	FVector GetPlacementLocation() const { return PlacementLocation; }
 
@@ -140,6 +141,10 @@ public:
 	void IssueMove(const FVector& GroundPoint, bool bAttackMove);
 	void IssueAttack(ASRUnit* Target);
 	void IssueAttackBuilding(ASRBuilding* Target);
+	/** The selected builders go and work on one of our buildings (a site, or a damaged one). False if none are selected. */
+	bool IssueBuild(ASRBuilding* Building);
+	/** A building was just laid: the selected builders go to it, or (outside the castle's zone) the nearest free one. */
+	void SendBuildersTo(ASRBuilding* Building);
 	void IssueStop();
 
 	void RecenterOnSelection();
@@ -206,6 +211,7 @@ private:
 	void OnRecruitArcher() { RecruitHotkey(ESRUnitType::Archer); }
 	void OnRecruitHorseman() { RecruitHotkey(ESRUnitType::Horseman); }
 	void OnRecruitCatapult() { RecruitHotkey(ESRUnitType::Catapult); }
+	void OnRecruitBuilder() { RecruitHotkey(ESRUnitType::Builder); }
 	void RecruitHotkey(ESRUnitType Type);
 	ASRBuilding* PickBuildingUnderCursor() const;
 
@@ -232,7 +238,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CancelAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DeleteAction;
 	UPROPERTY(Transient) TObjectPtr<ASRPlacementPreview> Preview;
-	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[4];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[5];
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
 
@@ -240,6 +246,7 @@ private:
 	bool bPlacing = false;
 	ESRBuildingType PlacingType = ESRBuildingType::Farm;
 	FText PlacementReason;
+	bool bPlacementNeedsBuilder = false;
 	bool bPlacementValid = false;
 	FVector PlacementLocation = FVector::ZeroVector;
 	TWeakObjectPtr<ASRUnit> Hovered;

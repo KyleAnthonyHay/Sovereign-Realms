@@ -21,6 +21,7 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "Common/SRRingComponent.h"
+#include "Battle/SRPlatoonSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/DecalComponent.h"
 
@@ -97,6 +98,13 @@ void ASRUnit::BuildVisuals()
 	Ring->SetRelativeLocation(FVector(0, 0, 3));
 	Ring->BuildRing(GetRadius() * 1.12f, GetRadius() * 1.42f);
 	Ring->SetVisibility(false);
+
+	PlatoonRing = NewObject<USRRingComponent>(this);
+	PlatoonRing->SetupAttachment(Root);
+	PlatoonRing->RegisterComponent();
+	PlatoonRing->SetRelativeLocation(FVector(0, 0, 2));
+	PlatoonRing->BuildRing(GetRadius() * 0.9f, GetRadius() * 1.16f);
+	PlatoonRing->SetVisibility(false);
 
 	LastVisualPos = GetPos2D();
 	const FSRSpriteView& View = Battle->GetSpriteView();
@@ -321,6 +329,13 @@ void ASRUnit::StepVisual(float Dt)
 			Frame = Sheet.AttackFrame(AttackPhase, R);
 			if (!S.bRanged) { Offset.X += F.MeleeLungeDistance * (1.f - EaseOutCubic(R)); }
 		}
+		else if (bWorking && !bWalking)
+		{
+			// A builder at work: the mallet swing, looped at its own pace.
+			const int32 Frames = Sheet.Anim(ESRSpriteAnim::Attack).Frames;
+			Anim = ESRSpriteAnim::Attack;
+			Frame = FMath::FloorToInt(FMath::Frac(WorkClock / FMath::Max(S.AttackInterval, 0.2f)) * Frames) % Frames;
+		}
 		else if (HitAnimClock < F.HitAnimTime && !bWalking)
 		{
 			// Flinch: only while standing and not attacking, so it never hides a strike or makes feet slide.
@@ -366,6 +381,7 @@ void ASRUnit::StepDeathVisual(float Dt)
 	DeathClock += Dt;
 
 	if (bRingVisible) { Ring->SetVisibility(false); bRingVisible = false; }
+	if (PlatoonRing && PlatoonRingShown != INDEX_NONE) { PlatoonRing->SetVisibility(false); PlatoonRingShown = INDEX_NONE; }
 	SetSpriteShown(true);
 
 	// The facing rows are frozen from the moment of death (they are simply no longer updated).
@@ -386,6 +402,14 @@ void ASRUnit::StepDeathVisual(float Dt)
 void ASRUnit::UpdateRing(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
+	// the platoon's colour, always on (inside the selection ring, so both read)
+	const int32 WantPlatoon = (F.bShowPlatoonColors && bActive && !bDead && Team == ESRTeam::Player) ? Platoon : INDEX_NONE;
+	if (PlatoonRing && WantPlatoon != PlatoonRingShown)
+	{
+		PlatoonRingShown = WantPlatoon;
+		PlatoonRing->SetVisibility(WantPlatoon != INDEX_NONE);
+		if (WantPlatoon != INDEX_NONE) { PlatoonRing->SetRingColor(USRPlatoonSubsystem::PlatoonColor(WantPlatoon), 0.95f); }
+	}
 	TargetFlash = FMath::Max(0.f, TargetFlash - Dt);
 	RingPop = FMath::FInterpTo(RingPop, 0.f, Dt, 14.f);
 

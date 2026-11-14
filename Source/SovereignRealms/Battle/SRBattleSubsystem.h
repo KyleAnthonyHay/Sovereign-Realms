@@ -170,6 +170,8 @@ public:
 	FLinearColor TeamColor(ESRTeam Team) const;
 	FVector2D TeamCentroid(ESRTeam Team) const;
 	int32 CountAlive(ESRTeam Team) const;
+	/** Living builders of a kingdom. */
+	int32 CountBuilders(ESRTeam Team) const;
 	void LogStatus() const;
 
 	ESRBattleResult GetResult() const { return Result; }
@@ -180,8 +182,9 @@ public:
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> UnitCardMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> ArrowCardMesh;
 	/** Index = ESRUnitType. A type whose sheet is not imported yet borrows the Shieldbearer's. */
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[4];
-	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[4];
+	static constexpr int32 SRSpriteTypes = 5;   // one per ESRUnitType
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[5];
+	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[5];
 	/** Catapult stones (an arrow card with the stone sheet). */
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StoneMaterial;
 	/** Workers (cosmetic miners and farmhands): 0 miner, 1 farmhand. */

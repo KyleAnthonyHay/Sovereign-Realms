@@ -204,6 +204,7 @@ FSRPlatoonInfo USRPlatoonSubsystem::GetInfo(int32 Index) const
 		case ESRUnitType::Archer: ++I.Archers; break;
 		case ESRUnitType::Horseman: ++I.Riders; break;
 		case ESRUnitType::Catapult: ++I.Catapults; break;
+		case ESRUnitType::Builder: ++I.Builders; break;
 		default: ++I.Shieldbearers; break;
 		}
 		HealthSum += M->GetHealthFrac();
@@ -213,6 +214,7 @@ FSRPlatoonInfo USRPlatoonSubsystem::GetInfo(int32 Index) const
 	}
 	if (N > 0) { I.Health = HealthSum / N; I.Centre /= N; }
 	if (N == 0) { I.Kind = ESRPlatoonKind::Empty; }
+	else if (I.Builders > N * 4 / 5) { I.Kind = ESRPlatoonKind::WorkCrew; }
 	else if (I.Riders > N * 4 / 5) { I.Kind = ESRPlatoonKind::Cavalry; }
 	else if (I.Catapults > N * 4 / 5) { I.Kind = ESRPlatoonKind::SiegeTrain; }
 	else if (I.Archers + I.Riders + I.Catapults <= N / 5) { I.Kind = ESRPlatoonKind::ShieldWall; }
@@ -233,7 +235,7 @@ int32 USRPlatoonSubsystem::PlatoonOf(const TArray<ASRUnit*>& Units) const
 void USRPlatoonSubsystem::OnRecruit(ASRUnit* Unit)
 {
 	const int32 Index = GetRecruitTarget();
-	if (Index == INDEX_NONE || !Unit || Unit->GetTeam() != ESRTeam::Player) { return; }
+	if (Index == INDEX_NONE || !Unit || Unit->GetTeam() != ESRTeam::Player || Unit->IsBuilder()) { return; }   // builders go to work, not to the ranks
 	Add(Index, { Unit });
 	const FSRPlatoonInfo Info = GetInfo(Index);
 	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this); Battle && Info.bExists)
@@ -257,8 +259,26 @@ FText USRPlatoonSubsystem::KindName(ESRPlatoonKind Kind)
 	case ESRPlatoonKind::MixedHost: return LOCTEXT("MixedHost", "Mixed Host");
 	case ESRPlatoonKind::Cavalry: return LOCTEXT("Cavalry", "Cavalry");
 	case ESRPlatoonKind::SiegeTrain: return LOCTEXT("SiegeTrain", "Siege Train");
+	case ESRPlatoonKind::WorkCrew: return LOCTEXT("WorkCrew", "Work Crew");
 	default: return LOCTEXT("Platoon", "Platoon");
 	}
+}
+
+FLinearColor USRPlatoonSubsystem::PlatoonColor(int32 Index)
+{
+	// Bright and far apart from each other, from the team blue / red and from the green selection ring.
+	static const FLinearColor Colors[9] = {
+		FLinearColor(1.00f, 0.78f, 0.12f),   // 1 gold
+		FLinearColor(0.15f, 0.90f, 1.00f),   // 2 cyan
+		FLinearColor(1.00f, 0.30f, 0.85f),   // 3 magenta
+		FLinearColor(1.00f, 0.48f, 0.10f),   // 4 orange
+		FLinearColor(0.96f, 0.96f, 0.96f),   // 5 white
+		FLinearColor(0.62f, 0.45f, 1.00f),   // 6 violet
+		FLinearColor(1.00f, 0.62f, 0.68f),   // 7 pink
+		FLinearColor(0.20f, 0.78f, 0.62f),   // 8 teal
+		FLinearColor(0.78f, 1.00f, 0.22f),   // 9 lime
+	};
+	return Colors[((Index % 9) + 9) % 9];
 }
 
 FText USRPlatoonSubsystem::FormationName(ESRFormationShape Shape)

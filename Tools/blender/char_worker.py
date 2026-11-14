@@ -1,9 +1,10 @@
-"""Workers: the kingdom's miners and farmhands. Cosmetic people who make the farms and mines feel worked.
+"""Workers: the kingdom's miners, farmhands and builders. Cosmetic people who make the farms and mines feel worked.
 
 Shared body (lighter than a soldier, no armour): linen tunic with a team sash and hem, leather wraps, a basket on
 the back. Two variants (char_miner.py, char_farmer.py):
   miner  - leather skullcap, pickaxe, a basket of ore with gold flecks
   farmer - wide straw hat, long hoe, a basket of cut sheaves
+  builder - team-coloured hood, leather apron, a big mallet, planks on the back (a troop: char_builder.py)
 Sheet layout is the troops' (spawn, idle, walk, attack, hit, death) so the game drives them with the same code;
 "attack" is the work swing (pick into rock / hoe into soil) and loops while they work. Death is a simple fall.
 """
@@ -72,6 +73,11 @@ def build_mesh(b, variant):
     b.add(lathe([(0.0, 0.60), (0.176, 0.60), (0.184, 0.632), (0.176, 0.664), (0.0, 0.664)], seg=24, sy=0.78), "team", "hips")
     b.add(sheet([[V(0.095, -0.12, 0.62), V(0.155, -0.10, 0.62)],
                  [V(0.10, -0.15, 0.53), V(0.168, -0.128, 0.53)]], 0.026), "team", "sash_tail")
+    if variant == "builder":
+        # leather work apron over the tunic front, waist to knee
+        b.add(sheet([[V(-0.13, -0.158, 0.66), V(0.13, -0.158, 0.66)],
+                     [V(-0.15, -0.205, 0.40), V(0.15, -0.205, 0.40)]], 0.022), "leather", "skirt")
+        b.add(lathe([(0.0, 0.655), (0.177, 0.655), (0.177, 0.675), (0.0, 0.675)], seg=24, sy=0.78), "leather_dark", "hips")
     # basket straps over both shoulders
     for s in (1, -1):
         b.add(tube([V(s * 0.12, 0.05, 0.95), V(s * 0.15, -0.10, 0.88), V(s * 0.16, -0.12, 0.74), V(s * 0.16, -0.02, 0.66),
@@ -91,13 +97,19 @@ def build_mesh(b, variant):
     b.add(ellipsoid((0.036, 0.046, 0.046), seg=10, rings=6), "skin", "head", place((0, -0.152, hz - 0.02)))
     b.add(ellipsoid((0.026, 0.019, 0.021), seg=8, rings=6), "eye", "head", place((0.058, -0.136, hz + 0.012)), mirror=True)
     b.add(capsule((0.024, -0.148, hz + 0.036), (0.094, -0.126, hz + 0.046), 0.013, 0.011, seg=8, caps=2), "hair", "head", mirror=True)
-    b.add(ellipsoid((0.13, 0.11, 0.07), seg=16, rings=8), "beard" if miner else "hair", "head", place((0, -0.05, hz - 0.115), rx=-10))
+    b.add(ellipsoid((0.13, 0.11, 0.07), seg=16, rings=8), "beard" if variant != "farmer" else "hair", "head", place((0, -0.05, hz - 0.115), rx=-10))
     b.add(ellipsoid((0.15, 0.15, 0.12), seg=16, rings=8), "hair", "head", place((0, 0.02, hz + 0.03)))
     if miner:
         # leather skullcap with a team band
         cap = place((0, 0.006, hz + 0.02), rx=-10)
         b.add(lathe([(0.0, 0.03), (0.155, 0.03), (0.16, 0.07), (0.145, 0.12), (0.1, 0.155), (0.0, 0.165)], seg=24, sy=1.04), "leather", "head", cap)
         b.add(lathe([(0.0, 0.02), (0.164, 0.02), (0.168, 0.05), (0.164, 0.07), (0.0, 0.07)], seg=24, sy=1.04), "team", "head", cap)
+    elif variant == "builder":
+        # a team-coloured hood over the head and shoulders, the face left open, a dark band round the brow
+        hood = place((0, 0.02, hz + 0.0), rx=-12)
+        b.add(lathe([(0.0, -0.02), (0.17, -0.02), (0.175, 0.04), (0.165, 0.10), (0.12, 0.155), (0.0, 0.175)], seg=24, sy=1.06), "team", "head", hood)
+        b.add(lathe([(0.0, 0.03), (0.177, 0.03), (0.18, 0.06), (0.0, 0.06)], seg=24, sy=1.06), "leather_dark", "head", hood)
+        b.add(lathe([(0.0, 0.90), (0.20, 0.90), (0.215, 0.95), (0.16, 1.0), (0.0, 1.0)], seg=24, sy=0.8), "team", "chest")
     else:
         # wide straw hat, crown banded in the team colour
         hat = place((0, 0.004, hz + 0.08), rx=-8)
@@ -109,7 +121,13 @@ def build_mesh(b, variant):
     bm = place((0, 0.20, 0.80), rx=8)
     b.add(lathe([(0.0, -0.13), (0.11, -0.13), (0.14, -0.05), (0.155, 0.08), (0.16, 0.12), (0.0, 0.12)], seg=16, sy=0.75), "straw", "basket", bm)
     b.add(lathe([(0.0, 0.11), (0.165, 0.11), (0.168, 0.135), (0.0, 0.135)], seg=16, sy=0.75), "leather_dark", "basket", bm)
-    if miner:
+    if variant == "builder":
+        # planks standing up out of the basket, leaning a little apart
+        for k, (dx, lean, ln) in enumerate(((-0.07, -10, 0.46), (-0.01, -3, 0.52), (0.05, 5, 0.44), (0.10, 12, 0.38))):
+            base = V(dx, 0.21 + 0.012 * k, 0.86)
+            top = base + V(math.sin(math.radians(lean)) * ln, 0.03, math.cos(math.radians(lean)) * ln)
+            b.add(tube([base, top], 0.034, seg=4, squash=(1.0, 0.28), up=(0, 1, 0)), "wood", "basket")
+    elif miner:
         for dx, dy, r, mat in ((-0.06, 0.18, 0.06, "ore"), (0.05, 0.21, 0.055, "ore"), (0.0, 0.17, 0.045, "gold"), (0.07, 0.17, 0.04, "ore"),
                                (-0.08, 0.22, 0.035, "gold")):
             b.add(ellipsoid((r, r * 0.9, r * 0.8), seg=8, rings=5), mat, "basket", place((dx, dy, 0.93 + r * 0.4)))
@@ -125,7 +143,12 @@ def build_mesh(b, variant):
     f = FIST_R
     b.add(capsule(f + V(0, 0.06, 0), f + V(0, -HANDLE, 0), 0.022, 0.02, seg=8, caps=2), "wood", "tool")
     h = f + V(0, -HANDLE + 0.04, 0)
-    if miner:
+    if variant == "builder":
+        # mallet: a fat wooden head across the end of the handle, iron-banded at both faces (face = -Z at rest)
+        b.add(capsule(h + V(0, 0.0, 0.10), h + V(0, 0.0, -0.10), 0.068, seg=10, caps=2), "wood", "tool")
+        for z in (0.085, -0.085):
+            b.add(capsule(h + V(0, 0.0, z + 0.012), h + V(0, 0.0, z - 0.012), 0.072, seg=10, caps=1), "iron", "tool")
+    elif miner:
         # pick head: an iron bar across the end, curved down to a point (edge = -Z at rest)
         b.add(tube([h + V(0, 0.03, 0.17), h + V(0, 0.0, 0.08), h + V(0, -0.01, 0.0), h + V(0, 0.0, -0.10), h + V(0, 0.05, -0.22)],
                    [0.016, 0.03, 0.036, 0.028, 0.004], seg=6, squash=(0.8, 1.0)), "iron", "tool")

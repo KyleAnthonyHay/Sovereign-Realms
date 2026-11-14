@@ -296,7 +296,7 @@ namespace
 			ASRPlayerController* PC = GetSRController(World);
 			if (!PC || Args.Num() < 1) { return; }
 			const FString W = Args[0].ToLower();
-			const ESRUnitType Type = W.StartsWith(TEXT("a")) ? ESRUnitType::Archer : (W.StartsWith(TEXT("h")) ? ESRUnitType::Horseman : (W.StartsWith(TEXT("c")) ? ESRUnitType::Catapult : ESRUnitType::Shieldbearer));
+			const ESRUnitType Type = W.StartsWith(TEXT("a")) ? ESRUnitType::Archer : (W.StartsWith(TEXT("h")) ? ESRUnitType::Horseman : (W.StartsWith(TEXT("c")) ? ESRUnitType::Catapult : (W.StartsWith(TEXT("b")) ? ESRUnitType::Builder : ESRUnitType::Shieldbearer)));
 			const bool bOk = PC->RecruitTroop(Type);
 			UE_LOG(LogSovereign, Log, TEXT("sr.Recruit %s: %s"), *Args[0], bOk ? TEXT("queued") : TEXT("REFUSED"));
 		}));
@@ -379,6 +379,7 @@ namespace
 			const ESRTeam Team = Args.Num() > 3 && Args[3] == TEXT("enemy") ? ESRTeam::Enemy : ESRTeam::Player;
 			FText Why;
 			ASRBuilding* B = Eco->PlaceBuilding(Type, Team, XY, &Why);
+			if (ASRPlayerController* PC = GetSRController(World); PC && B && Team == ESRTeam::Player) { PC->SendBuildersTo(B); }
 			UE_LOG(LogSovereign, Log, TEXT("sr.Build %s at (%.0f, %.0f): %s"), *Args[0], XY.X, XY.Y, B ? TEXT("placed") : *Why.ToString());
 		}));
 

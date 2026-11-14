@@ -45,6 +45,12 @@ public:
 	void OrderStop();
 	/** Stand fast: strike / shoot only what is in reach, never step out to chase. */
 	void OrderHold();
+	/** Builders: go to a building site (or a damaged building of their own) and work on it until it is done. */
+	void OrderBuild(ASRBuilding* InBuilding);
+	/** At the walls of this building, working on it (a builder with the Build order). */
+	bool IsWorkingOn(const ASRBuilding* Building) const { return bWorking && Order == ESROrder::Build && BuildTarget.Get() == Building && IsActive(); }
+	bool IsBuilder() const { return Stats().bBuilder; }
+	ASRBuilding* GetBuildTarget() const { return Order == ESROrder::Build ? BuildTarget.Get() : nullptr; }
 	/** Move (or attack-move) through waypoints to the last point: how recruits and group moves get round buildings. */
 	void OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove);
 	int32 GetWaypointsLeft() const { return Waypoints.Num(); }
@@ -131,6 +137,9 @@ public:
 private:
 	// --- simulation (SRUnit.cpp) ---
 	void UpdateTargeting(float Dt);
+	/** Builders: the Build order's walk and work; an idle builder looks for a job now and then. */
+	void StepBuild(float Dt, FVector2D& Desired, FVector2D& FaceDir);
+	void LookForWork(float Dt);
 	void TickAttack(float Dt, ASRUnit* T);
 	void Strike(ASRUnit* T);
 	void StrikeBuilding(ASRBuilding* B);
@@ -163,6 +172,9 @@ private:
 	/** Stepped contact shadow under the feet. */
 	UPROPERTY(Transient) TObjectPtr<UDecalComponent> Blob;
 	UPROPERTY(Transient) TObjectPtr<USRRingComponent> Ring;
+	/** Thin ring in the platoon's colour, under every member of a platoon. */
+	UPROPERTY(Transient) TObjectPtr<USRRingComponent> PlatoonRing;
+	int32 PlatoonRingShown = -2;   // the platoon its colour was set for (-1 = hidden)
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
 
@@ -196,6 +208,10 @@ private:
 	float NoProgressTime = 0.f;
 	bool bReturnHomeWhenDone = false;
 	double LastProvokedTime = -100.0;
+	TWeakObjectPtr<ASRBuilding> BuildTarget;
+	bool bWorking = false;
+	float WorkClock = 0.f;
+	float JobSearchTimer = 0.f;
 
 	// combat
 	float Health = 1.f;

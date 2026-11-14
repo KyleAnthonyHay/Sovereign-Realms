@@ -6,6 +6,8 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SRGridSubsystem.h"
 #include "Buildings/SRBuilding.h"
+#include "Battle/SREconomySubsystem.h"
+#include "Battle/SRAISubsystem.h"
 #include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "SovereignRealms.h"
@@ -79,7 +81,7 @@ float ASRUnit::GetPushMass() const
 
 bool ASRUnit::IsPlanted() const
 {
-	return AttackPhase != ESRAttackPhase::Ready || ((Order == ESROrder::Idle || Order == ESROrder::Hold) && !Target.IsValid() && !TargetBuilding.IsValid());
+	return AttackPhase != ESRAttackPhase::Ready || bWorking || ((Order == ESROrder::Idle || Order == ESROrder::Hold) && !Target.IsValid() && !TargetBuilding.IsValid());
 }
 
 // ------------------------------------------------------------------ orders
@@ -135,6 +137,20 @@ void ASRUnit::OrderAttackBuilding(ASRBuilding* InTarget)
 	Target = nullptr;
 	TargetBuilding = InTarget;
 	bReturnHomeWhenDone = false;
+}
+
+void ASRUnit::OrderBuild(ASRBuilding* InBuilding)
+{
+	if (!IsAlive() || !Stats().bBuilder || !InBuilding || !InBuilding->IsAlive() || InBuilding->Team != Team) { return; }
+	if (BuildTarget.Get() != InBuilding) { bWorking = false; }
+	Order = ESROrder::Build;
+	BuildTarget = InBuilding;
+	Waypoints.Reset();
+	Target = nullptr;
+	TargetBuilding = nullptr;
+	bReturnHomeWhenDone = false;
+	CancelAttack();
+	ResetProgress();
 }
 
 void ASRUnit::OrderHold()
@@ -200,6 +216,8 @@ void ASRUnit::StepSim(float Dt)
 
 	Cooldown = FMath::Max(0.f, Cooldown - Dt);
 	UpdateTargeting(Dt);
+	if (S.bBuilder) { LookForWork(Dt); }
+	if (Order != ESROrder::Build) { bWorking = false; }
 
 	const FVector2D Pos = GetPos2D();
 	ASRUnit* T = Target.Get();
@@ -209,7 +227,11 @@ void ASRUnit::StepSim(float Dt)
 	FVector2D Desired = FVector2D::ZeroVector;
 	FVector2D FaceDir = FVector2D::ZeroVector; // zero = face the direction of travel
 
-	if (AttackPhase != ESRAttackPhase::Ready)
+	if (Order == ESROrder::Build && AttackPhase == ESRAttackPhase::Ready)
+	{
+		StepBuild(Dt, Desired, FaceDir);
+	}
+	else if (AttackPhase != ESRAttackPhase::Ready)
 	{
 		// Planted for the swing; keep tracking the target.
 		if (T) { FaceDir = (T->GetPos2D() - Pos).GetSafeNormal(); }
@@ -370,8 +392,9 @@ void ASRUnit::UpdateTargeting(float Dt)
 		if (Order == ESROrder::AttackTarget) { Order = ESROrder::Idle; Home = Pos; }
 	}
 
-	// Explicit orders are obeyed, not second-guessed.
-	if (Order == ESROrder::Move || Order == ESROrder::AttackTarget) { return; }
+	// Explicit orders are obeyed, not second-guessed. Builders never pick a fight of their own.
+	if (Order == ESROrder::Move || Order == ESROrder::AttackTarget || Order == ESROrder::Build) { return; }
+	if (S.bBuilder) { Target = nullptr; TargetBuilding = nullptr; return; }
 
 	// Defensive stance: a short chase, then back to the post.
 	if (Stance == ESRStance::Defensive && (T || TargetBuilding.IsValid()) && FVector2D::Distance(Pos, Home) > F.DefensiveChaseDistance)
@@ -469,6 +492,72 @@ void ASRUnit::UpdateTargeting(float Dt)
 	}
 
 	if ((Target.IsValid() || TargetBuilding.IsValid()) && (Team == ESRTeam::Enemy || Stance == ESRStance::Defensive)) { bReturnHomeWhenDone = true; }
+}
+
+void ASRUnit::StepBuild(float Dt, FVector2D& Desired, FVector2D& FaceDir)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRUnitStats& S = Stats();
+	const FVector2D Pos = GetPos2D();
+	ASRBuilding* B = BuildTarget.Get();
+	if (!B || !B->IsAlive() || B->Team != Team || !B->NeedsWork())
+	{
+		// Done (or gone): stand here and look for the next job straight away.
+		BuildTarget = nullptr;
+		bWorking = false;
+		Order = ESROrder::Idle;
+		Home = Pos;
+		JobSearchTimer = 0.f;
+		return;
+	}
+	const float Dist = B->DistanceToFootprint(Pos);
+	const float Reach = GetRadius() + F.BuilderReach;
+	if (Dist > Reach || (!bWorking && Dist > Reach * 0.7f))
+	{
+		bWorking = false;
+		const float Remaining = FMath::Max(Dist - Reach * 0.6f, 0.f);
+		Desired = ChaseDir(B->ClosestPointOnFootprint(Pos, GetRadius() + 15.f), Dt) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
+		return;
+	}
+	if (!bWorking) { WorkClock = FMath::FRandRange(0.f, 1.f); }
+	bWorking = true;
+	WorkClock += Dt;
+	FaceDir = (B->ClosestPointOnFootprint(Pos, 0.f) - Pos).GetSafeNormal();
+}
+
+void ASRUnit::LookForWork(float Dt)
+{
+	if (Order != ESROrder::Idle || AttackPhase != ESRAttackPhase::Ready || Target.IsValid()) { return; }
+	JobSearchTimer -= Dt;
+	if (JobSearchTimer > 0.f) { return; }
+	JobSearchTimer = FMath::FRandRange(1.0f, 1.6f);
+
+	// The player's builders help out nearby; a commander's go wherever there is work.
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const USRAISubsystem* AI = USRAISubsystem::Get(this);
+	const bool bCommanded = Team == ESRTeam::Enemy || (AI && AI->IsPlayerAI());
+	const float Radius = bCommanded ? 1.e7f : F.BuilderAutoWorkRadius;
+	if (Radius <= 0.f) { return; }
+	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (!Eco) { return; }
+	const FVector2D Pos = GetPos2D();
+	ASRBuilding* Best = nullptr;
+	float BestScore = TNumericLimits<float>::Max();
+	for (ASRBuilding* B : Eco->GetBuildings())
+	{
+		if (!B || B->Team != Team || !B->IsAlive() || !B->NeedsWork()) { continue; }
+		// a damaged building is only worth it once it is properly hurt, or while nothing else is going on
+		const bool bSite = B->IsUnderConstruction();
+		if (!bSite && B->GetHealthFrac() > 0.9f && !bCommanded) { continue; }
+		const float D = B->DistanceToFootprint(Pos);
+		if (D > Radius) { continue; }
+		// sites nobody can raise without a builder come first, then other sites, then repairs; the nearest of each
+		float Score = D;
+		if (bSite && B->NeedsBuilder()) { Score *= B->GetBuildersWorking() == 0 ? 0.3f : 0.6f; }
+		else if (!bSite) { Score = Score * 1.5f + 600.f; }
+		if (Score < BestScore) { BestScore = Score; Best = B; }
+	}
+	if (Best) { OrderBuild(Best); }
 }
 
 void ASRUnit::TickAttack(float Dt, ASRUnit* T)
@@ -585,7 +674,7 @@ void ASRUnit::ReceiveDamage(float Amount, ASRUnit* From, const FVector2D& HitDir
 
 void ASRUnit::AlertTo(ASRUnit* Threat)
 {
-	if (IsActive() && Threat && !Target.IsValid() && Order == ESROrder::Idle)
+	if (IsActive() && Threat && !Target.IsValid() && Order == ESROrder::Idle && !Stats().bBuilder)
 	{
 		Target = Threat;
 		LastProvokedTime = GetWorld()->GetTimeSeconds();

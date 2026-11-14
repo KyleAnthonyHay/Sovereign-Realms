@@ -63,6 +63,7 @@ struct FSRAIProfile
 	float RetreatHold = 0.7f;      // falls back when its local strength drops below this x the foe's
 	bool bReinforce = true;
 	bool bImpatient = true;        // attacks at even odds after waiting long
+	int32 Builders = 2;            // builders it keeps (to build beyond its castle's zone and repair)
 };
 
 /** One kingdom's commander. Plain data + logic; owned by USRAISubsystem. */

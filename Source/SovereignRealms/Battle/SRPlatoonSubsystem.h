@@ -18,7 +18,8 @@ enum class ESRPlatoonKind : uint8
 	ArcherCompany,   // all (or nearly all) Archers
 	MixedHost,       // both
 	Cavalry,         // Horse Riders
-	SiegeTrain       // Catapults
+	SiegeTrain,      // Catapults
+	WorkCrew         // Builders
 };
 
 /** One of the player's platoons: a standing group with its own formation and stance (UI: the platoon panel). */
@@ -47,6 +48,7 @@ struct FSRPlatoonInfo
 	int32 Archers = 0;
 	int32 Riders = 0;
 	int32 Catapults = 0;
+	int32 Builders = 0;
 	/** Mean health fraction of the living members. */
 	float Health = 1.f;
 	/** Members fighting right now. */
@@ -101,6 +103,8 @@ public:
 	void OnRecruit(ASRUnit* Unit);
 
 	static FText KindName(ESRPlatoonKind Kind);
+	/** Each platoon slot's own colour (rings under its troops, its tag over them, its row in the panel). */
+	static FLinearColor PlatoonColor(int32 Index);
 	static FText FormationName(ESRFormationShape Shape);
 	static FText StanceName(ESRStance Stance);
 

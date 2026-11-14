@@ -173,6 +173,15 @@ public:
 	/** Saved games: put the building back as it was (health, construction, ruin, queue, rally point). */
 	void ApplySaved(float InHealth, float InProgress, bool bInDestroyed, const TArray<ESRUnitType>& InQueue, const FVector2D& InRally);
 
+	// ---- builders ----
+	/** Laid outside the castle's building zone: it only rises while a Builder works on it. */
+	void SetNeedsBuilder(bool bNeeds) { NeedsBuilderState = bNeeds ? 1 : 0; }
+	bool NeedsBuilder() const;
+	/** A builder has something to do here: it is a site, or it stands damaged. */
+	bool NeedsWork() const { return !bDestroyed && (BuildProgress < 1.f || Health < Stats().MaxHealth - 0.5f); }
+	/** Builders at its walls working on it right now (counted each frame while it needs work). */
+	int32 GetBuildersWorking() const { return BuildersWorking; }
+
 	/** Set by SpawnBuilding: not part of the level, so it is destroyed (not just reset) when the battle resets. */
 	bool IsRuntimeBuilt() const { return bRuntimeBuilt; }
 
@@ -228,6 +237,10 @@ private:
 	float RallyShowTime = 0.f;
 	float RallyPop = 0.f;
 	int32 RecruitCount = 0;
+	int8 NeedsBuilderState = -1;     // -1 = not worked out yet (a saved game): asked of the economy on first need
+	int32 BuildersWorking = 0;
+	void CountBuilders();
+	void StepRepair(float Dt);
 
 	bool bSelected = false;
 	bool bHovered = false;

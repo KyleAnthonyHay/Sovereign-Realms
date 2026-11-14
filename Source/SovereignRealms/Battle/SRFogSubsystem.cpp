@@ -125,7 +125,7 @@ void USRFogSubsystem::Recompute()
 	{
 		for (const ASRUnit* U : Battle->GetUnits())
 		{
-			if (U && U->IsActive() && U->GetTeam() == ESRTeam::Player) { Stamp(U->GetPos2D(), U->Stats().AcquireRange); }
+			if (U && U->IsActive() && U->GetTeam() == ESRTeam::Player) { Stamp(U->GetPos2D(), U->Stats().Sight()); }
 		}
 	}
 	if (Eco)

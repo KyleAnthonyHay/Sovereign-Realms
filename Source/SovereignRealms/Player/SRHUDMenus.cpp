@@ -53,6 +53,8 @@ namespace
 		{ TEXT("B, then 1-6"), TEXT("Build menu (Tab: next tab), pick a building") },
 		{ TEXT("LMB / RMB"), TEXT("Place it (Shift: keep placing) / cancel") },
 		{ TEXT("Delete"), TEXT("Cancel construction (75% refund)") },
+		{ TEXT("Y"), TEXT("Train a Builder at the Citadel (2 at most)") },
+		{ TEXT("RMB on a site"), TEXT("Builders selected: build / repair it") },
 		{ nullptr, TEXT("TROOPS") },
 		{ TEXT("Q / E / R / T"), TEXT("Train Shieldbearer / Archer / Rider / Catapult") },
 		{ TEXT("RMB"), TEXT("Rally point (Barracks or Range selected)") },

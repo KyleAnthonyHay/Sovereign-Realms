@@ -348,21 +348,17 @@ FSRPlacement USRGridSubsystem::CheckPlacement(ESRBuildingType Type, ESRTeam Team
 	const float Z = Out.Cells.Num() > 0 ? SumZ / Out.Cells.Num() : 0.f;
 	Out.Location = FVector(Loc2D.X, Loc2D.Y, Z);
 
-	// Territory: within reach of one of the kingdom's finished buildings (mines go on any free vein).
-	bool bInTerritory = Type == ESRBuildingType::Mine;
-	if (!bInTerritory)
+	// The building zone: inside the castle's reach a building raises itself; anywhere else a Builder has to go and
+	// build it, so the kingdom must have one.
+	bool bInTerritory = false;
+	if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
 	{
-		if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
+		bInTerritory = Eco->IsInBuildZone(Team, Loc2D + FootCentre);
+		if (!bInTerritory)
 		{
-			const FVector2D Mid = Loc2D + FootCentre;
-			for (const ASRBuilding* B : Eco->GetBuildings())
-			{
-				if (B && B->Team == Team && B->IsFinished() && B->IsAlive())
-				{
-					const float R = F.BuildingStatsFor(B->BuildingType).TerritoryRadius;
-					if (R > 0.f && FVector2D::Distance(B->GetFootprintCentre(), Mid) <= R) { bInTerritory = true; break; }
-				}
-			}
+			const USRBattleSubsystem* B = USRBattleSubsystem::Get(this);
+			Out.bNeedsBuilder = true;
+			bInTerritory = B && B->CountBuilders(Team) > 0;
 		}
 	}
 
@@ -386,7 +382,7 @@ FSRPlacement USRGridSubsystem::CheckPlacement(ESRBuildingType Type, ESRTeam Team
 	else if (bTaken) { Out.Reason = LOCTEXT("Taken", "Too close to another building"); }
 	else if (bBlocked) { Out.Reason = LOCTEXT("Blocked", "Rocks or trees are in the way"); }
 	else if (bUneven) { Out.Reason = LOCTEXT("Uneven", "The ground is too uneven"); }
-	else if (!bInTerritory) { Out.Reason = LOCTEXT("Territory", "Too far from your kingdom: build near your castle, farms or mines"); }
+	else if (!bInTerritory) { Out.Reason = LOCTEXT("Territory", "Outside the castle's reach: train a Builder at the castle to build out here"); }
 	else if (bEnemyThere) { Out.Reason = LOCTEXT("Enemy", "Enemy troops are in the way"); }
 	Out.bValid = Out.Reason.IsEmpty() && bAllOk && !bUneven;
 	return Out;

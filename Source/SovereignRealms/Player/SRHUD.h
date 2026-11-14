@@ -23,7 +23,7 @@ enum class ESRIcon : uint8
 	Swords, AlertAttack, AlertLost, AlertDone, AlertWave, AlertPop, AlertInfo, Clock,
 	Pause, Help, RecruitFlag, Castle, ChevronDown, ChevronUp, Crown, Cancel,
 	PortraitShield, PortraitArcher, Check, Vein, Barracks, Range, Hammer, Patrol,
-	Disband, PortraitHorse, PortraitCatapult, Stable, Workshop
+	Disband, PortraitHorse, PortraitCatapult, Stable, Workshop, PortraitBuilder
 };
 
 inline ESRIcon SRUnitIcon(ESRUnitType Type)
@@ -33,6 +33,7 @@ inline ESRIcon SRUnitIcon(ESRUnitType Type)
 	case ESRUnitType::Archer: return ESRIcon::PortraitArcher;
 	case ESRUnitType::Horseman: return ESRIcon::PortraitHorse;
 	case ESRUnitType::Catapult: return ESRIcon::PortraitCatapult;
+	case ESRUnitType::Builder: return ESRIcon::PortraitBuilder;
 	default: return ESRIcon::PortraitShield;
 	}
 }
@@ -45,6 +46,7 @@ inline const TCHAR* SRUnitKey(ESRUnitType Type)
 	case ESRUnitType::Archer: return TEXT("E");
 	case ESRUnitType::Horseman: return TEXT("R");
 	case ESRUnitType::Catapult: return TEXT("T");
+	case ESRUnitType::Builder: return TEXT("Y");
 	default: return TEXT("Q");
 	}
 }
@@ -156,6 +158,10 @@ private:
 	TMap<TWeakObjectPtr<ASRUnit>, FRangeCircle> RangeCircles;
 	/** A shooting building's reach (selected tower / castle, or a tower being placed), re-sampled when it moves. */
 	FRangeCircle BuildingReach;
+	/** The castle's building zone (shown while placing a building or with the castle selected). */
+	FRangeCircle BuildZone;
+	void DrawBuildZone();
+	void DrawPlatoonTags();
 
 	// ---- in-game HUD (SRHUDGame.cpp) ----
 	void DrawGameHUD();

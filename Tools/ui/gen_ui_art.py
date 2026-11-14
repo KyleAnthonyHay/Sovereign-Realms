@@ -518,6 +518,19 @@ rrrrrrrrrrrr
 .b.bbbbbb...
 .b.n.bb.nb..
 nnnnnnnnnnnn"""),
+    ("PortraitBuilder", """
+.......nBBBn
+.......nBBBn
+..ttt....b..
+.tTTTt...b..
+tTssst...b..
+tssksk...b..
+tsssss..sb..
+.tSSS..ss...
+.nnnnnnn....
+nppnnppn....
+.pnnnnp.....
+.nn..nn....."""),
 ]
 
 

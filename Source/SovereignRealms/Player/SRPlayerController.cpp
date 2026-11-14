@@ -93,6 +93,7 @@ void ASRPlayerController::BuildInput()
 	RecruitActions[1] = MakeAction(TEXT("IA_RecruitArcher"), EInputActionValueType::Boolean);
 	RecruitActions[2] = MakeAction(TEXT("IA_RecruitHorseman"), EInputActionValueType::Boolean);
 	RecruitActions[3] = MakeAction(TEXT("IA_RecruitCatapult"), EInputActionValueType::Boolean);
+	RecruitActions[4] = MakeAction(TEXT("IA_RecruitBuilder"), EInputActionValueType::Boolean);
 
 	// A key gives +X. Swizzle moves it onto Y (up/down keys), Negate flips it (left/down keys).
 	auto MapAxisKey = [this](UInputAction* Action, FKey Key, bool bVertical, bool bNegative)
@@ -139,6 +140,7 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(RecruitActions[1], EKeys::E);
 	MappingContext->MapKey(RecruitActions[2], EKeys::R);
 	MappingContext->MapKey(RecruitActions[3], EKeys::T);
+	MappingContext->MapKey(RecruitActions[4], EKeys::Y);
 }
 
 void ASRPlayerController::SetupInputComponent()
@@ -184,6 +186,7 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(RecruitActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitArcher);
 	Input->BindAction(RecruitActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitHorseman);
 	Input->BindAction(RecruitActions[3], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitCatapult);
+	Input->BindAction(RecruitActions[4], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitBuilder);
 }
 
 void ASRPlayerController::PlayerTick(float DeltaTime)
@@ -544,11 +547,14 @@ void ASRPlayerController::OnCommandPressed()
 		return;
 	}
 	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
-	if (ASRBuilding* B = Eco ? Eco->PickBuilding(Origin, Dir) : nullptr; B && B->Team == ESRTeam::Enemy && B->IsAlive())
+	ASRBuilding* PickedB = Eco ? Eco->PickBuilding(Origin, Dir) : nullptr;
+	if (PickedB && PickedB->Team == ESRTeam::Enemy && PickedB->IsAlive())
 	{
-		IssueAttackBuilding(B);
+		IssueAttackBuilding(PickedB);
 		return;
 	}
+	// Builders sent to one of our own sites (or a damaged building) go to work on it.
+	if (PickedB && PickedB->Team == ESRTeam::Player && IssueBuild(PickedB)) { return; }
 	IssueMove(Battle->RayToGround(Origin, Dir), false);
 }
 
@@ -666,6 +672,48 @@ void ASRPlayerController::IssueAttackBuilding(ASRBuilding* Target)
 	const FVector2D At = Target->GetFootprintCentre();
 	ASROrderMarker::SpawnMarker(GetWorld(), FVector(At, Target->GetActorLocation().Z), USRFeelSettings::Get().AttackMarkerColor);
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackOrder); }
+}
+
+bool ASRPlayerController::IssueBuild(ASRBuilding* Building)
+{
+	if (!Building || Building->Team != ESRTeam::Player || !Building->NeedsWork()) { return false; }
+	TArray<ASRUnit*> Units, Builders;
+	GatherCommandable(Units);
+	for (ASRUnit* U : Units) { if (U->IsBuilder()) { Builders.Add(U); } }
+	if (Builders.Num() == 0) { return false; }
+	Battle->ClearPatrol(Builders);
+	for (ASRUnit* U : Builders) { U->OrderBuild(Building); U->Acknowledge(FMath::FRandRange(0.f, USRFeelSettings::Get().AckMaxDelay)); }
+	const FVector2D At = Building->GetFootprintCentre();
+	ASROrderMarker::SpawnMarker(GetWorld(), FVector(At, Building->GetActorLocation().Z), USRFeelSettings::Get().MoveMarkerColor);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); }
+	return true;
+}
+
+void ASRPlayerController::SendBuildersTo(ASRBuilding* Building)
+{
+	if (!Building) { return; }
+	if (IssueBuild(Building)) { return; }
+	if (!Building->NeedsBuilder()) { return; }   // inside the castle's zone it raises itself
+	// The nearest builder with nothing better to do (one already raising a site out in the field is left to it).
+	ASRUnit* Best = nullptr;
+	float BestScore = TNumericLimits<float>::Max();
+	for (ASRUnit* U : Battle->GetUnits())
+	{
+		if (!U || !U->IsActive() || U->GetTeam() != ESRTeam::Player || !U->IsBuilder()) { continue; }
+		float Score = Building->DistanceToFootprint(U->GetPos2D());
+		if (const ASRBuilding* Busy = U->GetBuildTarget()) { Score += Busy->IsUnderConstruction() && Busy->NeedsBuilder() ? 20000.f : 4000.f; }
+		if (Score < BestScore) { BestScore = Score; Best = U; }
+	}
+	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (Best)
+	{
+		TArray<ASRUnit*> One = { Best };
+		Battle->ClearPatrol(One);
+		Best->OrderBuild(Building);
+		Best->Acknowledge(0.f);
+		const FVector2D At = Building->GetFootprintCentre();
+		if (Eco) { Eco->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "BuilderSent", "A Builder is on the way to the {0}"), FText::FromString(Building->GetDisplayName())), &At); }
+	}
 }
 
 void ASRPlayerController::IssueHold()
@@ -1111,6 +1159,7 @@ void ASRPlayerController::UpdatePlacement()
 	const FVector Ground = Battle->RayToGround(Origin, Dir);
 	const FSRPlacement P = Grid->CheckPlacement(PlacingType, ESRTeam::Player, FVector2D(Ground));
 	bPlacementValid = P.bValid;
+	bPlacementNeedsBuilder = P.bNeedsBuilder;
 	PlacementReason = P.Reason;
 	PlacementLocation = P.Location;
 	if (Preview) { Preview->Show(PlacingType, P); }
@@ -1123,8 +1172,9 @@ void ASRPlayerController::TryPlace()
 	if (!Eco || !GetCursorRay(Origin, Dir)) { return; }
 	const FVector Ground = Battle->RayToGround(Origin, Dir);
 	FText Why;
-	if (Eco->PlaceBuilding(PlacingType, ESRTeam::Player, FVector2D(Ground), &Why))
+	if (ASRBuilding* Placed = Eco->PlaceBuilding(PlacingType, ESRTeam::Player, FVector2D(Ground), &Why))
 	{
+		SendBuildersTo(Placed);
 		const USRFeelSettings& F = USRFeelSettings::Get();
 		// Shift keeps the building in hand for another (if there is gold for it).
 		if (!IsShiftDown() || !Eco->CanAfford(ESRTeam::Player, F.BuildingStatsFor(PlacingType).Cost)) { CancelPlacement(); }

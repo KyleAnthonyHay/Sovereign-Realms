@@ -9,6 +9,7 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRFogSubsystem.h"
+#include "Battle/SRPlatoonSubsystem.h"
 #include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "Engine/Canvas.h"
@@ -99,7 +100,9 @@ void ASRHUD::DrawHUD()
 		bInputOpen = State == ESRGameState::Playing && !bLegend;
 		DrawFarPips();
 		DrawHealthBars();
+		DrawPlatoonTags();
 		DrawTrainingBars();
+		DrawBuildZone();
 		DrawRangeCircles();
 		DrawRouteLines();
 		DrawPayoutPopups();
@@ -456,6 +459,50 @@ void ASRHUD::DrawHealthBars()
 	}
 }
 
+void ASRHUD::DrawPlatoonTags()
+{
+	// A numbered tag in the platoon's colour floats over each platoon, so it can be told apart at a glance.
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	if (!F.bShowPlatoonColors || !Platoons || !PC) { return; }
+	for (int32 i = 0; i < Platoons->Num(); ++i)
+	{
+		const FSRPlatoon* P = Platoons->Find(i);
+		if (!P) { continue; }
+		// over the member nearest the platoon's middle, a little above the heads
+		FVector2D Mid = FVector2D::ZeroVector;
+		int32 N = 0;
+		for (const TWeakObjectPtr<ASRUnit>& M : P->Members) { if (M.IsValid() && M->IsActive()) { Mid += M->GetPos2D(); ++N; } }
+		if (N == 0) { continue; }
+		Mid /= N;
+		const ASRUnit* Anchor = nullptr;
+		float Best = TNumericLimits<float>::Max();
+		for (const TWeakObjectPtr<ASRUnit>& M : P->Members)
+		{
+			if (!M.IsValid() || !M->IsActive()) { continue; }
+			const float D = FVector2D::DistSquared(M->GetPos2D(), Mid);
+			if (D < Best) { Best = D; Anchor = M.Get(); }
+		}
+		if (!Anchor) { continue; }
+		const FVector S = Canvas->Project(Anchor->GetOverheadPoint() + FVector(0.f, 0.f, 70.f));
+		if (S.Z <= 0.f || S.X < -50.f || S.Y < -50.f || S.X > Canvas->ClipX + 50.f || S.Y > Canvas->ClipY + 50.f) { continue; }
+		const FLinearColor Col = USRPlatoonSubsystem::PlatoonColor(i);
+		const bool bSel = PC->GetSelectedPlatoon() == i;
+		const float H = U(bSel ? 24.f : 20.f), W = H * 0.9f;
+		const float X = FMath::RoundToFloat(S.X - W * 0.5f), Y = FMath::RoundToFloat(S.Y - H);
+		Fill(X - 1.f, Y - 1.f, W + 2.f, H + 2.f, FLinearColor(0.02f, 0.02f, 0.03f, 0.9f));
+		Fill(X, Y, W, H, FLinearColor(Col.R * 0.25f, Col.G * 0.25f, Col.B * 0.25f, 0.92f));
+		Outline(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), Col, FMath::Max(1.f, U(bSel ? 2.f : 1.5f)));
+		// a little pointer down to the troops
+		for (float k = 0.f; k < U(5.f); k += 1.f)
+		{
+			const float w = U(5.f) - k;
+			Fill(FMath::RoundToFloat(S.X - w), Y + H + k, FMath::Max(1.f, 2.f * w), 1.f, Col);
+		}
+		TextIn(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), FString::FromInt(i + 1), H * 0.8f, Col, AlignCentre, Black);
+	}
+}
+
 void ASRHUD::DrawPayoutPopups()
 {
 	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
@@ -495,7 +542,9 @@ void ASRHUD::DrawFarPips()
 		const FVector P = Canvas->Project(Unit->GetSimPos() + FVector(0.f, 0.f, Unit->GetBodyHeight() + 30.f));
 		if (P.Z <= 0.f) { continue; }
 		const FLinearColor Team = Unit->GetTeam() == ESRTeam::Player ? F.PlayerTeamColor : F.EnemyTeamColor;
-		const FLinearColor Col = FLinearColor(FMath::Min(Team.R * 1.6f + 0.15f, 1.f), FMath::Min(Team.G * 1.6f + 0.15f, 1.f), FMath::Min(Team.B * 1.6f + 0.15f, 1.f), Alpha);
+		FLinearColor Col = FLinearColor(FMath::Min(Team.R * 1.6f + 0.15f, 1.f), FMath::Min(Team.G * 1.6f + 0.15f, 1.f), FMath::Min(Team.B * 1.6f + 0.15f, 1.f), Alpha);
+		// a platoon's troops show in its colour from afar too
+		if (F.bShowPlatoonColors && Unit->GetTeam() == ESRTeam::Player && Unit->GetPlatoon() != INDEX_NONE) { Col = USRPlatoonSubsystem::PlatoonColor(Unit->GetPlatoon()); Col.A = Alpha; }
 		// a little diamond with a dark rim
 		for (int32 r = 0; r < 2; ++r)
 		{
@@ -508,6 +557,62 @@ void ASRHUD::DrawFarPips()
 			}
 		}
 	}
+}
+
+void ASRHUD::DrawBuildZone()
+{
+	// Where buildings raise themselves: the castle's zone, a gold ring on the ground. Outside it a Builder must go.
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	const ASRBuilding* Castle = Eco ? Eco->GetCastle(ESRTeam::Player) : nullptr;
+	const ASRBuilding* Sel = PC ? PC->GetSelectedBuilding() : nullptr;
+	const bool bShow = PC && Castle && Battle && Castle->IsAlive() && (PC->IsPlacing() || Sel == Castle);
+	if (!bShow) { return; }
+	const float R = Castle->Stats().TerritoryRadius;
+	if (R <= 0.f) { return; }
+	const FVector2D Centre = Castle->GetFootprintCentre();
+	if (FVector2D::DistSquared(Centre, BuildZone.At) > 1.f || BuildZone.Sight.Num() == 0)
+	{
+		BuildZone.At = Centre;
+		const int32 N = 300;
+		BuildZone.Sight.Reset(N);
+		const float RefZ = Castle->GetActorLocation().Z;
+		for (int32 i = 0; i < N; ++i)
+		{
+			const float Ang = 2.f * PI * i / N;
+			const FVector2D P = Centre + FVector2D(FMath::Cos(Ang), FMath::Sin(Ang)) * R;
+			float Z = RefZ;
+			Battle->SampleGround(P, RefZ + 1200.f, Z);
+			BuildZone.Sight.Add(FVector(P.X, P.Y, Z + 15.f));
+		}
+	}
+	const int32 N = BuildZone.Sight.Num();
+	const float W = FMath::Max(1.f, U(3.f));
+	const FLinearColor Col(1.f, 0.8f, 0.3f, 0.85f);
+	for (int32 i = 0; i < N; ++i)
+	{
+		if (i % 3 == 2) { continue; }   // dashes
+		const FVector S0 = Canvas->Project(BuildZone.Sight[i]);
+		const FVector S1 = Canvas->Project(BuildZone.Sight[(i + 1) % N]);
+		if (S0.Z > 0.f && S1.Z > 0.f) { DrawLine(S0.X, S0.Y, S1.X, S1.Y, Col, W); }
+	}
+	// a label on the ring's nearest point to the view centre
+	const FVector2D ScreenMid(Canvas->ClipX * 0.5f, Canvas->ClipY * 0.5f);
+	float Best = TNumericLimits<float>::Max();
+	FVector2D LabelAt;
+	for (int32 i = 0; i < N; i += 4)
+	{
+		const FVector S = Canvas->Project(BuildZone.Sight[i]);
+		if (S.Z <= 0.f || S.X < 40.f || S.Y < 80.f || S.X > Canvas->ClipX - 40.f || S.Y > Canvas->ClipY - 200.f) { continue; }
+		const float D = FVector2D::DistSquared(FVector2D(S.X, S.Y), ScreenMid);
+		if (D < Best) { Best = D; LabelAt = FVector2D(S.X, S.Y); }
+	}
+	if (Best < TNumericLimits<float>::Max())
+	{
+		Text(TEXT("CASTLE ZONE: builds itself inside, needs a Builder outside"), LabelAt.X, LabelAt.Y - U(22.f), U(14.f), Col, AlignCentre, Bold);
+	}
+	(void)F;
 }
 
 void ASRHUD::DrawRangeCircles()
@@ -600,7 +705,7 @@ void ASRHUD::DrawRangeCircles()
 	TArray<FDisc> SightDiscs, ReachDiscs;
 	for (const ASRUnit* Unit : Units)
 	{
-		SightDiscs.Add({ Unit->GetPos2D(), Unit->Stats().AcquireRange });
+		SightDiscs.Add({ Unit->GetPos2D(), Unit->Stats().Sight() });
 		if (Unit->Stats().bRanged) { ReachDiscs.Add({ Unit->GetPos2D(), Unit->Stats().AttackRange }); }
 	}
 	auto Covered = [](const TArray<FDisc>& Discs, const FVector2D& P, const FVector2D& Own)
@@ -635,7 +740,7 @@ void ASRHUD::DrawRangeCircles()
 		{
 			C.At = P;
 			const FSRUnitStats& S = Unit->Stats();
-			Ring(P, S.AcquireRange, Unit->GetSimPos().Z, C.Sight);
+			Ring(P, S.Sight(), Unit->GetSimPos().Z, C.Sight);
 			if (S.bRanged) { Ring(P, S.AttackRange, Unit->GetSimPos().Z, C.Reach); } else { C.Reach.Reset(); }
 		}
 		const bool bEnemy = Unit->GetTeam() == ESRTeam::Enemy;

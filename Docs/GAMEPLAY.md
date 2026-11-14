@@ -48,7 +48,8 @@ Sovereign Feel** (`Source/SovereignRealms/Common/SRFeelSettings.{h,cpp}`, overri
 | Stable | 150 gold | 20 s | 1500 | trains Horse Riders |
 | Siege Workshop | 200 gold | 24 s | 1600 | builds Catapults |
 | Watchtower | 160 gold | 18 s | 1800 | shoots 40 dmg / 1.2 s at 14 m |
-| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8; if it falls, the kingdom falls |
+| Builder | 120 gold + 80 food | 14 s at the Citadel (Y) | 110 | builds outside the castle's zone and repairs (28 HP/s each); never starts a fight; at most 2 per kingdom |
+| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8; trains Builders; if it falls, the kingdom falls |
 
 Starting stock: 320 gold, 200 food, 3 Shieldbearers + 2 Archers each side.
 
@@ -62,9 +63,19 @@ collapse a ruin of low rubble and wall stubs (the ruin of a building raised in t
 `USRGridSubsystem` (`Battle/SRGridSubsystem.*`) samples the field into 1 m cells at the start of play: ground height,
 water, the hidden blocker boxes (rocks, trunks, ruins: one instanced actor tagged `SRBlocker`), gold veins, and
 building footprints while they stand. A building can be placed when every footprint cell is dry, unblocked and within
-30 cm of level, one free cell separates it from other buildings, no enemy troop stands on it, and it is inside its
-kingdom's territory (within the territory radius of a finished building: castle 38 m, farm 24 m, mine 20 m, tower
-12 m). Mines ignore territory but must snap onto a free vein. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
+30 cm of level, one free cell separates it from other buildings and no enemy troop stands on it (mines must also snap
+onto a free vein).
+
+**The castle's zone and Builders.** The Citadel has a building zone of 42 m (`TerritoryRadius`; the dashed gold ring
+shown while placing or with the castle selected). A building laid inside it raises itself as before. Outside it, the
+kingdom must have a Builder: the building is laid as a bare site and only rises while a Builder works at its walls
+(the selected Builders go to it, or else the nearest free one; each extra Builder adds 50% speed, up to 4). Builders
+also speed up sites inside the zone and repair damaged buildings (a building brought back above half health loses
+its fire and damaged look). An idle Builder of yours goes to work on its own on a site or a badly damaged building
+within 26 m; right-click one of your sites or damaged buildings with Builders selected to send them. Builders are
+dear (120 gold + 80 food, 14 s), capped at 2 per kingdom (`MaxBuilders`; shown in the top bar, click it to select
+them), never join platoons from recruitment, and never pick fights. The enemy commander keeps 1 (Easy) or 2 Builders
+and uses them the same way. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
 Defence (watchtower); 1-6 picks, Tab changes tab. Placing pays the gold; the building rises course by
 course over its build time with hammering, and works when done. Delete / Backspace cancels a building under
 construction for 75% of its price. Destroyed buildings slump into rubble (runtime ones clear away; the level's own
@@ -95,7 +106,9 @@ most 9 m from the post, then return), Hold Ground (never move to fight; H gives 
 ## Platoons
 
 `USRPlatoonSubsystem`: six slots. Ctrl+N makes the selection platoon N, N selects it (twice: centre the camera),
-Shift+N adds to it. A platoon has a name, a kind judged from its members (Shield Wall, Archer Company, Mixed Host), a
+Shift+N adds to it. Each platoon slot has its own colour (gold, cyan, magenta, orange, white, violet...): a ring under
+every member, a numbered tag over the platoon, its pips when zoomed far out, and its badge in the panel
+(`bShowPlatoonColors`). A platoon has a name, a kind judged from its members (Shield Wall, Archer Company, Mixed Host), a
 formation (F cycles) used whenever it is moved, a stance pushed to its members, and an optional "recruits join here"
 flag (new troops from the barracks and ranges join it and march to it). Disband: the button on its card, or Delete
 with it selected (the troops stay). A platoon whose last troop falls is struck off by itself and its slot is free.

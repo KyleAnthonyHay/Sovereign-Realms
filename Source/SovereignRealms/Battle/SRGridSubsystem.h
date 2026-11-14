@@ -29,6 +29,8 @@ struct FSRPlacement
 	TArray<FIntPoint> Cells;
 	TArray<bool> CellOk;
 	int32 VeinIndex = INDEX_NONE;
+	/** Outside the castle's building zone: only a Builder can raise it (it waits for one). */
+	bool bNeedsBuilder = false;
 };
 
 /**

@@ -286,10 +286,11 @@ void USREconomySubsystem::LogStatus() const
 	{
 		if (!Building) { continue; }
 		FString Queue;
-		for (ESRUnitType Type : Building->GetQueue()) { Queue += TEXT("SAHC")[FMath::Clamp(int32(Type), 0, 3)]; }
-		UE_LOG(LogSovereign, Log, TEXT("  %-16s %-9s team=%d pos=(%6.0f,%6.0f) payout=%.2f queue=[%s] build=%.2f rally=(%.0f,%.0f) sel=%d"),
+		for (ESRUnitType Type : Building->GetQueue()) { Queue += TEXT("SAHCB")[FMath::Clamp(int32(Type), 0, 4)]; }
+		UE_LOG(LogSovereign, Log, TEXT("  %-16s %-9s team=%d pos=(%6.0f,%6.0f) payout=%.2f queue=[%s] build=%.2f rally=(%.0f,%.0f) sel=%d site=%.2f%s builders=%d hp=%.0f"),
 			*Building->GetActorNameOrLabel(), *Building->GetDisplayName(), int32(Building->Team), Building->GetActorLocation().X, Building->GetActorLocation().Y,
-			Building->GetPayoutFraction(), *Queue, Building->GetBuildFraction(), Building->GetRallyPoint().X, Building->GetRallyPoint().Y, Building->IsSelected() ? 1 : 0);
+			Building->GetPayoutFraction(), *Queue, Building->GetBuildFraction(), Building->GetRallyPoint().X, Building->GetRallyPoint().Y, Building->IsSelected() ? 1 : 0,
+			Building->GetBuildProgress(), Building->IsUnderConstruction() && Building->NeedsBuilder() ? TEXT(" (needs builder)") : TEXT(""), Building->GetBuildersWorking(), Building->GetHealth());
 	}
 }
 
@@ -362,6 +363,31 @@ int32 USREconomySubsystem::CountFinished(ESRBuildingType Type, ESRTeam Team) con
 	return N;
 }
 
+bool USREconomySubsystem::IsInBuildZone(ESRTeam Team, const FVector2D& At) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	for (const ASRBuilding* B : Buildings)
+	{
+		if (!B || B->Team != Team || !B->IsAlive() || !B->IsFinished()) { continue; }
+		const float R = F.BuildingStatsFor(B->BuildingType).TerritoryRadius;
+		if (R > 0.f && FVector2D::DistSquared(B->GetFootprintCentre(), At) <= R * R) { return true; }
+	}
+	return false;
+}
+
+int32 USREconomySubsystem::GetBuilderCount(ESRTeam Team, int32* OutQueued) const
+{
+	int32 Alive = 0, Queued = 0;
+	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Alive = Battle->CountBuilders(Team); }
+	for (const ASRBuilding* B : Buildings)
+	{
+		if (!B || B->Team != Team || !B->IsAlive()) { continue; }
+		for (ESRUnitType T : B->GetQueue()) { Queued += T == ESRUnitType::Builder ? 1 : 0; }
+	}
+	if (OutQueued) { *OutQueued = Queued; }
+	return Alive;
+}
+
 ASRBuilding* USREconomySubsystem::PlaceBuilding(ESRBuildingType Type, ESRTeam Team, const FVector2D& Want, FText* OutReason)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
@@ -380,6 +406,7 @@ ASRBuilding* USREconomySubsystem::PlaceBuilding(ESRBuildingType Type, ESRTeam Te
 		return nullptr;
 	}
 	ASRBuilding* B = ASRBuilding::SpawnBuilding(GetWorld(), Type, Team, Placement.Location, true);
+	if (B) { B->SetNeedsBuilder(Placement.bNeedsBuilder); }
 	if (B && Type == ESRBuildingType::Mine && Placement.VeinIndex != INDEX_NONE) { Grid->ClaimVein(Placement.VeinIndex, B); }
 	return B;
 }

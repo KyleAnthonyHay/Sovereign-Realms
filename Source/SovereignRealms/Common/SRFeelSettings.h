@@ -32,6 +32,7 @@ public:
 		case ESRUnitType::Archer: return Archer;
 		case ESRUnitType::Horseman: return Horseman;
 		case ESRUnitType::Catapult: return Catapult;
+		case ESRUnitType::Builder: return Builder;
 		default: return Shieldbearer;
 		}
 	}
@@ -372,6 +373,36 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Units")
 	FSRUnitStats Catapult;
 
+	UPROPERTY(EditAnywhere, Config, Category = "Units")
+	FSRUnitStats Builder;
+
+	// -------------------------------------------------------------- Builders
+	/** A builder works on a building from within this distance (cm) of its walls. */
+	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "10"))
+	float BuilderReach = 70.f;
+
+	/** Each builder beyond the first adds this share of the normal build speed (outside the castle's zone the first
+	 * builder gives the normal speed; inside it every builder speeds the work up by this much). */
+	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0"))
+	float BuilderExtraSpeed = 0.5f;
+
+	/** Most builders a kingdom may have (alive and in training). */
+	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0", ClampMax = "20"))
+	int32 MaxBuilders = 2;
+
+	/** Most builders that count on one building. */
+	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "1"))
+	int32 BuildersPerBuilding = 4;
+
+	/** Health a builder restores per second on a damaged building. */
+	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0"))
+	float BuilderRepairPerSecond = 28.f;
+
+	/** An idle builder of yours goes to work on its own on a site or damaged building within this distance (cm).
+	 * The enemy's builders look everywhere. 0 = never on their own. */
+	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0"))
+	float BuilderAutoWorkRadius = 2600.f;
+
 	// -------------------------------------------------------------- Scenario
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
 	FLinearColor PlayerTeamColor = FLinearColor(0.05f, 0.22f, 0.8f);
@@ -440,6 +471,13 @@ public:
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
 	FSRCost CatapultCost = FSRCost(120, 120);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
+	/** Builders are dear: gold as well as food, and slow to train. */
+	FSRCost BuilderCost = FSRCost(120, 80);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
+	float BuilderBuildTime = 14.f;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
 	float HorsemanBuildTime = 11.f;
@@ -565,6 +603,7 @@ public:
 		case ESRUnitType::Archer: return ESRBuildingType::Range;
 		case ESRUnitType::Horseman: return ESRBuildingType::Stable;
 		case ESRUnitType::Catapult: return ESRBuildingType::Workshop;
+		case ESRUnitType::Builder: return ESRBuildingType::Castle;
 		default: return ESRBuildingType::Barracks;
 		}
 	}
@@ -696,6 +735,10 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Platoons", meta = (ClampMin = "1", ClampMax = "9"))
 	int32 MaxPlatoons = 6;
 
+	/** Each platoon has its own colour: a ring under every member and a numbered tag over the platoon. */
+	UPROPERTY(EditAnywhere, Config, Category = "Platoons")
+	bool bShowPlatoonColors = true;
+
 	/** Defensive stance: how far (cm) units chase before returning to where they were posted. */
 	UPROPERTY(EditAnywhere, Config, Category = "Platoons", meta = (ClampMin = "100"))
 	float DefensiveChaseDistance = 900.f;
@@ -727,6 +770,7 @@ public:
 		case ESRUnitType::Archer: return ArcherCost;
 		case ESRUnitType::Horseman: return HorsemanCost;
 		case ESRUnitType::Catapult: return CatapultCost;
+		case ESRUnitType::Builder: return BuilderCost;
 		default: return ShieldbearerCost;
 		}
 	}
@@ -737,6 +781,7 @@ public:
 		case ESRUnitType::Archer: return ArcherBuildTime;
 		case ESRUnitType::Horseman: return HorsemanBuildTime;
 		case ESRUnitType::Catapult: return CatapultBuildTime;
+		case ESRUnitType::Builder: return BuilderBuildTime;
 		default: return ShieldbearerBuildTime;
 		}
 	}

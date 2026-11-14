@@ -100,6 +100,28 @@ USRFeelSettings::USRFeelSettings()
 	Catapult.BuildingDamageScale = 3.f;
 	Catapult.PopCost = 3;
 
+	// Builder: a lightly armed craftsman. Raises buildings outside the castle's zone and repairs; never starts a fight.
+	Builder.DisplayName = TEXT("Builder");
+	Builder.MaxHealth = 110.f;
+	Builder.Radius = 34.f;
+	Builder.Mass = 0.9f;
+	Builder.MaxSpeed = 380.f;
+	Builder.Acceleration = 2600.f;
+	Builder.Deceleration = 3000.f;
+	Builder.TurnRateDeg = 600.f;
+	Builder.bRanged = false;
+	Builder.AttackRange = 30.f;
+	Builder.AcquireRange = 0.f;
+	Builder.SightRange = 1000.f;
+	Builder.Damage = 6.f;
+	Builder.AttackInterval = 1.3f;
+	Builder.WindupTime = 0.45f;
+	Builder.RecoveryTime = 0.45f;
+	Builder.KnockbackImpulse = 60.f;
+	Builder.BuildingDamageScale = 0.5f;
+	Builder.PopCost = 1;
+	Builder.bBuilder = true;
+
 	// ---- buildings (shapes from SourceArt/Buildings/<type>.json; the tower is SM_Bld_Tower) ----
 	auto Mesh = [](const TCHAR* Name) { return TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(FString::Printf(TEXT("/Game/SR/Buildings/%s.%s"), Name, Name))); };
 
@@ -108,10 +130,12 @@ USRFeelSettings::USRFeelSettings()
 	CastleStats.Cost = FSRCost(0, 0);
 	CastleStats.BuildTime = 60.f;
 	CastleStats.PopProvided = 8;
-	CastleStats.TerritoryRadius = 3800.f;
+	CastleStats.TerritoryRadius = 4200.f;   // the building zone: beyond it a Builder must go and build
 	CastleStats.bPlayerBuildable = false;
 	CastleStats.Category = ESRBuildCategory::Defence;
-	CastleStats.Blurb = TEXT("The seat of your kingdom: houses troops and shoots from its walls. If it falls, you lose.");
+	CastleStats.Blurb = TEXT("The seat of your kingdom: houses troops, shoots from its walls and trains Builders. If it falls, you lose.");
+	CastleStats.bRecruits = true;
+	CastleStats.RecruitType = ESRUnitType::Builder;
 	CastleStats.Mesh = Mesh(TEXT("SM_Bld_Castle"));
 	CastleStats.FootprintMin = FVector2D(-560.f, -660.f);
 	CastleStats.FootprintMax = FVector2D(560.f, 660.f);
@@ -129,7 +153,6 @@ USRFeelSettings::USRFeelSettings()
 	FarmStats.Cost = FSRCost(90, 0);
 	FarmStats.BuildTime = 14.f;
 	FarmStats.PopProvided = 4;
-	FarmStats.TerritoryRadius = 2400.f;
 	FarmStats.Mesh = Mesh(TEXT("SM_Bld_Farm"));
 	FarmStats.Category = ESRBuildCategory::Economy;
 	FarmStats.Blurb = TEXT("Grows food (troops are paid in food) and houses troops.");
@@ -145,7 +168,6 @@ USRFeelSettings::USRFeelSettings()
 	MineStats.Cost = FSRCost(140, 0);
 	MineStats.BuildTime = 16.f;
 	MineStats.PopProvided = 0;
-	MineStats.TerritoryRadius = 2000.f;
 	MineStats.Mesh = Mesh(TEXT("SM_Bld_Mine"));
 	MineStats.Category = ESRBuildCategory::Economy;
 	MineStats.Blurb = TEXT("Digs gold (buildings are paid in gold). Only on a free gold vein.");
@@ -161,7 +183,6 @@ USRFeelSettings::USRFeelSettings()
 	TowerStats.Cost = FSRCost(160, 0);
 	TowerStats.BuildTime = 18.f;
 	TowerStats.PopProvided = 0;
-	TowerStats.TerritoryRadius = 1200.f;
 	TowerStats.Mesh = Mesh(TEXT("SM_Bld_Tower"));
 	TowerStats.Category = ESRBuildCategory::Defence;
 	TowerStats.Blurb = TEXT("Archers on the top shoot any enemy in range.");
@@ -182,7 +203,6 @@ USRFeelSettings::USRFeelSettings()
 	BarracksStats.Cost = FSRCost(110, 0);
 	BarracksStats.BuildTime = 16.f;
 	BarracksStats.PopProvided = 0;
-	BarracksStats.TerritoryRadius = 1800.f;
 	BarracksStats.Mesh = Mesh(TEXT("SM_Bld_Barracks"));
 	BarracksStats.Category = ESRBuildCategory::Military;
 	BarracksStats.Blurb = TEXT("Trains Shieldbearers. Right-click with it selected to set where they muster.");

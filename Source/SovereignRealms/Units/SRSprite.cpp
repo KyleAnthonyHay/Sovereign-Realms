@@ -65,6 +65,17 @@ namespace
 		return S;
 	}
 
+	// builder.json: the worker body with a mallet; strike frame 4, figure top row 38.
+	FSRSpriteSheet MakeBuilder()
+	{
+		FSRSpriteSheet S = MakeSheet();
+		S.StrikeFrame = 4;
+		S.WindupMap = { 0.f, 0.25f, 0.5f, 0.75f };
+		S.RecoveryMap = { 0.f, 0.25f, 0.5f, 0.75f };
+		S.TopCm = (118 - 38) * 1.75f;
+		return S;
+	}
+
 	int32 LastAtOrBelow(TConstArrayView<float> Map, float Value)
 	{
 		int32 Index = 0;
@@ -82,11 +93,13 @@ const FSRSpriteSheet& FSRSpriteSheet::For(ESRUnitType Type)
 	static const FSRSpriteSheet Archer = MakeArcher();
 	static const FSRSpriteSheet Horseman = MakeHorseman();
 	static const FSRSpriteSheet Catapult = MakeCatapult();
+	static const FSRSpriteSheet Builder = MakeBuilder();
 	switch (Type)
 	{
 	case ESRUnitType::Archer: return Archer;
 	case ESRUnitType::Horseman: return Horseman;
 	case ESRUnitType::Catapult: return Catapult;
+	case ESRUnitType::Builder: return Builder;
 	default: return Shieldbearer;
 	}
 }

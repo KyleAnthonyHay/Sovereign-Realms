@@ -780,7 +780,7 @@ def build_sprite():
 
 
 def make_sprite_instances(sprite, shadow):
-    for troop in ("Shieldbearer", "Archer", "Miner", "Farmer"):
+    for troop in ("Shieldbearer", "Archer", "Miner", "Farmer", "Builder"):
         make_instance("MI_UnitSprite_" + troop, sprite, textures={
             "SpriteSheet": CHAR + "T_%s_Color" % troop, "TeamMask": CHAR + "T_%s_TeamMask" % troop, "NormalSheet": CHAR + "T_%s_Normal" % troop})
         make_instance("MI_UnitSpriteShadow_" + troop, shadow, textures={"SpriteSheet": CHAR + "T_%s_Color" % troop})

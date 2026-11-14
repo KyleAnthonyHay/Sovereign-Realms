@@ -71,6 +71,7 @@ FSRAIProfile USRAISubsystem::Profile()
 		P.AdaptWeight = 0.f;  P.IncomeScale = 0.6f;  P.BuildCadence = 8.f;
 		P.MaxTowers = 2;  P.MaxFarms = 6;  P.RecruitQueue = 1;  P.Think = 1.5f;
 		P.Garrison = 0.35f;  P.RetreatHold = 0.9f;  P.bReinforce = false;  P.bImpatient = false;
+		P.Builders = 1;
 	}
 	else if (F.AIDifficulty >= 2)
 	{
@@ -334,7 +335,8 @@ void USRAISubsystem::Think(FSRCommander& C)
 	{
 		if (!U || !U->IsActive() || U->GetTeam() != C.Team) { continue; }
 		Mine.Add(U);
-		if (!C.Main.Units.Contains(U) && !C.Raid.Units.Contains(U)) { Home.Add(U); }
+		// builders are not soldiers: they never join the defence or an attack (they find their own work)
+		if (!U->IsBuilder() && !C.Main.Units.Contains(U) && !C.Raid.Units.Contains(U)) { Home.Add(U); }
 	}
 
 	Observe(C);
@@ -557,13 +559,21 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
-	int32 Count[4] = { 0, 0, 0, 0 }, Total = 0;
-	for (const ASRUnit* U : Mine) { ++Count[FMath::Clamp(int32(U->GetUnitType()), 0, 3)]; ++Total; }
+	int32 Count[4] = { 0, 0, 0, 0 }, Total = 0, Builders = 0;
+	for (const ASRUnit* U : Mine)
+	{
+		if (U->IsBuilder()) { ++Builders; continue; }
+		++Count[FMath::Clamp(int32(U->GetUnitType()), 0, 3)]; ++Total;
+	}
 	TArray<ASRBuilding*> Trainers;
 	for (ASRBuilding* B : Eco->GetBuildings())
 	{
 		if (!B || B->Team != C.Team || !B->IsAlive() || !B->IsRecruiter()) { continue; }
-		for (ESRUnitType T : B->GetQueue()) { ++Count[FMath::Clamp(int32(T), 0, 3)]; ++Total; }
+		for (ESRUnitType T : B->GetQueue())
+		{
+			if (T == ESRUnitType::Builder) { ++Builders; continue; }
+			++Count[FMath::Clamp(int32(T), 0, 3)]; ++Total;
+		}
 		if (B->CanRecruit()) { Trainers.Add(B); }
 		const FVector2D Muster = MusterPoint(C);
 		if (FVector2D::Distance(B->GetRallyPoint(), Muster) > 150.f) { B->SetRallyPoint(Muster); }
@@ -576,7 +586,9 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 	const int32 FoeTowers = Eco->CountBuildings(ESRBuildingType::Tower, Foe(C.Team));
 	const int32 WantCatapults = Prof.AdaptWeight <= 0.f ? 0 : FMath::Min(3, FoeTowers / 2 + (C.WavesSent >= 2 ? 1 : 0));
 	const int32 WantRiders = Prof.AdaptWeight <= 0.f ? 0 : FMath::RoundToInt(Total * (0.12f + (C.FoeArcherShare > 0.5f ? 0.12f : 0.f)));
-	TArray<ESRUnitType, TInlineAllocator<4>> Order;
+	TArray<ESRUnitType, TInlineAllocator<6>> Order;
+	// a builder first if it is short of them (the first one once it has a barracks going, so troops come first)
+	if (Builders < FMath::Min(Prof.Builders, F.MaxBuilders) && (Builders > 0 || Total >= 4 || Eco->CountBuildings(ESRBuildingType::Barracks, C.Team) > 0)) { Order.Add(ESRUnitType::Builder); }
 	if (Count[3] < WantCatapults) { Order.Add(ESRUnitType::Catapult); }
 	if (Count[2] < WantRiders) { Order.Add(ESRUnitType::Horseman); }
 	const int32 Core = Count[0] + Count[1];

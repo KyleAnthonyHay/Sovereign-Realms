@@ -103,6 +103,10 @@ public:
 	void NotifyBuildingDestroyed(ASRBuilding* Building);
 	/** The team's castle, if it still stands. */
 	ASRBuilding* GetCastle(ESRTeam Team) const;
+	/** Inside one of the kingdom's building zones (its castle's TerritoryRadius): buildings there raise themselves. */
+	bool IsInBuildZone(ESRTeam Team, const FVector2D& At) const;
+	/** Builders alive and builders in training at the castle (the cap is Sovereign Feel > Builders > MaxBuilders). */
+	int32 GetBuilderCount(ESRTeam Team, int32* OutQueued = nullptr) const;
 	/** Finished, standing buildings of a type. */
 	int32 CountFinished(ESRBuildingType Type, ESRTeam Team) const;
 	/** The most recent time (game seconds) one of the team's buildings was struck, and where. */
