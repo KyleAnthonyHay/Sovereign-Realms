@@ -142,6 +142,15 @@ void ASRHUD::DrawMainMenu()
 
 	// entries
 	const float BW = U(340.f), BH = U(56.f), Gap = U(12.f);
+	// a saved game: CONTINUE comes first
+	const FString Latest = Flow->LatestSlot();
+	if (!Latest.IsEmpty())
+	{
+		const FBox2D Box(FVector2D(X, Y), FVector2D(X + BW, Y + BH));
+		if (MenuButton(Box, SRId::Menu + 8, TEXT("CONTINUE"), true, false)) { Flow->LoadMatch(Latest); }
+		Text(Flow->DescribeSave(Latest), X + U(4.f), Y + BH + U(3.f), U(13.f), A(Dim, In));
+		Y += BH + Gap + U(16.f);
+	}
 	const TCHAR* Labels[4] = { TEXT("NEW GAME"), TEXT("HOW TO PLAY"), TEXT("SETTINGS"), TEXT("QUIT") };
 	const EScreen Opens[4] = { EScreen::NewGame, EScreen::Controls, EScreen::Settings, EScreen::Confirm };
 	for (int32 i = 0; i < 4; ++i)
@@ -171,25 +180,35 @@ void ASRHUD::DrawPauseMenu()
 	if (Screen != EScreen::None) { DrawScreen(View.X * 0.5f); return; }
 
 	const float W = U(420.f), BH = U(54.f), Gap = U(10.f);
-	const float H = U(104.f) + 5.f * (BH + Gap) + U(20.f);
+	const float H = U(104.f) + 7.f * (BH + Gap) + U(46.f);
 	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = FMath::RoundToFloat((View.Y - H) * 0.5f - (1.f - In) * U(12.f));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("PAUSED"), X + W * 0.5f, Y + U(26.f), U(32.f), GoldBright, AlignCentre, Bold, U(6.f));
 	Rule(X + U(40.f), Y + U(78.f), W - U(80.f));
-	const TCHAR* Labels[5] = { TEXT("RESUME"), TEXT("RESTART"), TEXT("CONTROLS"), TEXT("SETTINGS"), TEXT("QUIT TO MAIN MENU") };
+	const FString Latest = Flow->LatestSlot();
+	const TCHAR* Labels[7] = { TEXT("RESUME"), TEXT("SAVE GAME"), TEXT("LOAD GAME"), TEXT("RESTART"), TEXT("CONTROLS"), TEXT("SETTINGS"), TEXT("QUIT TO MAIN MENU") };
 	float BY = Y + U(104.f);
-	for (int32 i = 0; i < 5; ++i, BY += BH + Gap)
+	for (int32 i = 0; i < 7; ++i, BY += BH + Gap)
 	{
-		if (!MenuButton(FBox2D(FVector2D(X + U(34.f), BY), FVector2D(X + W - U(34.f), BY + BH)), SRId::Menu + 10 + i, Labels[i])) { continue; }
+		const FBox2D Box(FVector2D(X + U(34.f), BY), FVector2D(X + W - U(34.f), BY + BH));
+		const bool bEnabled = i != 2 || !Latest.IsEmpty();
+		if (!MenuButton(Box, SRId::Menu + 10 + i, Labels[i], bEnabled)) { continue; }
 		switch (i)
 		{
 		case 0: Flow->SetPaused(false); break;
-		case 1: AskConfirm(EConfirm::Restart); break;
-		case 2: OpenScreen(EScreen::Controls); break;
-		case 3: OpenScreen(EScreen::Settings); break;
+		case 1: Flow->SaveMatch(USRGameFlowSubsystem::QuickSlot()); break;
+		case 2: Flow->LoadMatch(Latest); break;
+		case 3: AskConfirm(EConfirm::Restart); break;
+		case 4: OpenScreen(EScreen::Controls); break;
+		case 5: OpenScreen(EScreen::Settings); break;
 		default: AskConfirm(EConfirm::MainMenu); break;
 		}
 	}
+	// what the save / load buttons did, or what LOAD would bring back
+	const bool bFresh = FPlatformTime::Seconds() - Flow->GetSaveMessageTime() < 4.0;
+	const FString Note = bFresh ? Flow->GetSaveMessage() : (Latest.IsEmpty() ? FString(TEXT("No saved game yet.")) : FString::Printf(TEXT("Load: %s%s"),
+		Latest == USRGameFlowSubsystem::AutoSlot() ? TEXT("autosave, ") : TEXT(""), *Flow->DescribeSave(Latest)));
+	Text(Note, X + W * 0.5f, BY + U(4.f), U(14.f), bFresh ? GoldBright : Dim, AlignCentre);
 }
 
 // ---------------------------------------------------------------------------- victory / defeat

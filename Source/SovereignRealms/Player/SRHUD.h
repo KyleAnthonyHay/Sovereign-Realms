@@ -126,6 +126,8 @@ private:
 	void DrawRouteLines();
 	/** Ground circles round selected troops: line of sight, and an archer's bow range. */
 	void DrawRangeCircles();
+	/** Zoomed far out, a team-coloured pip over each troop so armies read at a glance. */
+	void DrawFarPips();
 	struct FRangeCircle { FVector2D At = FVector2D(1e9, 1e9); TArray<FVector> Sight, Reach; };
 	TMap<TWeakObjectPtr<ASRUnit>, FRangeCircle> RangeCircles;
 	/** A shooting building's reach (selected tower / castle, or a tower being placed), re-sampled when it moves. */

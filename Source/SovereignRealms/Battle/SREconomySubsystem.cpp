@@ -172,7 +172,7 @@ ASRBuilding* USREconomySubsystem::PickBuilding(const FVector& RayOrigin, const F
 	for (ASRBuilding* Building : Buildings)
 	{
 		float Along = 0.f;
-		if (Building && Building->RayHit(RayOrigin, RayDir, Along) && Along < BestAlong)
+		if (Building && !Building->IsHidden() && Building->RayHit(RayOrigin, RayDir, Along) && Along < BestAlong)
 		{
 			BestAlong = Along;
 			Best = Building;

@@ -2,6 +2,7 @@
 
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SRGridSubsystem.h"
+#include "Battle/SRFogSubsystem.h"
 #include "Battle/SRAISubsystem.h"
 #include "Battle/SRPlatoonSubsystem.h"
 #include "Battle/SRFormation.h"
@@ -207,6 +208,7 @@ void USRBattleSubsystem::Tick(float DeltaTime)
 	UpdateSpriteLook();
 
 	if (!bBattleStarted) { return; }
+	if (USRFogSubsystem* Fog = USRFogSubsystem::Get(this)) { Fog->Update(DeltaTime); }
 
 	if (bSimPaused)
 	{
@@ -432,6 +434,7 @@ void USRBattleSubsystem::ResetBattle()
 	if (USRAISubsystem* AI = USRAISubsystem::Get(this)) { AI->Reset(); }
 	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Reset(); }
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->StartLoops(); }
+	if (USRFogSubsystem* Fog = USRFogSubsystem::Get(this)) { Fog->Reset(); }
 	bBattleStarted = true;
 
 	UE_LOG(LogSovereign, Log, TEXT("BATTLE RESET: player=%d enemy=%d"), CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy));
@@ -578,9 +581,10 @@ ASRUnit* USRBattleSubsystem::PickUnit(const FVector& RayOrigin, const FVector& R
 	float BestAlong = TNumericLimits<float>::Max();
 	const FVector RayEnd = RayOrigin + RayDir * 200000.f;
 
+	const USRFogSubsystem* Fog = USRFogSubsystem::Get(this);
 	for (ASRUnit* Unit : Units)
 	{
-		if (!Unit || !Unit->IsActive()) { continue; }
+		if (!Unit || !Unit->IsActive() || (Fog && !Fog->IsUnitVisible(Unit))) { continue; }
 		// Treat the unit as a fat capsule from feet to head, standing where its sprite is drawn.
 		FVector Feet, Head;
 		Unit->GetPickSegment(Feet, Head);
@@ -947,4 +951,19 @@ void USRBattleSubsystem::StepPatrols(float Dt)
 		P.Settle = 1.5f;
 		CommandMove(Live, P.bTowardB ? P.B : P.A, true, P.Shape, false);
 	}
+}
+
+bool USRBattleSubsystem::IsVisibleToPlayer(const ASRUnit* Unit) const
+{
+	const USRFogSubsystem* Fog = USRFogSubsystem::Get(this);
+	return !Fog || Fog->IsUnitVisible(Unit);
+}
+
+void USRBattleSubsystem::RemoveAllUnits()
+{
+	Patrols.Reset();
+	for (ASRUnit* Unit : Units) { if (Unit) { Unit->Destroy(); } }
+	for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->Destroy(); } }
+	Units.Reset();
+	Corpses.Reset();
 }

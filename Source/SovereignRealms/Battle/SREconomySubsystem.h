@@ -71,6 +71,8 @@ public:
 	// ---- resources ----
 	int32 GetResource(ESRTeam Team, ESRResource Resource) const { return Stock[int32(Team)][int32(Resource)]; }
 	void AddResource(ESRTeam Team, ESRResource Resource, int32 Amount);
+	/** Saved games. */
+	void SetStock(ESRTeam Team, ESRResource Resource, int32 Amount) { Stock[int32(Team)][int32(Resource)] = FMath::Max(0, Amount); }
 	bool CanAfford(ESRTeam Team, const FSRCost& Cost) const;
 	/** Deducts the cost, or refuses and flashes the counters that fall short (player only). */
 	bool TrySpend(ESRTeam Team, const FSRCost& Cost);

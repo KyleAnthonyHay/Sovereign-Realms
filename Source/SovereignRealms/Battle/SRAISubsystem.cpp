@@ -1,6 +1,7 @@
 // Copyright Sovereign Realms.
 
 #include "Battle/SRAISubsystem.h"
+#include "Common/SRSaveGame.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRGridSubsystem.h"
@@ -707,7 +708,13 @@ void USRAISubsystem::ManageAttack(FSRCommander& C, TArray<ASRUnit*>& Home)
 		FVector2D Centre;
 		C.Main.Gather(W, Centre);
 		const float Ours = SumPower(W), Theirs = LocalFoePower(C, Centre, 2200.f);
-		if (Prof.bReinforce && Free.Num() >= 3 && Ours > Theirs * 0.9f && Clock - C.LastReinforce > 20.f)
+		// Reinforcements go as a body: they gather at the muster point until there are enough to cross the map
+		// together (a trickle of three dies to the first tower on the way).
+		TArray<ASRUnit*> Mustered;
+		const FVector2D Muster = MusterPoint(C);
+		for (ASRUnit* U : Free) { if (FVector2D::Distance(U->GetPos2D(), Muster) < 1400.f) { Mustered.Add(U); } }
+		Free = Mustered;
+		if (Prof.bReinforce && Free.Num() >= 6 && Ours > Theirs * 0.9f && Clock - C.LastReinforce > 20.f)
 		{
 			C.LastReinforce = Clock;
 			Battle->CommandMove(Free, Centre, true, ESRFormationShape::Column, false);
@@ -893,3 +900,36 @@ void USRAISubsystem::LogStatus() const
 }
 
 #undef LOCTEXT_NAMESPACE
+
+void USRAISubsystem::SaveState(FSRSavedCommander Out[2]) const
+{
+	for (int32 t = 0; t < 2; ++t)
+	{
+		const FSRCommander& C = Commanders[t];
+		Out[t].bActive = C.bActive;
+		Out[t].BuildStep = C.BuildStep;
+		Out[t].WavesSent = C.WavesSent;
+		Out[t].RaidsSent = C.RaidsSent;
+		Out[t].FoeAttacks = C.FoeAttacks;
+		Out[t].ShieldRatio = C.ShieldRatio;
+	}
+}
+
+void USRAISubsystem::LoadState(const FSRSavedCommander In[2], float BattleClock)
+{
+	const FSRAIProfile P = Profile();
+	Clock = BattleClock;
+	for (int32 t = 0; t < 2; ++t)
+	{
+		FSRCommander& C = Commanders[t];
+		C.bActive = t == 1 || In[t].bActive;
+		C.BuildStep = In[t].BuildStep;
+		C.WavesSent = In[t].WavesSent;
+		C.RaidsSent = In[t].RaidsSent;
+		C.FoeAttacks = In[t].FoeAttacks;
+		C.ShieldRatio = In[t].ShieldRatio;
+		C.NextWaveTime = FMath::Max(P.FirstAttack, Clock + P.Regroup * 0.5f);
+		C.NextRaidTime = P.bRaids ? FMath::Max(P.FirstRaid, Clock + P.RaidInterval * 0.5f) : 1e9f;
+		C.NextBuildTry = Clock + 2.f;
+	}
+}

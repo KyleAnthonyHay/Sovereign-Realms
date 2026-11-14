@@ -12,6 +12,7 @@
 #include "Battle/SRAISubsystem.h"
 #include "Battle/SRGridSubsystem.h"
 #include "Battle/SRPlatoonSubsystem.h"
+#include "Battle/SRFogSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "Common/SRUserSettings.h"
 #include "Engine/Canvas.h"
@@ -120,10 +121,9 @@ void ASRHUD::DrawTopBar()
 {
 	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
 	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
-	const USRAISubsystem* AI = USRAISubsystem::Get(this);
 	if (!Economy || !Battle) { return; }
 
-	const float W = U(930.f), H = U(54.f);
+	const float W = U(740.f), H = U(54.f);
 	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = U(10.f);
 	const FBox2D Bar(FVector2D(X, Y), FVector2D(X + W, Y + H));
 	HudPanel(Bar);
@@ -173,26 +173,6 @@ void ASRHUD::DrawTopBar()
 	// match clock
 	Icon(ESRIcon::Clock, CX, Y + (H - U(24.f)) * 0.5f, U(24.f));
 	TextIn(Row(CX + U(31.f)), Clock(Battle->GetBattleClock()), U(21.f), Parchment, AlignLeft, Bold);
-	CX += U(118.f);
-	Divider(CX - U(12.f));
-
-	// the enemy's next wave: quiet until it is close
-	if (AI)
-	{
-		const bool bAttacking = AI->IsEnemyAttacking();
-		const float In = bAttacking ? 0.f : AI->GetEnemyNextWaveIn();
-		FLinearColor Color = A(Dim, 0.85f);
-		if (bAttacking) { Color = A(Refuse, 0.7f + 0.3f * FMath::Sin(float(Now) * 7.f)); }
-		else if (In < 20.f) { Color = Amber; }
-		Icon(ESRIcon::AlertWave, CX, Y + (H - U(24.f)) * 0.5f, U(24.f), FLinearColor(1.f, 1.f, 1.f, (bAttacking || In < 60.f) ? 1.f : 0.6f));
-		const FString Label = bAttacking ? FString(TEXT("Enemy attacking!")) : (In > 0.f ? FString::Printf(TEXT("Enemy ready in %s"), *Clock(In)) : FString(TEXT("Enemy watching")));
-		TextIn(Row(CX + U(31.f)), Label, U(17.f), Color, AlignLeft, (bAttacking || In < 20.f) ? Bold : Regular);
-		if (bInputOpen && bMouse && FBox2D(FVector2D(CX - U(8.f), Y), FVector2D(Bar.Max.X, Y + H)).IsInside(Mouse))
-		{
-			SetTooltip(FBox2D(FVector2D(CX, Y), FVector2D(CX, Y + H + U(4.f))), TEXT("The enemy commander"),
-				{ TEXT("It attacks when it thinks it can win: keep an army,"), TEXT("towers and watch your outlying farms and mines.") });
-		}
-	}
 
 	// top-right: controls, pause
 	const float BS = U(46.f);
@@ -296,6 +276,21 @@ void ASRHUD::DrawMinimap(const FBox2D& Box)
 
 	if (MinimapBase) { DrawTexture(MinimapBase, MapRect.Min.X, MapRect.Min.Y, Size.X, Size.Y, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.9f, 0.9f, 0.9f, 1.f), BLEND_Opaque); }
 	else { Fill(MapRect.Min.X, MapRect.Min.Y, Size.X, Size.Y, FLinearColor(0.10f, 0.14f, 0.07f, 1.f)); }
+	// fog of war: unexplored land dark, explored but out of sight dimmed
+	if (const USRFogSubsystem* Fog = USRFogSubsystem::Get(this); Fog && Fog->IsEnabled())
+	{
+		const int32 G = 56;
+		const float CW = Size.X / G, CH = Size.Y / G;
+		for (int32 r = 0; r < G; ++r)
+		{
+			for (int32 c = 0; c < G; ++c)
+			{
+				const FVector2D W = ToWorld(FVector2D(MapRect.Min.X + (c + 0.5f) * CW, MapRect.Min.Y + (r + 0.5f) * CH));
+				const float Dark = Fog->IsVisible(W) ? 0.f : (Fog->IsExplored(W) ? 0.42f : 0.82f);
+				if (Dark > 0.f) { Fill(FMath::FloorToFloat(MapRect.Min.X + c * CW), FMath::FloorToFloat(MapRect.Min.Y + r * CH), FMath::CeilToFloat(CW) + 1.f, FMath::CeilToFloat(CH) + 1.f, FLinearColor(0.01f, 0.012f, 0.02f, Dark)); }
+			}
+		}
+	}
 
 	if (Grid)
 	{
@@ -306,7 +301,7 @@ void ASRHUD::DrawMinimap(const FBox2D& Box)
 	}
 	for (const ASRBuilding* Building : Economy->GetBuildings())
 	{
-		if (!Building || !Building->IsAlive()) { continue; }
+		if (!Building || !Building->IsAlive() || Building->IsHidden()) { continue; }   // hidden: not yet seen (fog of war)
 		FLinearColor Color = Building->Team == ESRTeam::Player ? TeamBlue : TeamRed;
 		if (Building->IsUnderConstruction()) { Color = FMath::Lerp(Color, FLinearColor(0.1f, 0.1f, 0.1f, 1.f), 0.45f); }
 		Dot(Building->GetFootprintCentre(), FMath::Max(4.f, U(Building->IsCastle() ? 13.f : 8.f)), Color, true);
@@ -315,7 +310,7 @@ void ASRHUD::DrawMinimap(const FBox2D& Box)
 	const float UnitSize = FMath::Max(2.f, U(3.5f));
 	for (const ASRUnit* Unit : Battle->GetUnits())
 	{
-		if (!Unit || !Unit->IsActive()) { continue; }
+		if (!Unit || !Unit->IsActive() || !Battle->IsVisibleToPlayer(Unit)) { continue; }
 		const bool bEnemy = Unit->GetTeam() == ESRTeam::Enemy;
 		Dot(Unit->GetPos2D(), UnitSize, Unit->IsSelected() && !bEnemy ? FLinearColor::White : (bEnemy ? FLinearColor(1.f, 0.42f, 0.30f, 1.f) : FLinearColor(0.55f, 0.80f, 1.f, 1.f)), false);
 	}

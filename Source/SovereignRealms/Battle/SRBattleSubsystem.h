@@ -100,12 +100,19 @@ public:
 	void CommandPatrol(const TArray<ASRUnit*>& Group, const FVector2D& To, ESRFormationShape Shape);
 	/** Takes these units off any patrol (a patrol left with nobody ends). */
 	void ClearPatrol(const TArray<ASRUnit*>& Group);
+	/** Fog of war: may the player see this unit right now (USRFogSubsystem)? */
+	bool IsVisibleToPlayer(const ASRUnit* Unit) const;
 	/** The patrol route a unit is on, if any (the HUD draws it). */
 	bool GetPatrolRoute(const ASRUnit* Unit, FVector2D& OutA, FVector2D& OutB) const;
 
 	/** A building fell; if it was a castle the match is decided. */
 	void NotifyBuildingDestroyed(ASRBuilding* Building);
 	float GetBattleClock() const { return BattleClock; }
+	/** Saved games. */
+	void SetBattleClock(float InClock) { BattleClock = InClock; }
+	void SetStats(const FSRMatchStats& InStats) { MatchStats = InStats; }
+	/** Saved games: every troop and corpse goes (the loaded ones are spawned after). */
+	void RemoveAllUnits();
 
 	/** Closest unit hit by a ray (cursor picking). Units have no collision; this is pure maths. */
 	ASRUnit* PickUnit(const FVector& RayOrigin, const FVector& RayDir, float Padding) const;

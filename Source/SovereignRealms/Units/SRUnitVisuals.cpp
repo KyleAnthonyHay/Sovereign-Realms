@@ -216,7 +216,9 @@ void ASRUnit::StepVisual(float Dt)
 
 	// Off screen: hide everything and skip the per-frame posing (transforms, sheet cells, shadow cards). The
 	// simulation is unaffected; the pose is rebuilt the frame the unit comes back into view.
-	const bool bOff = FVector2D::DistSquared(GetPos2D(), View.FocusXY) > FMath::Square(View.CullRadius) && !bSelected;
+	// Off screen, or an enemy in the fog of war.
+	const bool bOff = (FVector2D::DistSquared(GetPos2D(), View.FocusXY) > FMath::Square(View.CullRadius) && !bSelected)
+		|| (Team == ESRTeam::Enemy && !Battle->IsVisibleToPlayer(this));
 	if (bOff != bCulled)
 	{
 		bCulled = bOff;

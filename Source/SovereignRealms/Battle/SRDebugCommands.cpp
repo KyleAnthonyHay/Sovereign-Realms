@@ -5,6 +5,7 @@
 // and the running game executes them (see USRBattleSubsystem::PollCommandInbox).
 
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SRFogSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRAISubsystem.h"
 #include "Battle/SRGridSubsystem.h"
@@ -415,6 +416,24 @@ namespace
 			const USREconomySubsystem* Economy = USREconomySubsystem::Get(World);
 			const bool bPlayer = Args.Num() > 0 && Args[0].Equals(TEXT("player"), ESearchCase::IgnoreCase);
 			if (ASRBuilding* Castle = Economy ? Economy->GetCastle(bPlayer ? ESRTeam::Player : ESRTeam::Enemy) : nullptr) { Castle->ReceiveDamage(1.0e9f, nullptr); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdSave(TEXT("sr.Save"), TEXT("sr.Save [slot]: save the match (default: the pause menu's slot)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->SaveMatch(Args.Num() > 0 ? Args[0] : FString(USRGameFlowSubsystem::QuickSlot())); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdLoad(TEXT("sr.Load"), TEXT("sr.Load [slot]: load a saved match (default: the latest)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->LoadMatch(Args.Num() > 0 ? Args[0] : Flow->LatestSlot()); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdFog(TEXT("sr.Fog"), TEXT("sr.Fog <0|1>: fog of war off / on (testing)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USRFogSubsystem* Fog = USRFogSubsystem::Get(World)) { Fog->SetEnabled(Args.Num() == 0 || Args[0] != TEXT("0")); }
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdDamage(TEXT("sr.Damage"), TEXT("sr.Damage <castle|farm|mine|tower|barracks|range> <health fraction left> [enemy]: hurt a building (0 destroys it)."),

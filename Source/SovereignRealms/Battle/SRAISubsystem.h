@@ -141,6 +141,11 @@ public:
 	bool IsEnemyAttacking() const { return Commanders[1].Main.IsActive() || Commanders[1].Raid.IsActive(); }
 	void LogStatus() const;
 
+	/** Saved games: what of each commander's mind is worth keeping (its build order step, attacks made, what it
+	 * has learned of the player); on load the clock is the battle's and the next attack waits a regroup. */
+	void SaveState(struct FSRSavedCommander Out[2]) const;
+	void LoadState(const struct FSRSavedCommander In[2], float BattleClock);
+
 	/** The profile for the current difficulty (Sovereign Feel > AI > AI Difficulty). */
 	static FSRAIProfile Profile();
 	/** Share of a building's payout its kingdom gets: below 1 for an easier commander, 1 for the player. */

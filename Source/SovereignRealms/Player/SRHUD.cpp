@@ -3,10 +3,12 @@
 #include "Player/SRHUD.h"
 #include "Player/SRHUDStyle.h"
 #include "Player/SRPlayerController.h"
+#include "Player/SRCameraPawn.h"
 #include "Units/SRUnit.h"
 #include "Buildings/SRBuilding.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
+#include "Battle/SRFogSubsystem.h"
 #include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "Engine/Canvas.h"
@@ -95,6 +97,7 @@ void ASRHUD::DrawHUD()
 	{
 		// the match's own interface; under a menu it is still drawn but takes no input
 		bInputOpen = State == ESRGameState::Playing && !bLegend;
+		DrawFarPips();
 		DrawHealthBars();
 		DrawTrainingBars();
 		DrawRangeCircles();
@@ -440,12 +443,13 @@ void ASRHUD::DrawHealthBars()
 		// Only when it matters: selected, or hurt recently. Keeps the battlefield clean.
 		const bool bRecentlyHurt = Unit->GetHealthFrac() < 1.f && (WorldNow - Unit->GetLastDamagedTime()) < F.HealthBarLingerTime;
 		if (!Unit->IsSelected() && !bRecentlyHurt) { continue; }
+		if (!Battle->IsVisibleToPlayer(Unit)) { continue; }
 		Bar(Unit->GetOverheadPoint(), U(F.HealthBarSize.X), FMath::Max(3.f, U(F.HealthBarSize.Y + 1.f)), Unit->GetHealthFrac(), Unit->GetTeam() == ESRTeam::Enemy);
 	}
 	if (!Economy) { return; }
 	for (const ASRBuilding* Building : Economy->GetBuildings())
 	{
-		if (!Building || !Building->IsAlive() || Building->GetQueue().Num() > 0) { continue; }
+		if (!Building || !Building->IsAlive() || Building->GetQueue().Num() > 0 || Building->IsHidden()) { continue; }
 		const bool bRecentlyHurt = Building->GetHealthFrac() < 1.f && (WorldNow - Building->GetLastDamagedTime()) < F.HealthBarLingerTime;
 		if (!bRecentlyHurt && !(Building->IsSelected() && Building->GetHealthFrac() < 1.f)) { continue; }
 		Bar(Building->GetLabelPoint(), U(110.f), U(8.f), Building->GetHealthFrac(), Building->Team == ESRTeam::Enemy);
@@ -472,6 +476,37 @@ void ASRHUD::DrawPayoutPopups()
 		const float X = S.X - (W + U(5.f) + IS) * 0.5f, Y = S.Y - P * 0.6f;
 		Text(Label, X, Y, P, A(Popup.Resource == ESRResource::Gold ? GoldBright : FoodColor, Alpha), AlignLeft, Bold);
 		Icon(Popup.Resource == ESRResource::Gold ? ESRIcon::Coin : ESRIcon::Food, X + W + U(5.f), Y + P * 0.12f, IS, FLinearColor(1.f, 1.f, 1.f, Alpha));
+	}
+}
+
+void ASRHUD::DrawFarPips()
+{
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	const ASRCameraPawn* Camera = PC ? Cast<ASRCameraPawn>(PC->GetPawn()) : nullptr;
+	if (!Battle || !Camera) { return; }
+	// Fades in from 4.5 m of camera distance... to full at 7 m: by then a troop sprite is only a few pixels tall.
+	const float Alpha = FMath::GetMappedRangeValueClamped(FVector2f(4500.f, 7000.f), FVector2f(0.f, 1.f), Camera->GetZoomDistance());
+	if (Alpha <= 0.01f) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const float S = FMath::Max(2.f, U(4.f));
+	for (const ASRUnit* Unit : Battle->GetUnits())
+	{
+		if (!Unit || !Unit->IsActive() || !Battle->IsVisibleToPlayer(Unit)) { continue; }
+		const FVector P = Canvas->Project(Unit->GetSimPos() + FVector(0.f, 0.f, Unit->GetBodyHeight() + 30.f));
+		if (P.Z <= 0.f) { continue; }
+		const FLinearColor Team = Unit->GetTeam() == ESRTeam::Player ? F.PlayerTeamColor : F.EnemyTeamColor;
+		const FLinearColor Col = FLinearColor(FMath::Min(Team.R * 1.6f + 0.15f, 1.f), FMath::Min(Team.G * 1.6f + 0.15f, 1.f), FMath::Min(Team.B * 1.6f + 0.15f, 1.f), Alpha);
+		// a little diamond with a dark rim
+		for (int32 r = 0; r < 2; ++r)
+		{
+			const float H = S + (r == 0 ? FMath::Max(1.f, U(1.5f)) : 0.f);
+			const FLinearColor C = r == 0 ? FLinearColor(0.02f, 0.02f, 0.03f, Alpha * 0.85f) : (Unit->IsSelected() ? FLinearColor(1.f, 0.95f, 0.7f, Alpha) : Col);
+			for (float dy = -H; dy <= H; dy += 1.f)
+			{
+				const float w = H - FMath::Abs(dy);
+				Fill(FMath::RoundToFloat(P.X - w), FMath::RoundToFloat(P.Y + dy), FMath::Max(1.f, 2.f * w), 1.f, C);
+			}
+		}
 	}
 }
 
@@ -661,6 +696,12 @@ void ASRHUD::DrawTrainingBars()
 	for (const ASRBuilding* Building : Economy->GetBuildings())
 	{
 		if (!Building || Building->GetQueue().Num() == 0) { continue; }
+		if (Building->Team == ESRTeam::Enemy)
+		{
+			// what the enemy trains is only seen up close
+			const USRFogSubsystem* Fog = USRFogSubsystem::Get(this);
+			if (Building->IsHidden() || (Fog && !Fog->IsVisible(Building->GetFootprintCentre()))) { continue; }
+		}
 		const FVector S = Canvas->Project(Building->GetLabelPoint());
 		if (S.Z <= 0.f) { continue; }
 		const bool bEnemy = Building->Team == ESRTeam::Enemy;

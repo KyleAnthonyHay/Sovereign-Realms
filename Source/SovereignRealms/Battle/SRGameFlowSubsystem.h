@@ -47,9 +47,31 @@ public:
 	void StartMatch(int32 Difficulty = -1);
 	void SetPaused(bool bPaused);
 
+	// ---- saved games ----
+	/** Slots: the player's save (pause menu) and the autosave (every AutosaveInterval while playing). */
+	static const TCHAR* QuickSlot() { return TEXT("SR_Save"); }
+	static const TCHAR* AutoSlot() { return TEXT("SR_Autosave"); }
+	bool SaveMatch(const FString& Slot);
+	bool LoadMatch(const FString& Slot);
+	bool HasSave(const FString& Slot) const;
+	/** The newer of the two slots that exist ("" if none). */
+	FString LatestSlot() const;
+	/** "Saved 14:32 · 12:05 into the battle · Normal" for the menus ("" if the slot is empty). */
+	FString DescribeSave(const FString& Slot) const;
+	/** Last save / load message and when (real seconds), for the pause menu. */
+	const FString& GetSaveMessage() const { return SaveMessage; }
+	double GetSaveMessageTime() const { return SaveMessageTime; }
+
 private:
 	void SetState(ESRGameState NewState);
 
 	ESRGameState State = ESRGameState::Playing;
+	float AutosaveClock = 0.f;
+	FString SaveMessage;
+	double SaveMessageTime = -100.0;
+	// caches: the menus ask every frame, the answers only change when a game is saved
+	TMap<FString, FString> SaveLines;
+	mutable FString LatestCache;
+	mutable bool bLatestValid = false;
 	double StateChangedAt = 0.0;
 };

@@ -170,6 +170,9 @@ public:
 	bool IsSelected() const { return bSelected; }
 	void SetHovered(bool bInHovered) { bHovered = bInHovered; }
 
+	/** Saved games: put the building back as it was (health, construction, ruin, queue, rally point). */
+	void ApplySaved(float InHealth, float InProgress, bool bInDestroyed, const TArray<ESRUnitType>& InQueue, const FVector2D& InRally);
+
 	/** Set by SpawnBuilding: not part of the level, so it is destroyed (not just reset) when the battle resets. */
 	bool IsRuntimeBuilt() const { return bRuntimeBuilt; }
 

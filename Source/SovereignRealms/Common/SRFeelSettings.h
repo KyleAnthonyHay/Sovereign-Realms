@@ -398,7 +398,7 @@ public:
 
 	/** Food each farm adds per payout. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0"))
-	int32 FarmFoodPerPayout = 9;
+	int32 FarmFoodPerPayout = 14;
 
 	/** Seconds between a farm's payouts. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0.2"))
@@ -622,6 +622,30 @@ public:
 	/** Let a commander play the player's side too (balance testing: sr.AIvsAI 1). */
 	UPROPERTY(EditAnywhere, Config, Category = "AI")
 	bool bAIPlaysPlayer = false;
+
+	/** Seconds between autosaves while a match is played (0 = never). The pause menu also saves by hand. */
+	UPROPERTY(EditAnywhere, Config, Category = "Saves", meta = (ClampMin = "0"))
+	float AutosaveInterval = 120.f;
+
+	// ------------------------------------------------------------------- Fog
+	/** Fog of war for the player: enemy troops show only in sight, enemy buildings once seen (USRFogSubsystem). */
+	UPROPERTY(EditAnywhere, Config, Category = "Fog")
+	bool bFogOfWar = true;
+
+	/** Fog grid cell (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "Fog", meta = (ClampMin = "25"))
+	float FogCellSize = 125.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Fog", meta = (ClampMin = "0.03"))
+	float FogUpdateInterval = 0.12f;
+
+	/** Seconds a cell takes to clear or fog over (soft edges as troops move). */
+	UPROPERTY(EditAnywhere, Config, Category = "Fog", meta = (ClampMin = "0"))
+	float FogFadeTime = 0.5f;
+
+	/** How dark the fog is drawn (0 = not drawn, 1 = full). */
+	UPROPERTY(EditAnywhere, Config, Category = "Fog", meta = (ClampMin = "0", ClampMax = "1"))
+	float FogStrength = 1.f;
 
 	// -------------------------------------------------------------- Platoons
 	UPROPERTY(EditAnywhere, Config, Category = "Platoons", meta = (ClampMin = "1", ClampMax = "9"))

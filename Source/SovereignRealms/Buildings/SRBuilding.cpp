@@ -797,3 +797,45 @@ void ASRBuilding::SetState(ESRBuildingState NewState)
 	if (Want && Mesh->GetStaticMesh() != Want) { Mesh->SetStaticMesh(Want); }
 	if (SiteMesh) { SiteMesh->SetVisibility(NewState == ESRBuildingState::Site); }
 }
+
+void ASRBuilding::ApplySaved(float InHealth, float InProgress, bool bInDestroyed, const TArray<ESRUnitType>& InQueue, const FVector2D& InRally)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (bInDestroyed)
+	{
+		if (!bDestroyed)
+		{
+			if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this))
+			{
+				Grid->SetFootprint(this, false);
+				if (BuildingType == ESRBuildingType::Mine) { Grid->ReleaseVein(this); }
+			}
+			bDestroyed = true;
+			Blocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			for (ASRWorker* W : Workers) { if (W) { W->Destroy(); } }
+			Workers.Reset();
+			if (Ring) { Ring->SetVisibility(false); bRingVisible = false; }
+			if (RallyFlag) { RallyFlag->SetVisibility(false); }
+		}
+		Health = 0.f;
+		Queue.Reset();
+		CollapseClock = F.CollapseTime;
+		if (!RuinMeshAsset) { Mesh->SetRelativeScale3D(FVector(1.04f, 1.04f, 0.28f)); }
+		SetState(ESRBuildingState::Ruin);
+		return;
+	}
+	BuildProgress = FMath::Clamp(InProgress, 0.f, 1.f);
+	Health = FMath::Clamp(InHealth, 1.f, Stats().MaxHealth);
+	Queue = InQueue;
+	BuildClock = 0.f;
+	RallyPoint = InRally;
+	if (RallyFlag)
+	{
+		float Z = GetActorLocation().Z;
+		if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->SampleGround(RallyPoint, Z + 200.f, Z); }
+		RallyFlag->SetWorldLocation(FVector(RallyPoint.X, RallyPoint.Y, Z));
+	}
+	SetState(BuildProgress < 1.f ? ESRBuildingState::Site : (GetHealthFrac() < F.DamagedStateFraction ? ESRBuildingState::Damaged : ESRBuildingState::Complete));
+	ApplyBuildVisual();
+	UpdateWorkers();
+}

@@ -91,6 +91,8 @@ public:
 	int32 GetSpriteFrame() const { return SpriteFrame; }
 	int32 GetSpriteFacing() const { return FacingIndex; }
 	float GetHealth() const { return Health; }
+	/** Saved games: restore health directly (no hit reaction). */
+	void SetHealthForLoad(float InHealth) { Health = FMath::Clamp(InHealth, 1.f, Stats().MaxHealth); }
 	float GetHealthFrac() const;
 	double GetLastDamagedTime() const { return LastDamagedTime; }
 	ESROrder GetOrder() const { return Order; }
