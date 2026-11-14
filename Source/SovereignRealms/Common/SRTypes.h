@@ -12,13 +12,33 @@ enum class ESRTeam : uint8
 	Enemy
 };
 
-/** What a building is for. Castle: the kingdom's seat, recruits troops. Farm: food. Mine: gold. */
+/** What a building is for. Castle: the kingdom's seat, recruits troops. Farm: food. Mine: gold (on a vein). Tower: shoots. */
 UENUM(BlueprintType)
 enum class ESRBuildingType : uint8
 {
 	Castle,
 	Farm,
-	Mine
+	Mine,
+	Tower
+};
+
+/** How a platoon (and every unit in it) reacts to enemies it was not told to fight. */
+UENUM(BlueprintType)
+enum class ESRStance : uint8
+{
+	Aggressive,   // chase anything in acquire range, as far as it takes
+	Defensive,    // engage what comes close, give up a short chase and return to position
+	HoldGround    // never move to fight; strike / shoot only what is in reach
+};
+
+/** The shape a group takes when it is ordered to move. */
+UENUM(BlueprintType)
+enum class ESRFormationShape : uint8
+{
+	Line,     // wide ranks, melee in front: the default battle line
+	Column,   // narrow and deep: for roads, gaps and long marches
+	Wedge,    // a point leading: for breaking a line
+	Square    // a compact block, ranged in the middle: for holding ground
 };
 
 enum class ESRResource : uint8
@@ -43,6 +63,81 @@ struct FSRCost
 	FSRCost(int32 InGold, int32 InFood) : Gold(InGold), Food(InFood) {}
 };
 
+class UStaticMesh;
+
+/**
+ * Per-building-type tuning and shape. Edited in Project Settings > Game > Sovereign Feel > Buildings.
+ * Footprint / sockets are in the building's local space (cm); its front (gate, adit, yard) faces local -X.
+ * The values match the Blender models' exported metadata (SourceArt/Buildings/<type>.json).
+ */
+USTRUCT()
+struct FSRBuildingStats
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building")
+	FString DisplayName = TEXT("Building");
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building", meta = (ClampMin = "1"))
+	float MaxHealth = 600.f;
+
+	/** Gold only: troops are bought with food, buildings with gold. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building")
+	FSRCost Cost = FSRCost(100, 0);
+
+	/** Seconds from laying the foundations to a working building. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building", meta = (ClampMin = "0.5"))
+	float BuildTime = 12.f;
+
+	/** Troops this building lets its kingdom field (the population cap is the sum over finished buildings). */
+	UPROPERTY(EditAnywhere, Config, Category = "Building", meta = (ClampMin = "0"))
+	int32 PopProvided = 0;
+
+	/** New buildings must stand within this distance (cm) of one of their kingdom's finished buildings. 0 = no territory. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building", meta = (ClampMin = "0"))
+	float TerritoryRadius = 0.f;
+
+	/** The player can lay this down from the build menu. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building")
+	bool bPlayerBuildable = true;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape")
+	TSoftObjectPtr<UStaticMesh> Mesh;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape")
+	FVector2D FootprintMin = FVector2D(-400.f, -400.f);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape")
+	FVector2D FootprintMax = FVector2D(400.f, 400.f);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape", meta = (ClampMin = "50"))
+	float BlockHeight = 400.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape")
+	FVector GateOffset = FVector(-500.f, 0.f, 0.f);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape")
+	FVector LabelOffset = FVector(0.f, 0.f, 520.f);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Shape")
+	FVector PopupOffset = FVector(0.f, 0.f, 260.f);
+
+	// ---- towers (and the castle's own archers on the walls) ----
+	/** 0 = the building does not shoot. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0"))
+	float AttackRange = 0.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0"))
+	float AttackDamage = 0.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0.1"))
+	float AttackInterval = 1.6f;
+
+	/** Height (cm) arrows leave from. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0"))
+	float MuzzleHeight = 700.f;
+};
+
 UENUM()
 enum class ESRUnitType : uint8
 {
@@ -57,7 +152,8 @@ enum class ESROrder : uint8
 	Idle,         // hold here, engage enemies that come into acquire range
 	Move,         // go to destination, ignore enemies
 	AttackMove,   // go to destination, engage enemies met on the way
-	AttackTarget  // chase and attack one specific unit
+	AttackTarget, // chase and attack one specific unit (or building)
+	Hold          // stand here; strike only what is in reach (Hold Ground stance, or the H key)
 };
 
 enum class ESRAttackPhase : uint8
@@ -142,6 +238,14 @@ struct FSRUnitStats
 
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Ranged", meta = (ClampMin = "100"))
 	float ProjectileSpeed = 1900.f;
+
+	/** Damage against buildings is Damage x this (arrows barely scratch stone; blades and torches do better). */
+	UPROPERTY(EditAnywhere, Config, Category = "Combat", meta = (ClampMin = "0"))
+	float BuildingDamageScale = 1.f;
+
+	/** Population this troop takes up (see the buildings' PopProvided). */
+	UPROPERTY(EditAnywhere, Config, Category = "Unit", meta = (ClampMin = "0"))
+	int32 PopCost = 1;
 
 	/** Arc apex height as a fraction of the shot distance. */
 	UPROPERTY(EditAnywhere, Config, Category = "Combat|Ranged", meta = (ClampMin = "0"))

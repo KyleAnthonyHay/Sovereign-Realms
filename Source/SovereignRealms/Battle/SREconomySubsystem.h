@@ -8,6 +8,29 @@
 #include "SREconomySubsystem.generated.h"
 
 class ASRBuilding;
+class ASRUnit;
+struct FSRPlacement;
+
+/** Something the player should notice: drawn in the HUD's message line and pinged on the minimap. */
+UENUM()
+enum class ESRAlertKind : uint8
+{
+	UnderAttack,      // one of your buildings (or troops, near home) is being hit
+	BuildingLost,
+	BuildingDone,
+	EnemyWave,        // the enemy has marched out
+	PopulationCapped,
+	Info
+};
+
+struct FSRAlert
+{
+	ESRAlertKind Kind = ESRAlertKind::Info;
+	FText Text;
+	FVector2D Location = FVector2D::ZeroVector;
+	bool bHasLocation = false;
+	float Age = 0.f;
+};
 
 /** A "+N" floating up from a building when it pays out. Drawn by ASRHUD. */
 struct FSRPayoutPopup
@@ -57,6 +80,37 @@ public:
 	float GetInsufficientFlash(ESRResource Resource) const { return Flash[int32(Resource)]; }
 	/** 1 just after income arrived, falling to 0: the HUD pulses that counter. */
 	float GetIncomePulse(ESRResource Resource) const { return Pulse[int32(Resource)]; }
+	// ---- population ----
+	/** Troops alive (and spawning). */
+	int32 GetPopulation(ESRTeam Team) const;
+	/** Troops waiting in recruit queues. */
+	int32 GetQueuedPopulation(ESRTeam Team) const;
+	/** What the team's finished buildings house, capped at Sovereign Feel > Economy > MaxPopulation. */
+	int32 GetPopulationCap(ESRTeam Team) const;
+	void NotifyPopulationCapped(ESRTeam Team);
+	float GetPopulationFlash() const { return PopFlash; }
+
+	// ---- building ----
+	/**
+	 * Lays down a building for Team if the spot is valid and the gold is there: the foundations go down and it
+	 * rises over BuildTime. Returns it, or null with OutReason set (and the gold counter flashing for the player).
+	 */
+	ASRBuilding* PlaceBuilding(ESRBuildingType Type, ESRTeam Team, const FVector2D& Want, FText* OutReason = nullptr);
+	void NotifyBuildingFinished(ASRBuilding* Building);
+	void NotifyBuildingAttacked(ASRBuilding* Building, ASRUnit* Attacker);
+	void NotifyBuildingDestroyed(ASRBuilding* Building);
+	/** The team's castle, if it still stands. */
+	ASRBuilding* GetCastle(ESRTeam Team) const;
+	/** Finished, standing buildings of a type. */
+	int32 CountFinished(ESRBuildingType Type, ESRTeam Team) const;
+	/** The most recent time (game seconds) one of the team's buildings was struck, and where. */
+	double GetLastAttackTime(ESRTeam Team) const { return LastAttackTime[int32(Team)]; }
+	FVector2D GetLastAttackLocation(ESRTeam Team) const { return LastAttackLocation[int32(Team)]; }
+
+	// ---- alerts (player only) ----
+	void PushAlert(ESRAlertKind Kind, const FText& Text, const FVector2D* Location = nullptr);
+	const TArray<FSRAlert>& GetAlerts() const { return Alerts; }
+
 	/** What the team's farms / mines bring in per minute at the current settings. */
 	float GetIncomePerMinute(ESRTeam Team, ESRResource Resource) const;
 
@@ -87,5 +141,10 @@ private:
 	float Flash[2] = { 0.f, 0.f };
 	float Pulse[2] = { 0.f, 0.f };
 	TArray<FSRPayoutPopup> Popups;
+	TArray<FSRAlert> Alerts;
+	float PopFlash = 0.f;
+	double LastAttackTime[2] = { -100.0, -100.0 };
+	FVector2D LastAttackLocation[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
+	TMap<TWeakObjectPtr<ASRBuilding>, double> LastAttackAlert;
 	bool bStarted = false;
 };

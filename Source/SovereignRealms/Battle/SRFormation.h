@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Common/SRTypes.h"
 
 class ASRUnit;
 
@@ -16,5 +17,6 @@ namespace SRFormation
 	 * (whoever is on the left stays on the left, whoever is in front stays in front),
 	 * which keeps paths from crossing.
 	 */
-	void ComputeSlots(const TArray<ASRUnit*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots);
+	void ComputeSlots(const TArray<ASRUnit*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots,
+		ESRFormationShape Shape = ESRFormationShape::Line, const FVector2D* ForceFacing = nullptr);
 }

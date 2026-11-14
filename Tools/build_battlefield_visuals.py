@@ -36,7 +36,7 @@ MATERIAL_FOR = [            # first matching mesh-name prefix wins
     ("SM_T_", "M_Terrain"), ("SM_Water", "M_Water"), ("SM_Conifer_", "M_Foliage"), ("SM_Tuft_", "M_Card"),
     ("SM_BannerCloth", "MI_Card_Banner"), ("SM_BannerPole", "MI_Prop_Wood"), ("SM_Fence_", "MI_Prop_Wood"),
     ("SM_Log", "MI_Prop_Log"), ("SM_Stump", "MI_Prop_Log"), ("SM_Ruin_", "MI_Prop_Sandstone"),
-    ("SM_Rock_", "MI_Prop_Rock"), ("SM_Menhir_", "MI_Prop_Rock"),
+    ("SM_Rock_", "MI_Prop_Rock"), ("SM_Menhir_", "MI_Prop_Rock"), ("SM_GoldVein", "MI_Bld_Ore"),
 ]
 
 
@@ -80,14 +80,24 @@ def mesh_actor(mesh, loc, yaw, label, folder, collide, shadow=True, scale=1.0):
     return a
 
 
-def add_ism(owner, mesh, name, shadow=True):
+def add_ism(owner, mesh, name, shadow=True, hism=False, cull=0.0, sway=False):
+    """One instanced component. hism: hierarchical (per-cluster culling, for the big families). cull: fade instances out
+    beyond this distance (cm, 0 = never). sway: the material moves vertices (wind): keep its shadow cached rigidly (no
+    per-frame virtual shadow map invalidation, which flickers) and stop evaluating the sway far from the camera."""
     root = sds.k2_gather_subobject_data_for_instance(owner)[0]
     p = unreal.AddNewSubobjectParams()
     p.set_editor_property("parent_handle", root)
-    p.set_editor_property("new_class", unreal.InstancedStaticMeshComponent)
+    cls = unreal.HierarchicalInstancedStaticMeshComponent if hism else unreal.InstancedStaticMeshComponent
+    p.set_editor_property("new_class", cls)
     handle, _ = sds.add_new_subobject(p)
     sds.rename_subobject(handle, unreal.Text(name))
-    comp = [c for c in owner.get_components_by_class(unreal.InstancedStaticMeshComponent) if c.get_instance_count() == 0 and c.static_mesh is None][0]
+    comp = [c for c in owner.get_components_by_class(cls) if c.get_instance_count() == 0 and c.static_mesh is None][0]
+    if cull > 0.0:
+        comp.set_editor_property("instance_start_cull_distance", int(cull * 0.8))
+        comp.set_editor_property("instance_end_cull_distance", int(cull))
+    if sway:
+        comp.set_editor_property("shadow_cache_invalidation_behavior", unreal.ShadowCacheInvalidationBehavior.RIGID)
+        comp.set_editor_property("world_position_offset_disable_distance", 9000)
     comp.set_static_mesh(mesh)
     comp.set_collision_profile_name("NoCollision")
     comp.set_editor_property("cast_shadow", shadow)
@@ -169,30 +179,34 @@ def build_world():
     # single actors: rocks over their collision boxes, the ruin, fences, logs
     for a in layout["actors"]:
         mesh_actor(load(MESH + a["mesh"]), a["pos"], a["yaw"], a["label"], a["folder"], collide=False, shadow=a["mesh"] != "SM_BannerCloth")
-    for b in layout["blockers"]:
-        s = b["size"]
-        folder = "Props/Rocks" if b["label"].startswith("Rock_") else ("Props/Foliage" if b["label"].startswith("Fir_") else "Props/Ruin")
-        box = eas.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(*b["pos"]), unreal.Rotator(0, 0, b["yaw"]))
-        box.set_actor_label(b["label"])
-        box.set_folder_path(folder)
-        c = box.static_mesh_component
-        c.set_static_mesh(CUBE)
-        box.set_actor_scale3d(unreal.Vector(s[0] / 100.0, s[1] / 100.0, s[2] / 100.0))
-        c.set_editor_property("visible", False)            # collision only: one convex box per obstacle
-        c.set_editor_property("cast_shadow", False)
-        box.tags = ["SRBlocker"]
+    # blockers: one hidden, colliding cube instance per obstacle (rock, trunk, ruin piece), all in one actor so a large
+    # map does not need thousands of actors. WorldStatic + BlockAll: the units' wall traces see them.
+    owner = eas.spawn_actor_from_class(unreal.Actor, unreal.Vector(0, 0, 0))
+    owner.set_actor_label("Blockers")
+    owner.set_folder_path("Props/Blockers")
+    owner.tags = ["SRBlocker"]
+    comp = add_ism(owner, CUBE, "BlockerBoxes", False)
+    comp.set_collision_profile_name("BlockAll")
+    comp.set_editor_property("visible", False)
+    comp.set_editor_property("hidden_in_game", True)
+    xfs = [unreal.Transform(unreal.Vector(*b["pos"]), unreal.Rotator(0, 0, b["yaw"]), unreal.Vector(b["size"][0] / 100.0, b["size"][1] / 100.0, b["size"][2] / 100.0))
+           for b in layout["blockers"]]
+    comp.add_instances(xfs, False, True)
 
     # instanced dressing, one actor per family
-    families = {"Conifers": ("SM_Conifer_", True), "Grass": ("SM_Tuft_", False), "Stones": ("SM_Rock_", True), "Deadwood": ("SM_Log", True)}
+    # name: (mesh prefix, casts shadow, cull distance cm, sways). The camera tops out about 7800 cm from its focus; grass and
+    # pebbles past ~2/3 of the far view are lost in haze and blur, trees stay to the horizon.
+    families = {"Conifers": ("SM_Conifer_", True, 0.0, True), "Grass": ("SM_Tuft_", False, 9000.0, True),
+                "Stones": ("SM_Rock_", True, 14000.0, False), "Deadwood": ("SM_Log", True, 14000.0, False)}
     total = 0
-    for label, (prefix, shadow) in families.items():
+    for label, (prefix, shadow, cull, sway) in families.items():
         owner = eas.spawn_actor_from_class(unreal.Actor, unreal.Vector(0, 0, 0))
         owner.set_actor_label(label)
         owner.set_folder_path("Props/Foliage" if label in ("Conifers", "Grass") else "Props/Rocks")
         for mesh_name, items in sorted(layout["instances"].items()):
             if not mesh_name.startswith(prefix):
                 continue
-            comp = add_ism(owner, load(MESH + mesh_name), mesh_name[3:], shadow)
+            comp = add_ism(owner, load(MESH + mesh_name), mesh_name[3:], shadow, hism=True, cull=cull, sway=sway)
             xfs = [unreal.Transform(unreal.Vector(x, y, z), unreal.Rotator(0, 0, yaw), unreal.Vector(s, s, s)) for x, y, z, yaw, s in items]
             comp.add_instances(xfs, False, True)
             total += len(xfs)
@@ -226,7 +240,7 @@ LOOK = dict(
     sun_pitch=-33.0, sun_yaw=75.0,              # light travels toward screen right and a little up-screen
     sun_lux=11.0, sun_color=(255, 214, 165), sun_source_angle=1.8, sun_shafts=11.0,
     sky_intensity=7.5, sky_color=(205, 225, 255), sky_fog=0.3,
-    fog_density=0.55, fog_falloff=0.3, fog_albedo=(255, 242, 224), fog_phase=0.35, fog_extinction=1.0,
+    fog_density=0.2, fog_falloff=0.3, fog_albedo=(255, 242, 224), fog_phase=0.35, fog_extinction=0.55,
     exposure_bias=-0.6,
 )
 

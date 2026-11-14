@@ -3,6 +3,9 @@
 #include "Units/SRUnit.h"
 #include "Units/SRProjectile.h"
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SRGridSubsystem.h"
+#include "Buildings/SRBuilding.h"
+#include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "SovereignRealms.h"
 #include "Engine/World.h"
@@ -75,7 +78,7 @@ float ASRUnit::GetPushMass() const
 
 bool ASRUnit::IsPlanted() const
 {
-	return AttackPhase != ESRAttackPhase::Ready || (Order == ESROrder::Idle && !Target.IsValid());
+	return AttackPhase != ESRAttackPhase::Ready || ((Order == ESROrder::Idle || Order == ESROrder::Hold) && !Target.IsValid() && !TargetBuilding.IsValid());
 }
 
 // ------------------------------------------------------------------ orders
@@ -87,6 +90,7 @@ void ASRUnit::OrderMove(const FVector2D& Dest)
 	Destination = Dest;
 	Waypoints.Reset();
 	Target = nullptr;
+	TargetBuilding = nullptr;
 	bReturnHomeWhenDone = false;
 	CancelAttack();
 	ResetProgress();
@@ -117,7 +121,31 @@ void ASRUnit::OrderAttack(ASRUnit* InTarget)
 	Order = ESROrder::AttackTarget;
 	Waypoints.Reset();
 	Target = InTarget;
+	TargetBuilding = nullptr;
 	bReturnHomeWhenDone = false;
+}
+
+void ASRUnit::OrderAttackBuilding(ASRBuilding* InTarget)
+{
+	if (!IsAlive() || !InTarget || !InTarget->IsAlive() || InTarget->Team == Team) { return; }
+	if (TargetBuilding.Get() != InTarget) { CancelAttack(); }
+	Order = ESROrder::AttackTarget;
+	Waypoints.Reset();
+	Target = nullptr;
+	TargetBuilding = InTarget;
+	bReturnHomeWhenDone = false;
+}
+
+void ASRUnit::OrderHold()
+{
+	if (!IsAlive()) { return; }
+	Order = ESROrder::Hold;
+	Waypoints.Reset();
+	Target = nullptr;
+	TargetBuilding = nullptr;
+	Home = GetPos2D();
+	bReturnHomeWhenDone = false;
+	CancelAttack();
 }
 
 void ASRUnit::OrderStop()
@@ -126,6 +154,8 @@ void ASRUnit::OrderStop()
 	Order = ESROrder::Idle;
 	Waypoints.Reset();
 	Target = nullptr;
+	TargetBuilding = nullptr;
+	Home = GetPos2D();
 	bReturnHomeWhenDone = false;
 	RetargetTimer = 0.6f; // a beat of real stillness before auto-acquire kicks back in
 	CancelAttack();
@@ -172,6 +202,9 @@ void ASRUnit::StepSim(float Dt)
 
 	const FVector2D Pos = GetPos2D();
 	ASRUnit* T = Target.Get();
+	ASRBuilding* TB = T ? nullptr : TargetBuilding.Get();
+	if (TB && !TB->IsAlive()) { TB = nullptr; TargetBuilding = nullptr; }
+	const bool bHolding = Order == ESROrder::Hold || (Stance == ESRStance::HoldGround && Order != ESROrder::Move && Order != ESROrder::AttackTarget);
 	FVector2D Desired = FVector2D::ZeroVector;
 	FVector2D FaceDir = FVector2D::ZeroVector; // zero = face the direction of travel
 
@@ -179,7 +212,35 @@ void ASRUnit::StepSim(float Dt)
 	{
 		// Planted for the swing; keep tracking the target.
 		if (T) { FaceDir = (T->GetPos2D() - Pos).GetSafeNormal(); }
+		else if (TB) { FaceDir = (TB->ClosestPointOnFootprint(Pos, 0.f) - Pos).GetSafeNormal(); }
 		TickAttack(Dt, T);
+	}
+	else if (TB)
+	{
+		// A building: walk to its nearest wall, strike it there.
+		const FVector2D Wall = TB->ClosestPointOnFootprint(Pos, 0.f);
+		const float Dist = TB->DistanceToFootprint(Pos);
+		const float Reach = S.AttackRange + GetRadius();
+		const FVector2D ToDir = (Wall - Pos).GetSafeNormal();
+		ResetProgress();
+		if (Dist > Reach)
+		{
+			if (!bHolding)
+			{
+				const float Remaining = FMath::Max(Dist - Reach * 0.85f, 0.f);
+				Desired = ChaseDir(TB->ClosestPointOnFootprint(Pos, GetRadius() + 10.f), Dt) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
+			}
+		}
+		else
+		{
+			FaceDir = ToDir;
+			const float AimError = FMath::Abs(FMath::FindDeltaAngleDegrees(FacingYaw, YawFromDir(ToDir)));
+			if (Cooldown <= 0.f && AimError < 30.f)
+			{
+				AttackPhase = ESRAttackPhase::Windup;
+				PhaseTime = 0.f;
+			}
+		}
 	}
 	else if (T)
 	{
@@ -191,9 +252,12 @@ void ASRUnit::StepSim(float Dt)
 
 		if (Dist > Reach)
 		{
-			// Chase, easing off so we stop just inside reach instead of ramming the target.
-			const float Remaining = FMath::Max(Dist - Reach * 0.9f, 0.f);
-			Desired = ToDir * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
+			// Chase, easing off so we stop just inside reach instead of ramming the target (unless told to hold).
+			if (!bHolding)
+			{
+				const float Remaining = FMath::Max(Dist - Reach * 0.9f, 0.f);
+				Desired = ChaseDir(T->GetPos2D(), Dt) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
+			}
 		}
 		else
 		{
@@ -296,11 +360,33 @@ void ASRUnit::UpdateTargeting(float Dt)
 		Target = nullptr;
 		T = nullptr;
 		RetargetTimer = 0.f;
-		if (Order == ESROrder::AttackTarget) { Order = ESROrder::Idle; }
+		if (Order == ESROrder::AttackTarget) { Order = ESROrder::Idle; Home = Pos; }
+	}
+	if (TargetBuilding.IsValid() && !TargetBuilding->IsAlive())
+	{
+		TargetBuilding = nullptr;
+		RetargetTimer = 0.f;
+		if (Order == ESROrder::AttackTarget) { Order = ESROrder::Idle; Home = Pos; }
 	}
 
 	// Explicit orders are obeyed, not second-guessed.
 	if (Order == ESROrder::Move || Order == ESROrder::AttackTarget) { return; }
+
+	// Defensive stance: a short chase, then back to the post.
+	if (Stance == ESRStance::Defensive && (T || TargetBuilding.IsValid()) && FVector2D::Distance(Pos, Home) > F.DefensiveChaseDistance)
+	{
+		Target = nullptr;
+		TargetBuilding = nullptr;
+		const FVector2D Post = Home;
+		OrderMove(Post);
+		Home = Post;
+		return;
+	}
+	if (Stance == ESRStance::Defensive && !T && !TargetBuilding.IsValid() && bReturnHomeWhenDone && Order == ESROrder::Idle && AttackPhase == ESRAttackPhase::Ready)
+	{
+		bReturnHomeWhenDone = false;
+		if (FVector2D::Distance(Pos, Home) > 150.f) { const FVector2D Post = Home; OrderMove(Post); Home = Post; return; }
+	}
 
 	if (Team == ESRTeam::Enemy && F.bEnemyLeash && !bAuto)
 	{
@@ -321,7 +407,8 @@ void ASRUnit::UpdateTargeting(float Dt)
 	if (RetargetTimer > 0.f) { return; }
 	RetargetTimer = FMath::FRandRange(0.18f, 0.3f);
 
-	const float Range = bAuto ? 1.e7f : S.AcquireRange;
+	const bool bHold = Order == ESROrder::Hold || Stance == ESRStance::HoldGround;
+	const float Range = bAuto ? 1.e7f : (bHold ? S.AttackRange + GetRadius() * 2.f + 40.f : S.AcquireRange);
 	const double Now = GetWorld()->GetTimeSeconds();
 
 	if (T)
@@ -348,7 +435,20 @@ void ASRUnit::UpdateTargeting(float Dt)
 		}
 	}
 
-	if (Target.IsValid() && Team == ESRTeam::Enemy) { bReturnHomeWhenDone = true; }
+	// Nobody to fight in range: an enemy building will do (troops always come first).
+	if (!Target.IsValid())
+	{
+		if (!TargetBuilding.IsValid() && (Order == ESROrder::AttackMove || Order == ESROrder::Idle || Order == ESROrder::Hold))
+		{
+			TargetBuilding = Battle->FindNearestEnemyBuilding(this, bHold ? S.AttackRange + GetRadius() + 20.f : S.AcquireRange * 0.8f);
+		}
+	}
+	else
+	{
+		TargetBuilding = nullptr;
+	}
+
+	if ((Target.IsValid() || TargetBuilding.IsValid()) && (Team == ESRTeam::Enemy || Stance == ESRStance::Defensive)) { bReturnHomeWhenDone = true; }
 }
 
 void ASRUnit::TickAttack(float Dt, ASRUnit* T)
@@ -358,13 +458,15 @@ void ASRUnit::TickAttack(float Dt, ASRUnit* T)
 
 	if (AttackPhase == ESRAttackPhase::Windup)
 	{
-		if (!T)
+		ASRBuilding* B = T ? nullptr : TargetBuilding.Get();
+		if (!T && !(B && B->IsAlive()))
 		{
 			CancelAttack(); // target died mid-windup: no wasted swing, no cooldown penalty
 		}
 		else if (PhaseTime >= S.WindupTime)
 		{
-			Strike(T);
+			if (T) { Strike(T); }
+			else { StrikeBuilding(B); }
 			AttackPhase = ESRAttackPhase::Recovery;
 			PhaseTime = 0.f;
 			Cooldown = FMath::Max(0.f, S.AttackInterval - S.WindupTime) + FMath::FRandRange(0.f, USRFeelSettings::Get().AttackIntervalJitter);
@@ -397,6 +499,7 @@ void ASRUnit::Strike(ASRUnit* T)
 	if (To.Size() <= Reach * 1.35f)
 	{
 		T->ReceiveDamage(S.Damage, this, Dir, S.KnockbackImpulse, S.bHeavyHits);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(S.bHeavyHits ? ESRSound::ShieldBash : ESRSound::SwordHit, T->GetSimPos()); }
 		if (S.bHeavyHits)
 		{
 			if (F.bHitStop) { HitStopLeft = F.HitStopTime; }
@@ -478,8 +581,10 @@ void ASRUnit::Die(ASRUnit* Killer, const FVector2D& HitDir)
 	bSelected = false;
 	bHovered = false;
 	TargetFlash = 0.f;
+	TargetBuilding = nullptr;
 
 	Battle->AddCameraTrauma(SimPos, F.ShakeTraumaDeath);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::Death, SimPos); }
 	Battle->NotifyUnitDied(this, Killer);
 }
 
@@ -612,4 +717,43 @@ void ASRUnit::FollowGround(float Dt)
 	{
 		SimPos.Z = FMath::FInterpTo(SimPos.Z, GroundZ, Dt, 20.f);
 	}
+}
+
+
+void ASRUnit::StrikeBuilding(ASRBuilding* B)
+{
+	if (!B) { return; }
+	const FSRUnitStats& S = Stats();
+	Battle->NotifyStrike(this);
+	const float Damage = S.Damage * S.BuildingDamageScale;
+	if (S.bRanged)
+	{
+		ASRProjectile::LaunchArrow(GetWorld(), Team, this, nullptr, B, GetMuzzleLocation(), Damage, 0.f, S.ProjectileSpeed, S.ProjectileArc);
+		return;
+	}
+	if (B->DistanceToFootprint(GetPos2D()) <= (S.AttackRange + GetRadius()) * 1.35f)
+	{
+		B->ReceiveDamage(Damage, this);
+	}
+}
+
+FVector2D ASRUnit::ChaseDir(const FVector2D& Goal, float Dt)
+{
+	const FVector2D Pos = GetPos2D();
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	ChaseRepath -= Dt;
+	if (!Grid || FVector2D::DistSquared(Pos, Goal) < FMath::Square(250.f) || Grid->CanWalkStraight(Pos, Goal))
+	{
+		ChasePath.Reset();
+		return (Goal - Pos).GetSafeNormal();
+	}
+	if (ChasePath.Num() == 0 || ChaseRepath <= 0.f || FVector2D::DistSquared(Goal, ChaseGoal) > FMath::Square(300.f))
+	{
+		ChasePath.Reset();
+		Grid->FindPath(Pos, Goal, ChasePath);
+		ChaseGoal = Goal;
+		ChaseRepath = FMath::FRandRange(1.0f, 1.6f);
+	}
+	while (ChasePath.Num() > 1 && FVector2D::DistSquared(Pos, ChasePath[0]) < FMath::Square(70.f)) { ChasePath.RemoveAt(0); }
+	return ChasePath.Num() > 0 ? (ChasePath[0] - Pos).GetSafeNormal() : (Goal - Pos).GetSafeNormal();
 }

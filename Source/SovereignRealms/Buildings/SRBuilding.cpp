@@ -3,7 +3,12 @@
 #include "Buildings/SRBuilding.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SRGridSubsystem.h"
+#include "Buildings/SRWorker.h"
+#include "Battle/SRPlatoonSubsystem.h"
 #include "Units/SRUnit.h"
+#include "Units/SRProjectile.h"
+#include "Common/SRAudioSubsystem.h"
 #include "Common/SRRingComponent.h"
 #include "Common/SRFeelSettings.h"
 #include "SovereignRealms.h"
@@ -18,18 +23,18 @@ ASRBuilding::ASRBuilding()
 	PrimaryActorTick.bCanEverTick = false;
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-	Root->SetMobility(EComponentMobility::Static);
+	Root->SetMobility(EComponentMobility::Movable);     // rises while it is built, collapses when destroyed
 	SetRootComponent(Root);
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetupAttachment(Root);
-	Mesh->SetMobility(EComponentMobility::Static);
+	Mesh->SetMobility(EComponentMobility::Movable);
 	Mesh->SetCollisionProfileName(TEXT("NoCollision"));      // contract: only the footprint box blocks
 	Mesh->SetGenerateOverlapEvents(false);
 
 	Blocker = CreateDefaultSubobject<UBoxComponent>(TEXT("Blocker"));
 	Blocker->SetupAttachment(Root);
-	Blocker->SetMobility(EComponentMobility::Static);
+	Blocker->SetMobility(EComponentMobility::Movable);
 	Blocker->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Blocker->SetCollisionObjectType(ECC_WorldStatic);          // units trace WorldStatic for walls
 	Blocker->SetCollisionResponseToAllChannels(ECR_Block);
@@ -98,14 +103,19 @@ void ASRBuilding::BeginPlay()
 		}
 	}
 
-	ResetRuntime();
+	MeshBaseLocation = Mesh->GetRelativeLocation();
 	Economy = USREconomySubsystem::Get(this);
+	ResetRuntime();
 	if (Economy) { Economy->RegisterBuilding(this); }
+	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { Grid->SetFootprint(this, true); }
 }
 
 void ASRBuilding::EndPlay(const EEndPlayReason::Type Reason)
 {
 	if (Economy) { Economy->UnregisterBuilding(this); }
+	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this); Grid && !bDestroyed) { Grid->SetFootprint(this, false); }
+	for (ASRWorker* W : Workers) { if (W) { W->Destroy(); } }
+	Workers.Reset();
 	Super::EndPlay(Reason);
 }
 
@@ -113,6 +123,24 @@ void ASRBuilding::EndPlay(const EEndPlayReason::Type Reason)
 
 void ASRBuilding::ResetRuntime()
 {
+	// a level building that fell in the last battle stands again
+	if (bDestroyed)
+	{
+		bDestroyed = false;
+		Blocker->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { Grid->SetFootprint(this, true); }
+	}
+	CollapseClock = 0.f;
+	DefenceCooldown = FMath::FRandRange(0.f, 1.f);
+	HitShake = 0.f;
+	LastDamagedTime = -100.0;
+	if (!bRuntimeBuilt) { BuildProgress = 1.f; }
+	Health = Stats().MaxHealth * (BuildProgress >= 1.f ? 1.f : USRFeelSettings::Get().ConstructionStartHealth);
+	Mesh->SetRelativeLocation(MeshBaseLocation);
+	Mesh->SetRelativeRotation(FRotator::ZeroRotator);
+	ApplyBuildVisual();
+	if (Mesh) { Mesh->SetVisibility(true); }
+	UpdateWorkers();
 	Queue.Reset();
 	BuildClock = 0.f;
 	PayoutClock = 0.f;
@@ -132,25 +160,27 @@ void ASRBuilding::StepBuilding(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	TimeSincePayout += Dt;
+	HitShake = FMath::Max(0.f, HitShake - Dt * 5.f);
+
+	if (bDestroyed) { StepCollapse(Dt); return; }
+	if (BuildProgress < 1.f) { StepConstruction(Dt); UpdateFeedback(Dt); return; }
 
 	if (BuildingType == ESRBuildingType::Farm || BuildingType == ESRBuildingType::Mine)
 	{
-		const bool bFarm = BuildingType == ESRBuildingType::Farm;
-		const float Interval = FMath::Max(bFarm ? F.FarmPayoutInterval : F.MinePayoutInterval, 0.2f);
-		const int32 Amount = bFarm ? F.FarmFoodPerPayout : F.MineGoldPerPayout;
-		PayoutClock += Dt;
-		while (PayoutClock >= Interval)
+		// With workers on screen the payout lands when one of them delivers (ASRWorker -> Deliver). Without, on a timer.
+		if (F.WorkersPerBuilding <= 0 || Workers.Num() == 0)
 		{
-			PayoutClock -= Interval;
-			if (Economy && Amount > 0)
+			const float Interval = FMath::Max(BuildingType == ESRBuildingType::Farm ? F.FarmPayoutInterval : F.MinePayoutInterval, 0.2f);
+			PayoutClock += Dt;
+			while (PayoutClock >= Interval)
 			{
-				const ESRResource Resource = bFarm ? ESRResource::Food : ESRResource::Gold;
-				Economy->AddResource(Team, Resource, Amount);
-				TimeSincePayout = 0.f;
-				if (Team == ESRTeam::Player) { Economy->AddPopup(GetPopupPoint(), Amount, Resource); }
-				UE_LOG(LogSovereign, Log, TEXT("PAYOUT %s +%d %s  (team %s now gold=%d food=%d)"), *GetActorNameOrLabel(), Amount, bFarm ? TEXT("food") : TEXT("gold"),
-					Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), Economy->GetResource(Team, ESRResource::Gold), Economy->GetResource(Team, ESRResource::Food));
+				PayoutClock -= Interval;
+				Deliver();
 			}
+		}
+		else
+		{
+			PayoutClock += Dt; // only drives the HUD's "next payout" meter
 		}
 	}
 	else if (Queue.Num() > 0)
@@ -166,14 +196,35 @@ void ASRBuilding::StepBuilding(float Dt)
 		}
 	}
 
+	StepDefence(Dt);
 	UpdateFeedback(Dt);
+}
+
+void ASRBuilding::Deliver()
+{
+	if (!IsFinished() || !Economy) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const bool bFarm = BuildingType == ESRBuildingType::Farm;
+	const int32 Amount = bFarm ? F.FarmFoodPerPayout : F.MineGoldPerPayout;
+	if (Amount <= 0 || (BuildingType != ESRBuildingType::Farm && BuildingType != ESRBuildingType::Mine)) { return; }
+	const ESRResource Resource = bFarm ? ESRResource::Food : ESRResource::Gold;
+	Economy->AddResource(Team, Resource, Amount);
+	TimeSincePayout = 0.f;
+	PayoutClock = 0.f;
+	if (Team == ESRTeam::Player)
+	{
+		Economy->AddPopup(GetPopupPoint(), Amount, Resource);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(bFarm ? ESRSound::GrainPayout : ESRSound::CoinPayout, GetPopupPoint()); }
+	}
+	UE_LOG(LogSovereign, Verbose, TEXT("PAYOUT %s +%d %s  (team %s now gold=%d food=%d)"), *GetActorNameOrLabel(), Amount, bFarm ? TEXT("food") : TEXT("gold"),
+		Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), Economy->GetResource(Team, ESRResource::Gold), Economy->GetResource(Team, ESRResource::Food));
 }
 
 bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const TCHAR* Name = *F.StatsFor(Type).DisplayName;
-	if (!IsCastle() || !Economy)
+	if (!CanRecruit() || !Economy)
 	{
 		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s cannot recruit"), *GetActorNameOrLabel());
 		return false;
@@ -182,6 +233,13 @@ bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 	{
 		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s queue full (%d)"), Name, Queue.Num());
 		Economy->NotifyRefused();
+		return false;
+	}
+	const int32 PopNeeded = Economy->GetPopulation(Team) + Economy->GetQueuedPopulation(Team) + F.StatsFor(Type).PopCost;
+	if (PopNeeded > Economy->GetPopulationCap(Team))
+	{
+		UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: %s, population %d/%d (build farms to house more troops)"), Name, PopNeeded - F.StatsFor(Type).PopCost, Economy->GetPopulationCap(Team));
+		Economy->NotifyPopulationCapped(Team);
 		return false;
 	}
 	const FSRCost& Cost = F.CostFor(Type);
@@ -220,12 +278,22 @@ void ASRBuilding::SpawnRecruit(ESRUnitType Type)
 	const FVector2D Goal = RallyPoint + Side * ((Slot % 4) - 1.5f) * Spread - Out * (Slot / 4) * Spread;
 
 	TArray<FVector2D> Path;
-	const FVector2D Clear = Economy ? Economy->ClearOfBuildings(Gate2D + Out * (F.BuildingRouteMargin + 10.f)) : Gate2D;
+	const FVector2D Clear = Gate2D + Out * (F.BuildingRouteMargin + 10.f);
 	Path.Add(Clear);
-	if (Economy) { Economy->RoutePath(Clear, Goal, Path); }
+	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this))
+	{
+		TArray<FVector2D> Rest;
+		Grid->FindPath(Clear, Goal, Rest);
+		Path.Append(Rest);
+	}
 	else { Path.Add(Goal); }
 	Unit->OrderMovePath(Path, false);
 	Unit->SetHome(Path.Last());
+	if (Team == ESRTeam::Player)
+	{
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::RecruitReady); }
+		if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->OnRecruit(Unit); }
+	}
 
 	UE_LOG(LogSovereign, Log, TEXT("RECRUIT ready: %s emerges from %s at (%.0f, %.0f), rally (%.0f, %.0f) via %d waypoint(s)"), *Unit->GetLabel(), *GetActorNameOrLabel(),
 		Gate.X, Gate.Y, Path.Last().X, Path.Last().Y, Path.Num());
@@ -266,12 +334,7 @@ void ASRBuilding::SetRallyPoint(const FVector2D& WorldXY)
 
 FString ASRBuilding::GetDisplayName() const
 {
-	switch (BuildingType)
-	{
-	case ESRBuildingType::Castle: return TEXT("Citadel");
-	case ESRBuildingType::Farm: return TEXT("Farm");
-	default: return TEXT("Gold Mine");
-	}
+	return Stats().DisplayName;
 }
 
 FVector2D ASRBuilding::ToLocal2D(const FVector2D& World) const
@@ -377,6 +440,17 @@ void ASRBuilding::UpdateFeedback(float Dt)
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	RingPop = FMath::FInterpTo(RingPop, 0.f, Dt, 12.f);
 
+	// A shudder when struck.
+	if (HitShake > 0.f)
+	{
+		const float A = 4.f * HitShake;
+		Mesh->SetRelativeLocation(MeshBaseLocation + FVector(FMath::FRandRange(-A, A), FMath::FRandRange(-A, A), 0.f));
+	}
+	else if (!Mesh->GetRelativeLocation().Equals(MeshBaseLocation, 0.01f))
+	{
+		Mesh->SetRelativeLocation(MeshBaseLocation);
+	}
+
 	if (Ring)
 	{
 		const bool bShow = bSelected || bHovered;
@@ -406,5 +480,251 @@ void ASRBuilding::UpdateFeedback(float Dt)
 			const float Pop = 1.f + 0.35f * RallyPop;
 			RallyFlag->SetWorldScale3D(FVector(1.f, 1.f, Pop));
 		}
+	}
+}
+
+// ------------------------------------------------------------------ life, construction, defence
+
+ASRBuilding* ASRBuilding::SpawnBuilding(UWorld* World, ESRBuildingType Type, ESRTeam InTeam, const FVector& Location, bool bUnderConstruction)
+{
+	if (!World) { return nullptr; }
+	const FSRBuildingStats& S = USRFeelSettings::Get().BuildingStatsFor(Type);
+	ASRBuilding* B = World->SpawnActorDeferred<ASRBuilding>(ASRBuilding::StaticClass(), FTransform(FRotator::ZeroRotator, Location), nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!B) { return nullptr; }
+	B->BuildingType = Type;
+	B->Team = InTeam;
+	B->BuildingMesh = S.Mesh.LoadSynchronous();
+	B->FootprintMin = S.FootprintMin;
+	B->FootprintMax = S.FootprintMax;
+	B->BlockHeight = S.BlockHeight;
+	B->RingRadius = FMath::Max(S.FootprintMax.X - S.FootprintMin.X, S.FootprintMax.Y - S.FootprintMin.Y) * 0.7f;
+	B->GateOffset = S.GateOffset;
+	B->RallyOffset = S.GateOffset + FVector(-250.f, 0.f, 0.f);
+	B->LabelOffset = S.LabelOffset;
+	B->PopupOffset = S.PopupOffset;
+	B->bRuntimeBuilt = true;
+	B->BuildProgress = bUnderConstruction ? 0.f : 1.f;
+	B->FinishSpawning(FTransform(FRotator::ZeroRotator, Location));
+	if (!B->BuildingMesh)
+	{
+		UE_LOG(LogSovereign, Warning, TEXT("BUILD %s has no mesh (%s): run the building pipeline (Tools/blender/build_building.py, Tools/import_buildings.py)"),
+			*S.DisplayName, *S.Mesh.ToString());
+	}
+
+	// Our own troops standing on the foundations step aside.
+	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World))
+	{
+		for (ASRUnit* U : Battle->GetUnits())
+		{
+			if (U && U->IsAlive() && B->ContainsXY(U->GetPos2D(), U->GetRadius()))
+			{
+				const FVector2D To = B->PushOutside(U->GetPos2D(), U->GetRadius() + 40.f);
+				U->OrderMove(To);
+			}
+		}
+	}
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(World); Audio && bUnderConstruction) { Audio->PlayAt(ESRSound::BuildPlace, Location); }
+	UE_LOG(LogSovereign, Log, TEXT("BUILD %s %s laid at (%.0f, %.0f)%s"), InTeam == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), *S.DisplayName,
+		Location.X, Location.Y, bUnderConstruction ? TEXT(", under construction") : TEXT(""));
+	return B;
+}
+
+const FSRBuildingStats& ASRBuilding::Stats() const
+{
+	return USRFeelSettings::Get().BuildingStatsFor(BuildingType);
+}
+
+float ASRBuilding::GetHealthFrac() const
+{
+	return FMath::Clamp(Health / FMath::Max(Stats().MaxHealth, 1.f), 0.f, 1.f);
+}
+
+void ASRBuilding::StepConstruction(float Dt)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRBuildingStats& S = Stats();
+	const float Before = BuildProgress;
+	BuildProgress = FMath::Min(1.f, BuildProgress + Dt / FMath::Max(S.BuildTime, 0.5f));
+	Health = FMath::Min(S.MaxHealth, Health + S.MaxHealth * (1.f - F.ConstructionStartHealth) * (BuildProgress - Before));
+	ApplyBuildVisual();
+
+	HammerClock -= Dt;
+	if (HammerClock <= 0.f)
+	{
+		HammerClock = FMath::FRandRange(0.45f, 0.8f);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 150.f)); }
+	}
+
+	if (BuildProgress >= 1.f)
+	{
+		Health = FMath::Max(Health, S.MaxHealth * 0.999f);
+		UE_LOG(LogSovereign, Log, TEXT("BUILD %s finished at (%.0f, %.0f)"), *GetDisplayName(), GetActorLocation().X, GetActorLocation().Y);
+		if (Team == ESRTeam::Player)
+		{
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::BuildComplete); }
+		}
+		if (Economy) { Economy->NotifyBuildingFinished(this); }
+		RallyPoint = ToWorld2D(FVector2D(RallyOffset.X, RallyOffset.Y));
+		UpdateWorkers();
+	}
+}
+
+void ASRBuilding::ApplyBuildVisual()
+{
+	if (!Mesh || bDestroyed) { return; }
+	if (BuildProgress >= 1.f)
+	{
+		Mesh->SetRelativeScale3D(FVector::OneVector);
+		return;
+	}
+	// The walls rise course by course: stepped, not smooth, so it reads as building work rather than a stretch.
+	const float Courses = 14.f;
+	const float P = FMath::FloorToFloat(FMath::Pow(BuildProgress, 0.85f) * Courses) / Courses;
+	Mesh->SetRelativeScale3D(FVector(1.f, 1.f, FMath::Max(0.06f, P)));
+}
+
+void ASRBuilding::StepDefence(float Dt)
+{
+	const FSRBuildingStats& S = Stats();
+	if (S.AttackRange <= 0.f || S.AttackDamage <= 0.f) { return; }
+	DefenceCooldown -= Dt;
+	if (DefenceCooldown > 0.f) { return; }
+
+	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle) { return; }
+	const FVector2D C = GetFootprintCentre();
+	ASRUnit* Best = nullptr;
+	float BestD = FMath::Square(S.AttackRange);
+	for (ASRUnit* U : Battle->GetUnits())
+	{
+		if (!U || !U->IsActive() || U->GetTeam() == Team) { continue; }
+		const float D = FVector2D::DistSquared(U->GetPos2D(), C);
+		if (D < BestD) { BestD = D; Best = U; }
+	}
+	if (!Best) { DefenceCooldown = 0.25f; return; }
+
+	DefenceCooldown = S.AttackInterval * FMath::FRandRange(0.9f, 1.1f);
+	const FVector Muzzle = FVector(C.X, C.Y, GetActorLocation().Z + S.MuzzleHeight) + FVector((Best->GetPos2D() - C).GetSafeNormal() * 120.f, 0.f);
+	ASRProjectile::LaunchArrow(GetWorld(), Team, nullptr, Best, nullptr, Muzzle, S.AttackDamage, 60.f, 2200.f, 0.1f);
+}
+
+void ASRBuilding::ReceiveDamage(float Amount, ASRUnit* From)
+{
+	if (bDestroyed || Amount <= 0.f) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	Health = FMath::Max(0.f, Health - Amount);
+	LastDamagedTime = GetWorld()->GetTimeSeconds();
+	HitShake = 1.f;
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildingHit, GetAimPointFrom(From ? From->GetPos2D() : GetFootprintCentre())); }
+	if (Economy) { Economy->NotifyBuildingAttacked(this, From); }
+
+	// Troops of ours nearby come to its defence.
+	if (From && From->IsAlive())
+	{
+		if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
+		{
+			const FVector2D C = GetFootprintCentre();
+			for (ASRUnit* U : Battle->GetUnits())
+			{
+				if (U && U->GetTeam() == Team && FVector2D::DistSquared(U->GetPos2D(), C) < FMath::Square(F.AlertRadius * 2.f)) { U->AlertTo(From); }
+			}
+		}
+	}
+
+	if (Health <= 0.f) { Collapse(From); }
+}
+
+void ASRBuilding::Collapse(ASRUnit* Killer)
+{
+	if (bDestroyed) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { Grid->SetFootprint(this, false); }
+	bDestroyed = true;
+	CollapseClock = 0.f;
+	Queue.Reset();
+	Blocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetSelected(false);
+	for (ASRWorker* W : Workers) { if (W) { W->Destroy(); } }
+	Workers.Reset();
+	if (Ring) { Ring->SetVisibility(false); bRingVisible = false; }
+	if (RallyFlag) { RallyFlag->SetVisibility(false); }
+
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildingCollapse, GetLabelPoint(), 1.f); }
+	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->AddCameraTrauma(GetActorLocation(), F.ShakeTraumaDeath * 1.6f); }
+	UE_LOG(LogSovereign, Log, TEXT("DESTROYED %s %s at (%.0f, %.0f) by %s"), Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), *GetDisplayName(),
+		GetActorLocation().X, GetActorLocation().Y, Killer ? *Killer->GetLabel() : TEXT("?"));
+	if (Economy) { Economy->NotifyBuildingDestroyed(this); }
+}
+
+void ASRBuilding::StepCollapse(float Dt)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	CollapseClock += Dt;
+	const float T = FMath::Clamp(CollapseClock / FMath::Max(F.CollapseTime, 0.1f), 0.f, 1.f);
+	const float E = T * T;                                            // falls faster as it goes
+	const float Shake = (1.f - T) * 6.f;
+	Mesh->SetRelativeLocation(MeshBaseLocation + FVector(FMath::FRandRange(-Shake, Shake), FMath::FRandRange(-Shake, Shake), -BlockHeight * 0.18f * E));
+	Mesh->SetRelativeRotation(FRotator(0.f, 0.f, 3.5f * E));
+	Mesh->SetRelativeScale3D(FVector(1.f + 0.04f * E, 1.f + 0.04f * E, FMath::Lerp(1.f, 0.28f, E)));   // slumps into a heap of rubble
+
+	if (CollapseClock > F.CollapseTime * 6.f && bRuntimeBuilt)
+	{
+		Destroy();
+	}
+}
+
+void ASRBuilding::CancelConstruction()
+{
+	if (!IsUnderConstruction()) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (Economy)
+	{
+		const FSRCost& C = Stats().Cost;
+		Economy->AddResource(Team, ESRResource::Gold, FMath::RoundToInt(C.Gold * F.CancelRefund));
+		Economy->AddResource(Team, ESRResource::Food, FMath::RoundToInt(C.Food * F.CancelRefund));
+	}
+	UE_LOG(LogSovereign, Log, TEXT("BUILD %s cancelled"), *GetDisplayName());
+	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { Grid->SetFootprint(this, false); }
+	bDestroyed = true;
+	Destroy();
+}
+
+FVector2D ASRBuilding::ClosestPointOnFootprint(const FVector2D& World, float Margin) const
+{
+	const FVector2D L = ToLocal2D(World);
+	const FVector2D Min = FootprintMin - FVector2D(Margin, Margin), Max = FootprintMax + FVector2D(Margin, Margin);
+	FVector2D C(FMath::Clamp(L.X, Min.X, Max.X), FMath::Clamp(L.Y, Min.Y, Max.Y));
+	if (C == L)
+	{
+		// inside: out through the nearest side
+		return PushOutside(World, Margin);
+	}
+	return ToWorld2D(C);
+}
+
+float ASRBuilding::DistanceToFootprint(const FVector2D& World) const
+{
+	const FVector2D L = ToLocal2D(World);
+	const float Dx = FMath::Max3(float(FootprintMin.X - L.X), 0.f, float(L.X - FootprintMax.X));
+	const float Dy = FMath::Max3(float(FootprintMin.Y - L.Y), 0.f, float(L.Y - FootprintMax.Y));
+	return FMath::Sqrt(Dx * Dx + Dy * Dy);
+}
+
+FVector ASRBuilding::GetAimPointFrom(const FVector2D& From) const
+{
+	const FVector2D P = ClosestPointOnFootprint(From, -40.f);
+	return FVector(P.X, P.Y, GetActorLocation().Z + FMath::Min(BlockHeight * 0.4f, 260.f));
+}
+
+void ASRBuilding::UpdateWorkers()
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (!IsFinished() || (BuildingType != ESRBuildingType::Farm && BuildingType != ESRBuildingType::Mine)) { return; }
+	while (Workers.Num() < F.WorkersPerBuilding)
+	{
+		ASRWorker* W = ASRWorker::SpawnWorker(this, Workers.Num());
+		if (!W) { break; }
+		Workers.Add(W);
 	}
 }

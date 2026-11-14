@@ -13,7 +13,19 @@ World materials share three ideas:
     once texels are smaller than a pixel), so panning the camera does not make the art shimmer;
   * real light on the pixels: the art is albedo only. Lumen, the sun and the shadow maps do the rest.
 """
+import os
 import unreal
+
+
+def _splat_rect():
+    """World origin and size of the ground splat map, from the generator's layout (falls back to the old small map)."""
+    import json as _json
+    try:
+        with open(os.path.join(os.path.abspath(unreal.Paths.project_dir()), "SourceArt", "World", "layout.json")) as f:
+            sp = _json.load(f)["splat"]
+        return (float(sp["origin"][0]), float(sp["origin"][1]), float(sp["size"]), 0.0)
+    except Exception:
+        return (-5600.0, -6144.0, 12288.0, 0.0)
 
 DIR = "/Game/SR/Materials"
 TEX = "/Game/SR/Textures/"
@@ -319,7 +331,7 @@ def build_terrain():
         ("Lip", g.tex("Lip", "T_Lip")), ("Splat", g.tex("Splat", "T_Splat", True)),
         ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
         # SplatRect: XY = world origin of the splat map, Z = its world size (cm). Written by gen_battlefield.py's layout.
-        ("SplatRect", g.vector("SplatRect", lin(-5600.0, -6144.0, 12288.0, 0.0), "Splat"), "RGBA"),
+        ("SplatRect", g.vector("SplatRect", lin(*_splat_rect()), "Splat"), "RGBA"),
         ("NormalStrength", g.scalar("NormalStrength", 1.0, "Surface")),
         ("StoneRoughness", g.scalar("StoneRoughness", 0.72, "Surface")),
         ("FootShade", g.scalar("FootShade", 0.6, "Shading")),
@@ -676,7 +688,7 @@ def build_sprite():
 
 
 def make_sprite_instances(sprite, shadow):
-    for troop in ("Shieldbearer", "Archer"):
+    for troop in ("Shieldbearer", "Archer", "Miner", "Farmer"):
         make_instance("MI_UnitSprite_" + troop, sprite, textures={
             "SpriteSheet": CHAR + "T_%s_Color" % troop, "TeamMask": CHAR + "T_%s_TeamMask" % troop, "NormalSheet": CHAR + "T_%s_Normal" % troop})
         make_instance("MI_UnitSpriteShadow_" + troop, shadow, textures={"SpriteSheet": CHAR + "T_%s_Color" % troop})
@@ -913,6 +925,61 @@ def make_instance(name, parent, scalars=None, vectors=None, textures=None):
     print("built", path)
 
 
+
+# ----------------------------------------------------------------------------- building placement overlay
+def build_grid_cell():
+    """One 1 m grid cell of the build overlay (an ISM of /Engine/BasicShapes/Plane). Colour and alpha per instance
+    (PerInstanceCustomData 0..3), so free / blocked / footprint cells all share one draw call."""
+    mat = get_material("M_GridCell")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("used_with_instanced_static_meshes", True)
+    g = G(mat)
+    chans = []
+    for i, d in enumerate((0.3, 1.0, 0.4, 0.5)):
+        e = g.node(unreal.MaterialExpressionPerInstanceCustomData, data_index=i)
+        e.set_editor_property("const_default_value", d)
+        chans.append(e)
+    uv = g.node(unreal.MaterialExpressionTextureCoordinate)
+    glow = g.scalar("Glow", 1.6, "Look")
+    rgb = g.custom("return float3(R, G, B) * Glow;", F3, [("R", chans[0]), ("G", chans[1]), ("B", chans[2]), ("Glow", glow)], "Cell colour")
+    a = g.custom(
+        "float2 d = min(UV, 1.0 - UV);\n"
+        "float e = min(d.x, d.y);\n"
+        "float aa = max(fwidth(e), 0.002);\n"
+        "float border = 1.0 - saturate((e - 0.045) / aa);\n"       # a thin bright frame round every cell
+        "float inset = saturate((e - 0.0) / aa);\n"
+        "return saturate(A) * inset * lerp(0.32, 1.0, border);",
+        F1, [("UV", uv), ("A", chans[3])], "Cell alpha")
+    g.out(rgb, MP.MP_EMISSIVE_COLOR)
+    g.out(a, MP.MP_OPACITY)
+    g.finish()
+
+
+def build_ghost():
+    """Placement ghost: the building's own mesh drawn as glowing glass, tinted green (fits) or red (blocked).
+    Colour comes from custom primitive data 0..2, opacity from 3."""
+    mat = get_material("M_Ghost")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("two_sided", False)
+    mat.set_editor_property("used_with_static_lighting", False)
+    g = G(mat)
+    color = g.vector("Color", lin(0.3, 1.0, 0.45), "Contract", cpd=0)
+    opacity = g.scalar("Opacity", 0.42, "Contract", cpd=3)
+    fres = g.node(unreal.MaterialExpressionFresnel)
+    wp = g.node(unreal.MaterialExpressionWorldPosition)
+    rgb = g.custom(
+        "float band = frac(P.z / 24.0 - Time * 0.6);\n"            # slow rising scanlines read as 'not built yet'
+        "float line = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.12, 0.2, band));\n"
+        "return Color * (0.55 + Fr * 1.4 + line * 0.5);",
+        F3, [("Color", color), ("Fr", fres), ("P", wp), ("Time", g.node(unreal.MaterialExpressionTime))], "Ghost colour")
+    a = g.custom("return saturate(Opacity * (0.6 + Fr * 0.9));", F1, [("Opacity", opacity), ("Fr", fres)], "Ghost alpha")
+    g.out(rgb, MP.MP_EMISSIVE_COLOR)
+    g.out(a, MP.MP_OPACITY)
+    g.finish()
+
 if not eal.does_directory_exist(DIR):
     eal.make_directory(DIR)
 for stale in ("MI_Terrain_Rock", "MI_Foliage_Tuft", "MI_Foliage_Trunk"):      # instances from the first, texture-less pass
@@ -944,6 +1011,9 @@ if not ONLY or "card" in ONLY:
                   vectors={"Size": lin(16, 40, 0, 0), "Tint": lin(1, 1, 1)}, textures={"Tex": "T_Banner"})
 if not ONLY or "building" in ONLY:
     build_building()
+if not ONLY or "placement" in ONLY:
+    build_grid_cell()
+    build_ghost()
 if not ONLY or "sprite" in ONLY:
     sprite_m, sprite_shadow_m = build_sprite()
     make_sprite_instances(sprite_m, sprite_shadow_m)

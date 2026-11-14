@@ -1,0 +1,71 @@
+{
+ "name": "tower",
+ "mesh": "SM_Bld_Tower",
+ "triangles": 1210,
+ "bounds": {
+  "min": [
+   -297.0,
+   -267.5,
+   -1.5
+  ],
+  "max": [
+   200.0,
+   200.0,
+   1214.0
+  ]
+ },
+ "colliders": [
+  {
+   "centre": [
+    0.0,
+    0.0,
+    450.0
+   ],
+   "size": [
+    440,
+    440,
+    900.0
+   ],
+   "yaw": 0.0
+  }
+ ],
+ "sockets": {
+  "label": [
+   0.0,
+   0.0,
+   1050.0
+  ],
+  "popup": [
+   0.0,
+   0.0,
+   700.0
+  ],
+  "muzzle": [
+   0.0,
+   0.0,
+   860.0
+  ]
+ },
+ "footprint": [
+  -220.0,
+  -220.0,
+  220.0,
+  220.0
+ ],
+ "ring_radius": 320.0,
+ "slots": [
+  "Bld_Ashlar",
+  "Bld_AshlarLarge",
+  "Bld_Banner",
+  "Bld_Beam",
+  "Bld_Bronze",
+  "Bld_Dark",
+  "Bld_Door",
+  "Bld_Flame",
+  "Bld_Frieze",
+  "Bld_Planks",
+  "Bld_Rock",
+  "Bld_RoofClay",
+  "Bld_Trim"
+ ]
+}

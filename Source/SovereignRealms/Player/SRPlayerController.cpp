@@ -10,6 +10,10 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SRFormation.h"
 #include "Battle/SROrderMarker.h"
+#include "Battle/SRGridSubsystem.h"
+#include "Battle/SRPlatoonSubsystem.h"
+#include "Buildings/SRPlacementPreview.h"
+#include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -72,10 +76,18 @@ void ASRPlayerController::BuildInput()
 	KeySAction = MakeAction(TEXT("IA_KeyS"), EInputActionValueType::Boolean);
 	RecenterAction = MakeAction(TEXT("IA_Recenter"), EInputActionValueType::Boolean);
 	ResetAction = MakeAction(TEXT("IA_ResetBattle"), EInputActionValueType::Boolean);
-	for (int32 i = 0; i < 3; ++i)
+	for (int32 i = 0; i < 6; ++i)
 	{
-		GroupActions[i] = MakeAction(*FString::Printf(TEXT("IA_Group%d"), i + 1), EInputActionValueType::Boolean);
+		GroupActions[i] = MakeAction(*FString::Printf(TEXT("IA_Platoon%d"), i + 1), EInputActionValueType::Boolean);
 	}
+	BuildActions[0] = MakeAction(TEXT("IA_BuildFarm"), EInputActionValueType::Boolean);
+	BuildActions[1] = MakeAction(TEXT("IA_BuildMine"), EInputActionValueType::Boolean);
+	BuildActions[2] = MakeAction(TEXT("IA_BuildTower"), EInputActionValueType::Boolean);
+	HoldAction = MakeAction(TEXT("IA_Hold"), EInputActionValueType::Boolean);
+	FormationAction = MakeAction(TEXT("IA_Formation"), EInputActionValueType::Boolean);
+	StanceAction = MakeAction(TEXT("IA_Stance"), EInputActionValueType::Boolean);
+	CancelAction = MakeAction(TEXT("IA_Cancel"), EInputActionValueType::Boolean);
+	DeleteAction = MakeAction(TEXT("IA_Delete"), EInputActionValueType::Boolean);
 	RecruitActions[0] = MakeAction(TEXT("IA_RecruitShieldbearer"), EInputActionValueType::Boolean);
 	RecruitActions[1] = MakeAction(TEXT("IA_RecruitArcher"), EInputActionValueType::Boolean);
 
@@ -102,9 +114,17 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(RecenterAction, EKeys::SpaceBar);
 	MappingContext->MapKey(RecenterAction, EKeys::Home);
 	MappingContext->MapKey(ResetAction, EKeys::R);
-	MappingContext->MapKey(GroupActions[0], EKeys::One);
-	MappingContext->MapKey(GroupActions[1], EKeys::Two);
-	MappingContext->MapKey(GroupActions[2], EKeys::Three);
+	const FKey Digits[6] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
+	for (int32 i = 0; i < 6; ++i) { MappingContext->MapKey(GroupActions[i], Digits[i]); }
+	MappingContext->MapKey(BuildActions[0], EKeys::Z);
+	MappingContext->MapKey(BuildActions[1], EKeys::X);
+	MappingContext->MapKey(BuildActions[2], EKeys::C);
+	MappingContext->MapKey(HoldAction, EKeys::H);
+	MappingContext->MapKey(FormationAction, EKeys::F);
+	MappingContext->MapKey(StanceAction, EKeys::G);
+	MappingContext->MapKey(CancelAction, EKeys::Escape);
+	MappingContext->MapKey(DeleteAction, EKeys::Delete);
+	MappingContext->MapKey(DeleteAction, EKeys::BackSpace);
 	MappingContext->MapKey(RecruitActions[0], EKeys::Q);
 	MappingContext->MapKey(RecruitActions[1], EKeys::E);
 }
@@ -137,6 +157,17 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(GroupActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup1);
 	Input->BindAction(GroupActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup2);
 	Input->BindAction(GroupActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup3);
+	Input->BindAction(GroupActions[3], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup4);
+	Input->BindAction(GroupActions[4], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup5);
+	Input->BindAction(GroupActions[5], ETriggerEvent::Started, this, &ASRPlayerController::OnGroup6);
+	Input->BindAction(BuildActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnBuildFarm);
+	Input->BindAction(BuildActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnBuildMine);
+	Input->BindAction(BuildActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnBuildTower);
+	Input->BindAction(HoldAction, ETriggerEvent::Started, this, &ASRPlayerController::OnHold);
+	Input->BindAction(FormationAction, ETriggerEvent::Started, this, &ASRPlayerController::OnCycleFormation);
+	Input->BindAction(StanceAction, ETriggerEvent::Started, this, &ASRPlayerController::OnCycleStance);
+	Input->BindAction(CancelAction, ETriggerEvent::Started, this, &ASRPlayerController::OnCancel);
+	Input->BindAction(DeleteAction, ETriggerEvent::Started, this, &ASRPlayerController::OnDeleteBuilding);
 	Input->BindAction(RecruitActions[0], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitShieldbearer);
 	Input->BindAction(RecruitActions[1], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitArcher);
 }
@@ -160,13 +191,14 @@ void ASRPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	UpdateHover();
+	if (bPlacing) { UpdatePlacement(); }
 
 	if (ASRCameraPawn* Camera = GetCameraPawn())
 	{
 		Camera->SetPanInput(ComputePanInput());
 	}
 
-	CurrentMouseCursor = bAttackMoveArmed ? EMouseCursor::Crosshairs : EMouseCursor::Default;
+	CurrentMouseCursor = bAttackMoveArmed ? EMouseCursor::Crosshairs : (bPlacing ? EMouseCursor::Hand : EMouseCursor::Default);
 }
 
 FVector2D ASRPlayerController::ComputePanInput()
@@ -304,35 +336,19 @@ void ASRPlayerController::OnResetBattle()
 	}
 }
 
-void ASRPlayerController::OnGroupKey(int32 Index)
-{
-	if (IsGroupModifierDown())
-	{
-		ControlGroups[Index] = Selection;
-		return;
-	}
-
-	TArray<ASRUnit*> Units;
-	for (const TWeakObjectPtr<ASRUnit>& Unit : ControlGroups[Index])
-	{
-		if (Unit.IsValid() && Unit->IsActive()) { Units.Add(Unit.Get()); }
-	}
-	if (Units.Num() == 0) { return; }
-	SelectUnits(Units, false);
-
-	// Double-tap a group number to jump the camera to it.
-	const double Now = GetWorld()->GetRealTimeSeconds();
-	if (LastGroupRecalled == Index && Now - LastGroupRecallTime < 0.4) { RecenterOnSelection(); }
-	LastGroupRecalled = Index;
-	LastGroupRecallTime = Now;
-}
-
 // ---------------------------------------------------------- mouse: selection
 
 void ASRPlayerController::OnSelectPressed()
 {
 	FVector2D Mouse;
 	if (!GetCursorScreenPos(Mouse)) { return; }
+
+	if (bPlacing)
+	{
+		if (const ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && HUD->IsOverPanel(Mouse)) { return; }
+		TryPlace();
+		return;
+	}
 
 	if (bAttackMoveArmed)
 	{
@@ -441,6 +457,11 @@ void ASRPlayerController::OnSelectReleased()
 
 void ASRPlayerController::OnCommandPressed()
 {
+	if (bPlacing)
+	{
+		CancelPlacement(); // right-click drops the building you were about to place
+		return;
+	}
 	if (bAttackMoveArmed)
 	{
 		bAttackMoveArmed = false; // right-click cancels a pending attack-move
@@ -464,11 +485,15 @@ void ASRPlayerController::OnCommandPressed()
 	if (Unit && Unit->GetTeam() == ESRTeam::Enemy)
 	{
 		IssueAttack(Unit);
+		return;
 	}
-	else
+	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (ASRBuilding* B = Eco ? Eco->PickBuilding(Origin, Dir) : nullptr; B && B->Team == ESRTeam::Enemy && B->IsAlive())
 	{
-		IssueMove(Battle->RayToGround(Origin, Dir), false);
+		IssueAttackBuilding(B);
+		return;
 	}
+	IssueMove(Battle->RayToGround(Origin, Dir), false);
 }
 
 // ---------------------------------------------------------------- buildings
@@ -536,28 +561,17 @@ void ASRPlayerController::IssueMove(const FVector& GroundPoint, bool bAttackMove
 	GatherCommandable(Units);
 	if (Units.Num() == 0) { return; }
 
-	const USRFeelSettings& F = USRFeelSettings::Get();
-	FVector2D Dest(GroundPoint.X, GroundPoint.Y);
-	Dest.X = FMath::Clamp(Dest.X, -F.MapHalfExtent.X, F.MapHalfExtent.X);
-	Dest.Y = FMath::Clamp(Dest.Y, -F.MapHalfExtent.Y, F.MapHalfExtent.Y);
-	if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this)) { Dest = Eco->ClearOfBuildings(Dest); } // a click on a building means "go there", beside it
-
-	TArray<FVector2D> Slots;
-	SRFormation::ComputeSlots(Units, Dest, Slots);
-
-	// There is no navmesh: a straight line through a building's footprint is replaced by a walk round its corners.
-	const USREconomySubsystem* Economy = USREconomySubsystem::Get(this);
-	TArray<FVector2D> Path;
-	for (int32 i = 0; i < Units.Num(); ++i)
+	// A platoon moves in its own formation; any other selection forms a battle line.
+	ESRFormationShape Shape = ESRFormationShape::Line;
+	if (const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
 	{
-		Path.Reset();
-		if (Economy) { Economy->RoutePath(Units[i]->GetPos2D(), Slots[i], Path); }
-		else { Path.Add(Slots[i]); }
-		Units[i]->OrderMovePath(Path, bAttackMove);
-		Units[i]->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay));
+		if (const FSRPlatoon* P = Platoons->Find(Platoons->PlatoonOf(Units))) { Shape = P->Formation; }
 	}
-
-	ASROrderMarker::SpawnMarker(GetWorld(), FVector(Dest.X, Dest.Y, GroundPoint.Z), bAttackMove ? F.AttackMarkerColor : F.MoveMarkerColor);
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FVector2D Dest(GroundPoint.X, GroundPoint.Y);
+	Battle->CommandMove(Units, Dest, bAttackMove, Shape, true);
+	ASROrderMarker::SpawnMarker(GetWorld(), GroundPoint, bAttackMove ? F.AttackMarkerColor : F.MoveMarkerColor);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(bAttackMove ? ESRSound::AttackOrder : ESRSound::Acknowledge); }
 }
 
 void ASRPlayerController::IssueAttack(ASRUnit* Target)
@@ -565,14 +579,29 @@ void ASRPlayerController::IssueAttack(ASRUnit* Target)
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
 	if (Units.Num() == 0 || !Target) { return; }
-
-	const USRFeelSettings& F = USRFeelSettings::Get();
-	for (ASRUnit* Unit : Units)
-	{
-		Unit->OrderAttack(Target);
-		Unit->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay));
-	}
+	Battle->CommandAttack(Units, Target);
 	Target->FlashTargeted();
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackOrder); }
+}
+
+void ASRPlayerController::IssueAttackBuilding(ASRBuilding* Target)
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	if (Units.Num() == 0 || !Target) { return; }
+	Battle->CommandAttackBuilding(Units, Target);
+	const FVector2D At = Target->GetFootprintCentre();
+	ASROrderMarker::SpawnMarker(GetWorld(), FVector(At, Target->GetActorLocation().Z), USRFeelSettings::Get().AttackMarkerColor);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackOrder); }
+}
+
+void ASRPlayerController::IssueHold()
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	for (ASRUnit* Unit : Units) { Unit->OrderHold(); Unit->Acknowledge(FMath::FRandRange(0.f, USRFeelSettings::Get().AckMaxDelay)); }
+	bAttackMoveArmed = false;
+	if (Units.Num() > 0) { if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); } }
 }
 
 void ASRPlayerController::IssueStop()
@@ -774,4 +803,165 @@ bool ASRPlayerController::IsGroupModifierDown() const
 	return IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)
 		|| IsInputKeyDown(EKeys::LeftCommand) || IsInputKeyDown(EKeys::RightCommand)
 		|| IsInputKeyDown(EKeys::LeftAlt) || IsInputKeyDown(EKeys::RightAlt);
+}
+
+
+// ----------------------------------------------------------------- platoons
+
+int32 ASRPlayerController::GetSelectedPlatoon() const
+{
+	TArray<ASRUnit*> Units;
+	for (const TWeakObjectPtr<ASRUnit>& U : Selection) { if (U.IsValid()) { Units.Add(U.Get()); } }
+	const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	return Platoons ? Platoons->PlatoonOf(Units) : INDEX_NONE;
+}
+
+void ASRPlayerController::PlatoonKey(int32 Index)
+{
+	USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	if (!Platoons || Index >= Platoons->Num()) { return; }
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	if (IsGroupModifierDown())
+	{
+		if (Units.Num() > 0)
+		{
+			Platoons->Assign(Index, Units);
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+		}
+		return;
+	}
+	if (IsShiftDown() && Units.Num() > 0)
+	{
+		Platoons->Add(Index, Units);
+		return;
+	}
+	const double Now = GetWorld()->GetRealTimeSeconds();
+	const bool bDouble = LastGroupRecalled == Index && Now - LastGroupRecallTime < 0.4;
+	LastGroupRecalled = Index;
+	LastGroupRecallTime = Now;
+	SelectPlatoon(Index, bDouble);
+}
+
+void ASRPlayerController::SelectPlatoon(int32 Index, bool bCentre)
+{
+	const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	if (!Platoons) { return; }
+	TArray<ASRUnit*> Members;
+	Platoons->GetMembers(Index, Members);
+	if (Members.Num() == 0) { return; }
+	SelectUnits(Members, false);
+	if (bCentre) { RecenterOnSelection(); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Select); }
+}
+
+void ASRPlayerController::OnCycleFormation()
+{
+	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
+	{
+		const int32 P = GetSelectedPlatoon();
+		if (P != INDEX_NONE) { Platoons->CycleFormation(P); if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); } }
+	}
+}
+
+void ASRPlayerController::OnCycleStance()
+{
+	USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this);
+	const int32 P = GetSelectedPlatoon();
+	if (Platoons && P != INDEX_NONE)
+	{
+		Platoons->CycleStance(P);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+		return;
+	}
+	// Not a platoon: cycle the stance of the selected troops themselves.
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	if (Units.Num() == 0) { return; }
+	const ESRStance Next = ESRStance((uint8(Units[0]->GetStance()) + 1) % 3);
+	for (ASRUnit* U : Units) { U->SetStance(Next); if (Next == ESRStance::HoldGround && !U->IsEngaged()) { U->OrderHold(); } }
+}
+
+// ----------------------------------------------------------------- building placement
+
+void ASRPlayerController::BeginPlacement(ESRBuildingType Type)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (!F.BuildingStatsFor(Type).bPlayerBuildable) { return; }
+	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (Eco && !Eco->CanAfford(ESRTeam::Player, F.BuildingStatsFor(Type).Cost))
+	{
+		// Say so now rather than after the player has picked a spot.
+		const_cast<USREconomySubsystem*>(Eco)->TrySpend(ESRTeam::Player, F.BuildingStatsFor(Type).Cost);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
+		return;
+	}
+	bPlacing = true;
+	PlacingType = Type;
+	bAttackMoveArmed = false;
+	if (!Preview)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Preview = GetWorld()->SpawnActor<ASRPlacementPreview>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+	}
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+	UpdatePlacement();
+}
+
+void ASRPlayerController::CancelPlacement()
+{
+	bPlacing = false;
+	PlacementReason = FText::GetEmpty();
+	if (Preview) { Preview->Hide(); }
+}
+
+void ASRPlayerController::UpdatePlacement()
+{
+	FVector Origin, Dir;
+	const USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	if (!Grid || !GetCursorRay(Origin, Dir)) { return; }
+	const FVector Ground = Battle->RayToGround(Origin, Dir);
+	const FSRPlacement P = Grid->CheckPlacement(PlacingType, ESRTeam::Player, FVector2D(Ground));
+	bPlacementValid = P.bValid;
+	PlacementReason = P.Reason;
+	if (Preview) { Preview->Show(PlacingType, P); }
+}
+
+void ASRPlayerController::TryPlace()
+{
+	FVector Origin, Dir;
+	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (!Eco || !GetCursorRay(Origin, Dir)) { return; }
+	const FVector Ground = Battle->RayToGround(Origin, Dir);
+	FText Why;
+	if (Eco->PlaceBuilding(PlacingType, ESRTeam::Player, FVector2D(Ground), &Why))
+	{
+		const USRFeelSettings& F = USRFeelSettings::Get();
+		// Shift keeps the building in hand for another (if there is gold for it).
+		if (!IsShiftDown() || !Eco->CanAfford(ESRTeam::Player, F.BuildingStatsFor(PlacingType).Cost)) { CancelPlacement(); }
+	}
+	else
+	{
+		PlacementReason = Why;
+		Eco->PushAlert(ESRAlertKind::Info, Why);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
+	}
+}
+
+void ASRPlayerController::OnCancel()
+{
+	if (bPlacing) { CancelPlacement(); return; }
+	if (bAttackMoveArmed) { bAttackMoveArmed = false; return; }
+	if (Selection.Num() > 0 || SelectedBuilding.IsValid()) { ClearSelection(); SelectBuilding(nullptr); return; }
+	OnEscapeUnhandled();
+}
+
+void ASRPlayerController::OnDeleteBuilding()
+{
+	if (ASRBuilding* B = SelectedBuilding.Get(); B && B->Team == ESRTeam::Player && B->IsUnderConstruction())
+	{
+		SelectBuilding(nullptr);
+		B->CancelConstruction();
+	}
 }

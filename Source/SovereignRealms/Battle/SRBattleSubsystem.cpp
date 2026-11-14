@@ -1,6 +1,12 @@
 // Copyright Sovereign Realms.
 
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SRGridSubsystem.h"
+#include "Battle/SRAISubsystem.h"
+#include "Battle/SRPlatoonSubsystem.h"
+#include "Battle/SRFormation.h"
+#include "Buildings/SRBuilding.h"
+#include "Common/SRAudioSubsystem.h"
 #include "Units/SRUnit.h"
 #include "Units/SRProjectile.h"
 #include "Battle/SROrderMarker.h"
@@ -89,6 +95,10 @@ void USRBattleSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	SpriteMaterials[1] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Archer.MI_UnitSprite_Archer"))), this);
 	SpriteShadowMaterials[0] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Shieldbearer.MI_UnitSpriteShadow_Shieldbearer")));
 	SpriteShadowMaterials[1] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Archer.MI_UnitSpriteShadow_Archer")));
+	WorkerMaterials[0] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Miner.MI_UnitSprite_Miner"))), this);
+	WorkerMaterials[1] = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSprite_Farmer.MI_UnitSprite_Farmer"))), this);
+	WorkerShadowMaterials[0] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Miner.MI_UnitSpriteShadow_Miner")));
+	WorkerShadowMaterials[1] = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_Farmer.MI_UnitSpriteShadow_Farmer")));
 	ArrowMaterial = UMaterialInstanceDynamic::Create(OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_ArrowSprite.MI_ArrowSprite"))), this);
 	ArrowShadowMaterial = OrDefault(LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/MI_ArrowShadow.MI_ArrowShadow")));
 	BlobMaterial = LoadSpriteAsset<UMaterialInterface>(TEXT("/Game/SR/Materials/M_UnitBlob.M_UnitBlob"));
@@ -173,7 +183,7 @@ void USRBattleSubsystem::UpdateSpriteLook()
 	if (Look.Equals(AppliedSpriteLook, 0.0005f) && F.HitFlashColor.Equals(AppliedFlashColor, 0.0005f)) { return; }
 	AppliedSpriteLook = Look;
 	AppliedFlashColor = F.HitFlashColor;
-	for (UMaterialInstanceDynamic* MID : { SpriteMaterials[0].Get(), SpriteMaterials[1].Get(), ArrowMaterial.Get() })
+	for (UMaterialInstanceDynamic* MID : { SpriteMaterials[0].Get(), SpriteMaterials[1].Get(), WorkerMaterials[0].Get(), WorkerMaterials[1].Get(), ArrowMaterial.Get() })
 	{
 		if (!MID) { continue; }
 		MID->SetScalarParameterValue(TEXT("Relight"), F.SpriteRelight);
@@ -214,9 +224,20 @@ void USRBattleSubsystem::Tick(float DeltaTime)
 		return;
 	}
 
-	// Clamp so a hitch cannot teleport units through each other.
-	const float Dt = FMath::Min(DeltaTime, 0.05f);
+	// Sub-step long frames (a hitch, or the game sped up for balance tests) so nothing teleports through anything.
+	const float Total = FMath::Min(DeltaTime, 0.25f);
+	const int32 Steps = FMath::Clamp(FMath::CeilToInt(Total / 0.034f), 1, 8);
+	for (int32 k = 0; k < Steps; ++k) { StepFrame(Total / Steps); }
+	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this); Grid && USRFeelSettings::Get().bDebugDrawPaths) { Grid->DebugDraw(); }
+}
+
+void USRBattleSubsystem::StepFrame(float Dt)
+{
 	BattleClock += Dt;
+
+	// The commanders (enemy, and the player's side in AI-vs-AI tests) and the platoons decide before anyone moves.
+	if (USRAISubsystem* AI = USRAISubsystem::Get(this)) { AI->Step(Dt); }
+	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Step(Dt); }
 
 	// 1) think + move  2) push overlapping bodies apart  3) pose and place the actors
 	for (int32 i = 0; i < Units.Num(); ++i)
@@ -299,9 +320,28 @@ void USRBattleSubsystem::ResolveOverlaps(float DeltaTime)
 	}
 }
 
+void USRBattleSubsystem::NotifyBuildingDestroyed(ASRBuilding* Building)
+{
+	if (!Building || !Building->IsCastle() || Result != ESRBattleResult::Ongoing) { return; }
+	Result = Building->Team == ESRTeam::Enemy ? ESRBattleResult::PlayerWon : ESRBattleResult::EnemyWon;
+	TimeSinceResult = 0.f;
+	UE_LOG(LogSovereign, Log, TEXT("BATTLE RESULT: %s after %.1fs (the %s castle fell)  (troops: player=%d enemy=%d)"),
+		Result == ESRBattleResult::PlayerWon ? TEXT("PLAYER VICTORY") : TEXT("PLAYER DEFEAT"), BattleClock,
+		Building->Team == ESRTeam::Enemy ? TEXT("enemy") : TEXT("player"), CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy));
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(Result == ESRBattleResult::PlayerWon ? ESRSound::Victory : ESRSound::Defeat); }
+}
+
 void USRBattleSubsystem::CheckResult()
 {
 	if (Result != ESRBattleResult::Ongoing) { return; }
+	// With kingdoms on the map the match is decided by the castles (NotifyBuildingDestroyed); a side that has lost its
+	// castle and every troop is out too. Without castles (a bare test map) the last army standing wins.
+	if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
+	{
+		const bool bPlayerCastle = Eco->GetCastle(ESRTeam::Player) != nullptr;
+		const bool bEnemyCastle = Eco->GetCastle(ESRTeam::Enemy) != nullptr;
+		if (bPlayerCastle || bEnemyCastle) { return; }
+	}
 
 	const int32 Players = CountAlive(ESRTeam::Player);
 	const int32 Enemies = CountAlive(ESRTeam::Enemy);
@@ -342,6 +382,9 @@ void USRBattleSubsystem::ResetBattle()
 	SpawnObstacles();
 	SpawnScenario();
 	if (USREconomySubsystem* Economy = USREconomySubsystem::Get(this)) { Economy->Reset(); }
+	if (USRAISubsystem* AI = USRAISubsystem::Get(this)) { AI->Reset(); }
+	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Reset(); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->StartLoops(); }
 	bBattleStarted = true;
 
 	UE_LOG(LogSovereign, Log, TEXT("BATTLE RESET: player=%d enemy=%d"), CountAlive(ESRTeam::Player), CountAlive(ESRTeam::Enemy));
@@ -705,4 +748,80 @@ void USRBattleSubsystem::PollCommandInbox(float DeltaTime)
 		}
 	}
 #endif
+}
+
+
+// ------------------------------------------------------------------ group commands
+
+ASRBuilding* USRBattleSubsystem::FindNearestEnemyBuilding(const ASRUnit* For, float Range) const
+{
+	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (!Eco || !For) { return nullptr; }
+	ASRBuilding* Best = nullptr;
+	float BestD = Range;
+	for (ASRBuilding* B : Eco->GetBuildings())
+	{
+		if (!B || !B->IsAlive() || B->Team == For->GetTeam()) { continue; }
+		const float D = B->DistanceToFootprint(For->GetPos2D());
+		if (D < BestD) { BestD = D; Best = B; }
+	}
+	return Best;
+}
+
+void USRBattleSubsystem::CommandMove(const TArray<ASRUnit*>& Group, const FVector2D& Goal, bool bAttackMove, ESRFormationShape Shape, bool bAcknowledge,
+	const FVector2D* Facing)
+{
+	TArray<ASRUnit*> Units2;
+	for (ASRUnit* U : Group) { if (U && U->IsAlive()) { Units2.Add(U); } }
+	if (Units2.Num() == 0) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+
+	FVector2D Dest(FMath::Clamp(Goal.X, -F.MapHalfExtent.X, F.MapHalfExtent.X), FMath::Clamp(Goal.Y, -F.MapHalfExtent.Y, F.MapHalfExtent.Y));
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	if (Grid) { Dest = Grid->NearestWalkable(Dest); } // a click on a building, a rock or water means "go there", beside it
+
+	TArray<FVector2D> Slots;
+	SRFormation::ComputeSlots(Units2, Dest, Slots, Shape, Facing);
+
+	TArray<FVector2D> Starts;
+	for (ASRUnit* U : Units2) { Starts.Add(U->GetPos2D()); }
+	TArray<TArray<FVector2D>> Paths;
+	if (Grid) { Grid->FindGroupPaths(Starts, Dest, Paths); }
+	for (int32 i = 0; i < Units2.Num(); ++i)
+	{
+		TArray<FVector2D> Path = Paths.IsValidIndex(i) ? Paths[i] : TArray<FVector2D>();
+		FVector2D Slot = Grid ? Grid->NearestWalkable(Slots[i], 4) : Slots[i];
+		Path.Add(Slot);
+		Units2[i]->OrderMovePath(Path, bAttackMove);
+		Units2[i]->SetHome(Slot);
+		if (bAcknowledge) { Units2[i]->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay)); }
+	}
+}
+
+void USRBattleSubsystem::CommandAttack(const TArray<ASRUnit*>& Group, ASRUnit* Target)
+{
+	if (!Target) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	for (ASRUnit* U : Group)
+	{
+		if (U && U->IsAlive())
+		{
+			U->OrderAttack(Target);
+			U->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay));
+		}
+	}
+}
+
+void USRBattleSubsystem::CommandAttackBuilding(const TArray<ASRUnit*>& Group, ASRBuilding* Target)
+{
+	if (!Target) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	for (ASRUnit* U : Group)
+	{
+		if (U && U->IsAlive())
+		{
+			U->OrderAttackBuilding(Target);
+			U->Acknowledge(FMath::FRandRange(0.f, F.AckMaxDelay));
+		}
+	}
 }

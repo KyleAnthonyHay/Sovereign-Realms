@@ -56,6 +56,16 @@ MATERIALS = [
          ramp=["#808080", "#989898", "#b0b0b0", "#cccccc", "#e8e8e8"]),
     dict(name="feather", base="#d8ceb4", rough=0.9, metal=0.0, accent=True,
          ramp=["#7d7370", "#b3a994", "#e4dabc"]),
+    # workers (miners, farmhands): woven straw (hats, baskets), ore lumps with gold flecks, iron tool heads
+    dict(name="straw", base="#c8a45a", rough=0.9, metal=0.0, spec=(0.04, 6),
+         ramp=["#3d2a1e", "#62452a", "#8c6a38", "#b8924c", "#d8b866", "#f0d88e"]),
+    dict(name="ore", base="#4e4642", rough=0.85, metal=0.0, spec=(0.08, 8),
+         tex=dict(size=0.035, edge=0.35, cell=0.45),
+         ramp=["#1b1418", "#2e2628", "#463d3c", "#615753", "#7d726a"]),
+    dict(name="gold", base="#e6b43c", rough=0.25, metal=1.0, spec=(0.6, 30), gain=1.3, accent=True,
+         ramp=["#6a4a2b", "#b08b4a", "#e2b84e", "#fff0a0"]),
+    dict(name="iron", base="#6c6a6a", rough=0.4, metal=1.0, spec=(0.4, 20), gain=1.1,
+         ramp=["#1d1a20", "#33303a", "#4f4c54", "#6f6c70", "#949090", "#bdb8b0"]),
     # motion smear on the strike frame: flat, unshaded, no outline
     dict(name="smear", base="#fff6da", rough=1.0, metal=0.0, accent=True, fx=True,
          ramp=["#f3e6c0", "#fffbea"]),

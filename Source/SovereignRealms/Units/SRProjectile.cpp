@@ -2,6 +2,8 @@
 
 #include "Units/SRProjectile.h"
 #include "Units/SRUnit.h"
+#include "Buildings/SRBuilding.h"
+#include "Common/SRAudioSubsystem.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Units/SRSprite.h"
 #include "Components/StaticMeshComponent.h"
@@ -16,25 +18,34 @@ ASRProjectile::ASRProjectile()
 
 ASRProjectile* ASRProjectile::Launch(ASRUnit* Shooter, ASRUnit* Target, const FVector& From, const FSRUnitStats& ShooterStats)
 {
-	UWorld* World = Shooter->GetWorld();
+	return LaunchArrow(Shooter->GetWorld(), Shooter->GetTeam(), Shooter, Target, nullptr, From, ShooterStats.Damage, ShooterStats.KnockbackImpulse,
+		ShooterStats.ProjectileSpeed, ShooterStats.ProjectileArc);
+}
+
+ASRProjectile* ASRProjectile::LaunchArrow(UWorld* World, ESRTeam Team, ASRUnit* ShooterUnit, ASRUnit* TargetUnit, ASRBuilding* TargetBuilding,
+	const FVector& From, float Damage, float Knockback, float Speed, float Arc)
+{
+	if (!World || (!TargetUnit && !TargetBuilding)) { return nullptr; }
 	ASRProjectile* Arrow = World->SpawnActor<ASRProjectile>(From, FRotator::ZeroRotator);
 	if (!Arrow) { return nullptr; }
 
-	Arrow->ShooterUnit = Shooter;
-	Arrow->TargetUnit = Target;
+	Arrow->ShooterUnit = ShooterUnit;
+	Arrow->TargetUnit = TargetUnit;
+	Arrow->TargetBuilding = TargetBuilding;
 	Arrow->Start = From;
-	Arrow->AimPoint = Target->GetAimPoint();
+	Arrow->AimPoint = TargetUnit ? TargetUnit->GetAimPoint() : TargetBuilding->GetAimPointFrom(FVector2D(From));
 	const float Dist = FVector::Dist(From, Arrow->AimPoint);
-	Arrow->Duration = FMath::Max(Dist / FMath::Max(ShooterStats.ProjectileSpeed, 100.f), 0.08f);
-	Arrow->ArcHeight = Dist * ShooterStats.ProjectileArc;
-	Arrow->Damage = ShooterStats.Damage;
-	Arrow->Knockback = ShooterStats.KnockbackImpulse;
-	Arrow->BuildVisuals(Shooter);
+	Arrow->Duration = FMath::Max(Dist / FMath::Max(Speed, 100.f), 0.08f);
+	Arrow->ArcHeight = Dist * Arc;
+	Arrow->Damage = Damage;
+	Arrow->Knockback = Knockback;
+	Arrow->BuildVisuals(Team);
 	Arrow->Tick(0.f);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(World)) { Audio->PlayAt(ESRSound::BowRelease, From); }
 	return Arrow;
 }
 
-void ASRProjectile::BuildVisuals(ASRUnit* Shooter)
+void ASRProjectile::BuildVisuals(ESRTeam Team)
 {
 	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
 	if (!Battle) { return; }
@@ -67,7 +78,7 @@ void ASRProjectile::BuildVisuals(ASRUnit* Shooter)
 
 	Card = MakeCard(Battle->ArrowMaterial, false);
 	ShadowCard = MakeCard(Battle->ArrowShadowMaterial, true);
-	const FLinearColor TeamCol = Battle->TeamColor(Shooter->GetTeam());
+	const FLinearColor TeamCol = Battle->TeamColor(Team);
 	Card->SetCustomPrimitiveDataVector4(SRSprite::DataTeamColor, FVector4(TeamCol.R, TeamCol.G, TeamCol.B, 1.f));
 }
 
@@ -118,9 +129,14 @@ void ASRProjectile::Tick(float DeltaSeconds)
 	}
 
 	ASRUnit* Target = TargetUnit.Get();
+	ASRBuilding* TargetB = TargetBuilding.Get();
 	if (Target && Target->IsAlive())
 	{
 		AimPoint = Target->GetAimPoint(); // gentle homing: the arc bends with a moving target
+	}
+	else if (TargetB && TargetB->IsAlive())
+	{
+		// buildings do not move: the aim point stays where it was picked
 	}
 	else if (!bTargetLost)
 	{
@@ -154,10 +170,18 @@ void ASRProjectile::Tick(float DeltaSeconds)
 		{
 			const FVector2D Dir = FVector2D(AimPoint.X - Start.X, AimPoint.Y - Start.Y).GetSafeNormal();
 			Target->ReceiveDamage(Damage, ShooterUnit.Get(), Dir, Knockback, false);
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::ArrowHitFlesh, AimPoint); }
 			Destroy();
+		}
+		else if (TargetB && TargetB->IsAlive())
+		{
+			TargetB->ReceiveDamage(Damage, ShooterUnit.Get());
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::ArrowHitWood, AimPoint); }
+			bStuck = true; // sticks in the wall for a moment
 		}
 		else
 		{
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::ArrowHitGround, AimPoint); }
 			bStuck = true;
 		}
 	}

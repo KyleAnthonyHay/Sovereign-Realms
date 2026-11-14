@@ -12,6 +12,8 @@ class UStaticMeshComponent;
 class UBoxComponent;
 class USRRingComponent;
 class USREconomySubsystem;
+class ASRUnit;
+class ASRWorker;
 
 /**
  * A kingdom building: the castle (recruits troops), a farm (food) or a mine (gold).
@@ -38,6 +40,13 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+
+	/**
+	 * A building laid down at run time (the player's build menu, the enemy commander): shape and mesh come from
+	 * Sovereign Feel > Buildings. Under construction it rises from its foundations over BuildTime and does nothing
+	 * else; a finished one works straight away.
+	 */
+	static ASRBuilding* SpawnBuilding(UWorld* World, ESRBuildingType Type, ESRTeam Team, const FVector& Location, bool bUnderConstruction);
 
 	/** Applies the properties below to the components (mesh, blocking box, team colour). */
 	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Building")
@@ -82,12 +91,38 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Building|Sockets")
 	FVector PopupOffset = FVector(0.f, 0.f, 300.f);
 
+	// ---- life ----
+	const FSRBuildingStats& Stats() const;
+	bool IsAlive() const { return !bDestroyed; }
+	/** Standing and fully built (works, counts for territory and population). */
+	bool IsFinished() const { return !bDestroyed && BuildProgress >= 1.f; }
+	bool IsUnderConstruction() const { return !bDestroyed && BuildProgress < 1.f; }
+	float GetBuildProgress() const { return BuildProgress; }
+	float GetHealth() const { return Health; }
+	float GetHealthFrac() const;
+	double GetLastDamagedTime() const { return LastDamagedTime; }
+	/** Arrows and blades. From may be null (another building's arrow). */
+	void ReceiveDamage(float Amount, ASRUnit* From);
+	/** Pull down a building still under construction and get CancelRefund of its price back. */
+	void CancelConstruction();
+	/** Population this building lets its kingdom field right now. */
+	int32 GetPopProvided() const { return IsFinished() ? Stats().PopProvided : 0; }
+	/** Where an arrow shot from From should land on this building (on the near wall, a little up). */
+	FVector GetAimPointFrom(const FVector2D& From) const;
+	/** Distance from a point to the footprint's edge (0 inside). */
+	float DistanceToFootprint(const FVector2D& World) const;
+	/** Nearest point on the footprint's edge (grown by Margin) to a point outside it. */
+	FVector2D ClosestPointOnFootprint(const FVector2D& World, float Margin) const;
+
 	// ---- run time (USREconomySubsystem) ----
 	/** Back to the start of a battle: empty queue, timers at zero, default rally point. */
 	void ResetRuntime();
 	void StepBuilding(float Dt);
 
-	/** Pays for a recruit and queues it. False (with feedback on the resource counters) if it cannot be afforded or the queue is full. */
+	/** Called by a worker who has just delivered a load (or by the timer when there are no workers): pays out. */
+	void Deliver();
+
+	/** Pays for a recruit and queues it. False (with feedback on the resource counters) if it cannot be afforded, the queue is full or the kingdom is at its population cap. */
 	bool QueueRecruit(ESRUnitType Type);
 	const TArray<ESRUnitType>& GetQueue() const { return Queue; }
 	/** 0..1 through the recruit in training. */
@@ -102,6 +137,7 @@ public:
 
 	// ---- queries ----
 	FString GetDisplayName() const;
+	bool CanRecruit() const { return IsCastle() && IsFinished(); }
 	bool IsCastle() const { return BuildingType == ESRBuildingType::Castle; }
 	FVector2D ToLocal2D(const FVector2D& World) const;
 	FVector2D ToWorld2D(const FVector2D& Local) const;
@@ -124,9 +160,18 @@ public:
 	bool IsSelected() const { return bSelected; }
 	void SetHovered(bool bInHovered) { bHovered = bInHovered; }
 
+	/** Set by SpawnBuilding: not part of the level, so it is destroyed (not just reset) when the battle resets. */
+	bool IsRuntimeBuilt() const { return bRuntimeBuilt; }
+
 private:
 	void SpawnRecruit(ESRUnitType Type);
 	void UpdateFeedback(float Dt);
+	void StepConstruction(float Dt);
+	void StepDefence(float Dt);
+	void StepCollapse(float Dt);
+	void Collapse(ASRUnit* Killer);
+	void ApplyBuildVisual();
+	void UpdateWorkers();
 
 	UPROPERTY(VisibleAnywhere, Category = "Building") TObjectPtr<USceneComponent> Root;
 	UPROPERTY(VisibleAnywhere, Category = "Building") TObjectPtr<UStaticMeshComponent> Mesh;
@@ -139,7 +184,19 @@ private:
 
 	UPROPERTY(Transient) TObjectPtr<USREconomySubsystem> Economy;
 
+	UPROPERTY(Transient) TArray<TObjectPtr<ASRWorker>> Workers;
+
 	TArray<ESRUnitType> Queue;
+	float Health = 1.f;
+	float BuildProgress = 1.f;
+	bool bDestroyed = false;
+	bool bRuntimeBuilt = false;
+	float CollapseClock = 0.f;
+	float DefenceCooldown = 0.f;
+	float HitShake = 0.f;
+	float HammerClock = 0.f;
+	double LastDamagedTime = -100.0;
+	FVector MeshBaseLocation = FVector::ZeroVector;
 	float BuildClock = 0.f;
 	float PayoutClock = 0.f;
 	float TimeSincePayout = 1000.f;

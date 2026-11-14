@@ -9,6 +9,7 @@
 #include "SRUnit.generated.h"
 
 class USRBattleSubsystem;
+class ASRBuilding;
 class USRRingComponent;
 class UStaticMeshComponent;
 class UDecalComponent;
@@ -40,7 +41,10 @@ public:
 	void OrderMove(const FVector2D& Dest);
 	void OrderAttackMove(const FVector2D& Dest);
 	void OrderAttack(ASRUnit* InTarget);
+	void OrderAttackBuilding(ASRBuilding* InTarget);
 	void OrderStop();
+	/** Stand fast: strike / shoot only what is in reach, never step out to chase. */
+	void OrderHold();
 	/** Move (or attack-move) through waypoints to the last point: how recruits and group moves get round buildings. */
 	void OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove);
 	int32 GetWaypointsLeft() const { return Waypoints.Num(); }
@@ -94,6 +98,17 @@ public:
 	ESRAttackPhase GetAttackPhase() const { return AttackPhase; }
 
 	void SetHome(const FVector2D& InHome) { Home = InHome; }
+	FVector2D GetHome() const { return Home; }
+	ASRBuilding* GetTargetBuilding() const { return TargetBuilding.Get(); }
+
+	// ---- platoons ----
+	void SetStance(ESRStance InStance) { Stance = InStance; }
+	ESRStance GetStance() const { return Stance; }
+	/** Platoon slot (0 .. MaxPlatoons-1), or INDEX_NONE. */
+	void SetPlatoon(int32 Index) { Platoon = Index; }
+	int32 GetPlatoon() const { return Platoon; }
+	/** Busy with a fight: has a target or is mid-swing. */
+	bool IsEngaged() const { return Target.IsValid() || TargetBuilding.IsValid() || AttackPhase != ESRAttackPhase::Ready; }
 
 	// ---- Selection feedback ----
 	void SetSelected(bool bInSelected);
@@ -107,6 +122,9 @@ private:
 	void UpdateTargeting(float Dt);
 	void TickAttack(float Dt, ASRUnit* T);
 	void Strike(ASRUnit* T);
+	void StrikeBuilding(ASRBuilding* B);
+	/** Steering toward a chase target: straight when the way is clear, otherwise along a grid path refreshed now and then. */
+	FVector2D ChaseDir(const FVector2D& Goal, float Dt);
 	void CancelAttack();
 	void ResetProgress();
 	void Die(ASRUnit* Killer, const FVector2D& HitDir);
@@ -156,6 +174,12 @@ private:
 	TArray<FVector2D> Waypoints;   // points still to visit after Destination (Move / AttackMove)
 	FVector2D Home = FVector2D::ZeroVector;
 	TWeakObjectPtr<ASRUnit> Target;
+	TWeakObjectPtr<ASRBuilding> TargetBuilding;
+	ESRStance Stance = ESRStance::Aggressive;
+	int32 Platoon = INDEX_NONE;
+	TArray<FVector2D> ChasePath;
+	FVector2D ChaseGoal = FVector2D::ZeroVector;
+	float ChaseRepath = 0.f;
 	float RetargetTimer = 0.f;
 	float BestDist = 0.f;
 	float NoProgressTime = 0.f;

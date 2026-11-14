@@ -10,6 +10,7 @@
 class ASRUnit;
 class ASRBuilding;
 class ASRCameraPawn;
+class ASRPlacementPreview;
 class USRBattleSubsystem;
 class UInputAction;
 class UInputMappingContext;
@@ -28,7 +29,12 @@ struct FInputActionValue;
  *   S                                                stop             (tap S; holding S pans)
  *   WASD / arrows / screen edge / MMB drag           pan              wheel: zoom
  *   Space / Home                                     centre on selection
- *   Ctrl|Cmd|Alt + 1..3 / 1..3                       set / recall control group (double-tap to centre)
+ *   Ctrl|Cmd|Alt + 1..6 / 1..6 / Shift + 1..6        make / select (double-tap: centre) / add to platoon N
+ *   F / G                                            cycle the selected platoon's formation / stance
+ *   H                                                hold ground (stand fast, fight only what is in reach)
+ *   Z / X / C                                        build a Farm / Gold Mine / Watchtower (LMB place, Shift keeps
+ *                                                    placing, RMB or Esc cancels)
+ *   Delete                                           pull down the selected building while it is still being built
  *   R                                                reset the battle
  *   LMB on a building                                select it (info panel; the castle shows its recruit commands)
  *   Q / E, or the panel buttons, castle selected     recruit a Shieldbearer / an Archer
@@ -64,9 +70,30 @@ public:
 	double GetLastRecruitTime() const { return LastRecruitTime; }
 	bool WasLastRecruitAccepted() const { return bLastRecruitAccepted; }
 
+	/** Esc with nothing to cancel: the pause menu's hook (the UI overrides / binds this). */
+	virtual void OnEscapeUnhandled() {}
+
+	// ---- Building placement ----
+	void BeginPlacement(ESRBuildingType Type);
+	void CancelPlacement();
+	bool IsPlacing() const { return bPlacing; }
+	ESRBuildingType GetPlacingType() const { return PlacingType; }
+	/** Why the spot under the cursor is refused (empty when it is fine). */
+	const FText& GetPlacementReason() const { return PlacementReason; }
+	bool IsPlacementValid() const { return bPlacementValid; }
+
+	// ---- Platoons ----
+	/** The platoon key: assign (Ctrl/Cmd/Alt), add (Shift) or select (double-tap centres). */
+	void PlatoonKey(int32 Index);
+	void SelectPlatoon(int32 Index, bool bCentre);
+	/** The platoon the whole selection belongs to, or INDEX_NONE. */
+	int32 GetSelectedPlatoon() const;
+	void IssueHold();
+
 	// ---- Orders to the current selection ----
 	void IssueMove(const FVector& GroundPoint, bool bAttackMove);
 	void IssueAttack(ASRUnit* Target);
+	void IssueAttackBuilding(ASRBuilding* Target);
 	void IssueStop();
 
 	void RecenterOnSelection();
@@ -109,10 +136,23 @@ private:
 	void OnKeySReleased();
 	void OnRecenter();
 	void OnResetBattle();
-	void OnGroupKey(int32 Index);
+	void OnGroupKey(int32 Index) { PlatoonKey(Index); }
 	void OnGroup1() { OnGroupKey(0); }
 	void OnGroup2() { OnGroupKey(1); }
 	void OnGroup3() { OnGroupKey(2); }
+	void OnGroup4() { OnGroupKey(3); }
+	void OnGroup5() { OnGroupKey(4); }
+	void OnGroup6() { OnGroupKey(5); }
+	void OnBuildFarm() { BeginPlacement(ESRBuildingType::Farm); }
+	void OnBuildMine() { BeginPlacement(ESRBuildingType::Mine); }
+	void OnBuildTower() { BeginPlacement(ESRBuildingType::Tower); }
+	void OnHold() { IssueHold(); }
+	void OnCycleFormation();
+	void OnCycleStance();
+	void OnCancel();
+	void OnDeleteBuilding();
+	void UpdatePlacement();
+	void TryPlace();
 	void OnRecruitShieldbearer() { RecruitHotkey(ESRUnitType::Shieldbearer); }
 	void OnRecruitArcher() { RecruitHotkey(ESRUnitType::Archer); }
 	void RecruitHotkey(ESRUnitType Type);
@@ -129,13 +169,23 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> KeySAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RecenterAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> ResetAction;
-	UPROPERTY(Transient) TObjectPtr<UInputAction> GroupActions[3];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> GroupActions[6];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildActions[3];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> HoldAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> FormationAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> StanceAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> CancelAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> DeleteAction;
+	UPROPERTY(Transient) TObjectPtr<ASRPlacementPreview> Preview;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[2];
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
 
 	TArray<TWeakObjectPtr<ASRUnit>> Selection;
-	TArray<TWeakObjectPtr<ASRUnit>> ControlGroups[3];
+	bool bPlacing = false;
+	ESRBuildingType PlacingType = ESRBuildingType::Farm;
+	FText PlacementReason;
+	bool bPlacementValid = false;
 	TWeakObjectPtr<ASRUnit> Hovered;
 	TWeakObjectPtr<ASRBuilding> SelectedBuilding;
 	TWeakObjectPtr<ASRBuilding> HoveredBuilding;

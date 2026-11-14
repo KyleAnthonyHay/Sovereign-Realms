@@ -8,6 +8,7 @@
 #include "SRProjectile.generated.h"
 
 class ASRUnit;
+class ASRBuilding;
 class UStaticMeshComponent;
 
 /**
@@ -29,10 +30,14 @@ public:
 
 	static ASRProjectile* Launch(ASRUnit* Shooter, ASRUnit* Target, const FVector& From, const FSRUnitStats& ShooterStats);
 
+	/** Any arrow: from a troop or a building, at a troop or a building (exactly one of the two targets). */
+	static ASRProjectile* LaunchArrow(UWorld* World, ESRTeam Team, ASRUnit* ShooterUnit, ASRUnit* TargetUnit, ASRBuilding* TargetBuilding,
+		const FVector& From, float Damage, float Knockback, float Speed, float Arc);
+
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
-	void BuildVisuals(ASRUnit* Shooter);
+	void BuildVisuals(ESRTeam Team);
 	void OrientCards(const FVector& Direction);
 
 	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> Card;
@@ -41,6 +46,7 @@ private:
 
 	TWeakObjectPtr<ASRUnit> ShooterUnit;
 	TWeakObjectPtr<ASRUnit> TargetUnit;
+	TWeakObjectPtr<ASRBuilding> TargetBuilding;
 	FVector Start = FVector::ZeroVector;
 	FVector AimPoint = FVector::ZeroVector;
 	float Duration = 0.3f;

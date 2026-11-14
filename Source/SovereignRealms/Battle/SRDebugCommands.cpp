@@ -6,6 +6,10 @@
 
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
+#include "Battle/SRAISubsystem.h"
+#include "Battle/SRGridSubsystem.h"
+#include "Battle/SRPlatoonSubsystem.h"
+#include "Kismet/GameplayStatics.h"
 #include "Buildings/SRBuilding.h"
 #include "Player/SRPlayerController.h"
 #include "Player/SRCameraPawn.h"
@@ -313,5 +317,75 @@ namespace
 			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots/SR") / (Name + TEXT(".png")));
 			FScreenshotRequest::RequestScreenshot(Path, true, false);
 			UE_LOG(LogSovereign, Log, TEXT("sr.Shot -> %s"), *Path);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdAIvsAI(TEXT("sr.AIvsAI"), TEXT("sr.AIvsAI [0|1]: a commander plays the player's side too (balance testing)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USRAISubsystem* AI = USRAISubsystem::Get(World)) { AI->SetPlayerAI(Args.Num() == 0 || Args[0] != TEXT("0")); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdAIStatus(TEXT("sr.AIStatus"), TEXT("Log each commander's economy, army and wave state."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (const USRAISubsystem* AI = USRAISubsystem::Get(World)) { AI->LogStatus(); }
+			if (const USRBattleSubsystem* B = USRBattleSubsystem::Get(World))
+			{
+				UE_LOG(LogSovereign, Log, TEXT("MATCH t=%.0fs troops player=%d enemy=%d result=%d"), B->GetBattleClock(), B->CountAlive(ESRTeam::Player), B->CountAlive(ESRTeam::Enemy), int32(B->GetResult()));
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdSpeed(TEXT("sr.Speed"), TEXT("sr.Speed <x>: run the game x times faster (balance testing; 1 = normal)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const float X = Args.Num() > 0 ? FMath::Clamp(FCString::Atof(*Args[0]), 0.1f, 16.f) : 1.f;
+			UGameplayStatics::SetGlobalTimeDilation(World, X);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Speed %.1f"), X);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdBuild(TEXT("sr.Build"), TEXT("sr.Build <farm|mine|tower> X Y [enemy]: lay a building (pays gold; refused like the player would be)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
+			FVector2D XY;
+			if (!Eco || Args.Num() < 3) { return; }
+			TArray<FString> Rest(Args.GetData() + 1, 2);
+			if (!ParseXY(Rest, XY)) { return; }
+			const ESRBuildingType Type = Args[0] == TEXT("mine") ? ESRBuildingType::Mine : (Args[0] == TEXT("tower") ? ESRBuildingType::Tower : ESRBuildingType::Farm);
+			const ESRTeam Team = Args.Num() > 3 && Args[3] == TEXT("enemy") ? ESRTeam::Enemy : ESRTeam::Player;
+			FText Why;
+			ASRBuilding* B = Eco->PlaceBuilding(Type, Team, XY, &Why);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Build %s at (%.0f, %.0f): %s"), *Args[0], XY.X, XY.Y, B ? TEXT("placed") : *Why.ToString());
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPlace(TEXT("sr.Place"), TEXT("sr.Place <farm|mine|tower|off>: enter placement mode as if the build hotkey was pressed."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ASRPlayerController* PC = GetSRController(World);
+			if (!PC || Args.Num() == 0) { return; }
+			if (Args[0] == TEXT("off")) { PC->CancelPlacement(); return; }
+			PC->BeginPlacement(Args[0] == TEXT("mine") ? ESRBuildingType::Mine : (Args[0] == TEXT("tower") ? ESRBuildingType::Tower : ESRBuildingType::Farm));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPlatoon(TEXT("sr.Platoon"), TEXT("sr.Platoon <n> [assign|select|stance|formation]: platoon n (1-based) from / to the selection."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ASRPlayerController* PC = GetSRController(World);
+			USRPlatoonSubsystem* P = USRPlatoonSubsystem::Get(World);
+			if (!PC || !P || Args.Num() == 0) { return; }
+			const int32 I = FCString::Atoi(*Args[0]) - 1;
+			const FString Op = Args.Num() > 1 ? Args[1] : TEXT("select");
+			if (Op == TEXT("assign"))
+			{
+				TArray<ASRUnit*> Units;
+				for (const TWeakObjectPtr<ASRUnit>& U : PC->GetSelection()) { if (U.IsValid()) { Units.Add(U.Get()); } }
+				P->Assign(I, Units);
+			}
+			else if (Op == TEXT("stance")) { P->CycleStance(I); }
+			else if (Op == TEXT("formation")) { P->CycleFormation(I); }
+			else { PC->SelectPlatoon(I, true); }
+			const FSRPlatoonInfo Info = P->GetInfo(I);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Platoon %d '%s': %d shields, %d archers, %s, %s"), I + 1, *Info.Name, Info.Shieldbearers, Info.Archers,
+				*USRPlatoonSubsystem::FormationName(Info.Formation).ToString(), *USRPlatoonSubsystem::StanceName(Info.Stance).ToString());
 		}));
 }

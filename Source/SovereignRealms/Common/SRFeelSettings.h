@@ -42,7 +42,7 @@ public:
 
 	/** Camera distance from the focus point when fully zoomed out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "200"))
-	float ZoomDistanceMax = 3600.f;
+	float ZoomDistanceMax = 7800.f;
 
 	/** 0 = fully in, 1 = fully out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
@@ -62,7 +62,7 @@ public:
 
 	/** Pitch when fully zoomed out (steeper / more top-down). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "-89", ClampMax = "-10"))
-	float PitchZoomedOut = -46.f;
+	float PitchZoomedOut = -58.f;
 
 	/** When zooming in, how far the focus slides toward the cursor per notch (0 = off). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
@@ -101,7 +101,7 @@ public:
 
 	/** Camera focus is clamped to +/- this (cm) around the world origin. Also clamps move orders. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds")
-	FVector2D MapHalfExtent = FVector2D(3000.f, 3000.f);
+	FVector2D MapHalfExtent = FVector2D(12000.f, 12000.f);
 
 	/** Motion blur smears units while panning and hides fast attack animation, so the game camera turns it off. Untick to let post-process volumes decide. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera")
@@ -354,44 +354,44 @@ public:
 	FLinearColor EnemyTeamColor = FLinearColor(0.72f, 0.07f, 0.05f);
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
-	int32 PlayerShieldbearers = 6;
+	int32 PlayerShieldbearers = 4;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
-	int32 PlayerArchers = 6;
+	int32 PlayerArchers = 3;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
-	int32 EnemyShieldbearers = 5;
+	int32 EnemyShieldbearers = 4;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
 	int32 EnemyArchers = 3;
 
 	/** Centre of the player's starting formation (world XY, cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
-	FVector2D PlayerStart = FVector2D(-1300.f, 0.f);
+	FVector2D PlayerStart = FVector2D(-5500.f, -5000.f);
 
 	/** Centre of the hostile group (world XY, cm). */
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
-	FVector2D EnemyStart = FVector2D(1500.f, 200.f);
+	FVector2D EnemyStart = FVector2D(5500.f, 5000.f);
 
 	/** Spawns three grey blocks so obstacle handling can be tested before real props exist. Turn off once the map has its own. */
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
-	bool bSpawnGreyboxObstacles = true;
+	bool bSpawnGreyboxObstacles = false;
 
 	// --------------------------------------------------------------- Economy
 	// Farms make food, mines make gold. The castle turns food into troops; gold is for buildings. No workers: buildings pay out on a timer.
 	UPROPERTY(EditAnywhere, Config, Category = "Economy", meta = (ClampMin = "0"))
-	int32 StartingGold = 150;
+	int32 StartingGold = 250;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy", meta = (ClampMin = "0"))
-	int32 StartingFood = 110;
+	int32 StartingFood = 150;
 
 	/** Food each farm adds per payout. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0"))
-	int32 FarmFoodPerPayout = 10;
+	int32 FarmFoodPerPayout = 7;
 
 	/** Seconds between a farm's payouts. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0.2"))
-	float FarmPayoutInterval = 5.f;
+	float FarmPayoutInterval = 6.f;
 
 	/** Gold each mine adds per payout. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Production", meta = (ClampMin = "0"))
@@ -403,18 +403,18 @@ public:
 
 	/** Troops are paid for in food only; gold is kept for buildings. (The cost struct still carries a gold field, left at 0.) */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
-	FSRCost ShieldbearerCost = FSRCost(0, 40);
+	FSRCost ShieldbearerCost = FSRCost(0, 50);
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
-	FSRCost ArcherCost = FSRCost(0, 30);
+	FSRCost ArcherCost = FSRCost(0, 40);
 
 	/** Seconds the castle takes to train one Shieldbearer. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
-	float ShieldbearerBuildTime = 6.f;
+	float ShieldbearerBuildTime = 5.f;
 
 	/** Seconds the castle takes to train one Archer. */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
-	float ArcherBuildTime = 5.f;
+	float ArcherBuildTime = 4.5f;
 
 	/** Recruits a castle can have waiting (including the one in training). */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "1", ClampMax = "12"))
@@ -441,6 +441,154 @@ public:
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Feedback", meta = (ClampMin = "0"))
 	float BuildingRingGap = 34.f;
+
+	/** Hard ceiling on a kingdom's population, however many buildings it has. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Population", meta = (ClampMin = "1"))
+	int32 MaxPopulation = 60;
+
+	// ------------------------------------------------------------- Buildings
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats CastleStats;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats FarmStats;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats MineStats;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats TowerStats;
+
+	/** Gold refunded when a building is cancelled while still under construction (fraction of its cost). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
+	float CancelRefund = 0.75f;
+
+	/** A building under construction starts with this fraction of its health and gains the rest as it goes up. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0.05", ClampMax = "1"))
+	float ConstructionStartHealth = 0.15f;
+
+	/** Seconds a destroyed building takes to collapse into rubble (and the rubble lingers twice as long). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0.1"))
+	float CollapseTime = 1.6f;
+
+	/** Workers (miners at a mine, farmhands at a farm) shown going about their work. Cosmetic; payouts land when they deliver. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "6"))
+	int32 WorkersPerBuilding = 2;
+
+	const FSRBuildingStats& BuildingStatsFor(ESRBuildingType Type) const
+	{
+		switch (Type)
+		{
+		case ESRBuildingType::Castle: return CastleStats;
+		case ESRBuildingType::Farm: return FarmStats;
+		case ESRBuildingType::Mine: return MineStats;
+		default: return TowerStats;
+		}
+	}
+
+	// ------------------------------------------------------------------ Grid
+	/** Build grid cell size (cm). Buildings snap to it; the pathfinder walks it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "50", ClampMax = "400"))
+	float GridCellSize = 100.f;
+
+	/** Ground under a building may vary by at most this much (cm) across its footprint. */
+	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "0"))
+	float BuildFlatTolerance = 30.f;
+
+	/** Free cells kept between two buildings (so troops can always walk between them). */
+	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "0", ClampMax = "4"))
+	int32 BuildingGapCells = 1;
+
+	/** A mine must be placed with its centre within this distance (cm) of a free gold vein; it snaps onto the vein. */
+	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "50"))
+	float VeinSnapRadius = 900.f;
+
+	/** Extra path cost for walking next to an obstacle: keeps routes off walls and out of tight gaps. */
+	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "0"))
+	float PathWallPenalty = 1.5f;
+
+	/** Draw the walkability grid and the last paths (debug). */
+	UPROPERTY(EditAnywhere, Config, Category = "Grid")
+	bool bDebugDrawPaths = false;
+
+	// -------------------------------------------------------------------- AI
+	/** 0 Easy, 1 Normal, 2 Hard. Scales the enemy's income, wave timing and wave size (no map cheats at any level). */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "2"))
+	int32 AIDifficulty = 1;
+
+	/** Seconds between the commander's decisions. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0.1"))
+	float AIThinkInterval = 0.75f;
+
+	/** The first attack wave leaves no earlier than this (seconds into the match), at Normal. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0"))
+	float AIFirstWaveTime = 210.f;
+
+	/** Seconds between waves after the first, at Normal. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "10"))
+	float AIWaveInterval = 120.f;
+
+	/** Troops in the first wave, growth per wave, and the most a wave will ever wait for. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
+	int32 AIWaveSizeStart = 7;
+
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0"))
+	int32 AIWaveGrowth = 3;
+
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))
+	int32 AIWaveSizeMax = 26;
+
+	/** Share of the army kept home as a garrison when a wave leaves. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "0.9"))
+	float AIGarrisonFraction = 0.2f;
+
+	/** Enemies within this distance (cm) of any of the commander's buildings make it defend with everything at home. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "500"))
+	float AIDefendRadius = 3200.f;
+
+	/** A wave falls back home when it is down to this fraction of its strength and outnumbered where it fights. */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "1"))
+	float AIRetreatFraction = 0.3f;
+
+	/** Share of Shieldbearers the commander aims for (the rest are Archers). */
+	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "0", ClampMax = "1"))
+	float AIShieldRatio = 0.55f;
+
+	/** What the commander builds, in order, as gold allows (it repeats the list's farms / mines / towers after it ends). */
+	UPROPERTY(EditAnywhere, Config, Category = "AI")
+	TArray<ESRBuildingType> AIBuildOrder;
+
+	/** Let a commander play the player's side too (balance testing: sr.AIvsAI 1). */
+	UPROPERTY(EditAnywhere, Config, Category = "AI")
+	bool bAIPlaysPlayer = false;
+
+	// -------------------------------------------------------------- Platoons
+	UPROPERTY(EditAnywhere, Config, Category = "Platoons", meta = (ClampMin = "1", ClampMax = "9"))
+	int32 MaxPlatoons = 6;
+
+	/** Defensive stance: how far (cm) units chase before returning to where they were posted. */
+	UPROPERTY(EditAnywhere, Config, Category = "Platoons", meta = (ClampMin = "100"))
+	float DefensiveChaseDistance = 900.f;
+
+	// ----------------------------------------------------------------- Audio
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
+	float MasterVolume = 0.9f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
+	float EffectsVolume = 0.85f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
+	float UIVolume = 0.7f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
+	float AmbientVolume = 0.45f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
+	float MusicVolume = 0.35f;
+
+	/** Battle sounds further than this (cm) from the camera's focus are not played at all. */
+	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "500"))
+	float AudibleDistance = 5200.f;
 
 	const FSRCost& CostFor(ESRUnitType Type) const { return Type == ESRUnitType::Archer ? ArcherCost : ShieldbearerCost; }
 	float BuildTimeFor(ESRUnitType Type) const { return Type == ESRUnitType::Archer ? ArcherBuildTime : ShieldbearerBuildTime; }

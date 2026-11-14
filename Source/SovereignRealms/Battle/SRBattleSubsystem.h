@@ -9,6 +9,7 @@
 #include "SRBattleSubsystem.generated.h"
 
 class ASRUnit;
+class ASRBuilding;
 class UStaticMesh;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
@@ -65,6 +66,22 @@ public:
 	const TArray<TObjectPtr<ASRUnit>>& GetUnits() const { return Units; }
 
 	ASRUnit* FindNearestEnemy(const ASRUnit* For, float Range) const;
+	/** Nearest standing enemy building whose footprint edge is within Range of the unit (finished or not). */
+	ASRBuilding* FindNearestEnemyBuilding(const ASRUnit* For, float Range) const;
+
+	// ---- group commands: the one way orders reach troops (player, platoons, the enemy commander) ----
+	/**
+	 * Move (or attack-move) a group in formation. Slots are laid out at the goal in the given shape; one grid
+	 * search finds every member's way round lakes, cliffs, woods and buildings.
+	 */
+	void CommandMove(const TArray<ASRUnit*>& Group, const FVector2D& Goal, bool bAttackMove, ESRFormationShape Shape = ESRFormationShape::Line,
+		bool bAcknowledge = true, const FVector2D* Facing = nullptr);
+	void CommandAttack(const TArray<ASRUnit*>& Group, ASRUnit* Target);
+	void CommandAttackBuilding(const TArray<ASRUnit*>& Group, ASRBuilding* Target);
+
+	/** A building fell; if it was a castle the match is decided. */
+	void NotifyBuildingDestroyed(ASRBuilding* Building);
+	float GetBattleClock() const { return BattleClock; }
 
 	/** Closest unit hit by a ray (cursor picking). Units have no collision; this is pure maths. */
 	ASRUnit* PickUnit(const FVector& RayOrigin, const FVector& RayDir, float Padding) const;
@@ -116,6 +133,9 @@ public:
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> ArrowCardMesh;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[2];
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[2];
+	/** Workers (cosmetic miners and farmhands): 0 miner, 1 farmhand. */
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> WorkerMaterials[2];
+	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> WorkerShadowMaterials[2];
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> ArrowMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> ArrowShadowMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> BlobMaterial;
@@ -135,6 +155,8 @@ private:
 	void UpdateSpriteLook();
 	void OnShotEvent(ESRShotEvent Event, ASRUnit* Unit);
 	void IgnoreBuildings(struct FCollisionQueryParams& Params) const;
+
+	void StepFrame(float Dt);
 
 	UPROPERTY(Transient) TArray<TObjectPtr<ASRUnit>> Units;
 	UPROPERTY(Transient) TArray<TObjectPtr<ASRUnit>> Corpses;

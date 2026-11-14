@@ -35,11 +35,10 @@ from meshlib import Mesh, planar_uv, write_gltf  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TEXEL = 4.0                     # cm per texel, everywhere
-BOUND = 3000.0                  # playable half extent
+BOUND = 12000.0                 # playable half extent (the map was +/-3000 until the 4x pass)
 # dressed world: the low camera sees far up-screen (+X), a little behind the near bound, wide at the back
-WX0, WX1, WY0, WY1 = -5200.0, 12600.0, -9600.0, 9600.0
-PLAYER_START, ENEMY_START = (-1300.0, 0.0), (1500.0, 200.0)
-SPLAT_ORIGIN, SPLAT_SIZE, SPLAT_RES = (-5600.0, -6144.0), 12288.0, 1024      # world square the splat map covers
+WX0, WX1, WY0, WY1 = -15500.0, 24000.0, -16500.0, 16500.0
+SPLAT_ORIGIN, SPLAT_SIZE, SPLAT_RES = (-16000.0, -20480.0), 40960.0, 4096     # world square the splat map covers
 HM_RES = 8.0                    # heightmap raster, cm per cell
 
 rng = np.random.default_rng(20261)
@@ -151,7 +150,8 @@ def rasterize_heights():
         return [((y - WY0) / HM_RES, (x - WX0) / HM_RES) for x, y in ring.coords]
 
     if LAKE is not None:
-        d.polygon(ring_px(LAKE.exterior), fill=LAKE_BED)
+        for part in LAKE.geoms:
+            d.polygon(ring_px(part.exterior), fill=LAKE_BED)
     for t in sorted(TIERS, key=lambda t: t["top"]):
         d.polygon(ring_px(t["poly"].exterior), fill=t["top"])
     return np.array(img)
@@ -414,6 +414,12 @@ def build_prop_meshes():
                                    ((130, 105, 80), 15), ((170, 120, 95), 15), ((150, 150, 120), 16),
                                    ((280, 210, 170), 17), ((330, 250, 200), 18), ((260, 260, 230), 18)]):
         out.append(hull_rock("SM_Rock_%s%d" % ("SML"[i // 3], i % 3), sz, pts, seed=300 + i))
+    # gold vein: a low ore outcrop (MI_Bld_Ore: dark stone with gold glints) with loose ore chunks round it
+    gv = Mesh("SM_GoldVein")
+    hull_rock(None, (300, 240, 150), 17, seed=377, into=gv, yaw=10)
+    for j, (dx, dy, k) in enumerate([(150, 110, 0.45), (-140, 90, 0.38), (60, -150, 0.42), (-90, -120, 0.3), (190, -40, 0.28)]):
+        hull_rock(None, (300 * k, 240 * k, 150 * k * 1.1), 12, seed=380 + j, into=gv, offset=(dx, dy, 0.0), yaw=j * 47.0)
+    out.append(gv)
     # standing stones (rock skin)
     for i, (w, d, h) in enumerate([(70, 46, 250), (62, 50, 190), (80, 54, 130)]):
         m = hull_rock("SM_Menhir_%d" % i, (w, d, h * 1.6), 14, seed=340 + i)
@@ -505,52 +511,116 @@ def catmull(points, per=14):
     return out
 
 
-ROAD_MAIN = catmull([(-5200, -420), (-4000, -380), (-3000, -260), (-2000, -70), (-1300, 30), (-500, 150), (250, 90), (900, 260),
-                     (1500, 230), (2300, 400), (3000, 640), (3700, 880), (4500, 1080), (5600, 1380), (7200, 1500)])
-ROAD_BRANCH = catmull([(2300, 400), (2750, 60), (3050, -500), (3300, -1000)])
-ROAD_SIDE = catmull([(-500, 150), (-650, -420), (-560, -860)])          # spur to the in-field ruin
+# ---- kingdoms: opposite corners (player bottom-left of the screen, enemy top-right), each with open ground all round
+P_ANCHOR, E_ANCHOR = (-7000.0, -6400.0), (7000.0, 6400.0)
+# Buildings on the field: (type, x, y, yaw, team 0 player / 1 enemy, label). Types are the models under
+# SourceArt/Buildings (Tools/blender/build_building.py); <type>.json gives the blocking footprint and the sockets.
+# A building's front (gate, adit, yard) faces -X at yaw 0, toward the game camera.
+BUILDINGS = [
+    ("castle", P_ANCHOR[0], P_ANCHOR[1], 0.0, 0, "Castle_Player"),
+    ("farm", P_ANCHOR[0] + 250.0, P_ANCHOR[1] + 2500.0, 0.0, 0, "Farm_Player"),
+    ("mine", P_ANCHOR[0] + 450.0, P_ANCHOR[1] - 2500.0, 0.0, 0, "Mine_Player"),
+    ("castle", E_ANCHOR[0], E_ANCHOR[1], 0.0, 1, "Castle_Enemy"),
+    ("farm", E_ANCHOR[0] - 250.0, E_ANCHOR[1] - 2500.0, 0.0, 1, "Farm_Enemy"),
+    ("mine", E_ANCHOR[0] - 450.0, E_ANCHOR[1] + 2500.0, 0.0, 1, "Mine_Enemy"),
+]
+# Troops start in front of each castle, on the side facing the other kingdom.
+PLAYER_START = (P_ANCHOR[0] + 1500.0, P_ANCHOR[1] + 1400.0)
+ENEMY_START = (E_ANCHOR[0] - 1500.0, E_ANCHOR[1] - 1400.0)
+
+# Gold veins: the only places a mine can be built (layout.json "veins"; ASRBuilding placement rules read them).
+# Two are under the starting mines; each kingdom has two safe expansions; the rest are contested.
+GOLD_VEINS = [(P_ANCHOR[0] + 450.0, P_ANCHOR[1] - 2500.0), (E_ANCHOR[0] - 450.0, E_ANCHOR[1] + 2500.0),      # home
+              (-2600.0, -9300.0), (2600.0, 9300.0), (-9600.0, -1200.0), (9600.0, 1200.0),                    # expansions
+              (-1500.0, 1700.0), (1500.0, -1700.0),                                                          # centre
+              (-8200.0, 8600.0), (8200.0, -8600.0)]                                                          # far corners
+
+# The king's road: from the near edge into the player's castle court, diagonally across the field, into the enemy
+# court and away up-screen into the hills. Branches run to the far corners past the contested veins.
+ROAD_MAIN_KEYS = [(-7950.0, -6400.0), (-7700.0, -5000.0), (-6200.0, -4500.0), (-4300.0, -3300.0), (-2400.0, -1700.0), (-700.0, -350.0),
+                  (700.0, 350.0), (2400.0, 1700.0), (4300.0, 3300.0), (5600.0, 4700.0), (6000.0, 5700.0), (6050.0, 6400.0)]
+ROAD_MAIN = catmull([(-15500, -7200), (-11500, -6900), (-9200, -6700)] + ROAD_MAIN_KEYS + [(5850, 7600), (6300, 9600), (7300, 11800), (9300, 14800), (12500, 17000), (17600, 18000)])
+ROAD_BRANCH = catmull([(-2400, -1700), (-4400, 1500), (-6200, 4900), (-8000, 8300)])
+ROAD_SIDE = catmull([(2400, 1700), (4400, -1500), (6200, -4900), (8000, -8300)])       # second branch (earth only)
+LAKE_SEEDS = [(-2600.0, 6600.0, 1500.0, 1150.0), (2600.0, -6600.0, 1500.0, 1150.0)]     # inside the field: obstacles
 
 
 def lane_keepout():
-    """Ground that must stay flat: both spawn areas, the lane between them, and the blocking rocks."""
-    lane = LineString([(-1900, 0), PLAYER_START, (100, 110), ENEMY_START, (2100, 230)]).buffer(540)
-    spawns = unary_union([Point(PLAYER_START).buffer(680), Point(ENEMY_START).buffer(680)])
-    return unary_union([lane, spawns])
+    """Ground that must stay flat: both kingdoms, both spawn areas, the main road between them and the gold veins."""
+    lane = LineString(ROAD_MAIN_KEYS).buffer(560)
+    spawns = unary_union([Point(PLAYER_START).buffer(900), Point(ENEMY_START).buffer(900)])
+    kingdoms = unary_union([Point(x, y).buffer(1250 if k == "castle" else 950) for k, x, y, *_ in BUILDINGS])
+    veins = unary_union([Point(x, y).buffer(800) for x, y in GOLD_VEINS])
+    # room to build round each castle: a broad flat apron the player's farms and mines can go on
+    aprons = unary_union([Point(P_ANCHOR).buffer(3400), Point(E_ANCHOR).buffer(3400)])
+    return unary_union([lane, spawns, kingdoms, veins, aprons])
 
 
-BLOCK_ROCKS = [  # name, x, y, (sx, sy, sz), yaw : gameplay footprints, unchanged from the first pass
-    ("Rock_Centre", 150, -260, (230, 190, 150), 20),
-    ("Rock_East", -250, 820, (300, 220, 210), -35),
-    ("Rock_West", 650, -900, (260, 260, 180), 50),
-    ("Rock_SW", -1900, -1350, (210, 170, 130), 70),
-    ("Rock_NE", 2150, 1250, (240, 200, 160), -15),
-]
-# blocking knolls inside the play area: (x, y, rx, ry, height); each carries a tree or two
-KNOLLS = [(-2650, 2500, 250, 230, 120), (2650, -2550, 270, 250, 135), (2780, 820, 220, 240, 115), (-2750, -2400, 240, 230, 110),
-          (350, -2800, 230, 210, 105), (-1350, 2780, 230, 240, 125), (1550, 2820, 250, 230, 120), (2800, 2700, 260, 250, 140),
-          (-2330, 640, 190, 200, 96), (-2420, -720, 200, 190, 104)]
-# field terraces: (x, y, rx, ry, walkable 40 cm steps, core steps). The walkable steps are an apron troops can
-# climb; a core is a taller bluff standing on it (blocks movement, carries trees) for the ones well off the lane.
-FIELD_TERRACES = [(-250, 1800, 800, 660, 2, [90, 70]), (950, -1900, 740, 800, 2, [100, 75, 60]), (-2250, -1650, 520, 580, 2, [85]),
-                  (2380, -1150, 500, 560, 1, [95, 70]), (-2100, 1800, 520, 580, 1, [90, 65]), (2250, 1980, 640, 640, 2, [100, 80]),
-                  (-950, -2450, 600, 460, 1, [90, 70]), (780, 2520, 520, 440, 1, [85, 60]),
-                  (-760, -1010, 400, 430, 2, []), (-820, 1050, 330, 360, 1, []), (1700, -620, 300, 330, 1, []), (560, 1180, 330, 300, 2, [])]
-CORE_TOPS = []      # (x, y) on top of each bluff, for trees
+BLOCK_ROCKS = []      # name, x, y, (sx, sy, sz), yaw : blocking boulders (gameplay collision box each)
+KNOLLS = []           # (x, y, rx, ry, height): blocking knolls with a tree or two
+FIELD_TERRACES = []   # (x, y, rx, ry, walkable 40 cm steps, core steps)
+FIELD_FIRS = []       # (x, y, kind): single firs in the field, each with a trunk blocker
+CORE_TOPS = []        # (x, y) on top of each bluff, for trees
+
+
+def plan_field(keep):
+    """Scatters the in-field features over the +/-BOUND play area (Poisson-ish, with keep-outs), so the large map
+    reads like the hand-placed small one did: open lanes, terraces to fight round, knolls and boulders as cover."""
+    taken = []
+    keep_p = {}
+
+    def kept(x, y, pad):
+        if pad not in keep_p:
+            from shapely.prepared import prep
+            keep_p[pad] = prep(keep.buffer(pad))
+        return keep_p[pad].contains(Point(x, y))
+
+    def free(x, y, r, pad):
+        if abs(x) > BOUND - r * 0.6 or abs(y) > BOUND - r * 0.6:
+            return False
+        if kept(x, y, pad):
+            return False
+        return all((x - tx) ** 2 + (y - ty) ** 2 > (r + tr) ** 2 for tx, ty, tr in taken)
+
+    def scatter(n, rmin, rmax, pad, tries=20000):
+        out = []
+        for _ in range(tries):
+            if len(out) >= n:
+                break
+            r = U(rmin, rmax)
+            x, y = U(-BOUND, BOUND), U(-BOUND, BOUND)
+            if free(x, y, r, pad):
+                taken.append((x, y, r))
+                out.append((x, y, r))
+        return out
+
+    for x, y, r in scatter(95, 450, 1000, 300.0):
+        tiers = int(rng.integers(1, 3))
+        core = [] if rng.random() < 0.35 else [U(70, 110) for _ in range(int(rng.integers(1, 4)))]
+        FIELD_TERRACES.append((x, y, r * U(0.8, 1.1), r * U(0.75, 1.05), tiers, core))
+    for x, y, r in scatter(70, 220, 320, 150.0):
+        KNOLLS.append((x, y, r * U(0.9, 1.1), r * U(0.9, 1.1), U(95, 140)))
+    for i, (x, y, r) in enumerate(scatter(46, 170, 240, 120.0)):
+        BLOCK_ROCKS.append(("Rock_%02d" % i, x, y, (U(200, 320), U(170, 240), U(130, 210)), U(-60, 60)))
+    for x, y, r in scatter(70, 90, 120, 80.0):
+        FIELD_FIRS.append((x, y, "ABBCC"[int(rng.integers(0, 5))]))
 
 
 def build_layout():
     global LAKE, HM
     play = box(-BOUND, -BOUND, BOUND, BOUND)
     tall_zone_out = play.buffer(95, join_style=2)              # tiers taller than a step stay outside this
-    road_poly = unary_union([LineString(ROAD_MAIN).buffer(180), LineString(ROAD_BRANCH).buffer(150)])
-    keep = lane_keepout()
-    rock_clear = unary_union([Point(x, y).buffer(max(s[0], s[1]) * 0.5 + 150) for _, x, y, s, _ in BLOCK_ROCKS])
+    road_poly = unary_union([LineString(ROAD_MAIN).buffer(180), LineString(ROAD_BRANCH).buffer(150), LineString(ROAD_SIDE).buffer(140)])
 
-    # ---- lake: far-left, outside the play area
-    lake = unary_union([chunk_shape(4650, -2700, 1150, 1350, 6), rounded_box(3650, -1350, 700, 900, 20, 260), rounded_box(5900, -3600, 1500, 1700, 10, 500)])
-    lake = lake.difference(play.buffer(150, join_style=2)).buffer(-40, 2).buffer(40, 2)
-    LAKE = largest(lake).simplify(10.0)
+    # ---- lakes: two in the field (obstacles both armies must go round), one beyond the left edge
+    lakes = [chunk_shape(x, y, rx, ry, 6) for x, y, rx, ry in LAKE_SEEDS]
+    lakes.append(unary_union([chunk_shape(BOUND + 4200, -BOUND - 1800, 2200, 2600, 6), rounded_box(BOUND + 2600, -BOUND - 400, 1300, 1500, 20, 420)]))
+    lake = unary_union(lakes).difference(road_poly.buffer(200)).buffer(-40, 2).buffer(40, 2)
+    LAKE = MultiPolygon([p.simplify(10.0) for p in largest(lake, 200000.0, all_parts=True)])
     lake_out = LAKE.buffer(110)
+    keep = unary_union([lane_keepout(), lake_out])
+    plan_field(keep)
+    rock_clear = unary_union([Point(x, y).buffer(max(s[0], s[1]) * 0.5 + 150) for _, x, y, s, _ in BLOCK_ROCKS])
 
     # ---- field terraces (walkable: 36-40 cm steps)
     for i, (x, y, rx, ry, tiers, core) in enumerate(FIELD_TERRACES):
@@ -595,33 +665,36 @@ def build_layout():
             if base:
                 stack(name, "Terrain/Plateaus", base[:2], steps)
 
+    B = BOUND
     k = 0
     # far side (top of screen): two ranks, the back one taller
-    for y in np.arange(-2600, 5601, 1250):
-        ring_stack("SM_T_Far_%02d" % k, 3720 + U(-120, 160), y + U(-200, 200), U(780, 1050), U(620, 800), [U(60, 130) for _ in range(int(rng.integers(4, 7)))])
+    for y in np.arange(-B - 2600, B + 2601, 1250):
+        ring_stack("SM_T_Far_%02d" % k, B + 720 + U(-120, 160), y + U(-200, 200), U(780, 1050), U(620, 800), [U(60, 130) for _ in range(int(rng.integers(4, 7)))])
         k += 1
-    for y in np.arange(-900, 6001, 1500):
-        ring_stack("SM_T_Far_%02d" % k, 5300 + U(-200, 250), y + U(-250, 250), U(1000, 1350), U(800, 1000), [U(90, 190) for _ in range(int(rng.integers(5, 8)))], apron=False)
+    for y in np.arange(-B - 3000, B + 3001, 1500):
+        ring_stack("SM_T_Far_%02d" % k, B + 2300 + U(-200, 250), y + U(-250, 250), U(1000, 1350), U(800, 1000), [U(90, 190) for _ in range(int(rng.integers(5, 8)))], apron=False)
         k += 1
     # flanks (screen left and right)
     for side in (-1, 1):
-        for x in np.arange(-2700, 3001, 1150):
-            far = (x + 3000) / 6000.0
+        for x in np.arange(-B + 300, B + 1, 1150):
+            far = (x + B) / (2 * B)
             n = int(rng.integers(2, 4)) + (1 if far > 0.5 else 0)
-            ring_stack("SM_T_Flank_%02d" % k, x + U(-200, 200), side * (3900 + U(-150, 250)), U(620, 900), U(700, 950), [U(50, 105) for _ in range(n)])
+            ring_stack("SM_T_Flank_%02d" % k, x + U(-200, 200), side * (B + 900 + U(-150, 250)), U(620, 900), U(700, 950), [U(50, 105) for _ in range(n)])
             k += 1
-        for x in np.arange(-2000, 4001, 1500):
-            ring_stack("SM_T_Flank_%02d" % k, x + U(-250, 250), side * (5250 + U(-150, 250)), U(900, 1200), U(800, 1050), [U(80, 160) for _ in range(int(rng.integers(3, 6)))], apron=False)
+        for x in np.arange(-B + 1000, B + 1001, 1500):
+            ring_stack("SM_T_Flank_%02d" % k, x + U(-250, 250), side * (B + 2250 + U(-150, 250)), U(900, 1200), U(800, 1050), [U(80, 160) for _ in range(int(rng.integers(3, 6)))], apron=False)
             k += 1
     # near side (bottom of screen): low steps only, so nothing hides the field from the camera
-    for y in np.arange(-4200, 4201, 1200):
-        ring_stack("SM_T_Near_%02d" % k, -3900 + U(-200, 150), y + U(-250, 250), U(560, 800), U(600, 850), [U(34, 48)] if rng.random() < 0.6 else [])
+    for y in np.arange(-B - 1200, B + 1201, 1200):
+        ring_stack("SM_T_Near_%02d" % k, -B - 900 + U(-200, 150), y + U(-250, 250), U(560, 800), U(600, 850), [U(34, 48)] if rng.random() < 0.6 else [])
         k += 1
     # far backdrop: big simple hills that fade into the haze
-    for i, (x, y, rx, ry, steps) in enumerate([(8300, -6000, 1700, 2300, [260, 300, 320]), (8900, -1500, 1500, 2400, [300, 360, 300, 260]),
-                                               (8500, 3300, 1600, 2300, [280, 320, 340]), (9200, 7400, 1700, 2000, [300, 340, 300]),
-                                               (11000, -3800, 1300, 3000, [420, 460, 420]), (11200, 2400, 1300, 3300, [460, 480, 440, 300]),
-                                               (7200, 7600, 1100, 1500, [200, 240]), (7000, -7600, 1100, 1500, [220, 240])]):
+    for i, (x, y, rx, ry, steps) in enumerate([(B + 5300, -B - 3000, 1700, 2300, [260, 300, 320]), (B + 5900, -B + 1500, 1500, 2400, [300, 360, 300, 260]),
+                                               (B + 5500, -1500, 1600, 2300, [280, 320, 340]), (B + 6200, 3000, 1700, 2000, [300, 340, 300]),
+                                               (B + 5600, B - 2000, 1700, 2300, [280, 320, 340]), (B + 6000, B + 2600, 1600, 2000, [300, 340, 300]),
+                                               (B + 8000, -B + 4000, 1300, 3000, [420, 460, 420]), (B + 8200, B - 4000, 1300, 3300, [460, 480, 440, 300]),
+                                               (B + 8400, 0, 1400, 3000, [420, 460, 420]),
+                                               (B + 4200, B + 4600, 1100, 1500, [200, 240]), (B + 4000, -B - 4600, 1100, 1500, [220, 240])]):
         shape = chunk_shape(x, y, rx, ry, 6)
         base = clean(shape.difference(lake_out), 90000.0)
         if base:
@@ -629,7 +702,7 @@ def build_layout():
 
     HM = rasterize_heights()
 
-    # ---- blocking rocks: gameplay footprints as before, visible stone is a unique mesh per rock
+    # ---- blocking rocks: gameplay footprints, visible stone is a unique mesh per rock
     for name, x, y, size, yaw in BLOCK_ROCKS:
         z = height_at(x, y)
         BLOCKERS.append({"label": name + "_Collision", "pos": [x, y, z + size[2] * 0.5 - 12.0], "size": list(size), "yaw": yaw})
@@ -641,6 +714,10 @@ def build_layout():
             a, d = U(0, 2 * math.pi), max(size[0], size[1]) * U(0.6, 0.85)
             inst("SM_Tuft_Fern", x + math.cos(a) * d, y + math.sin(a) * d, yaw=U(-30, 30))
 
+    # ---- gold veins: an ore outcrop at each (dressing; the gameplay vein is the layout point)
+    for i, (x, y) in enumerate(GOLD_VEINS):
+        actor("SM_GoldVein", x, y, U(0, 360), "ore", "GoldVein_%02d" % i, "Props/Veins", z=height_at(x, y))
+
     place_props(keep, road_poly, rock_clear)
 
 
@@ -649,16 +726,18 @@ def on_road(x, y, pad=0.0):
 
 
 def place_props(keep, road_poly, rock_clear):
-    play_in = lambda x, y, m=0.0: abs(x) < BOUND + m and abs(y) < BOUND + m
+    B = BOUND
+    play_in = lambda x, y, m=0.0: abs(x) < B + m and abs(y) < B + m
     from shapely.prepared import prep
     lake_cache = {}
+    keep_prep = prep(keep)
 
     def in_lake(x, y, m=0.0):
         if m not in lake_cache:
             lake_cache[m] = prep(LAKE.buffer(m) if m else LAKE)
         return lake_cache[m].contains(Point(x, y))
 
-    # ---- conifers. Inside the play area only on the blocking knolls; outside in stands that thicken up-screen.
+    # ---- conifers. Inside the play area on the knolls, bluffs and as scattered single firs; outside in stands.
     trees = []
 
     def tree(x, y, kind=None, force=False):
@@ -667,11 +746,10 @@ def place_props(keep, road_poly, rock_clear):
                 return False
             if not flat_around(x, y, 55):
                 return False
-            if any((x - tx) ** 2 + (y - ty) ** 2 < 150 ** 2 for tx, ty in trees):
+            if any((x - tx) ** 2 + (y - ty) ** 2 < 150 ** 2 for tx, ty in trees[-400:]):
                 return False
         if kind is None:
-            # nothing tall on the camera side of the field; tall firs at the back
-            if x < -BOUND:
+            if x < -B:                                         # nothing tall on the camera side of the field
                 return False
             kind = "ABCDE"[int(rng.choice(5, p=[0.12, 0.26, 0.3, 0.22, 0.10]))]
         inst("SM_Conifer_" + kind, x, y, scale=U(0.92, 1.08), sink=6.0)
@@ -679,50 +757,51 @@ def place_props(keep, road_poly, rock_clear):
         return True
 
     for (x, y, rx, ry, h) in KNOLLS:
-        tall = "C" if abs(x) < 2500 else "D"
-        if x < -2000 and abs(y) < 1200:
-            tall = "D"                                         # the two behind the player's start frame the default view
-        tree(x + U(-30, 30), y + U(-30, 30), tall, force=True)
+        tree(x + U(-30, 30), y + U(-30, 30), "CD"[int(rng.integers(0, 2))], force=True)
         if rng.random() < 0.6:
             tree(x + U(-70, 70), y + rx * 0.45 * (1 if rng.random() < 0.5 else -1), "A", force=True)
-    # a few firs inside the play area, off the lane: each gets one small convex blocker at the trunk
-    for i, (x, y, kind) in enumerate([(-1050, 1560, "C"), (-880, 1730, "B"), (420, 1900, "C"), (-2050, 1820, "B"), (1180, -1700, "C"),
-                                      (1340, -1880, "B"), (-2300, -1620, "C"), (2420, -1180, "B"), (2300, 2050, "D"), (2120, 1900, "B"),
-                                      (-1000, -2500, "C"), (760, 2560, "B"), (-880, -1180, "B"), (640, 1240, "A"),
-                                      (-190, 970, "C"), (-40, 1060, "B"), (130, -650, "C"), (-10, -770, "B"), (330, 760, "B"),
-                                      (-2130, -360, "C"), (-2090, 420, "B"), (1750, 900, "C"), (1900, -520, "B"), (1050, 820, "A")]):
-        if tree(x, y, kind, force=True):
-            BLOCKERS.append({"label": "Fir_%02d_Collision" % i, "pos": [x, y, height_at(x, y) + 90.0], "size": [46, 46, 200], "yaw": 0})
+    for i, (x, y, kind) in enumerate(FIELD_FIRS):              # single firs in the field: one small trunk blocker each
+        if flat_around(x, y, 60) and not on_road(x, y, 60) and tree(x, y, kind, force=True):
+            BLOCKERS.append({"label": "Fir_%03d_Collision" % i, "pos": [x, y, height_at(x, y) + 90.0], "size": [46, 46, 200], "yaw": 0})
     for (x, y) in CORE_TOPS:
         tree(x, y, "ABC"[int(rng.integers(0, 3))], force=True)
-    for _ in range(26):                                        # loose stones in the field (ankle high: dressing only)
-        cx, cy = U(-2800, 2800), U(-2800, 2800)
-        if keep.contains(Point(cx, cy)) or on_road(cx, cy, 30):
+    for _ in range(110):                                       # loose stones in the field (ankle high: dressing only)
+        cx, cy = U(-B + 200, B - 200), U(-B + 200, B - 200)
+        if keep_prep.contains(Point(cx, cy)) or on_road(cx, cy, 30):
             continue
         for _ in range(int(rng.integers(2, 5))):
             inst("SM_Rock_S%d" % rng.integers(0, 3), cx + float(rng.normal(0, 45)), cy + float(rng.normal(0, 45)), sink=9.0)
     stands = []
-    for _ in range(150):
-        x, y = U(-3000, 6900), U(-6300, 6300)
+    for _ in range(520):
+        x, y = U(-B, B + 4000), U(-B - 3400, B + 3400)
         if play_in(x, y, 240):
             continue
         stands.append((x, y, int(rng.integers(4, 10)), U(240, 520)))
-    stands += [(3500, 1700, 9, 420), (3450, 2900, 8, 420), (3550, -200, 7, 360), (3900, 300, 8, 380), (-2400, 3500, 8, 400), (-800, 3450, 7, 380),
-               (800, 3500, 8, 420), (2300, 3600, 8, 400), (1200, -3500, 7, 380), (-1000, -3550, 6, 360), (2600, -3550, 6, 360), (-2600, -3600, 6, 380),
-               (4300, 2300, 10, 520), (4700, 800, 9, 480), (5200, 3300, 10, 560), (4900, -700, 8, 420)]
+    # woods at the field's edges, inside the bound but clear of the kingdoms
+    for _ in range(60):
+        x, y = U(-B + 600, B - 600), U(-B + 600, B - 600)
+        if abs(abs(x) - B) > 1600 and abs(abs(y) - B) > 1600:
+            continue
+        if keep_prep.contains(Point(x, y)):
+            continue
+        stands.append((x, y, int(rng.integers(5, 10)), U(300, 520)))
     for cx, cy, num, spread in stands:
         for _ in range(num):
             a, d = U(0, 2 * math.pi), spread * math.sqrt(U(0.02, 1.0))
             x, y = cx + math.cos(a) * d, cy + math.sin(a) * d
-            if play_in(x, y, 150):
+            inside = play_in(x, y, 150)
+            if inside and keep_prep.contains(Point(x, y)):
                 continue
-            if tree(x, y) and rng.random() < 0.5:
-                a2 = U(0, 2 * math.pi)
-                fx, fy = x + math.cos(a2) * U(80, 170), y + math.sin(a2) * U(80, 170)
-                if not on_road(fx, fy) and not in_lake(fx, fy, 30) and not (play_in(fx, fy) and keep.contains(Point(fx, fy))):
-                    inst("SM_Tuft_Fern", fx, fy, yaw=U(-35, 35))
-    for i in range(60):                                        # backdrop hills: big firs, sparse
-        x, y = U(7000, 12000), U(-8800, 8800)
+            if tree(x, y):
+                if inside:
+                    BLOCKERS.append({"label": "Wood_%04d_Collision" % len(trees), "pos": [x, y, height_at(x, y) + 90.0], "size": [46, 46, 200], "yaw": 0})
+                if rng.random() < 0.5:
+                    a2 = U(0, 2 * math.pi)
+                    fx, fy = x + math.cos(a2) * U(80, 170), y + math.sin(a2) * U(80, 170)
+                    if not on_road(fx, fy) and not in_lake(fx, fy, 30) and not (play_in(fx, fy) and keep_prep.contains(Point(fx, fy))):
+                        inst("SM_Tuft_Fern", fx, fy, yaw=U(-35, 35))
+    for i in range(160):                                       # backdrop hills: big firs, sparse
+        x, y = U(B + 4000, WX1 - 600), U(WY0 + 600, WY1 - 600)
         if height_at(x, y) > 100 and flat_around(x, y, 80):
             inst("SM_Conifer_" + "DE"[int(rng.integers(0, 2))], x, y, scale=U(1.1, 1.5), sink=6.0)
 
@@ -744,9 +823,9 @@ def place_props(keep, road_poly, rock_clear):
             off = U(26, 70)
             x, y = p.x + nx * off, p.y + ny * off
             d += U(170, 520)
-            if x < WX0 + 200 or x > 6800 or abs(y) > 6300 or in_lake(x, y, 20) or on_road(x, y, -60):
+            if x < WX0 + 200 or x > B + 3800 or abs(y) > B + 3300 or in_lake(x, y, 20) or on_road(x, y, -60):
                 continue
-            if play_in(x, y) and (keep.contains(Point(x, y)) or rock_clear.contains(Point(x, y))):
+            if play_in(x, y) and (keep_prep.contains(Point(x, y)) or rock_clear.contains(Point(x, y))):
                 continue
             if abs(height_at(x, y) - t["below"]) > 1.0:
                 continue
@@ -765,23 +844,29 @@ def place_props(keep, road_poly, rock_clear):
             feet += 1
 
     # ---- outcrops outside the play area (decoration only)
-    for i in range(34):
+    for i in range(110):
         for _ in range(30):
-            x, y = U(-4300, 6800), U(-6200, 6200)
+            x, y = U(-B - 1300, B + 3800), U(-B - 3200, B + 3200)
             if not play_in(x, y, 320) and not in_lake(x, y, 200) and not on_road(x, y, 120) and flat_around(x, y, 150):
                 break
         else:
             continue
-        big = "SM_Rock_%s%d" % ("M" if (x < -BOUND or rng.random() < 0.45) else "L", rng.integers(0, 3))
+        big = "SM_Rock_%s%d" % ("M" if (x < -B or rng.random() < 0.45) else "L", rng.integers(0, 3))
         inst(big, x, y, sink=12.0)
         for _ in range(int(rng.integers(2, 5))):
             a, d = U(0, 2 * math.pi), U(110, 220)
             inst("SM_Rock_S%d" % rng.integers(0, 3), x + math.cos(a) * d, y + math.sin(a) * d, sink=4.0)
 
-    # ---- grass: blade cards in clumps over the turf (units wade through them; no collision, no shadow)
+    # ---- grass: blade cards in clumps over the turf (units wade through them; no collision, no shadow). Denser in
+    # the field, sparser in the dressing beyond it (seen only far off, through haze and blur).
     n = 0
-    for _ in range(3400):
-        cx, cy = U(-4300, 6600), U(-5600, 5600)
+    for k_ in range(26000):
+        if k_ < 19000:
+            cx, cy = U(-B - 300, B + 300), U(-B - 300, B + 300)
+        else:
+            cx, cy = U(-B - 1300, B + 3600), U(-B - 2800, B + 2800)
+            if play_in(cx, cy):
+                continue
         if in_lake(cx, cy, 10):
             continue
         dry = SPLAT_DRY(cx, cy)
@@ -789,82 +874,100 @@ def place_props(keep, road_poly, rock_clear):
         if road < 170:
             continue
         kind = "SM_Tuft_Dry" if rng.random() < dry * 0.6 else ("SM_Tuft_Tall" if rng.random() < 0.55 else "SM_Tuft_Short")
-        in_field = play_in(cx, cy)
-        count = int(rng.integers(2, 6)) if in_field else int(rng.integers(3, 8))
+        count = int(rng.integers(2, 5))
         for _ in range(count):
             x, y = cx + float(rng.normal(0, 34)), cy + float(rng.normal(0, 34))
             if ROAD_DIST(x, y) < 160 or in_lake(x, y):
                 continue
             inst(kind, x, y, yaw=U(-32, 32), scale=1.0)
             n += 1
-    for _ in range(46):                                        # flower patches
-        cx, cy = U(-3600, 5200), U(-4800, 4800)
+    for _ in range(180):                                       # flower patches
+        cx, cy = U(-B, B + 2000), U(-B - 1000, B + 1000)
         if in_lake(cx, cy, 40) or ROAD_DIST(cx, cy) < 260:
             continue
         for _ in range(int(rng.integers(2, 5))):
             inst("SM_Tuft_Flower", cx + float(rng.normal(0, 50)), cy + float(rng.normal(0, 50)), yaw=U(-30, 30))
 
-    # ---- the in-field ruin (blocking: one convex box each) and the far gate ruin
+    # ---- ruins (blocking: one convex box each): one in the middle of the field, one where the road leaves it
     def ruin_piece(mesh, x, y, yaw, label, block=None):
         actor(mesh, x, y, yaw, "sandstone", label, "Props/Ruin")
         if block:
             z = height_at(x, y)
             BLOCKERS.append({"label": label + "_Collision", "pos": [x, y, z + block[2] * 0.5 - 6.0], "size": list(block), "yaw": yaw})
 
-    rx_, ry_ = -560.0, -900.0
-    ruin_piece("SM_Ruin_Pillar", rx_ + 120, ry_ - 150, 8, "Ruin_Pillar_A", (88, 88, 320))
-    ruin_piece("SM_Ruin_PillarBroken", rx_ + 130, ry_ + 170, -6, "Ruin_Pillar_B", (88, 88, 190))
-    ruin_piece("SM_Ruin_Wall", rx_ - 60, ry_ - 20, 4, "Ruin_Wall", (60, 370, 190))
-    ruin_piece("SM_Ruin_Block", rx_ + 200, ry_ + 40, 35, "Ruin_Block_A")
-    ruin_piece("SM_Ruin_Block", rx_ + 60, ry_ + 300, -50, "Ruin_Block_B")
-    actor("SM_BannerPole", rx_ + 150, ry_ - 60, 0, "wood", "Ruin_BannerPole", "Props/Ruin")
-    actor("SM_BannerCloth", rx_ + 150, ry_ - 60, 0, "banner", "Ruin_Banner", "Props/Ruin")
-    for i, (dx, dy, mesh) in enumerate([(-190, -330, "SM_Menhir_1"), (-230, 280, "SM_Menhir_2")]):
-        actor(mesh, rx_ + dx, ry_ + dy, U(0, 360), "rock", "Ruin_Stone_%d" % i, "Props/Ruin")
-    gx, gy = 3560.0, 860.0                                     # gate on the road where it leaves the field
+    for tag, (rx_, ry_) in (("Ruin", (-900.0, 1300.0)), ("RuinB", (1000.0, -1200.0))):
+        ruin_piece("SM_Ruin_Pillar", rx_ + 120, ry_ - 150, 8, tag + "_Pillar_A", (88, 88, 320))
+        ruin_piece("SM_Ruin_PillarBroken", rx_ + 130, ry_ + 170, -6, tag + "_Pillar_B", (88, 88, 190))
+        ruin_piece("SM_Ruin_Wall", rx_ - 60, ry_ - 20, 4, tag + "_Wall", (60, 370, 190))
+        ruin_piece("SM_Ruin_Block", rx_ + 200, ry_ + 40, 35, tag + "_Block_A")
+        ruin_piece("SM_Ruin_Block", rx_ + 60, ry_ + 300, -50, tag + "_Block_B")
+        actor("SM_BannerPole", rx_ + 150, ry_ - 60, 0, "wood", tag + "_BannerPole", "Props/Ruin")
+        actor("SM_BannerCloth", rx_ + 150, ry_ - 60, 0, "banner", tag + "_Banner", "Props/Ruin")
+        for i, (dx, dy, mesh) in enumerate([(-190, -330, "SM_Menhir_1"), (-230, 280, "SM_Menhir_2")]):
+            actor(mesh, rx_ + dx, ry_ + dy, U(0, 360), "rock", "%s_Stone_%d" % (tag, i), "Props/Ruin")
+    gx, gy = 6700.0, 10400.0                                   # gate on the road where it leaves the field (outside the bound)
     ruin_piece("SM_Ruin_Pillar", gx, gy - 300, 4, "Gate_Pillar_A")
     ruin_piece("SM_Ruin_Pillar", gx + 40, gy + 330, -5, "Gate_Pillar_B")
     ruin_piece("SM_Ruin_Wall", gx + 20, gy - 560, 2, "Gate_Wall_A")
     ruin_piece("SM_Ruin_Wall", gx + 70, gy + 600, 184, "Gate_Wall_B")
-    ruin_piece("SM_Ruin_Block", gx - 150, gy - 200, 70, "Gate_Block")
     actor("SM_BannerPole", gx - 30, gy + 250, 0, "wood", "Gate_BannerPole", "Props/Ruin")
     actor("SM_BannerCloth", gx - 30, gy + 250, 0, "banner", "Gate_Banner", "Props/Ruin")
-    for i, (x, y) in enumerate([(3300, -2050), (3420, -2330), (3250, -2600)]):      # standing stones by the water
-        actor("SM_Menhir_%d" % (i % 3), x, y, U(0, 360), "rock", "Shore_Stone_%d" % i, "Props/Rocks")
+    for i, (lx, ly, lrx, lry) in enumerate(LAKE_SEEDS):
+        a = U(0, 2 * math.pi)
+        x, y = lx + math.cos(a) * (lrx + 450), ly + math.sin(a) * (lry + 450)
+        if not in_lake(x, y, 60) and not keep_prep.contains(Point(x, y)):
+            actor("SM_Menhir_%d" % (i % 3), x, y, U(0, 360), "rock", "Shore_Stone_%d" % i, "Props/Rocks")
 
-    # ---- fences, stumps and logs: bits of an old boundary near the player's start and along the road
-    for i, (x, y, yaw, kind) in enumerate([(-2060, -520, 6, "A"), (-2080, -280, -4, "B"), (-2030, 430, 3, "A"), (-2000, 680, 12, "B"),
-                                           (-1750, 900, 70, "A"), (700, 620, 80, "B"), (2500, 760, 100, "A"), (2700, 830, 105, "B"),
-                                           (-3300, -700, 0, "A"), (-3300, -940, 5, "B"), (-3350, 300, -6, "A")]):
-        actor("SM_Fence_" + kind, x, y, yaw, "wood", "Fence_%02d" % i, "Props/Fences")
-    for i, (x, y) in enumerate([(-1650, -640), (-2250, 250), (380, 760), (1950, -350), (-3200, 1500), (3300, 1500)]):
-        actor("SM_Stump", x, y, U(0, 360), "log", "Stump_%d" % i, "Props/Logs")
-    for i, (x, y, yaw) in enumerate([(-1560, 700, 25), (1120, -420, -40), (-2600, -150, 80), (2850, -1500, 10)]):
-        actor("SM_Log", x, y, yaw, "log", "Log_%d" % i, "Props/Logs")
+    # ---- fences, stumps and logs round the kingdoms and along the road
+    def scatter_near(cx, cy, rmin, rmax):
+        for _ in range(40):
+            a, d = U(0, 2 * math.pi), U(rmin, rmax)
+            x, y = cx + math.cos(a) * d, cy + math.sin(a) * d
+            if not on_road(x, y, 80) and not in_lake(x, y, 60) and flat_around(x, y, 80):
+                return x, y
+        return None
+
+    fi = 0
+    for k_, x, y, yaw, team, label in BUILDINGS:
+        if k_ != "castle":
+            continue
+        for _ in range(5):
+            p = scatter_near(x, y, 1700, 3000)
+            if p:
+                actor("SM_Fence_" + "AB"[fi % 2], p[0], p[1], U(0, 180), "wood", "Fence_%02d" % fi, "Props/Fences")
+                fi += 1
+        for j in range(3):
+            p = scatter_near(x, y, 1600, 3200)
+            if p:
+                actor("SM_Stump", p[0], p[1], U(0, 360), "log", "Stump_%s_%d" % (label, j), "Props/Logs")
+        p = scatter_near(x, y, 1800, 3200)
+        if p:
+            actor("SM_Log", p[0], p[1], U(0, 180), "log", "Log_%s" % label, "Props/Logs")
     print("tufts %d, cliff-foot props %d, trees %d" % (n, feet, len(trees)))
 
 
 # ============================================================================================ kingdoms
-# Buildings on the field: (type, x, y, yaw, team 0 player / 1 enemy, label). Types are the models under
-# SourceArt/Buildings (Tools/blender/build_building.py); <type>.json gives the blocking footprint and the sockets.
-# A building's front (gate, adit, yard) faces -X at yaw 0, toward the game camera.
-BUILDINGS = [
-    ("castle", -2000.0, -1300.0, 0.0, 0, "Castle_Player"),
-    ("mine", -2570.0, -2550.0, 0.0, 0, "Mine_Player"),
-    ("farm", -2500.0, 620.0, 0.0, 0, "Farm_Player"),
-    ("castle", 2250.0, -1100.0, 0.0, 1, "Castle_Enemy"),
-]
-# Terrain that stood where a kingdom now is. It is still generated (so every random draw downstream is unchanged and
-# the rest of the world stays exactly as it was) and removed afterwards by apply_kingdoms().
-KINGDOM_REMOVES = {"SM_T_Field_02", "SM_T_Field_03", "SM_T_Knoll_03", "SM_T_Knoll_08", "SM_T_Knoll_09"}
-KINGDOM_REMOVE_ROCKS = {"Rock_SW"}
-# footpaths (bare earth), world polylines: the castle court to the road, the road to the farm yard, the court to the mine
-KINGDOM_PATHS = [
-    [(-2760, -1300), (-2800, -900), (-2740, -520), (-2640, -240)],
-    [(-2960, -250), (-3010, 60), (-2960, 380)],
-    [(-2800, -1560), (-2960, -1900), (-3010, -2330), (-2960, -2550)],
-    [(1420, -1100), (1280, -600), (1330, -60)],
-]
+# The kingdoms are planned with the field now (BUILDINGS above): nothing to remove afterwards.
+KINGDOM_REMOVES = set()
+KINGDOM_REMOVE_ROCKS = set()
+
+
+def _kingdom_paths():
+    """Footpaths (bare earth): each castle court to its farm yard and its mine adit."""
+    out = []
+    for team in (0, 1):
+        c = [b for b in BUILDINGS if b[4] == team and b[0] == "castle"][0]
+        court = (c[1] - 780.0, c[2])
+        for b in BUILDINGS:
+            if b[4] == team and b[0] != "castle":
+                front = (b[1] - 520.0, b[2])
+                mid = (min(court[0], front[0]) - 250.0, (court[1] + front[1]) * 0.5)
+                out.append([court, mid, front])
+    return out
+
+
+KINGDOM_PATHS = _kingdom_paths()
+
 _META = {}
 
 
@@ -948,6 +1051,9 @@ def apply_kingdoms():
         for a in lst:
             x, y = a["pos"][0], a["pos"][1]
             name = a[key].replace("_Collision", "")
+            if name.startswith("GoldVein"):
+                out.append(a)                       # a vein stays (a mine stands on it; if the mine falls it can be rebuilt)
+                continue
             if inside.contains(Point(x, y)) or name in KINGDOM_REMOVE_ROCKS:
                 dropped += 1
                 continue
@@ -1020,7 +1126,7 @@ def build_splat_fields():
     R = band(road_d, 55.0, 105.0) * 0.5 * paved + band(road_d, 100.0, 165.0) * 0.5   # stones inside ~55, earth out to ~165
     R = np.maximum(R, band(d_side, 40.0, 120.0) * 0.52)                               # footpath: earth only
     worn = smooth_noise(shape, 40, 3)
-    for (cx, cy, rad) in [(PLAYER_START[0], PLAYER_START[1], 520.0), (ENEMY_START[0], ENEMY_START[1], 520.0), (-560.0, -900.0, 330.0), (3560.0, 860.0, 520.0)]:
+    for (cx, cy, rad) in [(PLAYER_START[0], PLAYER_START[1], 620.0), (ENEMY_START[0], ENEMY_START[1], 620.0), (-900.0, 1300.0, 330.0), (1000.0, -1200.0, 330.0), (6700.0, 10400.0, 520.0)] + [(x, y, 420.0) for x, y in GOLD_VEINS]:
         dd = np.hypot(X - cx, Y - cy)
         R = np.maximum(R, np.clip((rad - dd) / rad, 0, 1) * (0.25 + worn * 0.45))      # trampled ground at camps and ruins
     R = np.maximum(R, np.clip((worn - 0.83) * 4.0, 0, 0.5))                           # a few bare scuffs
@@ -1069,8 +1175,8 @@ def finish_splat(X, Y, R, moss, dry):
 
 # ============================================================================================ preview
 def write_preview(splat, path):
-    x0, x1, y0, y1 = -4600, 7200, -6200, 6200
-    scale = 0.1
+    x0, x1, y0, y1 = -BOUND - 1600, BOUND + 4000, -BOUND - 3000, BOUND + 3000
+    scale = 0.04
     w, h = int((y1 - y0) * scale), int((x1 - x0) * scale)
     xs = x1 - (np.arange(h) + 0.5) / scale
     ys = y0 + (np.arange(w) + 0.5) / scale
@@ -1165,13 +1271,16 @@ def main():
                 layout_terrain.append({"mesh": m.name, "pos": list(pivot), "folder": "Terrain/Ground"})
                 gi += 1
     shore = Mesh("SM_T_Shore")
-    add_wall(shore, ring_ccw(list(LAKE.exterior.coords), False), 0.0, LAKE_BED)
-    add_cap(shore, LAKE.buffer(30), LAKE_BED)
+    for part in LAKE.geoms:
+        add_wall(shore, ring_ccw(list(part.exterior.coords), False), 0.0, LAKE_BED)
+        for cap in largest(part.buffer(30), 10.0, all_parts=True):
+            add_cap(shore, cap, LAKE_BED)
     pivot = shore.recenter()
     meshes.append(shore)
     layout_terrain.append({"mesh": "SM_T_Shore", "pos": list(pivot), "folder": "Terrain/Shore"})
     water = Mesh("SM_Water")
-    add_cap(water, LAKE.buffer(30), LAKE_SURFACE)
+    for cap in largest(LAKE.buffer(30), 10.0, all_parts=True):
+        add_cap(water, cap, LAKE_SURFACE)
     wpivot = water.recenter()
     meshes.append(water)
 
@@ -1205,6 +1314,8 @@ def main():
         "terrain": layout_terrain,
         "water": {"mesh": "SM_Water", "pos": list(wpivot), "surface": LAKE_SURFACE},
         "instances": INSTANCES, "actors": ACTORS, "blockers": BLOCKERS, "buildings": buildings,
+        "veins": [[x, y, round(height_at(x, y), 1)] for x, y in GOLD_VEINS],
+        "starts": {"player": list(PLAYER_START), "enemy": list(ENEMY_START)},
     }
     os.makedirs(os.path.join(ROOT, "SourceArt", "World"), exist_ok=True)
     with open(os.path.join(ROOT, "SourceArt", "World", "layout.json"), "w") as f:

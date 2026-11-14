@@ -5,7 +5,8 @@
 #include "Common/SRFeelSettings.h"
 #include "Battle/SRBattleSubsystem.h"
 
-void SRFormation::ComputeSlots(const TArray<ASRUnit*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots)
+void SRFormation::ComputeSlots(const TArray<ASRUnit*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots,
+	ESRFormationShape Shape, const FVector2D* ForceFacing)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const int32 Num = Units.Num();
@@ -26,12 +27,15 @@ void SRFormation::ComputeSlots(const TArray<ASRUnit*>& Units, const FVector2D& D
 	// Face the direction of travel; for tiny shuffles keep the facing the group already has.
 	FVector2D Fwd = Destination - Centroid;
 	if (Fwd.SizeSquared() < FMath::Square(150.f)) { Fwd = AvgFacing; }
+	if (ForceFacing && !ForceFacing->IsNearlyZero()) { Fwd = *ForceFacing; }
 	Fwd = Fwd.GetSafeNormal();
 	if (Fwd.IsNearlyZero()) { Fwd = FVector2D(1.f, 0.f); }
 	const FVector2D Right(-Fwd.Y, Fwd.X);
 
 	const float Spacing = MaxRadius * 2.f + F.FormationGap;
-	const int32 Columns = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt(Num * F.FormationWidthBias)), 1, FMath::Max(F.FormationMaxColumns, 1));
+	int32 Columns = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt(Num * F.FormationWidthBias)), 1, FMath::Max(F.FormationMaxColumns, 1));
+	if (Shape == ESRFormationShape::Column) { Columns = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt(float(Num)) * 0.5f), 2, 3); }
+	else if (Shape == ESRFormationShape::Square) { Columns = FMath::Max(FMath::CeilToInt(FMath::Sqrt(float(Num))), 1); }
 
 	// Melee first so they take the front ranks.
 	TArray<int32> Melee, Ranged;
@@ -51,13 +55,25 @@ void SRFormation::ComputeSlots(const TArray<ASRUnit*>& Units, const FVector2D& D
 		{
 			return FVector2D::DotProduct(Units[A]->GetPos2D(), Fwd) > FVector2D::DotProduct(Units[B]->GetPos2D(), Fwd);
 		});
-		const int32 RankCount = FMath::DivideAndRoundUp(Group.Num(), Columns);
-		const int32 Base = Group.Num() / RankCount;
-		int32 Extra = Group.Num() % RankCount;
-		int32 Cursor = 0;
-		for (int32 r = 0; r < RankCount; ++r)
+		TArray<int32> Counts;
+		if (Shape == ESRFormationShape::Wedge)
 		{
-			const int32 Count = Base + (Extra-- > 0 ? 1 : 0); // even ranks rather than one full and one stub
+			// 1, 3, 5, ... from the point back, continuing across the melee / ranged boundary
+			int32 Left = Group.Num();
+			int32 W = Ranks.Num() * 2 + 1;
+			while (Left > 0) { Counts.Add(FMath::Min(W, Left)); Left -= W; W += 2; }
+		}
+		else
+		{
+			const int32 RankCount = FMath::DivideAndRoundUp(Group.Num(), Columns);
+			const int32 Base = Group.Num() / RankCount;
+			int32 Extra = Group.Num() % RankCount;
+			for (int32 r = 0; r < RankCount; ++r) { Counts.Add(Base + (Extra-- > 0 ? 1 : 0)); } // even ranks rather than one full and one stub
+		}
+		int32 Cursor = 0;
+		for (int32 r = 0; r < Counts.Num(); ++r)
+		{
+			const int32 Count = Counts[r];
 			FRank& Rank = Ranks.AddDefaulted_GetRef();
 			for (int32 k = 0; k < Count; ++k) { Rank.Members.Add(Group[Cursor++]); }
 			// Within a rank keep left-to-right order.

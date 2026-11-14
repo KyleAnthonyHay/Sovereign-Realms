@@ -2,6 +2,10 @@
 
 #include "Battle/SREconomySubsystem.h"
 #include "Buildings/SRBuilding.h"
+#include "Battle/SRBattleSubsystem.h"
+#include "Battle/SRGridSubsystem.h"
+#include "Common/SRAudioSubsystem.h"
+#include "Units/SRUnit.h"
 #include "Common/SRFeelSettings.h"
 #include "SovereignRealms.h"
 #include "Engine/World.h"
@@ -55,10 +59,20 @@ void USREconomySubsystem::Reset()
 		Stock[Team][int32(ESRResource::Food)] = F.StartingFood;
 	}
 	Flash[0] = Flash[1] = Pulse[0] = Pulse[1] = 0.f;
+	PopFlash = 0.f;
 	Popups.Reset();
+	Alerts.Reset();
+	LastAttackAlert.Reset();
+	LastAttackTime[0] = LastAttackTime[1] = -100.0;
+	// Buildings put up during the last match come down; the level's own stand again.
+	const TArray<TObjectPtr<ASRBuilding>> Copy = Buildings;
+	for (ASRBuilding* Building : Copy)
+	{
+		if (Building && Building->IsRuntimeBuilt()) { Building->Destroy(); }
+	}
 	for (ASRBuilding* Building : Buildings)
 	{
-		if (Building) { Building->ResetRuntime(); }
+		if (Building && !Building->IsRuntimeBuilt()) { Building->ResetRuntime(); }
 	}
 	bStarted = true;
 	UE_LOG(LogSovereign, Log, TEXT("ECONOMY RESET: gold=%d food=%d, buildings=%d (player: %d castle, %d farm, %d mine)"), F.StartingGold, F.StartingFood, Buildings.Num(),
@@ -70,9 +84,17 @@ void USREconomySubsystem::Step(float Dt)
 	if (!bStarted) { return; }
 	const USRFeelSettings& F = USRFeelSettings::Get();
 
-	for (ASRBuilding* Building : Buildings)
+	// A building may destroy itself while stepping (rubble cleared): step a copy of the list.
+	const TArray<TObjectPtr<ASRBuilding>> Copy = Buildings;
+	for (ASRBuilding* Building : Copy)
 	{
-		if (Building) { Building->StepBuilding(Dt); }
+		if (IsValid(Building)) { Building->StepBuilding(Dt); }
+	}
+	PopFlash = FMath::Max(0.f, PopFlash - Dt / FMath::Max(F.InsufficientFlashTime, 0.05f));
+	for (int32 i = Alerts.Num() - 1; i >= 0; --i)
+	{
+		Alerts[i].Age += Dt;
+		if (Alerts[i].Age > 6.f) { Alerts.RemoveAt(i); }
 	}
 
 	for (int32 i = 0; i < 2; ++i)
@@ -128,9 +150,9 @@ float USREconomySubsystem::GetIncomePerMinute(ESRTeam Team, ESRResource Resource
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	if (Resource == ESRResource::Food)
 	{
-		return CountBuildings(ESRBuildingType::Farm, Team) * F.FarmFoodPerPayout * 60.f / FMath::Max(F.FarmPayoutInterval, 0.2f);
+		return CountFinished(ESRBuildingType::Farm, Team) * F.FarmFoodPerPayout * 60.f / FMath::Max(F.FarmPayoutInterval, 0.2f);
 	}
-	return CountBuildings(ESRBuildingType::Mine, Team) * F.MineGoldPerPayout * 60.f / FMath::Max(F.MinePayoutInterval, 0.2f);
+	return CountFinished(ESRBuildingType::Mine, Team) * F.MineGoldPerPayout * 60.f / FMath::Max(F.MinePayoutInterval, 0.2f);
 }
 
 void USREconomySubsystem::AddPopup(const FVector& Origin, int32 Amount, ESRResource Resource)
@@ -269,4 +291,142 @@ void USREconomySubsystem::LogStatus() const
 			*Building->GetActorNameOrLabel(), *Building->GetDisplayName(), int32(Building->Team), Building->GetActorLocation().X, Building->GetActorLocation().Y,
 			Building->GetPayoutFraction(), *Queue, Building->GetBuildFraction(), Building->GetRallyPoint().X, Building->GetRallyPoint().Y, Building->IsSelected() ? 1 : 0);
 	}
+}
+
+
+// ------------------------------------------------------------------ population
+
+int32 USREconomySubsystem::GetPopulation(ESRTeam Team) const
+{
+	int32 Pop = 0;
+	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
+	{
+		for (const ASRUnit* U : Battle->GetUnits())
+		{
+			if (U && U->IsAlive() && U->GetTeam() == Team) { Pop += U->Stats().PopCost; }
+		}
+	}
+	return Pop;
+}
+
+int32 USREconomySubsystem::GetQueuedPopulation(ESRTeam Team) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	int32 Pop = 0;
+	for (const ASRBuilding* B : Buildings)
+	{
+		if (B && B->Team == Team && B->IsAlive())
+		{
+			for (ESRUnitType T : B->GetQueue()) { Pop += F.StatsFor(T).PopCost; }
+		}
+	}
+	return Pop;
+}
+
+int32 USREconomySubsystem::GetPopulationCap(ESRTeam Team) const
+{
+	int32 Cap = 0;
+	for (const ASRBuilding* B : Buildings)
+	{
+		if (B && B->Team == Team) { Cap += B->GetPopProvided(); }
+	}
+	return FMath::Min(Cap, USRFeelSettings::Get().MaxPopulation);
+}
+
+void USREconomySubsystem::NotifyPopulationCapped(ESRTeam Team)
+{
+	if (Team != ESRTeam::Player) { return; }
+	PopFlash = 1.f;
+	PushAlert(ESRAlertKind::PopulationCapped, NSLOCTEXT("SREconomy", "PopCap", "Not enough housing: build more farms"));
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
+}
+
+// ------------------------------------------------------------------ buildings
+
+ASRBuilding* USREconomySubsystem::GetCastle(ESRTeam Team) const
+{
+	for (ASRBuilding* B : Buildings)
+	{
+		if (B && B->Team == Team && B->IsCastle() && B->IsAlive()) { return B; }
+	}
+	return nullptr;
+}
+
+int32 USREconomySubsystem::CountFinished(ESRBuildingType Type, ESRTeam Team) const
+{
+	int32 N = 0;
+	for (const ASRBuilding* B : Buildings)
+	{
+		N += (B && B->Team == Team && B->BuildingType == Type && B->IsFinished()) ? 1 : 0;
+	}
+	return N;
+}
+
+ASRBuilding* USREconomySubsystem::PlaceBuilding(ESRBuildingType Type, ESRTeam Team, const FVector2D& Want, FText* OutReason)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	if (!Grid) { return nullptr; }
+	const FSRPlacement Placement = Grid->CheckPlacement(Type, Team, Want);
+	if (!Placement.bValid)
+	{
+		if (OutReason) { *OutReason = Placement.Reason; }
+		return nullptr;
+	}
+	const FSRCost& Cost = F.BuildingStatsFor(Type).Cost;
+	if (!TrySpend(Team, Cost))
+	{
+		if (OutReason) { *OutReason = FText::Format(NSLOCTEXT("SREconomy", "NeedGold", "Not enough gold ({0} needed)"), FText::AsNumber(Cost.Gold)); }
+		return nullptr;
+	}
+	ASRBuilding* B = ASRBuilding::SpawnBuilding(GetWorld(), Type, Team, Placement.Location, true);
+	if (B && Type == ESRBuildingType::Mine && Placement.VeinIndex != INDEX_NONE) { Grid->ClaimVein(Placement.VeinIndex, B); }
+	return B;
+}
+
+void USREconomySubsystem::NotifyBuildingFinished(ASRBuilding* Building)
+{
+	if (Building && Building->Team == ESRTeam::Player)
+	{
+		const FVector2D At = Building->GetFootprintCentre();
+		PushAlert(ESRAlertKind::BuildingDone, FText::Format(NSLOCTEXT("SREconomy", "Done", "{0} completed"), FText::FromString(Building->GetDisplayName())), &At);
+	}
+}
+
+void USREconomySubsystem::NotifyBuildingAttacked(ASRBuilding* Building, ASRUnit* Attacker)
+{
+	if (!Building) { return; }
+	const double Now = GetWorld()->GetTimeSeconds();
+	const int32 T = int32(Building->Team);
+	LastAttackTime[T] = Now;
+	LastAttackLocation[T] = Building->GetFootprintCentre();
+	if (Building->Team != ESRTeam::Player) { return; }
+	double& Last = LastAttackAlert.FindOrAdd(Building);
+	if (Now - Last < 10.0) { return; }
+	Last = Now;
+	const FVector2D At = Building->GetFootprintCentre();
+	PushAlert(ESRAlertKind::UnderAttack, FText::Format(NSLOCTEXT("SREconomy", "Attacked", "Your {0} is under attack!"), FText::FromString(Building->GetDisplayName())), &At);
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::WarHorn, 0.6f); }
+}
+
+void USREconomySubsystem::NotifyBuildingDestroyed(ASRBuilding* Building)
+{
+	if (!Building) { return; }
+	if (Building->Team == ESRTeam::Player)
+	{
+		const FVector2D At = Building->GetFootprintCentre();
+		PushAlert(ESRAlertKind::BuildingLost, FText::Format(NSLOCTEXT("SREconomy", "Lost", "{0} destroyed"), FText::FromString(Building->GetDisplayName())), &At);
+	}
+	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->NotifyBuildingDestroyed(Building); }
+}
+
+void USREconomySubsystem::PushAlert(ESRAlertKind Kind, const FText& Text, const FVector2D* Location)
+{
+	FSRAlert& A = Alerts.AddDefaulted_GetRef();
+	A.Kind = Kind;
+	A.Text = Text;
+	A.bHasLocation = Location != nullptr;
+	if (Location) { A.Location = *Location; }
+	while (Alerts.Num() > 5) { Alerts.RemoveAt(0); }
+	UE_LOG(LogSovereign, Log, TEXT("ALERT %s"), *Text.ToString());
 }
