@@ -1,0 +1,589 @@
+// Copyright Sovereign Realms.
+
+#include "Units/SRUnit.h"
+#include "Units/SRProjectile.h"
+#include "Battle/SRBattleSubsystem.h"
+#include "Common/SRFeelSettings.h"
+#include "SovereignRealms.h"
+#include "Engine/World.h"
+
+namespace
+{
+	FVector2D DirFromYaw(float YawDeg)
+	{
+		const float R = FMath::DegreesToRadians(YawDeg);
+		return FVector2D(FMath::Cos(R), FMath::Sin(R));
+	}
+
+	float YawFromDir(const FVector2D& Dir)
+	{
+		return FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X));
+	}
+}
+
+ASRUnit::ASRUnit()
+{
+	// Stepped by USRBattleSubsystem so all units see a consistent frame.
+	PrimaryActorTick.bCanEverTick = false;
+
+	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(Root);
+	VisualRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VisualRoot"));
+	VisualRoot->SetupAttachment(Root);
+}
+
+void ASRUnit::InitUnit(ESRUnitType InType, ESRTeam InTeam, float InSpawnDelay, const FString& InLabel)
+{
+	UnitType = InType;
+	Team = InTeam;
+	SpawnDelay = InSpawnDelay;
+	Label = InLabel;
+	Battle = USRBattleSubsystem::Get(this);
+
+	Health = Stats().MaxHealth;
+	SimPos = GetActorLocation();
+	FacingYaw = GetActorRotation().Yaw;
+	Home = GetPos2D();
+	// Desynchronise idle breathing and retargeting between units.
+	AnimTime = FMath::FRandRange(0.f, 10.f);
+	RetargetTimer = FMath::FRandRange(0.f, 0.3f);
+
+	BuildVisuals();
+	StepVisual(0.f);
+}
+
+const FSRUnitStats& ASRUnit::Stats() const
+{
+	return USRFeelSettings::Get().StatsFor(UnitType);
+}
+
+FVector2D ASRUnit::GetFacingDir() const
+{
+	return DirFromYaw(FacingYaw);
+}
+
+float ASRUnit::GetHealthFrac() const
+{
+	return FMath::Clamp(Health / FMath::Max(Stats().MaxHealth, 1.f), 0.f, 1.f);
+}
+
+float ASRUnit::GetPushMass() const
+{
+	// Units that are planted (idle or mid-swing) resist shoving more than ones on the move.
+	return Stats().Mass * (IsPlanted() ? 2.f : 1.f);
+}
+
+bool ASRUnit::IsPlanted() const
+{
+	return AttackPhase != ESRAttackPhase::Ready || (Order == ESROrder::Idle && !Target.IsValid());
+}
+
+// ------------------------------------------------------------------ orders
+
+void ASRUnit::OrderMove(const FVector2D& Dest)
+{
+	if (!IsAlive()) { return; }
+	Order = ESROrder::Move;
+	Destination = Dest;
+	Target = nullptr;
+	bReturnHomeWhenDone = false;
+	CancelAttack();
+	ResetProgress();
+}
+
+void ASRUnit::OrderAttackMove(const FVector2D& Dest)
+{
+	if (!IsAlive()) { return; }
+	Order = ESROrder::AttackMove;
+	Destination = Dest;
+	RetargetTimer = 0.f; // look for something to fight right away
+	ResetProgress();
+}
+
+void ASRUnit::OrderAttack(ASRUnit* InTarget)
+{
+	if (!IsAlive() || !InTarget || !InTarget->IsAlive() || InTarget == this) { return; }
+	if (Target.Get() != InTarget) { CancelAttack(); }
+	Order = ESROrder::AttackTarget;
+	Target = InTarget;
+	bReturnHomeWhenDone = false;
+}
+
+void ASRUnit::OrderStop()
+{
+	if (!IsAlive()) { return; }
+	Order = ESROrder::Idle;
+	Target = nullptr;
+	bReturnHomeWhenDone = false;
+	RetargetTimer = 0.6f; // a beat of real stillness before auto-acquire kicks back in
+	CancelAttack();
+}
+
+void ASRUnit::CancelAttack()
+{
+	// Orders always win over animation: drop the swing so the unit responds this frame.
+	AttackPhase = ESRAttackPhase::Ready;
+	PhaseTime = 0.f;
+}
+
+void ASRUnit::ResetProgress()
+{
+	BestDist = TNumericLimits<float>::Max();
+	NoProgressTime = 0.f;
+}
+
+// --------------------------------------------------------------- simulation
+
+void ASRUnit::StepSim(float Dt)
+{
+	if (bDead) { return; }
+
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRUnitStats& S = Stats();
+
+	if (!bActive)
+	{
+		SpawnClock += Dt;
+		if (SpawnClock >= SpawnDelay + F.SpawnPopTime) { bActive = true; }
+		FollowGround(Dt);
+		return;
+	}
+
+	if (HitStopLeft > 0.f)
+	{
+		HitStopLeft -= Dt; // frozen on the impact frame
+		return;
+	}
+
+	Cooldown = FMath::Max(0.f, Cooldown - Dt);
+	UpdateTargeting(Dt);
+
+	const FVector2D Pos = GetPos2D();
+	ASRUnit* T = Target.Get();
+	FVector2D Desired = FVector2D::ZeroVector;
+	FVector2D FaceDir = FVector2D::ZeroVector; // zero = face the direction of travel
+
+	if (AttackPhase != ESRAttackPhase::Ready)
+	{
+		// Planted for the swing; keep tracking the target.
+		if (T) { FaceDir = (T->GetPos2D() - Pos).GetSafeNormal(); }
+		TickAttack(Dt, T);
+	}
+	else if (T)
+	{
+		const FVector2D To = T->GetPos2D() - Pos;
+		const float Dist = To.Size();
+		const float Reach = S.AttackRange + GetRadius() + T->GetRadius();
+		const FVector2D ToDir = Dist > 1.f ? To / Dist : GetFacingDir();
+		ResetProgress();
+
+		if (Dist > Reach)
+		{
+			// Chase, easing off so we stop just inside reach instead of ramming the target.
+			const float Remaining = FMath::Max(Dist - Reach * 0.9f, 0.f);
+			Desired = ToDir * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
+		}
+		else
+		{
+			FaceDir = ToDir;
+			const float AimError = FMath::Abs(FMath::FindDeltaAngleDegrees(FacingYaw, YawFromDir(ToDir)));
+			if (Cooldown <= 0.f && AimError < 25.f)
+			{
+				AttackPhase = ESRAttackPhase::Windup;
+				PhaseTime = 0.f;
+			}
+			else if (S.bRanged && S.KeepDistance > 0.f && Cooldown > 0.2f)
+			{
+				// Between shots, give ground to melee attackers that get too close (classic kiting).
+				const ASRUnit* Threat = Battle->FindNearestEnemy(this, S.KeepDistance + GetRadius());
+				if (Threat && !Threat->Stats().bRanged)
+				{
+					Desired = (Pos - Threat->GetPos2D()).GetSafeNormal() * S.MaxSpeed;
+					FaceDir = FVector2D::ZeroVector;
+				}
+			}
+		}
+	}
+	else if (Order == ESROrder::Move || Order == ESROrder::AttackMove)
+	{
+		const FVector2D To = Destination - Pos;
+		const float Dist = To.Size();
+
+		if (Dist < BestDist - 4.f) { BestDist = Dist; NoProgressTime = 0.f; }
+		else { NoProgressTime += Dt; }
+
+		// Arrived, or someone is parked on our slot and shoving would only cause jitter: settle.
+		const bool bGiveUp = NoProgressTime > (Dist < 260.f ? F.GiveUpTimeNear : F.GiveUpTimeFar);
+		if (Dist <= F.ArriveTolerance || bGiveUp)
+		{
+			Order = ESROrder::Idle;
+		}
+		else
+		{
+			// Arrive: speed limit falls with sqrt(distance) so braking is smooth and never overshoots.
+			Desired = (To / Dist) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Dist));
+		}
+	}
+
+	// --- steering -> velocity ---
+	FVector2D Want = Desired + ComputeAvoidance(Desired);
+	const float WantSpeed = Want.Size();
+	if (WantSpeed > S.MaxSpeed) { Want *= S.MaxSpeed / WantSpeed; }
+
+	if (!Desired.IsNearlyZero())
+	{
+		// Start moving immediately, but hold some speed back until the body has turned: gives weight without lag.
+		const float Align = FVector2D::DotProduct(Want.GetSafeNormal(), GetFacingDir());
+		Want *= FMath::Lerp(F.TurnSpeedFloor, 1.f, FMath::Clamp((Align + 0.3f) / 1.3f, 0.f, 1.f));
+	}
+
+	const bool bSpeedingUp = Want.SizeSquared() > Velocity.SizeSquared();
+	Velocity = FMath::Vector2DInterpConstantTo(Velocity, Want, Dt, bSpeedingUp ? S.Acceleration : S.Deceleration);
+
+	KnockVel *= FMath::Exp(-Dt / FMath::Max(F.KnockbackDecayTime, 0.001f));
+	if (KnockVel.SizeSquared() < 1.f) { KnockVel = FVector2D::ZeroVector; }
+
+	const FVector2D Step = (Velocity + KnockVel) * Dt;
+	if (Step.SizeSquared() > 1e-6f) { TryMove(Step, Dt); }
+	FollowGround(Dt);
+
+	// --- facing ---
+	float TargetYaw = FacingYaw;
+	if (!FaceDir.IsNearlyZero()) { TargetYaw = YawFromDir(FaceDir); }
+	else if (Velocity.SizeSquared() > FMath::Square(25.f)) { TargetYaw = YawFromDir(Velocity); }
+
+	const float Delta = FMath::FindDeltaAngleDegrees(FacingYaw, TargetYaw);
+	// Full rate for big turns, easing out for the last few degrees so the turn lands softly.
+	const float Rate = S.TurnRateDeg * FMath::Clamp(FMath::Abs(Delta) / 40.f, 0.15f, 1.f);
+	const float NewYaw = FMath::FixedTurn(FacingYaw, TargetYaw, Rate * Dt);
+	YawRate = Dt > KINDA_SMALL_NUMBER ? FMath::FindDeltaAngleDegrees(FacingYaw, NewYaw) / Dt : 0.f;
+	FacingYaw = NewYaw;
+}
+
+void ASRUnit::UpdateTargeting(float Dt)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRUnitStats& S = Stats();
+	const bool bAuto = Battle->IsAutoBattle();
+	const FVector2D Pos = GetPos2D();
+
+	ASRUnit* T = Target.Get();
+	if (T && !T->IsActive())
+	{
+		Target = nullptr;
+		T = nullptr;
+		RetargetTimer = 0.f;
+		if (Order == ESROrder::AttackTarget) { Order = ESROrder::Idle; }
+	}
+
+	// Explicit orders are obeyed, not second-guessed.
+	if (Order == ESROrder::Move || Order == ESROrder::AttackTarget) { return; }
+
+	if (Team == ESRTeam::Enemy && F.bEnemyLeash && !bAuto)
+	{
+		const float HomeDist = FVector2D::Distance(Pos, Home);
+		if (T && HomeDist > F.EnemyLeashDistance)
+		{
+			OrderMove(Home); // chased too far: disengage and walk back
+			return;
+		}
+		if (!T && bReturnHomeWhenDone && Order == ESROrder::Idle && AttackPhase == ESRAttackPhase::Ready)
+		{
+			bReturnHomeWhenDone = false;
+			if (HomeDist > 150.f) { OrderAttackMove(Home); }
+		}
+	}
+
+	RetargetTimer -= Dt;
+	if (RetargetTimer > 0.f) { return; }
+	RetargetTimer = FMath::FRandRange(0.18f, 0.3f);
+
+	const float Range = bAuto ? 1.e7f : S.AcquireRange;
+	const double Now = GetWorld()->GetTimeSeconds();
+
+	if (T)
+	{
+		const bool bProvoked = (Now - LastProvokedTime) < 4.0;
+		if (!bProvoked && FVector2D::Distance(Pos, T->GetPos2D()) > Range * 1.35f)
+		{
+			Target = nullptr;
+			T = nullptr;
+		}
+	}
+
+	ASRUnit* Nearest = Battle->FindNearestEnemy(this, Range);
+	if (!T)
+	{
+		Target = Nearest;
+	}
+	else if (Nearest && Nearest != T && AttackPhase == ESRAttackPhase::Ready)
+	{
+		// Only swap for something clearly closer, so units commit instead of dithering between targets.
+		if (FVector2D::Distance(Pos, Nearest->GetPos2D()) < FVector2D::Distance(Pos, T->GetPos2D()) * 0.6f)
+		{
+			Target = Nearest;
+		}
+	}
+
+	if (Target.IsValid() && Team == ESRTeam::Enemy) { bReturnHomeWhenDone = true; }
+}
+
+void ASRUnit::TickAttack(float Dt, ASRUnit* T)
+{
+	const FSRUnitStats& S = Stats();
+	PhaseTime += Dt;
+
+	if (AttackPhase == ESRAttackPhase::Windup)
+	{
+		if (!T)
+		{
+			CancelAttack(); // target died mid-windup: no wasted swing, no cooldown penalty
+		}
+		else if (PhaseTime >= S.WindupTime)
+		{
+			Strike(T);
+			AttackPhase = ESRAttackPhase::Recovery;
+			PhaseTime = 0.f;
+			Cooldown = FMath::Max(0.f, S.AttackInterval - S.WindupTime) + FMath::FRandRange(0.f, USRFeelSettings::Get().AttackIntervalJitter);
+		}
+	}
+	else if (PhaseTime >= S.RecoveryTime)
+	{
+		AttackPhase = ESRAttackPhase::Ready;
+		PhaseTime = 0.f;
+	}
+}
+
+void ASRUnit::Strike(ASRUnit* T)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRUnitStats& S = Stats();
+	const FVector2D To = T->GetPos2D() - GetPos2D();
+	const FVector2D Dir = To.GetSafeNormal();
+
+	if (S.bRanged)
+	{
+		// Damage is applied by the arrow when it lands, not here.
+		ASRProjectile::Launch(this, T, GetMuzzleLocation(), S);
+		return;
+	}
+
+	// Melee connects on this exact frame, which is also the frame the weapon reaches the target visually.
+	const float Reach = S.AttackRange + GetRadius() + T->GetRadius();
+	if (To.Size() <= Reach * 1.35f)
+	{
+		T->ReceiveDamage(S.Damage, this, Dir, S.KnockbackImpulse, S.bHeavyHits);
+		if (S.bHeavyHits)
+		{
+			if (F.bHitStop) { HitStopLeft = F.HitStopTime; }
+			Battle->AddCameraTrauma(T->GetSimPos(), F.ShakeTraumaHeavyHit);
+		}
+	}
+}
+
+void ASRUnit::ReceiveDamage(float Amount, ASRUnit* From, const FVector2D& HitDir, float Knockback, bool bHeavy)
+{
+	if (bDead) { return; }
+
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const double Now = GetWorld()->GetTimeSeconds();
+
+	Health = FMath::Max(0.f, Health - Amount);
+	LastDamagedTime = Now;
+
+	// Reaction is purely additive (flash, squash, a small shove). It never cancels the unit's order or attack.
+	HitFlash = 1.f;
+	Squash = 1.f;
+	KnockVel += HitDir * (Knockback / FMath::Max(Stats().Mass, 0.1f));
+	if (bHeavy && F.bHitStop) { HitStopLeft = FMath::Max(HitStopLeft, F.HitStopTime); }
+
+	if (F.bLogHits)
+	{
+		UE_LOG(LogSovereign, Log, TEXT("HIT   %s -> %s  dmg=%.0f  hp=%.0f/%.0f"),
+			From ? *From->GetLabel() : TEXT("?"), *Label, Amount, Health, Stats().MaxHealth);
+	}
+
+	if (Health <= 0.f)
+	{
+		Die(From, HitDir);
+		return;
+	}
+
+	if (From && From->IsAlive() && From->GetTeam() != Team)
+	{
+		LastProvokedTime = Now;
+		if (!Target.IsValid() && (Order == ESROrder::Idle || Order == ESROrder::AttackMove))
+		{
+			Target = From; // hit back, even if the shooter is outside acquire range
+		}
+		for (ASRUnit* Ally : Battle->GetUnits())
+		{
+			if (Ally && Ally != this && Ally->GetTeam() == Team
+				&& FVector2D::DistSquared(Ally->GetPos2D(), GetPos2D()) < FMath::Square(F.AlertRadius))
+			{
+				Ally->AlertTo(From);
+			}
+		}
+	}
+}
+
+void ASRUnit::AlertTo(ASRUnit* Threat)
+{
+	if (IsActive() && Threat && !Target.IsValid() && Order == ESROrder::Idle)
+	{
+		Target = Threat;
+		LastProvokedTime = GetWorld()->GetTimeSeconds();
+	}
+}
+
+void ASRUnit::Die(ASRUnit* Killer, const FVector2D& HitDir)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+
+	// Out of combat this instant; the subsystem moves us to the corpse list at the end of the frame.
+	bDead = true;
+	DeathClock = 0.f;
+	DeathDir = HitDir.IsNearlyZero() ? -GetFacingDir() : HitDir.GetSafeNormal();
+	Target = nullptr;
+	Order = ESROrder::Idle;
+	AttackPhase = ESRAttackPhase::Ready;
+	Velocity = FVector2D::ZeroVector;
+	HitStopLeft = 0.f;
+	bSelected = false;
+	bHovered = false;
+	TargetFlash = 0.f;
+
+	Battle->AddCameraTrauma(SimPos, F.ShakeTraumaDeath);
+	Battle->NotifyUnitDied(this, Killer);
+}
+
+// ----------------------------------------------------------------- movement
+
+FVector2D ASRUnit::ComputeAvoidance(const FVector2D& Desired) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FVector2D Pos = GetPos2D();
+	const bool bMoving = !Desired.IsNearlyZero();
+	const FVector2D DesiredDir = Desired.GetSafeNormal();
+	const FVector2D Perp(-DesiredDir.Y, DesiredDir.X);
+	const ASRUnit* MyTarget = Target.Get();
+
+	FVector2D Separation = FVector2D::ZeroVector;
+	float Sidestep = 0.f;
+
+	for (const ASRUnit* Other : Battle->GetUnits())
+	{
+		if (!Other || Other == this || !Other->IsAlive()) { continue; }
+
+		FVector2D Away = Pos - Other->GetPos2D();
+		float Dist = Away.Size();
+		if (Dist < 0.5f)
+		{
+			// Exactly stacked: pick a stable arbitrary direction (depends on which of the two we are).
+			Away = (GetUniqueID() < Other->GetUniqueID()) ? FVector2D(1.f, 0.f) : FVector2D(-1.f, 0.f);
+			Dist = 0.5f;
+		}
+		const FVector2D AwayDir = Away / Dist;
+		const float Touch = GetRadius() + Other->GetRadius();
+
+		// Soft spacing only between friends. Enemies are meant to press into each other; the hard overlap pass stops interpenetration.
+		// A unit standing still does not shuffle away from friends walking past; they go round it.
+		const bool bIgnoreMover = !bMoving && IsPlanted() && Other->GetVelocity2D().SizeSquared() > FMath::Square(60.f);
+		if (Other->GetTeam() == Team && !bIgnoreMover)
+		{
+			const float Range = Touch + F.SeparationPadding;
+			if (Dist < Range)
+			{
+				Separation += AwayDir * (1.f - Dist / Range) * 3.f * F.SeparationStrength;
+			}
+		}
+
+		// Flow round slower bodies in our way instead of pushing straight through them.
+		if (bMoving && Other != MyTarget)
+		{
+			const float LookAhead = Touch + 120.f;
+			const float Ahead = FVector2D::DotProduct(-AwayDir, DesiredDir); // 1 = dead ahead
+			if (Dist < LookAhead && Ahead > 0.45f && Other->GetVelocity2D().SizeSquared() < Velocity.SizeSquared() * 0.5f + 100.f)
+			{
+				const float Side = FVector2D::DotProduct(AwayDir, Perp) >= 0.f ? 1.f : -1.f; // keep to the side we are already on
+				Sidestep += Side * (Ahead - 0.45f) / 0.55f * (1.f - Dist / LookAhead);
+			}
+		}
+	}
+
+	const float Cap = F.SeparationStrength;
+	if (Separation.SizeSquared() > Cap * Cap) { Separation = Separation.GetSafeNormal() * Cap; }
+
+	return Separation + Perp * FMath::Clamp(Sidestep, -1.f, 1.f) * F.SidestepStrength * Stats().MaxSpeed;
+}
+
+bool ASRUnit::CanStep(const FVector2D& Step) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FVector2D Dir = Step.GetSafeNormal();
+	const FVector2D Pos = GetPos2D();
+
+	// Probe a body-radius ahead: walls / rocks / trunks, then ledges and drops in the ground itself.
+	const FVector2D Probe = Pos + Step + Dir * GetRadius() * 0.8f;
+	if (Battle->IsPathBlocked(SimPos, FVector(Probe.X, Probe.Y, SimPos.Z))) { return false; }
+
+	float ProbeZ = SimPos.Z;
+	if (!Battle->SampleGround(Probe, SimPos.Z, ProbeZ)) { return false; } // off the edge of the world
+	if (ProbeZ - SimPos.Z > F.StepHeight) { return false; }
+	if (SimPos.Z - ProbeZ > F.MaxDropHeight) { return false; }
+	return true;
+}
+
+void ASRUnit::TryMove(const FVector2D& Step, float Dt)
+{
+	if (CanStep(Step))
+	{
+		SimPos.X += Step.X;
+		SimPos.Y += Step.Y;
+		UnblockedTime += Dt;
+		if (UnblockedTime > 0.35f) { SlideSide = 0; }
+		return;
+	}
+
+	// Blocked: slide along the obstacle. Stick with one side until clear so we do not dither at a flat face.
+	UnblockedTime = 0.f;
+	const FVector2D Perp(-Step.Y, Step.X);
+	if (SlideSide == 0)
+	{
+		const FVector2D Goal = Target.IsValid() ? Target->GetPos2D() : Destination;
+		SlideSide = FVector2D::DotProduct(Perp, Goal - GetPos2D()) >= 0.f ? 1 : -1;
+	}
+	for (int32 Attempt = 0; Attempt < 2; ++Attempt)
+	{
+		const FVector2D Slide = Perp * float(SlideSide);
+		if (CanStep(Slide))
+		{
+			SimPos.X += Slide.X;
+			SimPos.Y += Slide.Y;
+			Velocity = Slide.GetSafeNormal() * Velocity.Size(); // face the way we are actually going
+			return;
+		}
+		SlideSide = -SlideSide;
+	}
+	Velocity = FVector2D::ZeroVector;
+}
+
+void ASRUnit::Nudge(const FVector2D& Delta)
+{
+	if (bDead || Delta.SizeSquared() < 1e-6f) { return; }
+	const FVector To(SimPos.X + Delta.X, SimPos.Y + Delta.Y, SimPos.Z);
+	if (!Battle->IsPathBlocked(SimPos, To))
+	{
+		SimPos.X = To.X;
+		SimPos.Y = To.Y;
+	}
+}
+
+void ASRUnit::FollowGround(float Dt)
+{
+	float GroundZ = SimPos.Z;
+	if (Battle->SampleGround(GetPos2D(), SimPos.Z, GroundZ))
+	{
+		SimPos.Z = FMath::FInterpTo(SimPos.Z, GroundZ, Dt, 20.f);
+	}
+}

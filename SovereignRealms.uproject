@@ -13,6 +13,7 @@
 	],
 	"Plugins": [
 		{ "Name": "ModelingToolsEditorMode", "Enabled": true, "TargetAllowList": [ "Editor" ] },
+		{ "Name": "ProceduralMeshComponent", "Enabled": true },
 		{ "Name": "PythonScriptPlugin", "Enabled": true },
 		{ "Name": "ModelContextProtocol", "Enabled": true },
 		{ "Name": "EditorToolset", "Enabled": true },
