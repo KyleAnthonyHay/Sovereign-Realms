@@ -386,6 +386,31 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0"))
 	float BuilderExtraSpeed = 0.5f;
 
+	// -------------------------------------------------------- Castle upgrades
+	/** The castle's top level (it starts at 1). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "1", ClampMax = "6"))
+	int32 CastleMaxLevel = 3;
+
+	/** Price of level 2; each level after costs this times the level it is raised from (level 3 = 2x). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades")
+	FSRCost CastleUpgradeCost = FSRCost(300, 0);
+
+	/** Seconds each level takes (builders at the walls speed it up). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "1"))
+	float CastleUpgradeTime = 40.f;
+
+	/** Housing each level adds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "0"))
+	int32 CastleUpgradePop = 8;
+
+	/** Health each level adds. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "0"))
+	float CastleUpgradeHealth = 3000.f;
+
+	/** How much wider (cm) the building zone gets with each level. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Castle Upgrades", meta = (ClampMin = "0"))
+	float CastleUpgradeZone = 600.f;
+
 	/** Most builders a kingdom may have (alive and in training). */
 	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "0", ClampMax = "20"))
 	int32 MaxBuilders = 2;

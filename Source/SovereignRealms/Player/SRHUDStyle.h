@@ -46,7 +46,7 @@ namespace SRId
 {
 	enum : uint32
 	{
-		Pause = 1, Help, Minimap, PlatoonHeader, CancelBuild, LegendClose, Builders,
+		Pause = 1, Help, Minimap, PlatoonHeader, CancelBuild, LegendClose, Builders, Upgrade,
 		Build = 10,       // + 0 toggle, 1..3 tabs, 4..9 entries
 		Command = 20,     // + 0..8
 		Recruit = 30,     // + 0..1

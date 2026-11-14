@@ -55,6 +55,8 @@ namespace
 		{ TEXT("Delete"), TEXT("Cancel construction (75% refund)") },
 		{ TEXT("Y"), TEXT("Train a Builder at the Citadel (2 at most)") },
 		{ TEXT("RMB on a site"), TEXT("Builders selected: build / repair it") },
+		{ TEXT("X"), TEXT("Builders: repair the nearest damaged building") },
+		{ TEXT("U"), TEXT("Raise the Citadel a level (+8 housing)") },
 		{ nullptr, TEXT("TROOPS") },
 		{ TEXT("Q / E / R / T"), TEXT("Train Shieldbearer / Archer / Rider / Catapult") },
 		{ TEXT("RMB"), TEXT("Rally point (Barracks or Range selected)") },

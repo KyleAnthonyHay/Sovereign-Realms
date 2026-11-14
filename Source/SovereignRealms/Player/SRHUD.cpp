@@ -569,10 +569,11 @@ void ASRHUD::DrawBuildZone()
 	const ASRBuilding* Sel = PC ? PC->GetSelectedBuilding() : nullptr;
 	const bool bShow = PC && Castle && Battle && Castle->IsAlive() && (PC->IsPlacing() || Sel == Castle);
 	if (!bShow) { return; }
-	const float R = Castle->Stats().TerritoryRadius;
+	const float R = Castle->GetBuildZoneRadius();
 	if (R <= 0.f) { return; }
 	const FVector2D Centre = Castle->GetFootprintCentre();
-	if (FVector2D::DistSquared(Centre, BuildZone.At) > 1.f || BuildZone.Sight.Num() == 0)
+	const bool bRadiusChanged = BuildZone.Sight.Num() > 0 && FMath::Abs(FVector2D::Distance(FVector2D(BuildZone.Sight[0].X, BuildZone.Sight[0].Y), Centre) - R) > 5.f;
+	if (FVector2D::DistSquared(Centre, BuildZone.At) > 1.f || BuildZone.Sight.Num() == 0 || bRadiusChanged)
 	{
 		BuildZone.At = Centre;
 		const int32 N = 300;

@@ -369,7 +369,7 @@ bool USREconomySubsystem::IsInBuildZone(ESRTeam Team, const FVector2D& At) const
 	for (const ASRBuilding* B : Buildings)
 	{
 		if (!B || B->Team != Team || !B->IsAlive() || !B->IsFinished()) { continue; }
-		const float R = F.BuildingStatsFor(B->BuildingType).TerritoryRadius;
+		const float R = B->GetBuildZoneRadius();
 		if (R > 0.f && FVector2D::DistSquared(B->GetFootprintCentre(), At) <= R * R) { return true; }
 	}
 	return false;

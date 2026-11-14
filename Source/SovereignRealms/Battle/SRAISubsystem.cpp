@@ -552,6 +552,14 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		C.NextBuildTry = FMath::Max(C.NextBuildTry, Clock + 1.f);
 	}
 
+	// housing short and gold to spare: raise the castle a level (houses more, stronger walls)
+	if (ASRBuilding* Castle = Eco->GetCastle(C.Team); Castle && Castle->CanUpgrade())
+	{
+		const int32 Pop = Eco->GetPopulation(C.Team) + Eco->GetQueuedPopulation(C.Team);
+		const FSRCost Cost = Castle->GetUpgradeCost();
+		if (Pop + 3 >= Eco->GetPopulationCap(C.Team) && Eco->GetResource(C.Team, ESRResource::Gold) >= Cost.Gold + 60) { Castle->StartUpgrade(); }
+	}
+
 	Recruit(C, Mine);
 }
 

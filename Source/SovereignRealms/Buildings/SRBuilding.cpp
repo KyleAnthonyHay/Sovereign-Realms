@@ -129,6 +129,8 @@ void ASRBuilding::EndPlay(const EEndPlayReason::Type Reason)
 
 void ASRBuilding::ResetRuntime()
 {
+	Level = 1;
+	UpgradeProgress = -1.f;
 	// a level building that fell in the last battle stands again
 	if (bDestroyed)
 	{
@@ -141,7 +143,7 @@ void ASRBuilding::ResetRuntime()
 	HitShake = 0.f;
 	LastDamagedTime = -100.0;
 	if (!bRuntimeBuilt) { BuildProgress = 1.f; }
-	Health = Stats().MaxHealth * (BuildProgress >= 1.f ? 1.f : USRFeelSettings::Get().ConstructionStartHealth);
+	Health = GetMaxHealth() * (BuildProgress >= 1.f ? 1.f : USRFeelSettings::Get().ConstructionStartHealth);
 	Mesh->SetRelativeLocation(MeshBaseLocation);
 	Mesh->SetRelativeRotation(FRotator::ZeroRotator);
 	SetState(BuildProgress < 1.f ? ESRBuildingState::Site : ESRBuildingState::Complete);
@@ -173,6 +175,7 @@ void ASRBuilding::StepBuilding(float Dt)
 	CountBuilders();
 	if (BuildProgress < 1.f) { StepConstruction(Dt); UpdateFeedback(Dt); return; }
 	StepRepair(Dt);
+	StepUpgrade(Dt);
 
 	if (BuildingType == ESRBuildingType::Farm || BuildingType == ESRBuildingType::Mine)
 	{
@@ -564,7 +567,85 @@ const FSRBuildingStats& ASRBuilding::Stats() const
 
 float ASRBuilding::GetHealthFrac() const
 {
-	return FMath::Clamp(Health / FMath::Max(Stats().MaxHealth, 1.f), 0.f, 1.f);
+	return FMath::Clamp(Health / FMath::Max(GetMaxHealth(), 1.f), 0.f, 1.f);
+}
+
+int32 ASRBuilding::GetPopProvided() const
+{
+	if (!IsFinished()) { return 0; }
+	return Stats().PopProvided + (IsCastle() ? (Level - 1) * USRFeelSettings::Get().CastleUpgradePop : 0);
+}
+
+float ASRBuilding::GetMaxHealth() const
+{
+	return Stats().MaxHealth + (IsCastle() ? (Level - 1) * USRFeelSettings::Get().CastleUpgradeHealth : 0.f);
+}
+
+float ASRBuilding::GetBuildZoneRadius() const
+{
+	const float R = Stats().TerritoryRadius;
+	return R > 0.f ? R + (IsCastle() ? (Level - 1) * USRFeelSettings::Get().CastleUpgradeZone : 0.f) : 0.f;
+}
+
+bool ASRBuilding::CanUpgrade() const
+{
+	return IsCastle() && IsFinished() && !IsUpgrading() && Level < USRFeelSettings::Get().CastleMaxLevel;
+}
+
+FSRCost ASRBuilding::GetUpgradeCost() const
+{
+	// each level dearer than the last: level 2 costs the base price, level 3 twice it, ...
+	const FSRCost& Base = USRFeelSettings::Get().CastleUpgradeCost;
+	return FSRCost(Base.Gold * Level, Base.Food * Level);
+}
+
+bool ASRBuilding::StartUpgrade()
+{
+	if (!CanUpgrade() || !Economy) { return false; }
+	if (!Economy->TrySpend(Team, GetUpgradeCost()))
+	{
+		UE_LOG(LogSovereign, Log, TEXT("UPGRADE refused: %s level %d costs %d gold"), *GetDisplayName(), Level + 1, GetUpgradeCost().Gold);
+		return false;
+	}
+	UpgradeProgress = 0.f;
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this); Audio && Team == ESRTeam::Player) { Audio->PlayAt(ESRSound::BuildPlace, GetLabelPoint()); }
+	UE_LOG(LogSovereign, Log, TEXT("UPGRADE %s %s to level %d started"), Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), *GetDisplayName(), Level + 1);
+	return true;
+}
+
+void ASRBuilding::StepUpgrade(float Dt)
+{
+	if (!IsUpgrading()) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	// builders at the walls speed it up, as they do a site
+	const float Rate = 1.f + F.BuilderExtraSpeed * BuildersWorking;
+	UpgradeProgress += Rate * Dt / FMath::Max(F.CastleUpgradeTime, 1.f);
+	HammerClock -= Dt;
+	if (HammerClock <= 0.f)
+	{
+		HammerClock = FMath::FRandRange(0.6f, 1.0f);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildHammer, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 250.f)); }
+	}
+	if (UpgradeProgress < 1.f) { return; }
+	UpgradeProgress = -1.f;
+	const float Before = GetMaxHealth();
+	++Level;
+	Health += GetMaxHealth() - Before;   // the new walls come up whole
+	NeedsBuilderState = -1;
+	UE_LOG(LogSovereign, Log, TEXT("UPGRADE %s reached level %d (houses %d)"), *GetDisplayName(), Level, GetPopProvided());
+	if (Team == ESRTeam::Player && Economy)
+	{
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::BuildComplete); }
+		const FVector2D At = GetFootprintCentre();
+		Economy->PushAlert(ESRAlertKind::BuildingDone, FText::Format(NSLOCTEXT("SRBuilding", "Upgraded", "{0} raised to level {1}: houses {2} troops"),
+			FText::FromString(GetDisplayName()), FText::AsNumber(Level), FText::AsNumber(GetPopProvided())), &At);
+	}
+}
+
+void ASRBuilding::SetLevelForLoad(int32 InLevel, float InUpgradeProgress)
+{
+	Level = FMath::Clamp(InLevel, 1, FMath::Max(1, USRFeelSettings::Get().CastleMaxLevel));
+	UpgradeProgress = InUpgradeProgress;
 }
 
 bool ASRBuilding::NeedsBuilder() const
@@ -594,8 +675,8 @@ void ASRBuilding::CountBuilders()
 void ASRBuilding::StepRepair(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
-	if (BuildersWorking <= 0 || Health >= Stats().MaxHealth) { return; }
-	Health = FMath::Min(Stats().MaxHealth, Health + BuildersWorking * F.BuilderRepairPerSecond * Dt);
+	if (BuildersWorking <= 0 || Health >= GetMaxHealth()) { return; }
+	Health = FMath::Min(GetMaxHealth(), Health + BuildersWorking * F.BuilderRepairPerSecond * Dt);
 	if (State == ESRBuildingState::Damaged && GetHealthFrac() >= F.DamagedStateFraction) { SetState(ESRBuildingState::Complete); }
 	HammerClock -= Dt;
 	if (HammerClock <= 0.f)
@@ -616,7 +697,7 @@ void ASRBuilding::StepConstruction(float Dt)
 	if (Rate <= 0.f) { return; }   // waiting for a builder
 	const float Before = BuildProgress;
 	BuildProgress = FMath::Min(1.f, BuildProgress + Rate * Dt / FMath::Max(S.BuildTime, 0.5f));
-	Health = FMath::Min(S.MaxHealth, Health + S.MaxHealth * (1.f - F.ConstructionStartHealth) * (BuildProgress - Before));
+	Health = FMath::Min(GetMaxHealth(), Health + GetMaxHealth() * (1.f - F.ConstructionStartHealth) * (BuildProgress - Before));
 	ApplyBuildVisual();
 
 	HammerClock -= Dt;
@@ -628,7 +709,7 @@ void ASRBuilding::StepConstruction(float Dt)
 
 	if (BuildProgress >= 1.f)
 	{
-		Health = FMath::Max(Health, S.MaxHealth * 0.999f);
+		Health = FMath::Max(Health, GetMaxHealth() * 0.999f);
 		UE_LOG(LogSovereign, Log, TEXT("BUILD %s finished at (%.0f, %.0f)"), *GetDisplayName(), GetActorLocation().X, GetActorLocation().Y);
 		if (Team == ESRTeam::Player)
 		{
@@ -927,7 +1008,7 @@ void ASRBuilding::ApplySaved(float InHealth, float InProgress, bool bInDestroyed
 	}
 	BuildProgress = FMath::Clamp(InProgress, 0.f, 1.f);
 	NeedsBuilderState = -1;
-	Health = FMath::Clamp(InHealth, 1.f, Stats().MaxHealth);
+	Health = FMath::Clamp(InHealth, 1.f, GetMaxHealth());
 	Queue = InQueue;
 	BuildClock = 0.f;
 	RallyPoint = InRally;

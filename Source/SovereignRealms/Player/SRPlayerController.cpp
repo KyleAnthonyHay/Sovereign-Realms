@@ -94,6 +94,8 @@ void ASRPlayerController::BuildInput()
 	RecruitActions[2] = MakeAction(TEXT("IA_RecruitHorseman"), EInputActionValueType::Boolean);
 	RecruitActions[3] = MakeAction(TEXT("IA_RecruitCatapult"), EInputActionValueType::Boolean);
 	RecruitActions[4] = MakeAction(TEXT("IA_RecruitBuilder"), EInputActionValueType::Boolean);
+	RepairAction = MakeAction(TEXT("IA_Repair"), EInputActionValueType::Boolean);
+	UpgradeAction = MakeAction(TEXT("IA_UpgradeCastle"), EInputActionValueType::Boolean);
 
 	// A key gives +X. Swizzle moves it onto Y (up/down keys), Negate flips it (left/down keys).
 	auto MapAxisKey = [this](UInputAction* Action, FKey Key, bool bVertical, bool bNegative)
@@ -141,6 +143,8 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(RecruitActions[2], EKeys::R);
 	MappingContext->MapKey(RecruitActions[3], EKeys::T);
 	MappingContext->MapKey(RecruitActions[4], EKeys::Y);
+	MappingContext->MapKey(RepairAction, EKeys::X);
+	MappingContext->MapKey(UpgradeAction, EKeys::U);
 }
 
 void ASRPlayerController::SetupInputComponent()
@@ -187,6 +191,8 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(RecruitActions[2], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitHorseman);
 	Input->BindAction(RecruitActions[3], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitCatapult);
 	Input->BindAction(RecruitActions[4], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitBuilder);
+	Input->BindAction(RepairAction, ETriggerEvent::Started, this, &ASRPlayerController::RepairCommand);
+	Input->BindAction(UpgradeAction, ETriggerEvent::Started, this, &ASRPlayerController::UpgradeCastleCommand);
 }
 
 void ASRPlayerController::PlayerTick(float DeltaTime)
@@ -687,6 +693,53 @@ bool ASRPlayerController::IssueBuild(ASRBuilding* Building)
 	ASROrderMarker::SpawnMarker(GetWorld(), FVector(At, Building->GetActorLocation().Z), USRFeelSettings::Get().MoveMarkerColor);
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); }
 	return true;
+}
+
+bool ASRPlayerController::SelectionHasBuilders() const
+{
+	for (const TWeakObjectPtr<ASRUnit>& U : Selection) { if (U.IsValid() && U->IsActive() && U->IsBuilder()) { return true; } }
+	return false;
+}
+
+void ASRPlayerController::RepairCommand()
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	FVector2D Mid = FVector2D::ZeroVector;
+	int32 N = 0;
+	for (ASRUnit* U : Units) { if (U->IsBuilder()) { Mid += U->GetPos2D(); ++N; } }
+	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (N == 0 || !Eco) { return; }
+	Mid /= N;
+	// the nearest damaged building; an unfinished site only if nothing is damaged
+	ASRBuilding* Best = nullptr;
+	float BestD = TNumericLimits<float>::Max();
+	for (ASRBuilding* B : Eco->GetBuildings())
+	{
+		if (!B || B->Team != ESRTeam::Player || !B->NeedsWork()) { continue; }
+		const float D = B->DistanceToFootprint(Mid) + (B->IsUnderConstruction() ? 100000.f : 0.f);
+		if (D < BestD) { BestD = D; Best = B; }
+	}
+	if (!Best)
+	{
+		Eco->PushAlert(ESRAlertKind::Info, NSLOCTEXT("SRPC", "NothingToRepair", "Nothing needs repairing"));
+		return;
+	}
+	IssueBuild(Best);
+}
+
+void ASRPlayerController::UpgradeCastleCommand()
+{
+	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	ASRBuilding* Castle = Eco ? Eco->GetCastle(ESRTeam::Player) : nullptr;
+	if (!Castle) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (Castle->GetLevel() >= F.CastleMaxLevel) { Eco->PushAlert(ESRAlertKind::Info, NSLOCTEXT("SRPC", "TopLevel", "The Citadel is at its highest level")); return; }
+	if (Castle->IsUpgrading()) { Eco->PushAlert(ESRAlertKind::Info, NSLOCTEXT("SRPC", "Upgrading", "The Citadel is already being raised")); return; }
+	if (!Castle->StartUpgrade())
+	{
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
+	}
 }
 
 void ASRPlayerController::SendBuildersTo(ASRBuilding* Building)

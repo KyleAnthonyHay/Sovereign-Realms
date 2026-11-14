@@ -90,13 +90,13 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdSelectType(TEXT("sr.SelectType"), TEXT("sr.SelectType <0=Shieldbearer|1=Archer>: select all player units of a type."),
+	FAutoConsoleCommandWithWorldAndArgs CmdSelectType(TEXT("sr.SelectType"), TEXT("sr.SelectType <0=Shieldbearer|1=Archer|2=Rider|3=Catapult|4=Builder>: select all player units of a type."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ASRPlayerController* PC = GetSRController(World);
 			const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
 			if (!PC || !Battle || Args.Num() < 1) { return; }
-			const ESRUnitType Type = FCString::Atoi(*Args[0]) == 1 ? ESRUnitType::Archer : ESRUnitType::Shieldbearer;
+			const ESRUnitType Type = ESRUnitType(FMath::Clamp(FCString::Atoi(*Args[0]), 0, 4));
 			TArray<ASRUnit*> Units;
 			for (ASRUnit* Unit : Battle->GetUnits())
 			{
@@ -381,6 +381,16 @@ namespace
 			ASRBuilding* B = Eco->PlaceBuilding(Type, Team, XY, &Why);
 			if (ASRPlayerController* PC = GetSRController(World); PC && B && Team == ESRTeam::Player) { PC->SendBuildersTo(B); }
 			UE_LOG(LogSovereign, Log, TEXT("sr.Build %s at (%.0f, %.0f): %s"), *Args[0], XY.X, XY.Y, B ? TEXT("placed") : *Why.ToString());
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdUpgrade(TEXT("sr.Upgrade"), TEXT("sr.Upgrade [enemy]: raise a castle a level (pays, like the U key)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
+			ASRBuilding* Castle = Eco ? Eco->GetCastle(Args.Num() > 0 && Args[0] == TEXT("enemy") ? ESRTeam::Enemy : ESRTeam::Player) : nullptr;
+			if (!Castle) { return; }
+			const bool bOk = Castle->StartUpgrade();
+			UE_LOG(LogSovereign, Log, TEXT("sr.Upgrade: %s (level %d, houses %d)"), bOk ? TEXT("started") : TEXT("REFUSED"), Castle->GetLevel(), Castle->GetPopProvided());
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdPlace(TEXT("sr.Place"), TEXT("sr.Place <farm|mine|tower|barracks|range|off>: enter placement mode as if the build hotkey was pressed."),

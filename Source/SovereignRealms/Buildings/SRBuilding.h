@@ -111,7 +111,7 @@ public:
 	/** Pull down a building still under construction and get CancelRefund of its price back. */
 	void CancelConstruction();
 	/** Population this building lets its kingdom field right now. */
-	int32 GetPopProvided() const { return IsFinished() ? Stats().PopProvided : 0; }
+	int32 GetPopProvided() const;
 	/** Where an arrow shot from From should land on this building (on the near wall, a little up). */
 	FVector GetAimPointFrom(const FVector2D& From) const;
 	/** Distance from a point to the footprint's edge (0 inside). */
@@ -178,7 +178,26 @@ public:
 	void SetNeedsBuilder(bool bNeeds) { NeedsBuilderState = bNeeds ? 1 : 0; }
 	bool NeedsBuilder() const;
 	/** A builder has something to do here: it is a site, or it stands damaged. */
-	bool NeedsWork() const { return !bDestroyed && (BuildProgress < 1.f || Health < Stats().MaxHealth - 0.5f); }
+	bool NeedsWork() const { return !bDestroyed && (BuildProgress < 1.f || Health < GetMaxHealth() - 0.5f); }
+
+	// ---- castle levels ----
+	/** The castle is upgraded level by level (Sovereign Feel > Buildings > Castle upgrades): more housing, more walls, a
+	 * wider building zone. Other buildings stay at level 1. */
+	int32 GetLevel() const { return Level; }
+	bool IsUpgrading() const { return UpgradeProgress >= 0.f; }
+	float GetUpgradeFraction() const { return FMath::Max(UpgradeProgress, 0.f); }
+	/** A finished castle below the top level, not already being upgraded. */
+	bool CanUpgrade() const;
+	/** The price of the next level. */
+	FSRCost GetUpgradeCost() const;
+	/** Pays and starts the next level; false (with feedback) if it cannot. */
+	bool StartUpgrade();
+	/** Health with the castle's levels counted. */
+	float GetMaxHealth() const;
+	/** The building zone round it (the castle's TerritoryRadius, wider with each level). */
+	float GetBuildZoneRadius() const;
+	/** Saved games. */
+	void SetLevelForLoad(int32 InLevel, float InUpgradeProgress);
 	/** Builders at its walls working on it right now (counted each frame while it needs work). */
 	int32 GetBuildersWorking() const { return BuildersWorking; }
 
@@ -237,7 +256,10 @@ private:
 	float RallyShowTime = 0.f;
 	float RallyPop = 0.f;
 	int32 RecruitCount = 0;
-	int8 NeedsBuilderState = -1;     // -1 = not worked out yet (a saved game): asked of the economy on first need
+	int8 NeedsBuilderState = -1;
+	int32 Level = 1;
+	float UpgradeProgress = -1.f;    // 0..1 while the next level is being built, -1 otherwise
+	void StepUpgrade(float Dt);     // -1 = not worked out yet (a saved game): asked of the economy on first need
 	int32 BuildersWorking = 0;
 	void CountBuilders();
 	void StepRepair(float Dt);

@@ -221,6 +221,8 @@ bool USRGameFlowSubsystem::SaveMatch(const FString& Slot)
 		O.bDestroyed = !B->IsAlive();
 		O.Queue = B->GetQueue();
 		O.Rally = B->GetRallyPoint();
+		O.Level = B->GetLevel();
+		O.UpgradeProgress = B->IsUpgrading() ? B->GetUpgradeFraction() : -1.f;
 	}
 	if (const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
 	{
@@ -294,7 +296,7 @@ bool USRGameFlowSubsystem::LoadMatch(const FString& Slot)
 				if (Vein != INDEX_NONE) { Grid->ClaimVein(Vein, B); }
 			}
 		}
-		if (B) { B->ApplySaved(O.Health, O.BuildProgress, O.bDestroyed, O.Queue, O.Rally); }
+		if (B) { B->SetLevelForLoad(O.Level, O.UpgradeProgress); B->ApplySaved(O.Health, O.BuildProgress, O.bDestroyed, O.Queue, O.Rally); }
 	}
 
 	// troops

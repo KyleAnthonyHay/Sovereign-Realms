@@ -78,10 +78,10 @@ USRFeelSettings::USRFeelSettings()
 	Catapult.MaxHealth = 260.f;
 	Catapult.Radius = 110.f;
 	Catapult.Mass = 4.f;
-	Catapult.MaxSpeed = 170.f;
-	Catapult.Acceleration = 900.f;
-	Catapult.Deceleration = 1500.f;
-	Catapult.TurnRateDeg = 110.f;
+	Catapult.MaxSpeed = 280.f;
+	Catapult.Acceleration = 1300.f;
+	Catapult.Deceleration = 1900.f;
+	Catapult.TurnRateDeg = 170.f;
 	Catapult.bRanged = true;
 	Catapult.AttackRange = 1700.f;
 	Catapult.AcquireRange = 1800.f;

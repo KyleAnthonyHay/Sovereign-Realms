@@ -145,6 +145,12 @@ public:
 	bool IssueBuild(ASRBuilding* Building);
 	/** A building was just laid: the selected builders go to it, or (outside the castle's zone) the nearest free one. */
 	void SendBuildersTo(ASRBuilding* Building);
+	/** The selected builders go to the nearest of our buildings that needs work (X, or the Repair button). */
+	void RepairCommand();
+	/** Raise the castle a level (U, or its Upgrade button). */
+	void UpgradeCastleCommand();
+	bool SelectionHasBuilders() const;
+	ASRBuilding* PickBuildingUnderCursor() const;
 	void IssueStop();
 
 	void RecenterOnSelection();
@@ -213,7 +219,6 @@ private:
 	void OnRecruitCatapult() { RecruitHotkey(ESRUnitType::Catapult); }
 	void OnRecruitBuilder() { RecruitHotkey(ESRUnitType::Builder); }
 	void RecruitHotkey(ESRUnitType Type);
-	ASRBuilding* PickBuildingUnderCursor() const;
 
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MappingContext;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> PanAction;      // arrows
@@ -239,6 +244,8 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DeleteAction;
 	UPROPERTY(Transient) TObjectPtr<ASRPlacementPreview> Preview;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[5];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> RepairAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> UpgradeAction;
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
 

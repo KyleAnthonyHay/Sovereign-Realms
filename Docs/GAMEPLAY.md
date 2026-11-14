@@ -44,12 +44,12 @@ Sovereign Feel** (`Source/SovereignRealms/Common/SRFeelSettings.{h,cpp}`, overri
 | Barracks | 110 gold | 16 s | 1600 | trains Shieldbearers; own rally point |
 | Archery Range | 125 gold | 16 s | 1400 | trains Archers; own rally point |
 | Horse Rider | 110 food + 40 gold | 11 s at a Stable | 230 | fast (6.4 m/s); the first blow after 4 s without striking is a charge, 2.2x; 2 housing |
-| Catapult | 120 food + 120 gold | 18 s at a Siege Workshop | 260 | 17 m range (none under 4.5 m), 70 dmg stones with 2.3 m splash, 3x vs buildings, goes for buildings first; slow; 3 housing |
+| Catapult | 120 food + 120 gold | 18 s at a Siege Workshop | 260 | 17 m range (none under 4.5 m), 70 dmg stones with 2.3 m splash, 3x vs buildings, goes for buildings first; 2.8 m/s; 3 housing |
 | Stable | 150 gold | 20 s | 1500 | trains Horse Riders |
 | Siege Workshop | 200 gold | 24 s | 1600 | builds Catapults |
 | Watchtower | 160 gold | 18 s | 1800 | shoots 40 dmg / 1.2 s at 14 m |
 | Builder | 120 gold + 80 food | 14 s at the Citadel (Y) | 110 | builds outside the castle's zone and repairs (28 HP/s each); never starts a fight; at most 2 per kingdom |
-| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8; trains Builders; if it falls, the kingdom falls |
+| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8 (+8 per level); trains Builders; if it falls, the kingdom falls |
 
 Starting stock: 320 gold, 200 food, 3 Shieldbearers + 2 Archers each side.
 
@@ -75,7 +75,13 @@ its fire and damaged look). An idle Builder of yours goes to work on its own on 
 within 26 m; right-click one of your sites or damaged buildings with Builders selected to send them. Builders are
 dear (120 gold + 80 food, 14 s), capped at 2 per kingdom (`MaxBuilders`; shown in the top bar, click it to select
 them), never join platoons from recruitment, and never pick fights. The enemy commander keeps 1 (Easy) or 2 Builders
-and uses them the same way. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
+and uses them the same way. **Repair**: X (or the Repair button) sends the selected Builders to the nearest damaged
+building; hovering one of your damaged buildings with Builders selected shows "RMB: repair it".
+
+**Raising the Citadel** (U, or the Upgrade button on the castle): levels 1 to 3 (`CastleMaxLevel`). Each level costs
+300 gold x the current level (300, then 600), takes 40 s (Builders at the walls speed it up) and adds 8 housing,
+3000 health (the new walls come up whole) and 6 m to the building zone. The enemy commander raises its castle when
+its housing runs short and it has the gold. Saved games keep the level. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
 Defence (watchtower); 1-6 picks, Tab changes tab. Placing pays the gold; the building rises course by
 course over its build time with hammering, and works when done. Delete / Backspace cancels a building under
 construction for 75% of its price. Destroyed buildings slump into rubble (runtime ones clear away; the level's own

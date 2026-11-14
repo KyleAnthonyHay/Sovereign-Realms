@@ -35,6 +35,8 @@ struct FSRSavedBuilding
 	UPROPERTY() bool bDestroyed = false;
 	UPROPERTY() TArray<ESRUnitType> Queue;
 	UPROPERTY() FVector2D Rally = FVector2D::ZeroVector;
+	UPROPERTY() int32 Level = 1;
+	UPROPERTY() float UpgradeProgress = -1.f;
 };
 
 USTRUCT()
