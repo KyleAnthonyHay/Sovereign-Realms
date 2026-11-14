@@ -142,10 +142,11 @@ void USRAudioSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	bLoaded = true;
 
 	int32 Missing = 0;
-	for (int32 i = 0; i < int32(ESRSound::Count); ++i) { Missing += Variants[i].Num() == 0 ? 1 : 0; }
+	// (MusicLoop is only a fallback for a build without the soundtrack's songs)
+	for (int32 i = 0; i < int32(ESRSound::Count); ++i) { Missing += (Variants[i].Num() == 0 && i != int32(ESRSound::MusicLoop)) ? 1 : 0; }
 	if (Missing > 0)
 	{
-		UE_LOG(LogSovereign, Warning, TEXT("AUDIO %d of %d sounds missing under /Game/SR/Audio (run Tools/audio/gen_sounds.py, Tools/audio/prep_recorded.py and Tools/import_audio.py)"), Missing, int32(ESRSound::Count));
+		UE_LOG(LogSovereign, Warning, TEXT("AUDIO %d of %d sounds missing under /Game/SR/Audio (run Tools/audio/prep_recorded.py and Tools/import_audio.py)"), Missing, int32(ESRSound::Count));
 	}
 }
 

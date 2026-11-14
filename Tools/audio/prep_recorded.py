@@ -182,6 +182,56 @@ def main_cc0():
     write("WindLoop", loop(cc0("wind_excerpt.wav"), 0.5, 23.5, 1.5), peak=0.7)
 
 
+def mix(a, b, gain_b=0.8, delay=0.0):
+    """Two takes layered (b a little later), each peak-normalised first."""
+    a = a / max(np.abs(a).max(), 1e-6)
+    b = b / max(np.abs(b).max(), 1e-6)
+    d = int(delay * SR)
+    m = np.zeros(max(len(a), len(b) + d))
+    m[:len(a)] += a
+    m[d:d + len(b)] += gain_b * b
+    return m
+
+
+def main_replace():
+    """Every sound that used to be synthesised (Tools/audio/gen_sounds.py) now comes from CC0 recordings."""
+    takes("SwordHit", [trim(cc0("sword_clash_%d.ogg" % k)) for k in range(1, 7)])
+    takes("ShieldBash", [trim(cc0("shield_block_%d.ogg" % k)) for k in range(1, 7)])
+    for k in range(1, 4):   # more takes for the melee wind-up (the first is Recorded/sword_swing.wav)
+        write("SwordSwing_%d" % (k + 1), trim(cc0("sword_swing_%d.ogg" % k)))
+    takes("ArrowHitFlesh", [trim(cc0("impactPunch_medium_00%d.ogg" % k)) for k in range(5)])
+    takes("ArrowHitWood", [trim(cc0("impactWood_light_00%d.ogg" % k)) for k in range(5)])
+    takes("ArrowHitGround", [trim(cc0("impactSoft_medium_00%d.ogg" % k)) for k in range(5)], peak=0.7)
+    takes("Select", [trim(cc0(n)) for n in ("clothBelt.ogg", "clothBelt2.ogg", "beltHandle1.ogg", "beltHandle2.ogg")], peak=0.7)
+    takes("Acknowledge", [trim(cc0("chain_0%d.ogg" % k)) for k in (1, 2, 3)], peak=0.7)
+    takes("AttackOrder", [trim(cc0("blade_0%d.ogg" % k)) for k in (1, 2, 3)], peak=0.75)
+    takes("UIClick", [trim(cc0("click_001.ogg"))], peak=0.7)   # (the pack's other clicks are only ~10 ms)
+    takes("UIError", [trim(cc0("error_002.ogg")), trim(cc0("error_006.ogg"))], peak=0.7)
+    takes("CoinPayout", [trim(cc0("item_coins_0%d.ogg" % k)) for k in (1, 2, 3, 4)], peak=0.75)
+    takes("GrainPayout", [trim(cc0(n)) for n in ("dropLeather.ogg", "handleSmallLeather.ogg", "handleSmallLeather2.ogg")], peak=0.75)
+    takes("BuildPlace", [trim(cc0("wood_slam_0%d.ogg" % k)) for k in (1, 2, 3, 4)])
+    takes("BuildComplete", [trim(cc0("jingles_PIZZI02.ogg"))], peak=0.75)
+    takes("RecruitReady", [trim(cc0("door_open_01.ogg"))], peak=0.75)
+    takes("BuildingHit", [trim(cc0("bfh1_wood_hit_0%d.ogg" % k)) for k in (1, 2, 3)] + [trim(cc0("bfh1_rock_hit_01.ogg"))])
+    # a building coming down: timbers splitting and stone tumbling, in waves over a second and a half
+    rock = [trim(cc0("bfh1_rock_falling_0%d.ogg" % k)) for k in (1, 2, 3, 4)]
+    wood = [trim(cc0("bfh1_wood_breaking_0%d.ogg" % k)) for k in (1, 2, 3, 4)]
+    collapses = []
+    for k in range(4):
+        c = mix(wood[k], rock[k], 0.9, 0.12)
+        c = mix(c, rock[(k + 1) % 4], 0.8, 0.45)
+        c = mix(c, wood[(k + 2) % 4], 0.6, 0.8)
+        c = mix(c, rock[(k + 3) % 4], 0.55, 1.15)
+        collapses.append(c)
+    takes("BuildingCollapse", collapses, peak=0.9)
+    takes("WarHorn", [trim(cc0("war_horn.ogg"))], peak=0.8)
+    takes("Pickaxe", [trim(cc0("impactMining_00%d.ogg" % k)) for k in range(5)], peak=0.75)
+    takes("Hoe", [trim(cc0("footstep_grass_00%d.ogg" % k)) for k in range(5)], peak=0.75)
+    takes("Victory", [trim(cc0("fanfare.ogg"))], peak=0.85)
+    takes("Defeat", [trim(cc0("jingles_STEEL14.ogg"))], peak=0.85)
+    write("AmbientLoop", cc0("amb_morning.ogg"), peak=0.7)   # already a seamless loop
+
+
 def main():
     write("BowRelease", trim(read("bow_release_1.wav")))
     write("BowRelease_2", trim(read("bow_release_2.wav")))
@@ -224,4 +274,5 @@ def main_music():
 if __name__ == "__main__":
     main()
     main_cc0()
+    main_replace()
     main_music()

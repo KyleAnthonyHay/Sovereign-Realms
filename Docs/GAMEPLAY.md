@@ -193,9 +193,16 @@ health left; towers and the castle count as defenders where they reach. Difficul
 
 ## Sound
 
-`Tools/audio/gen_sounds.py` synthesises 27 sounds (no samples): bronze clangs, hide and wood thuds, a plucked
-bowstring, arrow impacts, ram's-horn calls and fanfares, coins and grain, hammering, collapse, a wind-and-birdsong
-ambient loop and a lyre-over-drone music loop. `Tools/import_audio.py` brings them into `/Game/SR/Audio`.
+Every sound is a recording: the user's own (`SourceArt/Audio/Recorded`) and CC0 sounds from Kenney and OpenGameArt
+(`SourceArt/Audio/Recorded/cc0`, sources in its `CREDITS.md`). `Tools/audio/prep_recorded.py` turns them into
+`SourceArt/Audio/S_<Name>[_N].wav` (48 kHz mono, peak-normalised, trimmed; several takes of a sound are picked at random)
+and `Tools/import_audio.py` brings them into `/Game/SR/Audio`. The old synthesiser (`Tools/audio/gen_sounds.py`) is
+retired. Combat: six sword clashes, six shield blocks, punchy flesh hits, wood and dirt arrow hits; orders: a belt and
+leather creak on select, a chain rattle on a move order, a blade on an attack order; Kenney interface click / error;
+coins and grain-sack payouts; timber set down for a new site, a gate opening for a recruit, a pizzicato rise when a
+building is done, wood and stone hits and a layered timber-and-rubble collapse for buildings; a long war horn; picks
+and soil for the workers; a fanfare for victory and a falling steel phrase for defeat; a 63 s morning-countryside
+ambience loop.
 Recorded sounds (`SourceArt/Audio/Recorded`, turned into game sounds by `Tools/audio/prep_recorded.py`): two bow
 releases (picked at random), an arrow whistle that rides on every arrow (pitched down, on catapult stones), a sword
 swing on every melee wind-up, two horse snorts (idle riders, now and then) and a gallop loop cut from a pass-by that

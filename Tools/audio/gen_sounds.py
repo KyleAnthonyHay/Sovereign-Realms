@@ -8,6 +8,7 @@ wood and hide thuds, gut bowstrings, ram's-horn calls, frame drums, a lyre over 
 Deterministic (fixed seed) so re-running reproduces the same files.
 """
 import os
+import sys
 import wave
 
 import numpy as np
@@ -153,6 +154,11 @@ def loop_seamless(x, xfade=1.5):
 
 
 def main():
+    # Superseded: every game sound is now a CC0 recording (Tools/audio/prep_recorded.py). Kept for reference;
+    # run with --force to synthesise anyway (it would overwrite the recordings' wavs).
+    if "--force" not in sys.argv:
+        print("gen_sounds.py is superseded by prep_recorded.py (CC0 recordings); pass --force to run it anyway")
+        return
     S = {}
     # ---------------------------------------------------------------- combat
     S["SwordHit"] = mix(clang(780, 0.5, decay=0.14), clang(1230, 0.35, decay=0.08) * 0.5,
