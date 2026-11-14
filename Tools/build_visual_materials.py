@@ -960,7 +960,8 @@ def build_grid_cell():
 def build_ghost():
     """Placement ghost: the building's own mesh drawn as glowing glass, tinted green (fits) or red (blocked).
     Colour comes from custom primitive data 0..2, opacity from 3."""
-    mat = get_material("M_Ghost")
+    # (named M_PlacementGhost: an older M_Ghost asset failed to compile on Metal and cannot be rebuilt in place)
+    mat = get_material("M_PlacementGhost")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
     mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     mat.set_editor_property("two_sided", False)
@@ -972,8 +973,8 @@ def build_ghost():
     wp = g.node(unreal.MaterialExpressionWorldPosition)
     rgb = g.custom(
         "float band = frac(P.z / 24.0 - Time * 0.6);\n"            # slow rising scanlines read as 'not built yet'
-        "float line = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.12, 0.2, band));\n"
-        "return Color * (0.55 + Fr * 1.4 + line * 0.5);",
+        "float scan = smoothstep(0.0, 0.08, band) * (1.0 - smoothstep(0.12, 0.2, band));\n"
+        "return Color * (0.55 + Fr * 1.4 + scan * 0.5);",
         F3, [("Color", color), ("Fr", fres), ("P", wp), ("Time", g.node(unreal.MaterialExpressionTime))], "Ghost colour")
     a = g.custom("return saturate(Opacity * (0.6 + Fr * 0.9));", F1, [("Opacity", opacity), ("Fr", fres)], "Ghost alpha")
     g.out(rgb, MP.MP_EMISSIVE_COLOR)
@@ -1011,8 +1012,9 @@ if not ONLY or "card" in ONLY:
                   vectors={"Size": lin(16, 40, 0, 0), "Tint": lin(1, 1, 1)}, textures={"Tex": "T_Banner"})
 if not ONLY or "building" in ONLY:
     build_building()
-if not ONLY or "placement" in ONLY:
+if not ONLY or "placement" in ONLY or "gridcell" in ONLY:
     build_grid_cell()
+if not ONLY or "placement" in ONLY or "ghost" in ONLY:
     build_ghost()
 if not ONLY or "sprite" in ONLY:
     sprite_m, sprite_shadow_m = build_sprite()

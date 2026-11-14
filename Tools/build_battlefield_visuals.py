@@ -196,8 +196,8 @@ def build_world():
     # instanced dressing, one actor per family
     # name: (mesh prefix, casts shadow, cull distance cm, sways). The camera tops out about 7800 cm from its focus; grass and
     # pebbles past ~2/3 of the far view are lost in haze and blur, trees stay to the horizon.
-    families = {"Conifers": ("SM_Conifer_", True, 0.0, True), "Grass": ("SM_Tuft_", False, 9000.0, True),
-                "Stones": ("SM_Rock_", True, 14000.0, False), "Deadwood": ("SM_Log", True, 14000.0, False)}
+    families = {"Conifers": ("SM_Conifer_", True, 0.0, True), "Grass": ("SM_Tuft_", False, 13000.0, True),
+                "Stones": ("SM_Rock_", True, 18000.0, False), "Deadwood": ("SM_Log", True, 18000.0, False)}
     total = 0
     for label, (prefix, shadow, cull, sway) in families.items():
         owner = eas.spawn_actor_from_class(unreal.Actor, unreal.Vector(0, 0, 0))

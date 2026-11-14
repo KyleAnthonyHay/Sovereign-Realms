@@ -54,7 +54,7 @@ void ASRPlacementPreview::Show(ESRBuildingType Type, const FSRPlacement& P)
 		ShownType = Type;
 		UStaticMesh* Mesh = F.BuildingStatsFor(Type).Mesh.LoadSynchronous();
 		Ghost->SetStaticMesh(Mesh);
-		if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SR/Materials/M_Ghost.M_Ghost")))
+		if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SR/Materials/M_PlacementGhost.M_PlacementGhost")))
 		{
 			for (int32 i = 0; i < Ghost->GetNumMaterials(); ++i) { Ghost->SetMaterial(i, M); }
 		}

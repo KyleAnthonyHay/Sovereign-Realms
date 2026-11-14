@@ -75,6 +75,11 @@ public:
 	const TArray<TObjectPtr<ASRUnit>>& GetUnits() const { return Units; }
 
 	ASRUnit* FindNearestEnemy(const ASRUnit* For, float Range) const;
+	/**
+	 * Living units within Radius of Pos, from a bucket grid rebuilt each simulation step (so neighbour searches
+	 * cost O(nearby) instead of O(all units): avoidance, overlap resolution, targeting, alerts).
+	 */
+	void QueryUnits(const FVector2D& Pos, float Radius, TArray<ASRUnit*>& Out) const;
 	/** Nearest standing enemy building whose footprint edge is within Range of the unit (finished or not). */
 	ASRBuilding* FindNearestEnemyBuilding(const ASRUnit* For, float Range) const;
 
@@ -179,6 +184,9 @@ private:
 	void IgnoreBuildings(struct FCollisionQueryParams& Params) const;
 
 	void StepFrame(float Dt);
+	void RebuildBuckets();
+	static constexpr float BucketSize = 400.f;
+	TMap<FIntPoint, TArray<ASRUnit*>> Buckets;
 
 	UPROPERTY(Transient) TArray<TObjectPtr<ASRUnit>> Units;
 	UPROPERTY(Transient) TArray<TObjectPtr<ASRUnit>> Corpses;

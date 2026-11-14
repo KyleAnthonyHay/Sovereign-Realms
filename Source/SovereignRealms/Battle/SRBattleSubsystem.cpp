@@ -133,6 +133,9 @@ void USRBattleSubsystem::UpdateSpriteView()
 	if (const ASRCameraPawn* Camera = PC ? Cast<ASRCameraPawn>(PC->GetPawn()) : nullptr)
 	{
 		ViewRot = Camera->GetViewRotation();
+		// Generous: the low camera sees far up the screen, and a shadow can fall into view from just outside it.
+		SpriteView.FocusXY = FVector2D(Camera->GetFocusPoint());
+		SpriteView.CullRadius = Camera->GetZoomDistance() * 1.6f + 1800.f;
 	}
 	else if (PC && PC->PlayerCameraManager)
 	{
@@ -248,10 +251,12 @@ void USRBattleSubsystem::StepFrame(float Dt)
 	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Step(Dt); }
 
 	// 1) think + move  2) push overlapping bodies apart  3) pose and place the actors
+	RebuildBuckets();
 	for (int32 i = 0; i < Units.Num(); ++i)
 	{
 		if (Units[i]) { Units[i]->StepSim(Dt); }
 	}
+	RebuildBuckets();
 	ResolveOverlaps(Dt);
 	ResolveOverlaps(Dt); // second pass settles three-body pile-ups
 
@@ -285,19 +290,49 @@ void USRBattleSubsystem::StepFrame(float Dt)
 	if (Result != ESRBattleResult::Ongoing) { TimeSinceResult += Dt; }
 }
 
+void USRBattleSubsystem::RebuildBuckets()
+{
+	for (TPair<FIntPoint, TArray<ASRUnit*>>& B : Buckets) { B.Value.Reset(); }
+	for (ASRUnit* U : Units)
+	{
+		if (!U || !U->IsAlive()) { continue; }
+		const FVector2D P = U->GetPos2D();
+		Buckets.FindOrAdd(FIntPoint(FMath::FloorToInt(P.X / BucketSize), FMath::FloorToInt(P.Y / BucketSize))).Add(U);
+	}
+}
+
+void USRBattleSubsystem::QueryUnits(const FVector2D& Pos, float Radius, TArray<ASRUnit*>& Out) const
+{
+	Out.Reset();
+	const int32 X0 = FMath::FloorToInt((Pos.X - Radius) / BucketSize), X1 = FMath::FloorToInt((Pos.X + Radius) / BucketSize);
+	const int32 Y0 = FMath::FloorToInt((Pos.Y - Radius) / BucketSize), Y1 = FMath::FloorToInt((Pos.Y + Radius) / BucketSize);
+	const float R2 = Radius * Radius;
+	for (int32 y = Y0; y <= Y1; ++y)
+	{
+		for (int32 x = X0; x <= X1; ++x)
+		{
+			if (const TArray<ASRUnit*>* B = Buckets.Find(FIntPoint(x, y)))
+			{
+				for (ASRUnit* U : *B)
+				{
+					if (U && U->IsAlive() && FVector2D::DistSquared(U->GetPos2D(), Pos) <= R2) { Out.Add(U); }
+				}
+			}
+		}
+	}
+}
+
 void USRBattleSubsystem::ResolveOverlaps(float DeltaTime)
 {
 	const float Fraction = FMath::Min(1.f, USRFeelSettings::Get().OverlapResolveRate * DeltaTime * 0.5f);
-
-	for (int32 i = 0; i < Units.Num(); ++i)
+	TArray<ASRUnit*> Near;
+	for (ASRUnit* A : Units)
 	{
-		ASRUnit* A = Units[i];
 		if (!A || !A->IsAlive()) { continue; }
-		for (int32 j = i + 1; j < Units.Num(); ++j)
+		QueryUnits(A->GetPos2D(), A->GetRadius() + 50.f, Near);
+		for (ASRUnit* B : Near)
 		{
-			ASRUnit* B = Units[j];
-			if (!B || !B->IsAlive()) { continue; }
-
+			if (B == A || B < A) { continue; } // each pair once
 			FVector2D Delta = B->GetPos2D() - A->GetPos2D();
 			float Dist = Delta.Size();
 			const float MinDist = A->GetRadius() + B->GetRadius();
@@ -516,15 +551,21 @@ ASRUnit* USRBattleSubsystem::FindNearestEnemy(const ASRUnit* For, float Range) c
 	ASRUnit* Best = nullptr;
 	float BestDistSq = Range * Range;
 	const FVector2D Pos = For->GetPos2D();
-	for (ASRUnit* Other : Units)
+	auto Consider = [&](ASRUnit* Other)
 	{
-		if (!Other || !Other->IsActive() || Other->GetTeam() == For->GetTeam()) { continue; }
+		if (!Other || !Other->IsActive() || Other->GetTeam() == For->GetTeam()) { return; }
 		const float DistSq = FVector2D::DistSquared(Pos, Other->GetPos2D());
-		if (DistSq < BestDistSq)
-		{
-			BestDistSq = DistSq;
-			Best = Other;
-		}
+		if (DistSq < BestDistSq) { BestDistSq = DistSq; Best = Other; }
+	};
+	if (Range > 4000.f)
+	{
+		for (ASRUnit* Other : Units) { Consider(Other); } // whole-map searches (auto-battle) walk the list
+	}
+	else
+	{
+		TArray<ASRUnit*> Near;
+		QueryUnits(Pos, Range, Near);
+		for (ASRUnit* Other : Near) { Consider(Other); }
 	}
 	return Best;
 }

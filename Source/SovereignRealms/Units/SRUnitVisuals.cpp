@@ -151,8 +151,8 @@ void ASRUnit::SetSpriteShown(bool bShown)
 {
 	if (bShown == bSpriteShown) { return; }
 	bSpriteShown = bShown;
-	SpriteCard->SetVisibility(bShown);
-	Blob->SetVisibility(bShown);
+	SpriteCard->SetVisibility(bShown && !bCulled);
+	Blob->SetVisibility(bShown && !bCulled);
 }
 
 void ASRUnit::ApplySprite(ESRSpriteAnim Anim, int32 Frame, float Fade, const FVector& Offset, const FVector2D& CardScale)
@@ -213,6 +213,25 @@ void ASRUnit::StepVisual(float Dt)
 	const FSRSpriteView& View = Battle->GetSpriteView();
 
 	HitFlash = FMath::Max(0.f, HitFlash - Dt / FMath::Max(F.HitFlashTime, 0.01f));
+
+	// Off screen: hide everything and skip the per-frame posing (transforms, sheet cells, shadow cards). The
+	// simulation is unaffected; the pose is rebuilt the frame the unit comes back into view.
+	const bool bOff = FVector2D::DistSquared(GetPos2D(), View.FocusXY) > FMath::Square(View.CullRadius) && !bSelected;
+	if (bOff != bCulled)
+	{
+		bCulled = bOff;
+		SpriteCard->SetVisibility(!bOff && bSpriteShown);
+		Blob->SetVisibility(!bOff && bSpriteShown);
+		if (bOff) { ShadowCard->SetCastShadow(false); bShadowCasting = false; }
+		if (!bOff) { AppliedSpriteData = AppliedShadowData = FVector4(-1.f, -1.f, -1.f, -1.f); }
+	}
+	if (bCulled)
+	{
+		AnimTime += Dt;
+		LastVisualPos = GetPos2D();
+		if (bDead) { DeathClock += Dt; }
+		return;
+	}
 
 	if (bDead)
 	{

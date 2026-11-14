@@ -224,6 +224,7 @@ private:
 	float WalkDistance = 0.f;     // cm travelled in the current run; drives the walk cycle
 	FVector2D LastVisualPos = FVector2D::ZeroVector;
 	bool bSpriteShown = true;
+	bool bCulled = false;      // off screen: presentation skipped (SpriteView.CullRadius)
 	bool bShadowCasting = true;
 	FVector4 AppliedSpriteData = FVector4(-1.f, -1.f, -1.f, -1.f);
 	FVector4 AppliedShadowData = FVector4(-1.f, -1.f, -1.f, -1.f);

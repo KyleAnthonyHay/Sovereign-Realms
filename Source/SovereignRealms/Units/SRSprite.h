@@ -75,6 +75,13 @@ struct FSRSpriteView
 {
 	/** The camera's rotation. A card with this rotation is parallel to the view plane: X = view forward, Y = screen right, Z = screen up. */
 	FQuat CardRotation = FQuat::Identity;
+
+	/**
+	 * Significance: sprites further than CullRadius from the camera's focus are off screen. They are hidden (card,
+	 * shadow, contact shadow) and skip their per-frame presentation work entirely until they come back into view.
+	 */
+	FVector2D FocusXY = FVector2D::ZeroVector;
+	float CullRadius = 1.e9f;
 	FVector ViewForward = FVector::ForwardVector;
 	FVector ViewUp = FVector::UpVector;
 	float ViewYaw = 0.f;

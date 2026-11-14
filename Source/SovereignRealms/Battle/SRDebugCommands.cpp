@@ -11,6 +11,9 @@
 #include "Battle/SRPlatoonSubsystem.h"
 #include "Battle/SRGameFlowSubsystem.h"
 #include "Kismet/GameplayStatics.h"
+#include "Containers/Ticker.h"
+#include "RenderCore.h"
+#include "RHI.h"
 #include "Buildings/SRBuilding.h"
 #include "Player/SRPlayerController.h"
 #include "Player/SRCameraPawn.h"
@@ -445,5 +448,42 @@ namespace
 			const FSRPlatoonInfo Info = P->GetInfo(I);
 			UE_LOG(LogSovereign, Log, TEXT("sr.Platoon %d '%s': %d shields, %d archers, %s, %s"), I + 1, *Info.Name, Info.Shieldbearers, Info.Archers,
 				*USRPlatoonSubsystem::FormationName(Info.Formation).ToString(), *USRPlatoonSubsystem::StanceName(Info.Stance).ToString());
+		}));
+
+	// sr.Perf: frame-time sampler. Averages over N seconds of real time, then logs once.
+	struct FPerfSampler
+	{
+		double Left = 0.0, Frames = 0.0, Delta = 0.0, Game = 0.0, Render = 0.0, Gpu = 0.0, Worst = 0.0;
+		FTSTicker::FDelegateHandle Handle;
+		TWeakObjectPtr<UWorld> World;
+	};
+	FPerfSampler GPerf;
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPerf(TEXT("sr.Perf"), TEXT("sr.Perf [seconds]: average frame, game-thread, render-thread and GPU times over the next N seconds (default 5) and log them with the unit counts."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (GPerf.Handle.IsValid()) { FTSTicker::GetCoreTicker().RemoveTicker(GPerf.Handle); }
+			GPerf = FPerfSampler();
+			GPerf.Left = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 5.0;
+			GPerf.World = World;
+			GPerf.Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float Dt)
+			{
+				GPerf.Left -= Dt;
+				GPerf.Frames += 1.0;
+				GPerf.Delta += Dt;
+				GPerf.Worst = FMath::Max(GPerf.Worst, double(Dt));
+				GPerf.Game += FPlatformTime::ToMilliseconds(GGameThreadTime);
+				GPerf.Render += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+				GPerf.Gpu += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+				if (GPerf.Left > 0.0) { return true; }
+				const double N = FMath::Max(GPerf.Frames, 1.0);
+				int32 Units = 0, Bld = 0;
+				if (const USRBattleSubsystem* B = USRBattleSubsystem::Get(GPerf.World.Get())) { Units = B->GetUnits().Num(); }
+				if (const USREconomySubsystem* E = USREconomySubsystem::Get(GPerf.World.Get())) { Bld = E->GetBuildings().Num(); }
+				UE_LOG(LogSovereign, Log, TEXT("PERF %.1f fps (frame %.2f ms, worst %.1f ms)  game %.2f ms  render %.2f ms  gpu %.2f ms  units %d buildings %d"),
+					N / FMath::Max(GPerf.Delta, 1e-6), GPerf.Delta / N * 1000.0, GPerf.Worst * 1000.0, GPerf.Game / N, GPerf.Render / N, GPerf.Gpu / N, Units, Bld);
+				GPerf.Handle.Reset();
+				return false;
+			}));
 		}));
 }

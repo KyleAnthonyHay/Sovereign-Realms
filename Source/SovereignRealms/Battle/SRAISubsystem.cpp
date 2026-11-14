@@ -159,7 +159,27 @@ bool USRAISubsystem::TryBuild(FSRCommander& C, ESRBuildingType Type)
 	default: break;
 	}
 	FSRPlacement P;
-	if (!Grid->FindPlacementNear(Type, C.Team, Near, Radius, P)) { return false; }
+	if (Type == ESRBuildingType::Tower)
+	{
+		// Spread the towers: try a few candidate spots and take the first that is well clear of our other towers.
+		bool bFound = false;
+		for (int32 Try = 0; Try < 8 && !bFound; ++Try)
+		{
+			const FVector2D Cand = Base + Fwd * FMath::FRandRange(1400.f, 3000.f) + Side * FMath::FRandRange(-2400.f, 2400.f);
+			if (!Grid->FindPlacementNear(Type, C.Team, Cand, 800.f, P)) { continue; }
+			bFound = true;
+			for (const ASRBuilding* B : Eco->GetBuildings())
+			{
+				if (B && B->Team == C.Team && B->BuildingType == ESRBuildingType::Tower && FVector2D::Distance(B->GetFootprintCentre(), FVector2D(P.Location)) < 1000.f)
+				{
+					bFound = false;
+					break;
+				}
+			}
+		}
+		if (!bFound) { return false; }
+	}
+	else if (!Grid->FindPlacementNear(Type, C.Team, Near, Radius, P)) { return false; }
 	FText Why;
 	return Eco->PlaceBuilding(Type, C.Team, FVector2D(P.Location) + (F.BuildingStatsFor(Type).FootprintMin + F.BuildingStatsFor(Type).FootprintMax) * 0.5f, &Why) != nullptr;
 }
@@ -185,7 +205,7 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 			const int32 Towers = Eco->CountBuildings(ESRBuildingType::Tower, C.Team);
 			if (Cap < F.MaxPopulation && Pop >= Cap - 3) { Want = ESRBuildingType::Farm; bHave = true; }
 			else if (Farms > Mines * 2 + 1) { Want = ESRBuildingType::Mine; bHave = true; }
-			else if (Towers < 2 + Mines / 2) { Want = ESRBuildingType::Tower; bHave = true; }
+			else if (Towers < FMath::Min(1 + Mines / 2, 4)) { Want = ESRBuildingType::Tower; bHave = true; }
 			else if (Farms < 8) { Want = ESRBuildingType::Farm; bHave = true; }
 		}
 		if (bHave)
@@ -283,8 +303,12 @@ void USRAISubsystem::ManageArmy(FSRCommander& C, TArray<ASRUnit*>& Home, const T
 	}
 
 	// ---- launch a wave ----
-	const int32 WaveSize = FMath::Min(F.AIWaveSizeMax, FMath::RoundToInt((F.AIWaveSizeStart + C.WavesSent * F.AIWaveGrowth) * DifficultyScale(0.75f, 1.f, 1.25f)));
-	const int32 Sendable = FMath::Min(WaveSize, Home.Num() - FMath::FloorToInt(Home.Num() * F.AIGarrisonFraction));
+	int32 WaveSize = FMath::Min(F.AIWaveSizeMax, FMath::RoundToInt((F.AIWaveSizeStart + C.WavesSent * F.AIWaveGrowth) * DifficultyScale(0.75f, 1.f, 1.25f)));
+	const int32 Spare = Home.Num() - FMath::FloorToInt(Home.Num() * F.AIGarrisonFraction);
+	// With the army at its housing limit there is nothing to gain by waiting: push with everything but the garrison.
+	const bool bMaxed = Eco->GetPopulation(C.Team) >= Eco->GetPopulationCap(C.Team) - 2 && Eco->GetPopulationCap(C.Team) >= 30;
+	if (bMaxed) { WaveSize = FMath::Max(WaveSize, Spare); }
+	const int32 Sendable = FMath::Min(WaveSize, Spare);
 	if (C.Wave.Num() == 0 && Clock >= C.NextWaveTime && Sendable >= WaveSize)
 	{
 		Home.Sort([](const ASRUnit& A, const ASRUnit& B) { return A.GetUnitType() < B.GetUnitType(); }); // shields first
@@ -302,6 +326,8 @@ void USRAISubsystem::ManageArmy(FSRCommander& C, TArray<ASRUnit*>& Home, const T
 		C.Wave.Reset();
 		for (ASRUnit* U : Send) { C.Wave.Add(U); U->SetStance(ESRStance::Aggressive); }
 		C.WaveStartSize = Send.Num();
+		C.WaveLaunched = Clock;
+		C.WaveLastFight = Clock;
 		C.WaveTarget = Target;
 		C.WaveGoal = Target->ClosestPointOnFootprint(From, 250.f);
 		C.WaveReorder = 0.f;
@@ -344,6 +370,19 @@ void USRAISubsystem::ManageWave(FSRCommander& C)
 	{
 		Battle->CommandMove(W, MusterPoint(C), false, ESRFormationShape::Column, false);
 		UE_LOG(LogSovereign, Log, TEXT("AI %s wave retreats (%d left of %d, %d foes near)"), C.Team == ESRTeam::Enemy ? TEXT("enemy") : TEXT("player"), W.Num(), C.WaveStartSize, Foes);
+		C.Wave.Reset();
+		return;
+	}
+
+	// A wave that has stopped fighting for a long while (lost its way, target out of reach), or that is down to a
+	// handful with nobody near, goes home and rejoins the army instead of blocking the next wave.
+	bool bFighting = false;
+	for (const ASRUnit* U : W) { if (U->IsEngaged()) { bFighting = true; break; } }
+	if (bFighting) { C.WaveLastFight = Clock; }
+	if ((Clock - C.WaveLastFight > 150.f) || (W.Num() <= 3 && Foes == 0 && Clock - C.WaveLaunched > 60.f))
+	{
+		Battle->CommandMove(W, MusterPoint(C), false, ESRFormationShape::Column, false);
+		UE_LOG(LogSovereign, Log, TEXT("AI %s wave returns home (%d left, idle %.0fs)"), C.Team == ESRTeam::Enemy ? TEXT("enemy") : TEXT("player"), W.Num(), Clock - C.WaveLastFight);
 		C.Wave.Reset();
 		return;
 	}

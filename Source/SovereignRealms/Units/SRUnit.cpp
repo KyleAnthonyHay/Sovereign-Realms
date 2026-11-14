@@ -545,10 +545,11 @@ void ASRUnit::ReceiveDamage(float Amount, ASRUnit* From, const FVector2D& HitDir
 		{
 			Target = From; // hit back, even if the shooter is outside acquire range
 		}
-		for (ASRUnit* Ally : Battle->GetUnits())
+		TArray<ASRUnit*> Near;
+		Battle->QueryUnits(GetPos2D(), F.AlertRadius, Near);
+		for (ASRUnit* Ally : Near)
 		{
-			if (Ally && Ally != this && Ally->GetTeam() == Team
-				&& FVector2D::DistSquared(Ally->GetPos2D(), GetPos2D()) < FMath::Square(F.AlertRadius))
+			if (Ally && Ally != this && Ally->GetTeam() == Team)
 			{
 				Ally->AlertTo(From);
 			}
@@ -602,7 +603,9 @@ FVector2D ASRUnit::ComputeAvoidance(const FVector2D& Desired) const
 	FVector2D Separation = FVector2D::ZeroVector;
 	float Sidestep = 0.f;
 
-	for (const ASRUnit* Other : Battle->GetUnits())
+	TArray<ASRUnit*> Near;
+	Battle->QueryUnits(Pos, GetRadius() + 50.f + 120.f + F.SeparationPadding, Near);
+	for (const ASRUnit* Other : Near)
 	{
 		if (!Other || Other == this || !Other->IsAlive()) { continue; }
 

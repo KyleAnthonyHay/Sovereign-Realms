@@ -54,7 +54,7 @@ USRFeelSettings::USRFeelSettings()
 	auto Mesh = [](const TCHAR* Name) { return TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(FString::Printf(TEXT("/Game/SR/Buildings/%s.%s"), Name, Name))); };
 
 	CastleStats.DisplayName = TEXT("Citadel");
-	CastleStats.MaxHealth = 4200.f;
+	CastleStats.MaxHealth = 6000.f;
 	CastleStats.Cost = FSRCost(0, 0);
 	CastleStats.BuildTime = 60.f;
 	CastleStats.PopProvided = 12;
@@ -68,15 +68,15 @@ USRFeelSettings::USRFeelSettings()
 	CastleStats.LabelOffset = FVector(0.f, 0.f, 1168.f);
 	CastleStats.PopupOffset = FVector(0.f, 0.f, 700.f);
 	CastleStats.AttackRange = 1000.f;
-	CastleStats.AttackDamage = 8.f;
-	CastleStats.AttackInterval = 1.8f;
+	CastleStats.AttackDamage = 12.f;
+	CastleStats.AttackInterval = 1.4f;
 	CastleStats.MuzzleHeight = 820.f;
 
 	FarmStats.DisplayName = TEXT("Farm");
 	FarmStats.MaxHealth = 520.f;
 	FarmStats.Cost = FSRCost(90, 0);
 	FarmStats.BuildTime = 14.f;
-	FarmStats.PopProvided = 4;
+	FarmStats.PopProvided = 6;
 	FarmStats.TerritoryRadius = 2400.f;
 	FarmStats.Mesh = Mesh(TEXT("SM_Bld_Farm"));
 	FarmStats.FootprintMin = FVector2D(-440.f, -480.f);

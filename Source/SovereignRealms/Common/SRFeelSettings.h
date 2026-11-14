@@ -42,7 +42,7 @@ public:
 
 	/** Camera distance from the focus point when fully zoomed out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "200"))
-	float ZoomDistanceMax = 7800.f;
+	float ZoomDistanceMax = 11000.f;
 
 	/** 0 = fully in, 1 = fully out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
@@ -526,7 +526,7 @@ public:
 
 	/** Seconds between waves after the first, at Normal. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "10"))
-	float AIWaveInterval = 120.f;
+	float AIWaveInterval = 150.f;
 
 	/** Troops in the first wave, growth per wave, and the most a wave will ever wait for. */
 	UPROPERTY(EditAnywhere, Config, Category = "AI", meta = (ClampMin = "1"))

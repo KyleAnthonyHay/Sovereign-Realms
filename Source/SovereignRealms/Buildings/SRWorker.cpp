@@ -240,6 +240,12 @@ void ASRWorker::Present(float Dt)
 	if (!Battle || !Card) { return; }
 	const FSRSpriteView& View = Battle->GetSpriteView();
 	const USRFeelSettings& F = USRFeelSettings::Get();
+	// Off screen: hidden, no posing (see FSRSpriteView::CullRadius).
+	if (FVector2D::DistSquared(Pos, View.FocusXY) > FMath::Square(View.CullRadius))
+	{
+		if (Card->IsVisible()) { Card->SetVisibility(false); ShadowCard->SetCastShadow(false); Applied = FVector4(-1.f, -1.f, -1.f, -1.f); }
+		return;
+	}
 	Facing = SRSprite::FacingIndexSticky(Facing, Yaw, View.ViewYaw, F.FacingHysteresisDeg);
 	ShadowFacing = SRSprite::FacingIndexSticky(ShadowFacing, Yaw, View.SunYaw, F.FacingHysteresisDeg);
 

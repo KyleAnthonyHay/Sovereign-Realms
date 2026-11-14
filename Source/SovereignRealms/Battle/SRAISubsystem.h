@@ -21,6 +21,8 @@ struct FSRCommander
 	int32 WavesSent = 0;
 	TArray<TWeakObjectPtr<ASRUnit>> Wave;
 	int32 WaveStartSize = 0;
+	float WaveLaunched = 0.f;
+	float WaveLastFight = 0.f;
 	TWeakObjectPtr<ASRBuilding> WaveTarget;
 	FVector2D WaveGoal = FVector2D::ZeroVector;
 	float WaveReorder = 0.f;
