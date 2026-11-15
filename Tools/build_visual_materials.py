@@ -27,6 +27,17 @@ def _splat_rect():
     except Exception:
         return (-5600.0, -6144.0, 12288.0, 0.0)
 
+def _relief():
+    """(rock line, snow line) in cm, from the generator's layout: where M_Terrain's bare rock and snow start."""
+    import json as _json
+    try:
+        with open(os.path.join(os.path.abspath(unreal.Paths.project_dir()), "SourceArt", "World", "layout.json")) as f:
+            r = _json.load(f)["relief"]
+        return float(r["rock_line"]), float(r["snow_line"])
+    except Exception:
+        return 950.0, 2700.0
+
+
 DIR = "/Game/SR/Materials"
 TEX = "/Game/SR/Textures/"
 mel = unreal.MaterialEditingLibrary
@@ -280,6 +291,20 @@ if (N.z > 0.5)
 		}
 		nrm = normalize(float3(-nrm.y * NormalStrength, nrm.x * NormalStrength, nrm.z));
 	}
+	// high ground: bare rock above the tree line, snow above that. Texel by texel across a ragged band, never a soft
+	// blend; grass tips hold out a little higher than the thatch between them.
+	if (P.z > RockLine + (hx - 0.5) * 300.0 + tip * 90.0)
+	{
+		col = px.S(MountainRock, uv, 128).rgb;
+		nrm = float3(0, 0, 1);
+		rough = StoneRoughness + 0.12;
+	}
+	if (P.z > SnowLine + (hx - 0.5) * 420.0)
+	{
+		col = px.S(Snow, uv, 128).rgb;
+		nrm = float3(0, 0, 1);
+		rough = 0.55;
+	}
 	col *= lerp(1.0, sp.a, FootShade);                             // shade baked at cliff feet
 	col *= 1.0 + (sp.b - sp.g) * TintRange;                        // dry ground a little lighter, mossy a little deeper
 }
@@ -293,11 +318,25 @@ else
 	float3 Tw = normalize(float3(-N.y, N.x, 0.0));
 	nrm = normalize(Tw * tn.x * NormalStrength + float3(0, 0, -1) * tn.y * NormalStrength + N * tn.z);
 	rough = StoneRoughness + 0.1;
-	// turf hanging over the edge, never more than about half the wall
+	if (UV1.y > 0.5)
+	{
+		// a crag or a mountain face: living rock, not the terraces' coursed strata
+		col = px.S(MountainRock, uv, 128).rgb * RockFaceTint;
+		nrm = N;
+		rough = StoneRoughness + 0.16;
+	}
+	// high rock is colder and greyer than the warm strata of the field's terraces
+	float high = saturate((P.z - RockLine * 0.6) / (RockLine * 1.4));
+	col = lerp(col, px.lum(col) * float3(1.02, 1.04, 1.1) * 1.08, high * 0.7);
+	// turf hanging over the edge, never more than about half the wall. Above the rock line the top is bare (no fringe);
+	// above the snow line it is a snow cornice.
+	float topZ = P.z + UV0.y;
 	float lipMax = min(23.0, wallH / T * LipFraction);
+	if (topZ > RockLine + 150.0 && topZ <= SnowLine) lipMax = 0.0;
 	if (uv.y < lipMax)
 	{
 		float4 lp = px.S(Lip, float2(uv.x, min(uv.y, 23.4)), float2(128, 24));
+		if (topZ > SnowLine) lp.rgb = px.S(Snow, uv, 128).rgb;
 		float grassW = saturate((lp.a - 0.6) / 0.3);
 		float shadow = saturate(lp.a / 0.43) * (1.0 - grassW);
 		col = lerp(col * (1.0 - shadow * LipShadow), lp.rgb, grassW);
@@ -329,6 +368,10 @@ def build_terrain():
         ("Cobble", g.tex("Cobble", "T_Cobble")), ("CobbleN", g.tex("CobbleNormal", "T_Cobble_N", True)),
         ("Cliff", g.tex("Cliff", "T_Cliff")), ("CliffN", g.tex("CliffNormal", "T_Cliff_N", True)),
         ("Lip", g.tex("Lip", "T_Lip")), ("Splat", g.tex("Splat", "T_Splat", True)),
+        ("MountainRock", g.tex("MountainRock", "T_MountainRock")), ("Snow", g.tex("Snow", "T_Snow")),
+        # where bare rock and snow start (cm above the field), from gen_battlefield.py's layout
+        ("RockLine", g.scalar("RockLine", _relief()[0], "Relief")), ("SnowLine", g.scalar("SnowLine", _relief()[1], "Relief")),
+        ("RockFaceTint", g.vector("RockFaceTint", lin(0.92, 0.86, 0.76), "Relief"), "RGB"),      # warms the rock toward the strata's sandstone
         ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
         # SplatRect: XY = world origin of the splat map, Z = its world size (cm). Written by gen_battlefield.py's layout.
         ("SplatRect", g.vector("SplatRect", lin(*_splat_rect()), "Splat"), "RGBA"),
@@ -622,6 +665,131 @@ def build_water():
     g.out(colour, MP.MP_ROUGHNESS, "OutRough")
     g.out(g.scalar("Specular", 0.6, "Surface"), MP.MP_SPECULAR)
     g.finish()
+
+
+# ----------------------------------------------------------------------------- atmosphere: cloud shadows, birds
+# M_CloudShadow is a light function on the sun: broad soft shadows of clouds that are never seen, drifting across the
+# field with the wind. World-aligned value noise, so it costs a few instructions per lit pixel and no texture.
+CLOUD_CODE = r"""
+struct SRNoise
+{
+	float h(float2 p) { float3 p3 = frac(float3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return frac((p3.x + p3.y) * p3.z); }
+	float v(float2 p)
+	{
+		float2 i = floor(p), f = frac(p);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(h(i), h(i + float2(1, 0)), f.x), lerp(h(i + float2(0, 1)), h(i + float2(1, 1)), f.x), f.y);
+	}
+};
+SRNoise nz;
+float2 p = (P.xy + Time * Wind.xy) / max(Scale, 1.0);
+float n = nz.v(p) * 0.6 + nz.v(p * 2.13 + 17.0) * 0.28 + nz.v(p * 4.7 + 41.0) * 0.12;
+float c = smoothstep(Cover - Soft, Cover + Soft, n);
+return 1.0 - c * Strength;
+"""
+
+
+def build_cloud_shadow():
+    mat = get_material("M_CloudShadow")
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_LIGHT_FUNCTION)
+    g = G(mat)
+    P = g.node(unreal.MaterialExpressionWorldPosition)
+    params = [
+        ("P", P), ("Time", g.node(unreal.MaterialExpressionTime)),
+        ("Wind", g.vector("Wind", lin(55.0, 130.0, 0.0, 0.0), "Clouds"), "RGBA"),      # cm per second: toward screen right, a little up
+        ("Scale", g.scalar("Scale", 5200.0, "Clouds")),                               # size of a cloud, cm
+        ("Cover", g.scalar("Cover", 0.56, "Clouds")),                                 # higher = fewer clouds
+        ("Soft", g.scalar("Soft", 0.11, "Clouds")),
+        ("Strength", g.scalar("Strength", 0.5, "Clouds")),                            # how much sun a cloud takes
+    ]
+    c = g.custom(CLOUD_CODE, F1, params, "Cloud shadows: drifting world-aligned noise, 1 = sun, lower under a cloud")
+    g.out(c, MP.MP_EMISSIVE_COLOR)
+    g.finish()
+    return mat
+
+
+# M_Mist: low mist. A soft, drifting sheet a hand above the river (the water mesh again, raised) that thins to nothing at
+# the banks (T_WaterMap.r: distance in from the bank), and big level sheets at the foot of the far mountains that fade
+# toward their own rim (MI_Mist_Valley, UseMap = 0, on the engine's plane). Unlit, translucent, two layers of value noise.
+MIST_CODE = r"""
+struct SRNoise
+{
+	float h(float2 p) { float3 p3 = frac(float3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return frac((p3.x + p3.y) * p3.z); }
+	float v(float2 p)
+	{
+		float2 i = floor(p), f = frac(p);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(h(i), h(i + float2(1, 0)), f.x), lerp(h(i + float2(0, 1)), h(i + float2(1, 1)), f.x), f.y);
+	}
+};
+SRNoise nz;
+float2 p = (P.xy + Time * Wind.xy) / max(Scale, 1.0);
+float n = nz.v(p) * 0.62 + nz.v(p * 2.3 + 11.0 - Time * 0.013) * 0.38;
+float wisps = smoothstep(Cover, Cover + Soft, n);
+float inWater = Map.SampleLevel(View.SharedBilinearClampedSampler, (P.xy - MapRect.xy) / MapRect.z, 0).r;
+float rim = saturate(1.0 - length(UV - 0.5) * 2.0);
+float edge = lerp(smoothstep(0.0, 0.55, rim), saturate(inWater * 1.5), UseMap);
+return wisps * edge * Strength;
+"""
+
+
+def build_mist():
+    mat = get_material("M_Mist")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("two_sided", True)
+    g = G(mat)
+    rect, _ = _water_info()
+    P = g.node(unreal.MaterialExpressionWorldPosition)
+    _data_map("T_WaterMap")
+    params = [
+        ("P", P), ("UV", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)), ("Time", g.node(unreal.MaterialExpressionTime)),
+        ("Map", g.tex("Map", "T_WaterMap", True)), ("MapRect", g.vector("MapRect", lin(*rect), "Map"), "RGBA"),
+        ("UseMap", g.scalar("UseMap", 1.0, "Mist")),
+        ("Wind", g.vector("Wind", lin(22.0, 48.0, 0.0, 0.0), "Mist"), "RGBA"),       # cm per second, with the clouds but slower
+        ("Scale", g.scalar("Scale", 620.0, "Mist")), ("Cover", g.scalar("Cover", 0.34, "Mist")), ("Soft", g.scalar("Soft", 0.42, "Mist")),
+        ("Strength", g.scalar("Strength", 0.27, "Mist")),
+    ]
+    a = g.custom(MIST_CODE, F1, params, "Mist: drifting wisps, thinning to nothing at the bank / the sheet's rim")
+    fade = g.node(unreal.MaterialExpressionDepthFade, fade_distance_default=170.0)      # no hard line where a sheet meets a cliff or a troop
+    g.link(a, fade, "Opacity")
+    g.out(fade, MP.MP_OPACITY)
+    g.out(g.vector("Colour", lin(0.62, 0.68, 0.74), "Mist"), MP.MP_EMISSIVE_COLOR)
+    g.finish()
+    return mat
+
+
+# M_Birds: SM_Birds is a flock of flat gulls 26 m out from its pivot. The material swings every vertex round the pivot
+# (the flock circles) and beats the wing tips (COLOR.r = 1 at a tip, UV1.x = that bird's phase). Unlit pale shapes.
+BIRDS_CODE = r"""
+float a = Time * Speed + dot(Pivot.xy, float2(0.0013, 0.0021));
+float s = sin(a), c = cos(a);
+float3 d = P - Pivot;
+float3 r = float3(d.x * c - d.y * s, d.x * s + d.y * c, d.z);
+float beat = sin(Time * Flap + Phase.x * 6.2832);
+r.z += Tip * beat * Amp + sin(a * 2.7 + Phase.x * 6.2832) * 70.0;      // wing beat; the bird itself rises and sinks a little
+return r - d;
+"""
+
+
+def build_birds():
+    mat = get_material("M_Birds")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("two_sided", True)
+    g = G(mat)
+    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    params = [
+        ("P", P), ("Pivot", g.node(unreal.MaterialExpressionObjectPositionWS)), ("Time", g.node(unreal.MaterialExpressionTime)),
+        ("Tip", g.node(unreal.MaterialExpressionVertexColor), "R"), ("Phase", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)),
+        ("Speed", g.scalar("Speed", 0.07, "Birds")),          # radians per second round the pivot
+        ("Flap", g.scalar("Flap", 9.0, "Birds")), ("Amp", g.scalar("Amp", 20.0, "Birds")),
+    ]
+    wpo = g.custom(BIRDS_CODE, F3, params, "Birds: circle the pivot, beat the wing tips")
+    g.out(wpo, MP.MP_WORLD_POSITION_OFFSET)
+    g.out(g.vector("Colour", lin(0.62, 0.6, 0.54), "Birds"), MP.MP_EMISSIVE_COLOR)       # pale gulls: they must read over dark turf
+    g.finish()
+    return mat
 
 
 # ----------------------------------------------------------------------------- troop sprites
@@ -1118,6 +1286,11 @@ if not ONLY or "prop" in ONLY:
                   vectors={"SizeA": lin(64, 32, 0, 0)}, textures={"TexA": "T_Wood"})
     make_instance("MI_Prop_Log", prop, scalars={"Moss": 0.0, "Roughness": 0.85},
                   vectors={"SizeA": lin(16, 16, 0, 0), "SizeB": lin(32, 64, 0, 0)}, textures={"TexA": "T_LogEnd", "TexB": "T_Bark"})
+if not ONLY or "atmosphere" in ONLY:
+    build_cloud_shadow()
+    build_birds()
+    mist = build_mist()
+    make_instance("MI_Mist_Valley", mist, scalars={"UseMap": 0.0, "Scale": 1500.0, "Cover": 0.3, "Soft": 0.5, "Strength": 0.42})
 if not ONLY or "foliage" in ONLY:
     build_foliage()
 if not ONLY or "card" in ONLY:

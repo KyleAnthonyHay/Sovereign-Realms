@@ -9,7 +9,8 @@ Pipeline (see Docs/VISUAL_CONTRACT.md):
   Tools/ue_py.py Tools/build_visual_materials.py                  # /Game/SR/Materials
   Tools/ue_py.py Tools/build_battlefield_visuals.py               # this file: the level
 One part only:  Tools/ue_py.py -c "PARTS=['lighting']; exec(open('<abs path to this file>').read())"
-Parts: world (terrain + props + water + buildings), buildings (only re-place the buildings), lighting.
+Parts: world (terrain + props + water + buildings), buildings (only re-place the buildings), lighting, atmosphere
+(valley mist, cloud shadows, birds: the outliner folder Atmosphere).
 
 Gameplay rules honoured (enforced by the generator): the +/-12000 cm play area keeps both kingdoms' aprons,
 the spawn areas, the roads, the fords and the island flat; walkable terraces step <= 40 cm (the ridges, knolls and
@@ -21,7 +22,7 @@ import json
 import os
 import unreal
 
-PARTS = globals().get("PARTS", ["world", "lighting"])
+PARTS = globals().get("PARTS", ["world", "lighting", "atmosphere"])
 MAP = "/Game/Maps/L_Battlefield"
 MAT = "/Game/SR/Materials/"
 MESH = "/Game/SR/Meshes/"
@@ -39,6 +40,7 @@ MATERIAL_FOR = [            # first matching mesh-name prefix wins
     ("SM_BannerCloth", "MI_Card_Banner"), ("SM_BannerPole", "MI_Prop_Wood"), ("SM_Fence_", "MI_Prop_Wood"),
     ("SM_Log", "MI_Prop_Log"), ("SM_Stump", "MI_Prop_Log"), ("SM_Ruin_", "MI_Prop_Sandstone"),
     ("SM_Rock_", "MI_Prop_Rock"), ("SM_Menhir_", "MI_Prop_Rock"), ("SM_GoldVein", "MI_Bld_Ore"),
+    ("SM_WatchPost", "MI_Prop_Wood"), ("SM_Dolmen", "MI_Prop_Rock"), ("SM_Cairn", "MI_Prop_Rock"), ("SM_Birds", "M_Birds"),
 ]
 
 
@@ -169,7 +171,7 @@ def build_world():
     with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
         layout = json.load(f)
     assign_materials()
-    for folder in ("Greybox", "Terrain", "Props", "Water", "Buildings"):
+    for folder in ("Greybox", "Terrain", "Props", "Water", "Buildings", "Atmosphere/Birds"):
         clear_folder(folder)
 
     # terrain: WorldStatic, complex-as-simple collision set on the assets at import
@@ -214,6 +216,11 @@ def build_world():
             xfs = [unreal.Transform(unreal.Vector(x, y, z), unreal.Rotator(0, 0, yaw), unreal.Vector(s, s, s)) for x, y, z, yaw, s in items]
             comp.add_instances(xfs, False, True)
             total += len(xfs)
+    # birds: SM_Birds circles its own pivot in the material (M_Birds), so each flock is one static mesh actor. Bounds are
+    # scaled up because the flock leaves the mesh's own box as it goes round.
+    for i, (x, y, z, yaw, scale) in enumerate(layout.get("atmosphere", {}).get("birds", [])):
+        a = mesh_actor(load(MESH + "SM_Birds"), (x, y, z), yaw, "Birds_%d" % i, "Atmosphere/Birds", collide=False, shadow=False, scale=scale)
+        a.static_mesh_component.set_editor_property("bounds_scale", 8.0)
     build_buildings(layout)
     print("terrain actors %d, single actors %d, blockers %d, instances %d" % (len(layout["terrain"]), len(layout["actors"]), len(layout["blockers"]), total))
 
@@ -329,6 +336,43 @@ def build_lighting():
     print("lighting done")
 
 
+# ------------------------------------------------------------------ atmosphere
+PLANE = load("/Engine/BasicShapes/Plane")
+
+
+def build_atmosphere():
+    """Mist and the sun's cloud shadows (folder Atmosphere/Mist; the birds are placed with the world: they are meshes).
+    River mist is the water mesh again, a hand above the surface, in M_Mist (it thins out at the banks by T_WaterMap).
+    Valley mist is a level sheet per entry of layout "atmosphere" > "mist" [x, y, z, radius, height] in MI_Mist_Valley."""
+    clear_folder("Atmosphere/Mist")
+    with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
+        layout = json.load(f)
+    mist, valley = load(MAT + "M_Mist"), load(MAT + "MI_Mist_Valley")
+    n = 0
+    if mist is not None:
+        w = layout["water"]
+        for k, lift in enumerate((52.0, 96.0)):                 # two thin layers read as depth when the camera tilts
+            a = mesh_actor(load(MESH + w["mesh"]), (w["pos"][0], w["pos"][1], w["pos"][2] + lift), 0.0, "RiverMist_%d" % k, "Atmosphere/Mist", collide=False, shadow=False)
+            a.static_mesh_component.set_material(0, mist)
+            a.static_mesh_component.set_editor_property("translucency_sort_priority", k)
+            n += 1
+        for i, (x, y, z, radius, height) in enumerate(layout.get("atmosphere", {}).get("mist", [])):
+            a = mesh_actor(PLANE, (x, y, z + height), float(i * 37 % 360), "ValleyMist_%02d" % i, "Atmosphere/Mist", collide=False, shadow=False)
+            a.set_actor_scale3d(unreal.Vector(radius * 2.0 / 100.0, radius * 2.0 / 100.0, 1.0))
+            a.static_mesh_component.set_material(0, valley)
+            n += 1
+    else:
+        print("no M_Mist (run Tools/build_visual_materials.py)")
+    sun = find_or_spawn(unreal.DirectionalLight, "Sun")
+    cloud = load(MAT + "M_CloudShadow")
+    if cloud is not None:
+        sun.light_component.set_editor_property("light_function_material", cloud)
+        sun.light_component.set_editor_property("light_function_fade_distance", 200000.0)
+    else:
+        print("no M_CloudShadow (run Tools/build_visual_materials.py)")
+    print("atmosphere: %d mist sheets, cloud shadows %s" % (n, "on" if cloud is not None else "off"))
+
+
 # ------------------------------------------------------------------ run
 if "world" in PARTS:
     build_world()
@@ -337,5 +381,7 @@ elif "buildings" in PARTS:
         build_buildings(json.load(f))
 if "lighting" in PARTS:
     build_lighting()
+if "atmosphere" in PARTS:
+    build_atmosphere()
 les.save_current_level()
 print("saved", MAP)
