@@ -33,6 +33,7 @@ public:
 		case ESRUnitType::Horseman: return Horseman;
 		case ESRUnitType::Catapult: return Catapult;
 		case ESRUnitType::Builder: return Builder;
+		case ESRUnitType::Scout: return Scout;
 		default: return Shieldbearer;
 		}
 	}
@@ -116,6 +117,42 @@ public:
 	/** The camera rides the ground under its focus (hills, terraces, the heights) but never higher than this (cm): panning across a mountain must not lift the view off the field. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds", meta = (ClampMin = "0.0"))
 	float FocusHeightMax = 560.f;
+
+	/** Guarding (V, or RMB on your Builder / building): a guard fights only foes within this distance (cm) of what it
+	 * guards, and gives up a chase that takes it further. */
+	UPROPERTY(EditAnywhere, Config, Category = "Units|Guard", meta = (ClampMin = "200"))
+	float GuardLeash = 1400.f;
+
+	/** How far from a guarded Builder its guards keep (cm; a ring, more rings for more guards). */
+	UPROPERTY(EditAnywhere, Config, Category = "Units|Guard", meta = (ClampMin = "50"))
+	float GuardRingRadius = 230.f;
+
+	/** Flocks of birds flying wide loops round the map (ASRBirds). */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Birds")
+	bool bBirds = true;
+
+	UPROPERTY(EditAnywhere, Config, Category = "World|Birds", meta = (ClampMin = "0", ClampMax = "40"))
+	int32 BirdFlocks = 10;
+
+	/** Birds in a flock: each flock picks a size in this range. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Birds", meta = (ClampMin = "1", ClampMax = "60"))
+	FIntPoint BirdsPerFlock = FIntPoint(6, 16);
+
+	/** Wingspan (cm). */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Birds", meta = (ClampMin = "10"))
+	float BirdSpan = 70.f;
+
+	/** Flying speed (cm/s); each flock varies it by +/- 20%. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Birds", meta = (ClampMin = "50"))
+	float BirdSpeed = 1100.f;
+
+	/** Height above the ground (cm): each flock keeps a height in this range, rising over hills and mountains. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Birds")
+	FVector2D BirdHeight = FVector2D(1200.f, 3200.f);
+
+	/** Each flock's loop round the map: its mean radius (cm) is in this range. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Birds")
+	FVector2D BirdLoopRadius = FVector2D(4500.f, 12000.f);
 
 	/** Motion blur smears units while panning and hides fast attack animation, so the game camera turns it off. Untick to let post-process volumes decide. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera")
@@ -380,6 +417,28 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Units")
 	FSRUnitStats Builder;
 
+	/** The Scout: very fast, sees far, hard to notice (Notice Scale), weak in a fight. */
+	UPROPERTY(EditAnywhere, Config, Category = "Units")
+	FSRUnitStats Scout;
+
+	// ---------------------------------------------------------------- Scouts
+	/** The castle level a kingdom needs before it can train its Scout. */
+	UPROPERTY(EditAnywhere, Config, Category = "Scouts", meta = (ClampMin = "1"))
+	int32 ScoutCastleLevel = 3;
+
+	/** Scouts a kingdom may have at once (alive and in training). */
+	UPROPERTY(EditAnywhere, Config, Category = "Scouts", meta = (ClampMin = "0"))
+	int32 MaxScouts = 1;
+
+	/** Seconds of game time a kingdom waits between training two Scouts, counted from the moment the last one was
+	 * queued and paid for (so losing or dismissing a Scout does not shorten the wait). 0 = no wait. */
+	UPROPERTY(EditAnywhere, Config, Category = "Scouts", meta = (ClampMin = "0"))
+	float ScoutCooldown = 300.f;
+
+	/** How faded a hard-to-notice troop (Notice Scale under 1) is drawn: the share of its sprite's texels kept. */
+	UPROPERTY(EditAnywhere, Config, Category = "Scouts", meta = (ClampMin = "0.2", ClampMax = "1"))
+	float StealthSpriteFade = 0.72f;
+
 	// -------------------------------------------------------------- Builders
 	/** A builder works on a building from within this distance (cm) of its walls. */
 	UPROPERTY(EditAnywhere, Config, Category = "Builders", meta = (ClampMin = "10"))
@@ -406,6 +465,47 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Mine Levels")
 	TArray<FSRMineLevel> MineLevels;
 
+	/** Granary levels, 1 first: food it holds on top of the castle's stores. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Store Levels")
+	TArray<FSRStoreLevel> GranaryLevels;
+
+	/** Treasury levels, 1 first: gold it holds on top of the castle's stores. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Store Levels")
+	TArray<FSRStoreLevel> TreasuryLevels;
+
+	/** Granaries (and, separately, Treasuries) a kingdom may have with its castle at level 1... */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Store Levels", meta = (ClampMin = "0"))
+	int32 StoreLimitBase = 1;
+
+	/** ...and one more of each for every this many castle levels above 1 (2: a second at level 3, a third at 5, a fourth at 7). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Store Levels", meta = (ClampMin = "1"))
+	int32 StoreLimitCastleLevels = 2;
+
+	/** Level L (1-based, clamped) of a Granary (bGranary) or a Treasury. */
+	const FSRStoreLevel& StoreLevel(bool bGranary, int32 L) const
+	{
+		static const FSRStoreLevel Default;
+		const TArray<FSRStoreLevel>& Levels = bGranary ? GranaryLevels : TreasuryLevels;
+		return Levels.Num() > 0 ? Levels[FMath::Clamp(L, 1, Levels.Num()) - 1] : Default;
+	}
+
+	/** Watchtowers a kingdom may have (standing or going up) with its castle at level 1... */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Tower Levels", meta = (ClampMin = "0"))
+	int32 TowerLimitBase = 2;
+
+	/** ...and this many more for each castle level above 1. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Tower Levels", meta = (ClampMin = "0"))
+	int32 TowerLimitPerCastleLevel = 1;
+
+	/** Levels of every training building (barracks, archery range, stable, siege workshop), 1 first: faster training. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Trainer Levels")
+	TArray<FSRTrainerLevel> TrainerLevels;
+
+	const FSRTrainerLevel& TrainerLevel(int32 L) const
+	{
+		static const FSRTrainerLevel Default;
+		return TrainerLevels.Num() > 0 ? TrainerLevels[FMath::Clamp(L, 1, TrainerLevels.Num()) - 1] : Default;
+	}
 	const FSRTowerLevel& TowerLevel(int32 L) const
 	{
 		static const FSRTowerLevel Default;
@@ -509,6 +609,13 @@ public:
 	/** Builders are dear: gold as well as food, and slow to train. */
 	FSRCost BuilderCost = FSRCost(120, 80);
 
+	/** The Scout: a little gold, mostly food. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
+	FSRCost ScoutCost = FSRCost(60, 90);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
+	float ScoutBuildTime = 12.f;
+
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
 	float BuilderBuildTime = 14.f;
 
@@ -590,6 +697,12 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
 	FSRBuildingStats WorkshopStats;
 
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats GranaryStats;
+
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats TreasuryStats;
+
 	/** A finished building shows its battle-damaged model below this fraction of its health. */
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
 	float DamagedStateFraction = 0.5f;
@@ -625,6 +738,8 @@ public:
 		case ESRBuildingType::Range: return RangeStats;
 		case ESRBuildingType::Stable: return StableStats;
 		case ESRBuildingType::Workshop: return WorkshopStats;
+		case ESRBuildingType::Granary: return GranaryStats;
+		case ESRBuildingType::Treasury: return TreasuryStats;
 		default: return TowerStats;
 		}
 	}
@@ -632,7 +747,8 @@ public:
 	/** Every building type, in build-menu order. */
 	static const TArray<ESRBuildingType>& AllBuildingTypes()
 	{
-		static const TArray<ESRBuildingType> Types = { ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Barracks, ESRBuildingType::Range,
+		static const TArray<ESRBuildingType> Types = { ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Granary, ESRBuildingType::Treasury,
+			ESRBuildingType::Barracks, ESRBuildingType::Range,
 			ESRBuildingType::Stable, ESRBuildingType::Workshop, ESRBuildingType::Tower, ESRBuildingType::Castle };
 		return Types;
 	}
@@ -646,6 +762,7 @@ public:
 		case ESRUnitType::Horseman: return ESRBuildingType::Stable;
 		case ESRUnitType::Catapult: return ESRBuildingType::Workshop;
 		case ESRUnitType::Builder: return ESRBuildingType::Castle;
+		case ESRUnitType::Scout: return ESRBuildingType::Castle;
 		default: return ESRBuildingType::Barracks;
 		}
 	}
@@ -819,6 +936,7 @@ public:
 		case ESRUnitType::Horseman: return HorsemanCost;
 		case ESRUnitType::Catapult: return CatapultCost;
 		case ESRUnitType::Builder: return BuilderCost;
+		case ESRUnitType::Scout: return ScoutCost;
 		default: return ShieldbearerCost;
 		}
 	}
@@ -830,6 +948,7 @@ public:
 		case ESRUnitType::Horseman: return HorsemanBuildTime;
 		case ESRUnitType::Catapult: return CatapultBuildTime;
 		case ESRUnitType::Builder: return BuilderBuildTime;
+		case ESRUnitType::Scout: return ScoutBuildTime;
 		default: return ShieldbearerBuildTime;
 		}
 	}

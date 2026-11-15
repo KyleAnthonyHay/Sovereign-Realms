@@ -5,6 +5,8 @@ the back. Two variants (char_miner.py, char_farmer.py):
   miner  - leather skullcap, pickaxe, a basket of ore with gold flecks
   farmer - wide straw hat, long hoe, a basket of cut sheaves
   builder - team-coloured hood, leather apron, a big mallet, planks on the back (a troop: char_builder.py)
+  scout   - a deep team-coloured hood and a long cloak instead of the basket, a light spear on the shoulder, and a
+            sprinter's stride: 192 cm to the run cycle instead of 124 (a troop: char_scout.py)
 Sheet layout is the troops' (spawn, idle, walk, attack, hit, death) so the game drives them with the same code;
 "attack" is the work swing (pick into rock / hoe into soil) and loops while they work. Death is a simple fall.
 """
@@ -78,8 +80,8 @@ def build_mesh(b, variant):
         b.add(sheet([[V(-0.13, -0.158, 0.66), V(0.13, -0.158, 0.66)],
                      [V(-0.15, -0.205, 0.40), V(0.15, -0.205, 0.40)]], 0.022), "leather", "skirt")
         b.add(lathe([(0.0, 0.655), (0.177, 0.655), (0.177, 0.675), (0.0, 0.675)], seg=24, sy=0.78), "leather_dark", "hips")
-    # basket straps over both shoulders
-    for s in (1, -1):
+    # basket straps over both shoulders (the Scout: one baldric)
+    for s in ((1, -1) if variant != "scout" else (1,)):
         b.add(tube([V(s * 0.12, 0.05, 0.95), V(s * 0.15, -0.10, 0.88), V(s * 0.16, -0.12, 0.74), V(s * 0.16, -0.02, 0.66),
                     V(s * 0.12, 0.13, 0.68)], 0.017, seg=6, squash=(1.0, 0.6)), "leather_dark", "chest")
 
@@ -104,11 +106,15 @@ def build_mesh(b, variant):
         cap = place((0, 0.006, hz + 0.02), rx=-10)
         b.add(lathe([(0.0, 0.03), (0.155, 0.03), (0.16, 0.07), (0.145, 0.12), (0.1, 0.155), (0.0, 0.165)], seg=24, sy=1.04), "leather", "head", cap)
         b.add(lathe([(0.0, 0.02), (0.164, 0.02), (0.168, 0.05), (0.164, 0.07), (0.0, 0.07)], seg=24, sy=1.04), "team", "head", cap)
-    elif variant == "builder":
+    elif variant in ("builder", "scout"):
         # a team-coloured hood over the head and shoulders, the face left open, a dark band round the brow
+        # (the Scout's is pulled further forward, and has no brow band: the face sits in its shadow)
         hood = place((0, 0.02, hz + 0.0), rx=-12)
         b.add(lathe([(0.0, -0.02), (0.17, -0.02), (0.175, 0.04), (0.165, 0.10), (0.12, 0.155), (0.0, 0.175)], seg=24, sy=1.06), "team", "head", hood)
-        b.add(lathe([(0.0, 0.03), (0.177, 0.03), (0.18, 0.06), (0.0, 0.06)], seg=24, sy=1.06), "leather_dark", "head", hood)
+        if variant == "builder":
+            b.add(lathe([(0.0, 0.03), (0.177, 0.03), (0.18, 0.06), (0.0, 0.06)], seg=24, sy=1.06), "leather_dark", "head", hood)
+        else:
+            b.add(lathe([(0.0, 0.10), (0.172, 0.10), (0.176, 0.125), (0.0, 0.125)], seg=24, sy=1.12), "team", "head", place((0, -0.03, hz - 0.02), rx=-12))
         b.add(lathe([(0.0, 0.90), (0.20, 0.90), (0.215, 0.95), (0.16, 1.0), (0.0, 1.0)], seg=24, sy=0.8), "team", "chest")
     else:
         # wide straw hat, crown banded in the team colour
@@ -117,27 +123,40 @@ def build_mesh(b, variant):
         b.add(lathe([(0.0, 0.04), (0.15, 0.04), (0.14, 0.13), (0.09, 0.16), (0.0, 0.165)], seg=24, sy=1.0), "straw", "head", hat)
         b.add(lathe([(0.0, 0.045), (0.155, 0.045), (0.152, 0.075), (0.0, 0.075)], seg=24, sy=1.0), "team", "head", hat)
 
-    # ---------------------------------------------------------------- basket on the back
-    bm = place((0, 0.20, 0.80), rx=8)
-    b.add(lathe([(0.0, -0.13), (0.11, -0.13), (0.14, -0.05), (0.155, 0.08), (0.16, 0.12), (0.0, 0.12)], seg=16, sy=0.75), "straw", "basket", bm)
-    b.add(lathe([(0.0, 0.11), (0.165, 0.11), (0.168, 0.135), (0.0, 0.135)], seg=16, sy=0.75), "leather_dark", "basket", bm)
-    if variant == "builder":
-        # planks standing up out of the basket, leaning a little apart
-        for k, (dx, lean, ln) in enumerate(((-0.07, -10, 0.46), (-0.01, -3, 0.52), (0.05, 5, 0.44), (0.10, 12, 0.38))):
-            base = V(dx, 0.21 + 0.012 * k, 0.86)
-            top = base + V(math.sin(math.radians(lean)) * ln, 0.03, math.cos(math.radians(lean)) * ln)
-            b.add(tube([base, top], 0.034, seg=4, squash=(1.0, 0.28), up=(0, 1, 0)), "wood", "basket")
-    elif miner:
-        for dx, dy, r, mat in ((-0.06, 0.18, 0.06, "ore"), (0.05, 0.21, 0.055, "ore"), (0.0, 0.17, 0.045, "gold"), (0.07, 0.17, 0.04, "ore"),
-                               (-0.08, 0.22, 0.035, "gold")):
-            b.add(ellipsoid((r, r * 0.9, r * 0.8), seg=8, rings=5), mat, "basket", place((dx, dy, 0.93 + r * 0.4)))
+    # ---------------------------------------------------------------- basket on the back (the Scout wears a cloak instead)
+    if variant == "scout":
+        # a long cloak in the team's colour, shoulders to calves, a dark hem; it rides on the basket bone so it
+        # swings with the stride
+        rows = [[V(-0.17, 0.10, 0.97), V(0.0, 0.135, 0.985), V(0.17, 0.10, 0.97)],
+                [V(-0.23, 0.17, 0.74), V(0.0, 0.215, 0.74), V(0.23, 0.17, 0.74)],
+                [V(-0.27, 0.20, 0.50), V(0.0, 0.255, 0.50), V(0.27, 0.20, 0.50)],
+                [V(-0.29, 0.21, 0.31), V(0.0, 0.275, 0.31), V(0.29, 0.21, 0.31)]]
+        b.add(sheet(rows, 0.03), "team", "basket")
+        b.add(sheet([[V(-0.295, 0.212, 0.315), V(0.0, 0.278, 0.315), V(0.295, 0.212, 0.315)],
+                     [V(-0.30, 0.215, 0.275), V(0.0, 0.283, 0.275), V(0.30, 0.215, 0.275)]], 0.036), "leather_dark", "basket")
+        # a leather belt pouch and a rolled blanket across the small of the back
+        b.add(ellipsoid((0.05, 0.04, 0.055), seg=8, rings=6), "leather", "hips", place((0.15, -0.10, 0.58)))
     else:
-        for k in range(7):
-            a = -0.35 + k * 0.12
-            base = V(0.05 * math.sin(k * 2.1), 0.20, 0.90)
-            top = base + V(math.sin(a) * 0.12, 0.04, 0.30 + 0.03 * math.cos(k))
-            b.add(capsule(base, top, 0.018, 0.012, seg=6, caps=1), "straw", "basket")
-            b.add(ellipsoid((0.03, 0.026, 0.06), seg=6, rings=5), "straw", "basket", place(top + V(0, 0, 0.03)))
+        bm = place((0, 0.20, 0.80), rx=8)
+        b.add(lathe([(0.0, -0.13), (0.11, -0.13), (0.14, -0.05), (0.155, 0.08), (0.16, 0.12), (0.0, 0.12)], seg=16, sy=0.75), "straw", "basket", bm)
+        b.add(lathe([(0.0, 0.11), (0.165, 0.11), (0.168, 0.135), (0.0, 0.135)], seg=16, sy=0.75), "leather_dark", "basket", bm)
+        if variant == "builder":
+            # planks standing up out of the basket, leaning a little apart
+            for k, (dx, lean, ln) in enumerate(((-0.07, -10, 0.46), (-0.01, -3, 0.52), (0.05, 5, 0.44), (0.10, 12, 0.38))):
+                base = V(dx, 0.21 + 0.012 * k, 0.86)
+                top = base + V(math.sin(math.radians(lean)) * ln, 0.03, math.cos(math.radians(lean)) * ln)
+                b.add(tube([base, top], 0.034, seg=4, squash=(1.0, 0.28), up=(0, 1, 0)), "wood", "basket")
+        elif miner:
+            for dx, dy, r, mat in ((-0.06, 0.18, 0.06, "ore"), (0.05, 0.21, 0.055, "ore"), (0.0, 0.17, 0.045, "gold"), (0.07, 0.17, 0.04, "ore"),
+                                   (-0.08, 0.22, 0.035, "gold")):
+                b.add(ellipsoid((r, r * 0.9, r * 0.8), seg=8, rings=5), mat, "basket", place((dx, dy, 0.93 + r * 0.4)))
+        else:
+            for k in range(7):
+                a = -0.35 + k * 0.12
+                base = V(0.05 * math.sin(k * 2.1), 0.20, 0.90)
+                top = base + V(math.sin(a) * 0.12, 0.04, 0.30 + 0.03 * math.cos(k))
+                b.add(capsule(base, top, 0.018, 0.012, seg=6, caps=1), "straw", "basket")
+                b.add(ellipsoid((0.03, 0.026, 0.06), seg=6, rings=5), "straw", "basket", place(top + V(0, 0, 0.03)))
 
     # ---------------------------------------------------------------- the tool, built along -Y from the right fist
     f = FIST_R
@@ -148,6 +167,11 @@ def build_mesh(b, variant):
         b.add(capsule(h + V(0, 0.0, 0.10), h + V(0, 0.0, -0.10), 0.068, seg=10, caps=2), "wood", "tool")
         for z in (0.085, -0.085):
             b.add(capsule(h + V(0, 0.0, z + 0.012), h + V(0, 0.0, z - 0.012), 0.072, seg=10, caps=1), "iron", "tool")
+    elif variant == "scout":
+        # a light spear: a leaf-shaped iron head on the end of the shaft, a leather binding under it
+        b.add(tube([h + V(0, 0.01, 0), h + V(0, -0.04, 0), h + V(0, -0.10, 0), h + V(0, -0.15, 0)], [0.02, 0.046, 0.034, 0.004], seg=6,
+                   squash=(1.0, 0.35), up=(0, 0, 1)), "iron", "tool")
+        b.add(capsule(h + V(0, 0.07, 0), h + V(0, 0.02, 0), 0.027, seg=8, caps=2), "leather_dark", "tool")
     elif miner:
         # pick head: an iron bar across the end, curved down to a point (edge = -Z at rest)
         b.add(tube([h + V(0, 0.03, 0.17), h + V(0, 0.0, 0.08), h + V(0, -0.01, 0.0), h + V(0, 0.0, -0.10), h + V(0, 0.05, -0.22)],
@@ -222,6 +246,8 @@ def rest(rig):
 
 def animate(rig, variant):
     miner = variant == "miner"
+    scout = variant == "scout"
+    step = 0.24 if scout else STEP        # the Scout sprints: 8 frames = 192 cm (FSRUnitStats::WalkCycleDistance)
     G = rest(rig)
     sin, cos, pi = math.sin, math.cos, math.pi
 
@@ -240,20 +266,24 @@ def animate(rig, variant):
         rig.key(p, i)
 
     # ---------------------------------------------------------------- walk: an easy trudge, tool on the shoulder
-    rig.new_action("walk", 8, loop=True, drive="distance", cycle_cm=STEP * 800,
+    rig.new_action("walk", 8, loop=True, drive="distance", cycle_cm=step * 800,
                    contact_frames=[0, 4], roles=["contact L", "down", "passing", "up", "contact R", "down", "passing", "up"])
     for i in range(8):
         ph = i / 8
-        body = A.run_body(i, bob=0.022, drop=-0.035, lean=6.0, sway=0.012, yaw=8.0, roll=3.0)
-        fl = A.run_legs(ph, STEP, 0.085, lift=0.11, side=1, foot_x=0.11)
-        fr = A.run_legs(ph + 0.5, STEP, 0.085, lift=0.11, side=-1, foot_x=0.11)
+        if scout:       # head down, long low strides, the cloak streaming
+            body = A.run_body(i, bob=0.03, drop=-0.085, lean=17.0, sway=0.012, yaw=12.0, roll=4.0)
+        else:
+            body = A.run_body(i, bob=0.022, drop=-0.035, lean=6.0, sway=0.012, yaw=8.0, roll=3.0)
+        fl = A.run_legs(ph, step, 0.085, lift=0.17 if scout else 0.11, side=1, foot_x=0.11)
+        fr = A.run_legs(ph + 0.5, step, 0.085, lift=0.17 if scout else 0.11, side=-1, foot_x=0.11)
         lag = -0.022 * cos(4 * pi * ph - pi / 2 - 0.9)
         c1 = cos(2 * pi * ph)
         g = Vector(SHOULDER["grip"]) + Vector((0, 0, lag))
         p = make(rig, (body["hips"]["loc"], body["hips"]["rot"]), body["spine"]["rot"], body["chest"]["rot"], (0, -6),
                  (fl["pos"], fl["rot"]), (fr["pos"], fr["rot"]), tuple(g), SHOULDER["d"], SHOULDER["edge"],
-                 lhand=(0.30, -0.02 + 0.14 * c1, 0.60 + lag), kneeL=(0.16, -1.0, 0.3), kneeR=(-0.16, -1.0, 0.3),
-                 basket=3 * cos(4 * pi * ph - 2.0), sash=8 + 8 * cos(4 * pi * ph - 2.0), skirt=3 * cos(4 * pi * ph - 1.0))
+                 lhand=(0.30, -0.02 + (0.24 if scout else 0.14) * c1, 0.60 + lag), kneeL=(0.16, -1.0, 0.3), kneeR=(-0.16, -1.0, 0.3),
+                 basket=(-26 + 6 * cos(4 * pi * ph - 2.0)) if scout else 3 * cos(4 * pi * ph - 2.0),
+                 sash=8 + 8 * cos(4 * pi * ph - 2.0), skirt=3 * cos(4 * pi * ph - 1.0))
         rig.key(p, i)
 
     # ---------------------------------------------------------------- attack = work: lift overhead, swing down into

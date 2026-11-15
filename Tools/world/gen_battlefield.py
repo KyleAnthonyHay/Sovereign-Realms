@@ -666,7 +666,7 @@ def build_prop_meshes():
 
 def build_structure_meshes():
     """Set dressing added with the mountain pass: a timber watch post, more of the old kingdom's ruins (an arch, a broken
-    tower, a fallen bridge), a dolmen and cairns, the bridges' parapets, and a flock of birds (see M_Birds)."""
+    tower, a fallen bridge), a dolmen and cairns, and the bridges' parapets (the birds are ASRBirds, made at run time)."""
     out = []
     wood = (1, 1, 1, 1)
     # watch post: four splayed legs, two rings of girts, braces, a railed deck under a pyramid roof, a ladder. 7 m.
@@ -749,27 +749,6 @@ def build_structure_meshes():
     for j, (dx, dy, dz, k) in enumerate(((0, 0, 0, 1.0), (34, 20, 0, 0.7), (-30, 26, 0, 0.66), (4, -34, 0, 0.7), (4, 4, 40, 0.72), (-2, 2, 74, 0.48), (2, 0, 100, 0.3))):
         hull_rock(None, (84 * k, 76 * k, 62 * k), 11, seed=540 + j, into=c, offset=(dx, dy, dz), yaw=j * 53.0)
     out.append(c)
-    # birds: a loose flock of flat two-triangle gulls, wings out along the radius, 26 m from the mesh pivot. M_Birds swings
-    # the whole flock round the pivot and beats the wing tips (COLOR.r = 1 at a tip, UV1.x = the bird's own beat phase).
-    fl = Mesh("SM_Birds")
-    r2 = np.random.default_rng(606)
-    for j in range(9):
-        ang = math.radians(float(r2.uniform(-9.0, 9.0)))
-        rad = 2600.0 + float(r2.uniform(-260.0, 260.0))
-        bz = float(r2.uniform(-90.0, 90.0))
-        phase = float(r2.uniform(0.0, 1.0))
-        cx_, cy_ = rad * math.cos(ang), rad * math.sin(ang)
-        rx_, ry_ = math.cos(ang), math.sin(ang)                 # along the radius: the wing span
-        tx_, ty_ = -ry_, rx_                                    # along the flight
-        span, chord = 46.0 * float(r2.uniform(0.85, 1.15)), 13.0
-        for sgn in (-1.0, 1.0):
-            root_a = (cx_ + tx_ * chord, cy_ + ty_ * chord, bz)
-            root_b = (cx_ - tx_ * chord * 0.6, cy_ - ty_ * chord * 0.6, bz)
-            tip = (cx_ + rx_ * span * sgn - tx_ * chord * 0.5, cy_ + ry_ * span * sgn - ty_ * chord * 0.5, bz)
-            ids = [fl.vert(root_a, (0, 0, 1), (0, 0), (phase, 0.0), (0, 0, 0, 1)), fl.vert(root_b, (0, 0, 1), (0, 1), (phase, 0.0), (0, 0, 0, 1)),
-                   fl.vert(tip, (0, 0, 1), (1, 0.5), (phase, 0.0), (1, 0, 0, 1))]
-            fl.tri(*ids)
-    out.append(fl)
     return out
 
 
@@ -2612,7 +2591,8 @@ def build_water_map():
 def plan_atmosphere():
     """Where the level builder puts the air. Mist: level sheets [x, y, z, radius, height above z] at the foot of the far
     mountain wall, the flanks' far ends and over the lake (the river's own mist needs no plan: it is the water mesh,
-    raised). Birds: [x, y, z, yaw, scale] (SM_Birds circles its pivot)."""
+    raised).
+    The birds are not planned here: ASRBirds flies them round the map at run time."""
     r = np.random.default_rng(909)
     mist = [[CORE + 4600.0, -CORE - 1800.0, LAKE_SURFACE, 3800.0, 160.0]]                # the lake the river rises in
     for y in np.arange(-BOUND + 1500, BOUND, 3600.0):                                   # the foot of the far mountain wall
@@ -2620,11 +2600,7 @@ def plan_atmosphere():
     for side in (-1.0, 1.0):
         for x in (2500.0, 8500.0):
             mist.append([x + float(r.uniform(-500, 500)), side * (BOUND + 1100.0), 0.0, float(r.uniform(1600, 2100)), float(r.uniform(240, 380))])
-    # the flock mesh is 26 m across its circle with 0.9 m gulls; scaled up they read from the far camera
-    birds = [[0.0, 0.0, 1500.0, 0.0, 1.7], [HIGHLAND_P[0], HIGHLAND_P[1], 1900.0, 140.0, 2.1], [-HIGHLAND_P[0], -HIGHLAND_P[1], 1300.0, 20.0, 1.5],
-             [PLATEAU_P[0] + 1500.0, PLATEAU_P[1] + 800.0, 1500.0, 260.0, 1.4], [-PLATEAU_P[0] - 1500.0, -PLATEAU_P[1] - 800.0, 2000.0, 80.0, 1.9],
-             [BOUND - 4500.0, -4500.0, 2600.0, 200.0, 2.4], [BOUND - 4000.0, 6000.0, 3000.0, 310.0, 2.6], [4500.0, -BOUND + 4500.0, 2100.0, 60.0, 2.0]]
-    return {"mist": mist, "birds": birds}
+    return {"mist": mist}
 
 
 # ============================================================================================ main

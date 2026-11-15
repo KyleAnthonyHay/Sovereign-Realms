@@ -261,11 +261,21 @@ float ASRHUD::TextIn(const FBox2D& Box, const FString& String, float Pixels, con
 void ASRHUD::Icon(ESRIcon Which, float X, float Y, float Size, const FLinearColor& Tint, bool bEnemy)
 {
 	if (!IconAtlas) { return; }
-	// atlas: 8 x 12 cells of 18 px (a 16 px icon and a 1 px gutter); the lower six rows are the enemy-red copies
+	// atlas: 8 columns of 18 px cells (a 16 px icon and a 1 px gutter); the lower half of the rows are the enemy-red
+	// copies. The row count is read off the texture (Tools/ui/gen_ui_art.py, ROWS), so the atlas can grow without a
+	// change here; an icon the imported atlas does not hold yet is drawn as its nearest older relative.
+	const float AtlasH = FMath::Max(float(IconAtlas->GetSizeY()), 36.f);
+	const int32 HalfRows = FMath::Max(1, FMath::RoundToInt(AtlasH / 36.f));
+	if (HalfRows < 7)
+	{
+		if (Which == ESRIcon::Granary) { Which = ESRIcon::Food; }
+		else if (Which == ESRIcon::Treasury) { Which = ESRIcon::Coin; }
+		else if (Which == ESRIcon::PortraitScout) { Which = ESRIcon::PortraitBuilder; }
+	}
 	const int32 N = int32(Which);
-	const float Col = float(N % 8), Row = float(N / 8 + (bEnemy ? 6 : 0));
+	const float Col = float(N % 8), Row = float(N / 8 + (bEnemy ? HalfRows : 0));
 	DrawTexture(IconAtlas, FMath::RoundToFloat(X), FMath::RoundToFloat(Y), FMath::RoundToFloat(Size), FMath::RoundToFloat(Size),
-		(Col * 18.f + 1.f) / 144.f, (Row * 18.f + 1.f) / 216.f, 16.f / 144.f, 16.f / 216.f, Lin(Tint), BLEND_Translucent);
+		(Col * 18.f + 1.f) / 144.f, (Row * 18.f + 1.f) / AtlasH, 16.f / 144.f, 16.f / AtlasH, Lin(Tint), BLEND_Translucent);
 }
 
 void ASRHUD::Meter(float X, float Y, float W, float H, float Frac, const FLinearColor& FillColor)
@@ -419,6 +429,23 @@ void ASRHUD::DrawSelectionBox()
 	Outline(Box, FromLinear(F.BoxLineColor), FMath::Max(1.f, U(2.f)));
 }
 
+namespace
+{
+	/** How many progress rows DrawTrainingBars stacks over a building (training, construction, upgrade, repair), so
+	 * the health bar can sit above them. */
+	int32 OverheadRows(const ASRBuilding* B)
+	{
+		int32 Rows = B->GetQueue().Num() > 0 ? 1 : 0;
+		if (B->Team == ESRTeam::Player)
+		{
+			Rows += B->IsUnderConstruction() ? 1 : 0;
+			Rows += B->IsUpgrading() ? 1 : 0;
+			Rows += (!B->IsUnderConstruction() && B->GetBuildersWorking() > 0 && B->NeedsWork()) ? 1 : 0;
+		}
+		return Rows;
+	}
+}
+
 void ASRHUD::DrawHealthBars()
 {
 	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
@@ -428,11 +455,11 @@ void ASRHUD::DrawHealthBars()
 	const double WorldNow = GetWorld()->GetTimeSeconds();
 	const float B = FMath::Max(1.f, U(1.f));
 
-	auto Bar = [&](const FVector& WorldPoint, float W, float H, float Frac, bool bEnemy)
+	auto Bar = [&](const FVector& WorldPoint, float W, float H, float Frac, bool bEnemy, float Lift = 0.f)
 	{
 		const FVector S = Canvas->Project(WorldPoint);
 		if (S.Z <= 0.f) { return; }
-		const float X = FMath::RoundToFloat(S.X - W * 0.5f), Y = FMath::RoundToFloat(S.Y - H);
+		const float X = FMath::RoundToFloat(S.X - W * 0.5f), Y = FMath::RoundToFloat(S.Y - H - Lift);
 		// enemies get a red-tinted frame so the sides read at a glance
 		Fill(X - B, Y - B, W + 2.f * B, H + 2.f * B, bEnemy ? FLinearColor(0.30f, 0.03f, 0.02f, 0.92f) : FLinearColor(0.02f, 0.03f, 0.07f, 0.92f));
 		Fill(X, Y, W, H, FLinearColor(0.10f, 0.10f, 0.11f, 0.9f));
@@ -452,10 +479,12 @@ void ASRHUD::DrawHealthBars()
 	if (!Economy) { return; }
 	for (const ASRBuilding* Building : Economy->GetBuildings())
 	{
-		if (!Building || !Building->IsAlive() || Building->GetQueue().Num() > 0 || Building->IsHidden()) { continue; }
+		if (!Building || !Building->IsAlive() || Building->IsHidden()) { continue; }
 		const bool bRecentlyHurt = Building->GetHealthFrac() < 1.f && (WorldNow - Building->GetLastDamagedTime()) < F.HealthBarLingerTime;
 		if (!bRecentlyHurt && !(Building->IsSelected() && Building->GetHealthFrac() < 1.f)) { continue; }
-		Bar(Building->GetLabelPoint(), U(110.f), U(8.f), Building->GetHealthFrac(), Building->Team == ESRTeam::Enemy);
+		// over the progress rows (training, construction, upgrade, repair) rather than hidden by them
+		const int32 Rows = OverheadRows(Building);
+		Bar(Building->GetLabelPoint(), U(110.f), U(8.f), Building->GetHealthFrac(), Building->Team == ESRTeam::Enemy, Rows > 0 ? Rows * U(26.f) - U(4.f) : 0.f);
 	}
 }
 
@@ -852,7 +881,7 @@ void ASRHUD::DrawTrainingBars()
 		Meter(X, Y, W, H, Building->GetBuildFraction(), GoldBright);
 		if (Building->GetQueue().Num() > 1)
 		{
-			Text(FString::Printf(TEXT("+%d"), Building->GetQueue().Num() - 1), X + W + U(6.f), Y - U(6.f), U(16.f), Parchment, AlignLeft, Bold);
+			Text(FString::Printf(TEXT("x%d"), Building->GetQueue().Num()), X + W + U(6.f), Y - U(6.f), U(16.f), Parchment, AlignLeft, Bold);
 		}
 	}
 }

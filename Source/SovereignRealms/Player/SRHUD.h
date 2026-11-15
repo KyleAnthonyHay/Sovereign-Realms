@@ -23,7 +23,8 @@ enum class ESRIcon : uint8
 	Swords, AlertAttack, AlertLost, AlertDone, AlertWave, AlertPop, AlertInfo, Clock,
 	Pause, Help, RecruitFlag, Castle, ChevronDown, ChevronUp, Crown, Cancel,
 	PortraitShield, PortraitArcher, Check, Vein, Barracks, Range, Hammer, Patrol,
-	Disband, PortraitHorse, PortraitCatapult, Stable, Workshop, PortraitBuilder
+	Disband, PortraitHorse, PortraitCatapult, Stable, Workshop, PortraitBuilder, Granary, Treasury,
+	PortraitScout
 };
 
 inline ESRIcon SRUnitIcon(ESRUnitType Type)
@@ -34,11 +35,12 @@ inline ESRIcon SRUnitIcon(ESRUnitType Type)
 	case ESRUnitType::Horseman: return ESRIcon::PortraitHorse;
 	case ESRUnitType::Catapult: return ESRIcon::PortraitCatapult;
 	case ESRUnitType::Builder: return ESRIcon::PortraitBuilder;
+	case ESRUnitType::Scout: return ESRIcon::PortraitScout;
 	default: return ESRIcon::PortraitShield;
 	}
 }
 
-/** The recruit hotkey of a troop type (Q / E / R / T). */
+/** The recruit hotkey of a troop type (Q / E / R / T, Y for a Builder, J for the Scout). */
 inline const TCHAR* SRUnitKey(ESRUnitType Type)
 {
 	switch (Type)
@@ -47,6 +49,7 @@ inline const TCHAR* SRUnitKey(ESRUnitType Type)
 	case ESRUnitType::Horseman: return TEXT("R");
 	case ESRUnitType::Catapult: return TEXT("T");
 	case ESRUnitType::Builder: return TEXT("Y");
+	case ESRUnitType::Scout: return TEXT("J");
 	default: return TEXT("Q");
 	}
 }
@@ -165,7 +168,7 @@ private:
 	/** The top bar's Builders list (open after a click on the counter): each builder and what it is doing. */
 	bool bBuilderList = false;
 	void DrawBuilderList(const FBox2D& Anchor);
-	/** The Upgrade button of a building with levels (castle, watchtower, gold mine). */
+	/** The Upgrade button of a building with levels (castle, watchtower, gold mine, training buildings, storehouses). */
 	void DrawUpgradeButton(const FBox2D& Box, class ASRBuilding* Building);
 
 	// ---- in-game HUD (SRHUDGame.cpp) ----

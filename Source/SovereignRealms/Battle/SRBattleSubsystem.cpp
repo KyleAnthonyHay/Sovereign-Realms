@@ -94,14 +94,17 @@ void USRBattleSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// Sovereign Feel > Visuals > Sprites look values can be tuned live; per-unit values are custom primitive data.
 	UnitCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_UnitCard.SM_UnitCard"));
 	ArrowCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_ArrowCard.SM_ArrowCard"));
-	static const TCHAR* Troops[SRSpriteTypes] = { TEXT("Shieldbearer"), TEXT("Archer"), TEXT("Horseman"), TEXT("Catapult"), TEXT("Builder") };
+	static_assert(SRSpriteTypes == SRNumUnitTypes, "one sprite material per troop type");
+	static const TCHAR* Troops[SRSpriteTypes] = { TEXT("Shieldbearer"), TEXT("Archer"), TEXT("Horseman"), TEXT("Catapult"), TEXT("Builder"), TEXT("Scout") };
 	for (int32 i = 0; i < SRSpriteTypes; ++i)
 	{
 		const FString Path = FString::Printf(TEXT("/Game/SR/Materials/MI_UnitSprite_%s.MI_UnitSprite_%s"), Troops[i], Troops[i]);
 		const FString ShadowPath = FString::Printf(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_%s.MI_UnitSpriteShadow_%s"), Troops[i], Troops[i]);
 		UMaterialInterface* Base = i < 2 ? LoadSpriteAsset<UMaterialInterface>(*Path) : LoadObject<UMaterialInterface>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
 		UMaterialInterface* Shadow = i < 2 ? LoadSpriteAsset<UMaterialInterface>(*ShadowPath) : LoadObject<UMaterialInterface>(nullptr, *ShadowPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
-		if (!Base && i >= 2) { SpriteMaterials[i] = SpriteMaterials[0]; SpriteShadowMaterials[i] = SpriteShadowMaterials[0]; continue; }   // not imported yet
+		// not imported yet: the Shieldbearer's (the Scout: the Builder's, whose sheet layout it shares)
+		const int32 Borrow = i == int32(ESRUnitType::Scout) ? int32(ESRUnitType::Builder) : 0;
+		if (!Base && i >= 2) { SpriteMaterials[i] = SpriteMaterials[Borrow]; SpriteShadowMaterials[i] = SpriteShadowMaterials[Borrow]; continue; }
 		SpriteMaterials[i] = UMaterialInstanceDynamic::Create(OrDefault(Base), this);
 		SpriteShadowMaterials[i] = OrDefault(Shadow);
 	}
@@ -200,7 +203,7 @@ void USRBattleSubsystem::UpdateSpriteLook()
 	if (Look.Equals(AppliedSpriteLook, 0.0005f) && F.HitFlashColor.Equals(AppliedFlashColor, 0.0005f)) { return; }
 	AppliedSpriteLook = Look;
 	AppliedFlashColor = F.HitFlashColor;
-	TSet<UMaterialInstanceDynamic*> MIDs = { SpriteMaterials[0].Get(), SpriteMaterials[1].Get(), SpriteMaterials[2].Get(), SpriteMaterials[3].Get(), SpriteMaterials[4].Get(),
+	TSet<UMaterialInstanceDynamic*> MIDs = { SpriteMaterials[0].Get(), SpriteMaterials[1].Get(), SpriteMaterials[2].Get(), SpriteMaterials[3].Get(), SpriteMaterials[4].Get(), SpriteMaterials[5].Get(),
 		WorkerMaterials[0].Get(), WorkerMaterials[1].Get(), ArrowMaterial.Get(), StoneMaterial.Get() };
 	for (UMaterialInstanceDynamic* MID : MIDs)
 	{
@@ -692,7 +695,8 @@ ASRUnit* USRBattleSubsystem::FindNearestEnemy(const ASRUnit* For, float Range) c
 	{
 		if (!Other || !Other->IsActive() || Other->GetTeam() == For->GetTeam()) { return; }
 		const float DistSq = FVector2D::DistSquared(Pos, Other->GetPos2D());
-		if (DistSq < BestDistSq) { BestDistSq = DistSq; Best = Other; }
+		// reduced visibility: a Scout is only noticed from close by (auto-battle, which sees the whole map, ignores it)
+		if (DistSq < BestDistSq && (bAutoBattle || Other->IsNoticedAt(DistSq, Range))) { BestDistSq = DistSq; Best = Other; }
 	};
 	if (Range > 4000.f)
 	{
@@ -917,8 +921,8 @@ void USRBattleSubsystem::LogStatus() const
 		if (!Unit) { continue; }
 		static const TCHAR* AnimNames[] = { TEXT("spawn"), TEXT("idle"), TEXT("walk"), TEXT("attack"), TEXT("hit"), TEXT("death") };
 		static const TCHAR* FacingNames[] = { TEXT("S"), TEXT("SW"), TEXT("W"), TEXT("NW"), TEXT("N"), TEXT("NE"), TEXT("E"), TEXT("SE") };
-		UE_LOG(LogSovereign, Log, TEXT("  %-20s pos=(%7.0f,%7.0f,%5.0f) vel=%4.0f hp=%3.0f order=%d sel=%d target=%s sprite=%s:%d:%s"),
-			*Unit->GetLabel(), Unit->GetSimPos().X, Unit->GetSimPos().Y, Unit->GetSimPos().Z, Unit->GetVelocity2D().Size(),
+		UE_LOG(LogSovereign, Log, TEXT("  %-20s pos=(%7.0f,%7.0f,%5.0f) vel=%4.0f/%.0f seen=%d hp=%3.0f order=%d sel=%d target=%s sprite=%s:%d:%s"),
+			*Unit->GetLabel(), Unit->GetSimPos().X, Unit->GetSimPos().Y, Unit->GetSimPos().Z, Unit->GetVelocity2D().Size(), Unit->Stats().MaxSpeed, IsVisibleToPlayer(Unit) ? 1 : 0,
 			Unit->GetHealth(), int32(Unit->GetOrder()), Unit->IsSelected() ? 1 : 0,
 			Unit->GetTarget() ? *Unit->GetTarget()->GetLabel() : TEXT("-"),
 			AnimNames[int32(Unit->GetSpriteAnim())], Unit->GetSpriteFrame(), FacingNames[Unit->GetSpriteFacing() % 8]);

@@ -74,12 +74,30 @@ public:
 	void AddResource(ESRTeam Team, ESRResource Resource, int32 Amount, bool bIgnoreStorage = false);
 	/** The castle's level (1 without one). */
 	int32 GetCastleLevel(ESRTeam Team) const;
-	/** The most gold / food the kingdom can hold at its castle's level. */
+	/** The most gold / food the kingdom can hold: its castle's level plus its finished Granaries (food) or Treasuries (gold). */
 	int32 GetStorage(ESRTeam Team, ESRResource Resource) const;
+	/** The share of GetStorage that storehouses add (finished Granaries / Treasuries, each at its level). */
+	int32 GetStoreCapacity(ESRTeam Team, ESRResource Resource) const;
+	/** Granaries (and, separately, Treasuries) a kingdom may have at its castle's level. */
+	int32 GetMaxStores(ESRTeam Team) const;
+	/** Standing buildings of a type, finished or going up (ruins not counted). */
+	int32 CountStanding(ESRBuildingType Type, ESRTeam Team) const;
+	// ---- the Scout: castle level, one at a time, a wait between two ----
+	/** Scouts alive, and (OutQueued) in training. */
+	int32 GetScoutCount(ESRTeam Team, int32* OutQueued = nullptr) const;
+	/** Seconds of game time until the kingdom may train another Scout (0 = now). */
+	float GetScoutCooldown(ESRTeam Team) const { return ScoutCooldownLeft[int32(Team)]; }
+	/** A Scout was queued and paid for: the wait starts (also: saved games, sr.ScoutCooldown). */
+	void SetScoutCooldown(ESRTeam Team, float Seconds) { ScoutCooldownLeft[int32(Team)] = FMath::Max(0.f, Seconds); }
+	/** Why the kingdom cannot train a Scout right now (castle level, one already, the wait), or empty if it can.
+	 * Price and housing are not looked at here. */
+	FText GetScoutRefusal(ESRTeam Team) const;
 	/** The most troops it may field at its castle's level, however many farms. */
 	int32 GetPopulationCeiling(ESRTeam Team) const;
 	/** Builders it may have at its castle's level. */
 	int32 GetMaxBuilders(ESRTeam Team) const;
+	/** Watchtowers a kingdom may have (standing or going up): TowerLimitBase, +TowerLimitPerCastleLevel per castle level. */
+	int32 GetMaxTowers(ESRTeam Team) const;
 	/** Saved games. */
 	void SetStock(ESRTeam Team, ESRResource Resource, int32 Amount) { Stock[int32(Team)][int32(Resource)] = FMath::Max(0, Amount); }
 	bool CanAfford(ESRTeam Team, const FSRCost& Cost) const;
@@ -164,5 +182,6 @@ private:
 	FVector2D LastAttackLocation[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
 	TMap<TWeakObjectPtr<ASRBuilding>, double> LastAttackAlert;
 	double LastUnitAttackAlert = -100.0;
+	float ScoutCooldownLeft[2] = { 0.f, 0.f };
 	bool bStarted = false;
 };

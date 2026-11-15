@@ -10,7 +10,7 @@ Pipeline (see Docs/VISUAL_CONTRACT.md):
   Tools/ue_py.py Tools/build_battlefield_visuals.py               # this file: the level
 One part only:  Tools/ue_py.py -c "PARTS=['lighting']; exec(open('<abs path to this file>').read())"
 Parts: world (terrain + props + water + buildings), buildings (only re-place the buildings), lighting, atmosphere
-(valley mist, cloud shadows, birds: the outliner folder Atmosphere).
+(valley mist and cloud shadows: the outliner folder Atmosphere; the birds are ASRBirds, spawned at run time).
 
 Gameplay rules honoured (enforced by the generator): the +/-12000 cm play area keeps both kingdoms' aprons,
 the spawn areas, the roads, the fords and the island flat; walkable terraces step <= 40 cm (the ridges, knolls and
@@ -40,7 +40,7 @@ MATERIAL_FOR = [            # first matching mesh-name prefix wins
     ("SM_BannerCloth", "MI_Card_Banner"), ("SM_BannerPole", "MI_Prop_Wood"), ("SM_Fence_", "MI_Prop_Wood"),
     ("SM_Log", "MI_Prop_Log"), ("SM_Stump", "MI_Prop_Log"), ("SM_Ruin_", "MI_Prop_Sandstone"),
     ("SM_Rock_", "MI_Prop_Rock"), ("SM_Menhir_", "MI_Prop_Rock"), ("SM_GoldVein", "MI_Bld_Ore"),
-    ("SM_WatchPost", "MI_Prop_Wood"), ("SM_Dolmen", "MI_Prop_Rock"), ("SM_Cairn", "MI_Prop_Rock"), ("SM_Birds", "M_Birds"),
+    ("SM_WatchPost", "MI_Prop_Wood"), ("SM_Dolmen", "MI_Prop_Rock"), ("SM_Cairn", "MI_Prop_Rock"),
 ]
 
 
@@ -171,7 +171,7 @@ def build_world():
     with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
         layout = json.load(f)
     assign_materials()
-    for folder in ("Greybox", "Terrain", "Props", "Water", "Buildings", "Atmosphere/Birds"):
+    for folder in ("Greybox", "Terrain", "Props", "Water", "Buildings", "Atmosphere/Birds"):   # (Atmosphere/Birds: clears the old static flocks)
         clear_folder(folder)
 
     # terrain: WorldStatic, complex-as-simple collision set on the assets at import
@@ -216,11 +216,6 @@ def build_world():
             xfs = [unreal.Transform(unreal.Vector(x, y, z), unreal.Rotator(0, 0, yaw), unreal.Vector(s, s, s)) for x, y, z, yaw, s in items]
             comp.add_instances(xfs, False, True)
             total += len(xfs)
-    # birds: SM_Birds circles its own pivot in the material (M_Birds), so each flock is one static mesh actor. Bounds are
-    # scaled up because the flock leaves the mesh's own box as it goes round.
-    for i, (x, y, z, yaw, scale) in enumerate(layout.get("atmosphere", {}).get("birds", [])):
-        a = mesh_actor(load(MESH + "SM_Birds"), (x, y, z), yaw, "Birds_%d" % i, "Atmosphere/Birds", collide=False, shadow=False, scale=scale)
-        a.static_mesh_component.set_editor_property("bounds_scale", 8.0)
     build_buildings(layout)
     print("terrain actors %d, single actors %d, blockers %d, instances %d" % (len(layout["terrain"]), len(layout["actors"]), len(layout["blockers"]), total))
 
@@ -341,7 +336,7 @@ PLANE = load("/Engine/BasicShapes/Plane")
 
 
 def build_atmosphere():
-    """Mist and the sun's cloud shadows (folder Atmosphere/Mist; the birds are placed with the world: they are meshes).
+    """Mist and the sun's cloud shadows (folder Atmosphere/Mist; the birds are ASRBirds, spawned at run time).
     River mist is the water mesh again, a hand above the surface, in M_Mist (it thins out at the banks by T_WaterMap).
     Valley mist is a level sheet per entry of layout "atmosphere" > "mist" [x, y, z, radius, height] in MI_Mist_Valley."""
     clear_folder("Atmosphere/Mist")

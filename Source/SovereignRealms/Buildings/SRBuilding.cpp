@@ -181,6 +181,9 @@ void ASRBuilding::StepBuilding(float Dt)
 	StepFireSound(Dt);
 	StepLife(Dt);
 
+	// under repair it does not work: no payouts, no training, no shooting (it picks up where it left off)
+	if (bRepairing) { UpdateFeedback(Dt); return; }
+
 	if (BuildingType == ESRBuildingType::Farm || BuildingType == ESRBuildingType::Mine)
 	{
 		// With workers on screen the payout lands when one of them delivers (ASRWorker -> Deliver). Without, on a timer.
@@ -201,7 +204,7 @@ void ASRBuilding::StepBuilding(float Dt)
 	}
 	else if (Queue.Num() > 0)
 	{
-		BuildClock += Dt;
+		BuildClock += Dt * GetTrainSpeed();
 		const float BuildTime = FMath::Max(F.BuildTimeFor(Queue[0]), 0.1f);
 		if (BuildClock >= BuildTime)
 		{
@@ -218,7 +221,7 @@ void ASRBuilding::StepBuilding(float Dt)
 
 void ASRBuilding::Deliver()
 {
-	if (!IsFinished() || !Economy) { return; }
+	if (!IsFinished() || !Economy || bRepairing) { return; }   // (a worker's load is lost while it is mended)
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const bool bFarm = BuildingType == ESRBuildingType::Farm;
 	int32 Amount = GetPayoutAmount();
@@ -253,6 +256,18 @@ bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 		Economy->NotifyRefused();
 		return false;
 	}
+	if (Type == ESRUnitType::Scout)
+	{
+		// castle level, one at a time, and a wait between two (USREconomySubsystem::GetScoutRefusal)
+		const FText Why = Economy->GetScoutRefusal(Team);
+		if (!Why.IsEmpty())
+		{
+			UE_LOG(LogSovereign, Log, TEXT("RECRUIT refused: Scout (%s): %s"), Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), *Why.ToString());
+			if (Team == ESRTeam::Player) { Economy->PushAlert(ESRAlertKind::Info, Why); }
+			Economy->NotifyRefused();
+			return false;
+		}
+	}
 	if (Type == ESRUnitType::Builder)
 	{
 		int32 Queued = 0;
@@ -285,6 +300,8 @@ bool ASRBuilding::QueueRecruit(ESRUnitType Type)
 	}
 	if (Queue.Num() == 0) { BuildClock = 0.f; }
 	Queue.Add(Type);
+	// the wait before the next Scout runs from now: queued and paid for
+	if (Type == ESRUnitType::Scout) { Economy->SetScoutCooldown(Team, F.ScoutCooldown); }
 	UE_LOG(LogSovereign, Log, TEXT("RECRUIT queued: %s at %s for gold=%d food=%d, %.1fs  (queue=%d, left gold=%d food=%d)"), Name, *GetActorNameOrLabel(), Cost.Gold, Cost.Food,
 		F.BuildTimeFor(Type), Queue.Num(), Economy->GetResource(Team, ESRResource::Gold), Economy->GetResource(Team, ESRResource::Food));
 	return true;
@@ -331,7 +348,7 @@ void ASRBuilding::SpawnRecruit(ESRUnitType Type)
 	if (Team == ESRTeam::Player)
 	{
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::RecruitReady); }
-		if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->OnRecruit(Unit); }
+		if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->OnRecruit(Unit, AssignedPlatoon); }
 	}
 
 	UE_LOG(LogSovereign, Log, TEXT("RECRUIT ready: %s emerges from %s at (%.0f, %.0f), rally (%.0f, %.0f) via %d waypoint(s)"), *Unit->GetLabel(), *GetActorNameOrLabel(),
@@ -585,11 +602,30 @@ int32 ASRBuilding::GetPopProvided() const
 	return IsCastle() ? USRFeelSettings::Get().CastleLevel(Level).Housing : Stats().PopProvided;
 }
 
+float ASRBuilding::GetTrainSpeed() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return IsTrainer() && F.TrainerLevels.Num() > 0 ? FMath::Max(F.TrainerLevel(Level).TrainSpeed, 0.1f) : 1.f;
+}
+
+float ASRBuilding::GetTrainTime(ESRUnitType Type) const
+{
+	return USRFeelSettings::Get().BuildTimeFor(Type) / GetTrainSpeed();
+}
+
+int32 ASRBuilding::GetStoreCapacity() const
+{
+	return IsStore() ? USRFeelSettings::Get().StoreLevel(BuildingType == ESRBuildingType::Granary, Level).Capacity : 0;
+}
+
 float ASRBuilding::GetMaxHealth() const
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (IsTrainer() && F.TrainerLevels.Num() > 0) { return Stats().MaxHealth * F.TrainerLevel(Level).HealthScale; }
 	switch (BuildingType)
 	{
+	case ESRBuildingType::Granary: return F.GranaryLevels.Num() > 0 ? F.StoreLevel(true, Level).Health : Stats().MaxHealth;
+	case ESRBuildingType::Treasury: return F.TreasuryLevels.Num() > 0 ? F.StoreLevel(false, Level).Health : Stats().MaxHealth;
 	case ESRBuildingType::Castle: return F.CastleLevel(Level).Health;
 	case ESRBuildingType::Tower: return F.TowerLevels.Num() > 0 ? F.TowerLevel(Level).Health : Stats().MaxHealth;
 	case ESRBuildingType::Mine: return F.MineLevels.Num() > 0 ? F.MineLevel(Level).Health : Stats().MaxHealth;
@@ -605,6 +641,9 @@ int32 ASRBuilding::GetMaxLevel() const
 	case ESRBuildingType::Castle: return F.CastleMaxLevel();
 	case ESRBuildingType::Tower: return FMath::Max(1, F.TowerLevels.Num());
 	case ESRBuildingType::Mine: return FMath::Max(1, F.MineLevels.Num());
+	case ESRBuildingType::Barracks: case ESRBuildingType::Range: case ESRBuildingType::Stable: case ESRBuildingType::Workshop: return FMath::Max(1, F.TrainerLevels.Num());
+	case ESRBuildingType::Granary: return FMath::Max(1, F.GranaryLevels.Num());
+	case ESRBuildingType::Treasury: return FMath::Max(1, F.TreasuryLevels.Num());
 	default: return 1;
 	}
 }
@@ -643,6 +682,9 @@ float ASRBuilding::GetUpgradeTime() const
 	case ESRBuildingType::Castle: return F.CastleLevel(Level + 1).UpgradeTime;
 	case ESRBuildingType::Tower: return F.TowerLevel(Level + 1).UpgradeTime;
 	case ESRBuildingType::Mine: return F.MineLevel(Level + 1).UpgradeTime;
+	case ESRBuildingType::Barracks: case ESRBuildingType::Range: case ESRBuildingType::Stable: case ESRBuildingType::Workshop: return F.TrainerLevel(Level + 1).UpgradeTime;
+	case ESRBuildingType::Granary: return F.StoreLevel(true, Level + 1).UpgradeTime;
+	case ESRBuildingType::Treasury: return F.StoreLevel(false, Level + 1).UpgradeTime;
 	default: return 30.f;
 	}
 }
@@ -665,6 +707,9 @@ FSRCost ASRBuilding::GetUpgradeCost() const
 	case ESRBuildingType::Castle: return F.CastleLevel(Level + 1).UpgradeCost;
 	case ESRBuildingType::Tower: return F.TowerLevel(Level + 1).UpgradeCost;
 	case ESRBuildingType::Mine: return F.MineLevel(Level + 1).UpgradeCost;
+	case ESRBuildingType::Barracks: case ESRBuildingType::Range: case ESRBuildingType::Stable: case ESRBuildingType::Workshop: return F.TrainerLevel(Level + 1).UpgradeCost;
+	case ESRBuildingType::Granary: return F.StoreLevel(true, Level + 1).UpgradeCost;
+	case ESRBuildingType::Treasury: return F.StoreLevel(false, Level + 1).UpgradeCost;
 	default: return FSRCost(0, 0);
 	}
 }
@@ -702,7 +747,7 @@ void ASRBuilding::StepUpgrade(float Dt)
 	++Level;
 	Health += GetMaxHealth() - Before;   // the new walls come up whole
 	NeedsBuilderState = -1;
-	UE_LOG(LogSovereign, Log, TEXT("UPGRADE %s reached level %d (houses %d)"), *GetDisplayName(), Level, GetPopProvided());
+	UE_LOG(LogSovereign, Log, TEXT("UPGRADE %s reached level %d (houses %d, holds %d)"), *GetDisplayName(), Level, GetPopProvided(), GetStoreCapacity());
 	if (Team == ESRTeam::Player && Economy)
 	{
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::BuildComplete); }
@@ -760,6 +805,8 @@ void ASRBuilding::PlayVoice()
 	case ESRBuildingType::Range: Voice = ESRSound::TargetThunk; break;
 	case ESRBuildingType::Stable: Voice = ESRSound::HorseNeigh; break;
 	case ESRBuildingType::Workshop: Voice = ESRSound::Woodwork; break;
+	case ESRBuildingType::Granary: Voice = ESRSound::GrainPayout; break;      // sacks thump down
+	case ESRBuildingType::Treasury: Voice = ESRSound::CoinPayout; break;      // coins counted out
 	}
 	if (IsUnderConstruction()) { Voice = ESRSound::BuildHammer; }
 	Audio->PlayAt(Voice, GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + 200.f));
@@ -780,6 +827,9 @@ void ASRBuilding::StepLife(float Dt)
 	case ESRBuildingType::Range: Life = ESRSound::TargetThunk; break;
 	case ESRBuildingType::Stable: Life = ESRSound::HorseSnort; break;
 	case ESRBuildingType::Workshop: Life = ESRSound::Woodwork; break;
+	// the granary: sparrows after the spilt grain, a sack set down now and then; the treasury: the clerk at his counting
+	case ESRBuildingType::Granary: Life = FMath::FRand() < 0.6f ? ESRSound::Birds : ESRSound::GrainPayout; break;
+	case ESRBuildingType::Treasury: if (FMath::FRand() < 0.5f) { Life = ESRSound::CoinPayout; } break;
 	default: break;   // the castle and the mine have their own life (archers on the walls, the miners' picks)
 	}
 	if (Life == ESRSound::Count) { return; }
@@ -826,7 +876,13 @@ void ASRBuilding::StopFireSound(float Fade)
 void ASRBuilding::StepRepair(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
-	if (BuildersWorking <= 0 || Health >= GetMaxHealth()) { return; }
+	const bool bWas = bRepairing;
+	bRepairing = BuildersWorking > 0 && Health < GetMaxHealth() - 0.5f;
+	if (bRepairing != bWas)
+	{
+		UE_LOG(LogSovereign, Log, TEXT("REPAIR %s %s"), *GetDisplayName(), bRepairing ? TEXT("started: out of action") : TEXT("ended: back in action"));
+	}
+	if (!bRepairing) { return; }
 	Health = FMath::Min(GetMaxHealth(), Health + BuildersWorking * F.BuilderRepairPerSecond * Dt);
 	if (State == ESRBuildingState::Damaged && GetHealthFrac() >= F.DamagedStateFraction) { SetState(ESRBuildingState::Complete); }
 	// (the builders' own mallet blows are the sound of the repair)
@@ -900,7 +956,8 @@ void ASRBuilding::StepDefence(float Dt)
 	{
 		if (!U || !U->IsActive() || U->GetTeam() == Team) { continue; }
 		const float D = FVector2D::DistSquared(U->GetPos2D(), C);
-		if (D < BestD) { BestD = D; Best = U; }
+		// the archers on the walls notice a Scout only at a fraction of their reach
+		if (D < BestD && U->IsNoticedAt(D, GetAttackRange())) { BestD = D; Best = U; }
 	}
 	if (!Best) { DefenceCooldown = 0.25f; return; }
 

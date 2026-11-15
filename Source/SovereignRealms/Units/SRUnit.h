@@ -50,7 +50,17 @@ public:
 	/** At the walls of this building, working on it (a builder with the Build order). */
 	bool IsWorkingOn(const ASRBuilding* Building) const { return bWorking && Order == ESROrder::Build && BuildTarget.Get() == Building && IsActive(); }
 	bool IsBuilder() const { return Stats().bBuilder; }
+	/** How hard it is to notice (FSRUnitStats::NoticeScale): 1 = like anyone, under 1 = only from closer. */
+	float GetNoticeScale() const { return Stats().NoticeScale; }
+	/** Would a foe that notices ordinary troops out to Range notice this one at DistSq (squared, centre to centre)? */
+	bool IsNoticedAt(float DistSq, float Range) const { return DistSq <= FMath::Square(Range * Stats().NoticeScale); }
 	ASRBuilding* GetBuildTarget() const { return Order == ESROrder::Build ? BuildTarget.Get() : nullptr; }
+	/** Guard a Builder of our own (Ward) or a building of our own (WardBuilding): keep to Offset from it, fight what
+	 * comes near it (within GuardLeash), never chase far. Builders do not guard, and only Builders can be guarded. */
+	void OrderGuard(ASRUnit* Ward, ASRBuilding* WardBuilding, const FVector2D& Offset);
+	static bool CanBeGuarded(const ASRUnit* U) { return U && U->IsBuilder(); }
+	ASRUnit* GetGuardedUnit() const { return Order == ESROrder::Guard ? GuardUnit.Get() : nullptr; }
+	ASRBuilding* GetGuardedBuilding() const { return Order == ESROrder::Guard ? GuardBuilding.Get() : nullptr; }
 	/** Move (or attack-move) through waypoints to the last point: how recruits and group moves get round buildings. */
 	void OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove);
 	int32 GetWaypointsLeft() const { return Waypoints.Num(); }
@@ -154,7 +164,17 @@ private:
 	FVector2D ChaseDir(const FVector2D& Goal, float Dt);
 	void CancelAttack();
 	void ResetProgress();
-	void Die(ASRUnit* Killer, const FVector2D& HitDir);
+	void Die(ASRUnit* Killer, const FVector2D& HitDir, bool bQuiet = false);
+	/** Where the guarded thing is now (false: it is gone). */
+	bool GuardWardPos(FVector2D& Out) const;
+	TWeakObjectPtr<ASRUnit> GuardUnit;
+	TWeakObjectPtr<ASRBuilding> GuardBuilding;
+	FVector2D GuardOffset = FVector2D::ZeroVector;
+	FVector2D GuardLastWard = FVector2D::ZeroVector;
+public:
+	/** Sent away by its own side (a stuck troop): it falls out quietly, no cry, no shake. */
+	void Dismiss();
+private:
 	FVector2D ComputeAvoidance(const FVector2D& Desired) const;
 	bool CanStep(const FVector2D& Step) const;
 	void TryMove(const FVector2D& Step, float Dt);

@@ -82,7 +82,32 @@ bool USRFogSubsystem::IsExplored(const FVector2D& P) const
 bool USRFogSubsystem::IsUnitVisible(const ASRUnit* Unit) const
 {
 	if (!Unit || Unit->GetTeam() == ESRTeam::Player || !IsEnabled()) { return true; }
-	return IsVisible(Unit->GetPos2D());
+	if (!IsVisible(Unit->GetPos2D())) { return false; }
+	// Reduced visibility (an enemy Scout): the ground it stands on is in sight, but it only shows once one of the
+	// player's troops or buildings is within the same fraction of its own sight that the enemy's would need.
+	const float Scale = Unit->GetNoticeScale();
+	if (Scale >= 1.f) { return true; }
+	const FVector2D P = Unit->GetPos2D();
+	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
+	{
+		for (const ASRUnit* U : Battle->GetUnits())
+		{
+			if (U && U->IsActive() && U->GetTeam() == ESRTeam::Player && FVector2D::DistSquared(U->GetPos2D(), P) <= FMath::Square(U->Stats().Sight() * Scale)) { return true; }
+		}
+	}
+	if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
+	{
+		for (const ASRBuilding* B : Eco->GetBuildings())
+		{
+			if (B && B->IsAlive() && B->Team == ESRTeam::Player && FVector2D::DistSquared(B->GetFootprintCentre(), P) <= FMath::Square(BuildingSight(B) * Scale)) { return true; }
+		}
+	}
+	return false;
+}
+
+float USRFogSubsystem::BuildingSight(const ASRBuilding* B)
+{
+	return FMath::Max3(1400.f, B->GetAttackRange() + 300.f, B->Stats().TerritoryRadius * 0.5f);
 }
 
 bool USRFogSubsystem::IsBuildingKnown(const ASRBuilding* Building) const
@@ -133,8 +158,7 @@ void USRFogSubsystem::Recompute()
 		for (const ASRBuilding* B : Eco->GetBuildings())
 		{
 			if (!B || !B->IsAlive() || B->Team != ESRTeam::Player) { continue; }
-			const FSRBuildingStats& S = B->Stats();
-			Stamp(B->GetFootprintCentre(), FMath::Max3(1400.f, B->GetAttackRange() + 300.f, S.TerritoryRadius * 0.5f));
+			Stamp(B->GetFootprintCentre(), BuildingSight(B));
 		}
 		// An enemy building is known once any part of it has been in sight.
 		for (ASRBuilding* B : Eco->GetBuildings())

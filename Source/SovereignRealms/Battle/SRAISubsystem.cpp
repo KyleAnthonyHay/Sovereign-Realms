@@ -334,14 +334,16 @@ void USRAISubsystem::Think(FSRCommander& C)
 	{
 		if (!U || !U->IsActive() || U->GetTeam() != C.Team) { continue; }
 		Mine.Add(U);
-		// builders are not soldiers: they never join the defence or an attack (they find their own work)
-		if (!U->IsBuilder() && !C.Main.Units.Contains(U) && !C.Raid.Units.Contains(U)) { Home.Add(U); }
+		// builders are not soldiers: they never join the defence or an attack (they find their own work); nor does
+		// the Scout, which is sent out on its own (ManageScout)
+		if (!U->IsBuilder() && U->GetUnitType() != ESRUnitType::Scout && !C.Main.Units.Contains(U) && !C.Raid.Units.Contains(U)) { Home.Add(U); }
 	}
 
 	Observe(C);
 	Adapt(C);
 	ManageEconomy(C, Mine);
 	ManageDefence(C, Home);
+	ManageScout(C, Mine);
 	if (!C.bDefending)
 	{
 		ManageRaid(C, Home);
@@ -369,7 +371,8 @@ void USRAISubsystem::Observe(FSRCommander& C)
 	{
 		if (!U || !U->IsActive() || U->GetTeam() == C.Team) { continue; }
 		bool bVisible = false;
-		for (const FVector2D& E : Eyes) { if (FVector2D::DistSquared(E, U->GetPos2D()) < R2) { bVisible = true; break; } }
+		const float See2 = R2 * FMath::Square(U->GetNoticeScale());   // a Scout is only seen from close by
+		for (const FVector2D& E : Eyes) { if (FVector2D::DistSquared(E, U->GetPos2D()) < See2) { bVisible = true; break; } }
 		if (!bVisible) { continue; }
 		FSRSighting* S = C.Seen.FindByPredicate([U](const FSRSighting& X) { return X.Unit.Get() == U; });
 		if (!S) { S = &C.Seen.AddDefaulted_GetRef(); S->Unit = U; }
@@ -449,6 +452,8 @@ bool USRAISubsystem::TryBuild(FSRCommander& C, ESRBuildingType Type)
 	case ESRBuildingType::Stable:
 	case ESRBuildingType::Workshop: Near = Base + Fwd * 300.f + Side * (FMath::RandBool() ? 1.f : -1.f) * FMath::FRandRange(1300.f, 1900.f); Radius = 2400.f; break;
 	case ESRBuildingType::Mine: Near = Base; Radius = 16000.f; break; // the nearest free vein, wherever it is
+	case ESRBuildingType::Granary:
+	case ESRBuildingType::Treasury: Near = Base - Fwd * 500.f + Side * FMath::FRandRange(-1500.f, 1500.f); Radius = 2600.f; break; // tucked in behind the castle
 	default: break;
 	}
 	FSRPlacement P;
@@ -509,6 +514,8 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		auto Want = [&](ESRBuildingType T, bool bOrder = false)
 		{
 			const float* Until = C.BuildBlockedUntil.Find(T);
+			if (T == ESRBuildingType::Tower && Towers >= Eco->GetMaxTowers(C.Team)) { return; }   // the castle's level allows no more
+			if ((T == ESRBuildingType::Granary || T == ESRBuildingType::Treasury) && Eco->CountStanding(T, C.Team) >= Eco->GetMaxStores(C.Team)) { return; }
 			if (!Until || *Until <= Clock) { Wants.Add({ T, bOrder }); }
 		};
 		const float Food = Eco->GetResource(C.Team, ESRResource::Food);
@@ -530,6 +537,9 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 			if (Prof.AdaptWeight > 0.f && Eco->CountBuildings(ESRBuildingType::Stable, C.Team) == 0 && Farms >= 3) { Want(ESRBuildingType::Stable); }
 			if (Prof.AdaptWeight > 0.f && Eco->CountBuildings(ESRBuildingType::Workshop, C.Team) == 0
 				&& (Eco->CountBuildings(ESRBuildingType::Tower, Foe(C.Team)) >= 2 || C.WavesSent >= 2)) { Want(ESRBuildingType::Workshop); }
+			// stores full (income is being lost): somewhere to put it. Food first: it is what the army is paid in.
+			if (Food >= Eco->GetStorage(C.Team, ESRResource::Food) * 0.9f) { Want(ESRBuildingType::Granary); }
+			if (Gold >= Eco->GetStorage(C.Team, ESRResource::Gold) * 0.9f) { Want(ESRBuildingType::Treasury); }
 			if (Farms < FMath::Min(8, Prof.MaxFarms)) { Want(ESRBuildingType::Farm); }
 			if (Gold > 600.f) { Want(ESRBuildingType::Mine); if (Towers < Prof.MaxTowers) { Want(ESRBuildingType::Tower); } }  // gold to spare
 		}
@@ -560,13 +570,18 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		const bool bStoresFull = Eco->GetResource(C.Team, ESRResource::Gold) >= Eco->GetStorage(C.Team, ESRResource::Gold) * 0.85f;
 		if ((bCrowded || bStoresFull) && Eco->GetResource(C.Team, ESRResource::Gold) >= Cost.Gold + 60 && Eco->GetResource(C.Team, ESRResource::Food) >= Cost.Food) { Castle->StartUpgrade(); }
 	}
-	// gold piling up (Normal and Hard): a mine first (more gold), then a tower (where the foe has struck before)
-	if (Profile().AdaptWeight > 0.f && Eco->GetResource(C.Team, ESRResource::Gold) >= Eco->GetStorage(C.Team, ESRResource::Gold) * 0.7f)
+	// gold piling up (Normal and Hard): a mine first (more gold), then a tower (where the foe has struck before).
+	// A granary or a treasury is only enlarged while its own stores are full (whatever the gold).
+	const bool bGoldFull = Eco->GetResource(C.Team, ESRResource::Gold) >= Eco->GetStorage(C.Team, ESRResource::Gold) * 0.85f;
+	const bool bFoodFull = Eco->GetResource(C.Team, ESRResource::Food) >= Eco->GetStorage(C.Team, ESRResource::Food) * 0.85f;
+	const bool bGoldSpare = Profile().AdaptWeight > 0.f && Eco->GetResource(C.Team, ESRResource::Gold) >= Eco->GetStorage(C.Team, ESRResource::Gold) * 0.7f;
+	if (bFoodFull || bGoldFull || bGoldSpare)
 	{
 		ASRBuilding* Best = nullptr;
 		for (ASRBuilding* B : Eco->GetBuildings())
 		{
 			if (!B || B->Team != C.Team || !B->CanUpgrade() || B->IsCastle() || !Eco->CanAfford(C.Team, B->GetUpgradeCost())) { continue; }
+			if (B->BuildingType == ESRBuildingType::Granary ? !bFoodFull : (B->BuildingType == ESRBuildingType::Treasury ? !bGoldFull : !bGoldSpare)) { continue; }
 			if (!Best || (B->BuildingType == ESRBuildingType::Mine && Best->BuildingType != ESRBuildingType::Mine) || (B->BuildingType == Best->BuildingType && B->GetLevel() < Best->GetLevel())) { Best = B; }
 		}
 		if (Best) { Best->StartUpgrade(); }
@@ -583,6 +598,7 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 	for (const ASRUnit* U : Mine)
 	{
 		if (U->IsBuilder()) { ++Builders; continue; }
+		if (U->GetUnitType() == ESRUnitType::Scout) { continue; }   // not part of the army's mix
 		++Count[FMath::Clamp(int32(U->GetUnitType()), 0, 3)]; ++Total;
 	}
 	TArray<ASRBuilding*> Trainers;
@@ -592,6 +608,7 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 		for (ESRUnitType T : B->GetQueue())
 		{
 			if (T == ESRUnitType::Builder) { ++Builders; continue; }
+			if (T == ESRUnitType::Scout) { continue; }
 			++Count[FMath::Clamp(int32(T), 0, 3)]; ++Total;
 		}
 		if (B->CanRecruit()) { Trainers.Add(B); }
@@ -609,6 +626,10 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 	TArray<ESRUnitType, TInlineAllocator<6>> Order;
 	// a builder first if it is short of them (the first one once it has a barracks going, so troops come first)
 	if (Builders < FMath::Min(Prof.Builders, Eco->GetMaxBuilders(C.Team)) && (Builders > 0 || Total >= 4 || Eco->CountBuildings(ESRBuildingType::Barracks, C.Team) > 0)) { Order.Add(ESRUnitType::Builder); }
+	// its one Scout (Normal and Hard), once the army has a core: when the castle's level, the one-at-a-time rule and the
+	// wait between two all allow it (the same rules as the player's: USREconomySubsystem::GetScoutRefusal)
+	if (Prof.AdaptWeight > 0.f && Total >= 6 && Eco->GetScoutRefusal(C.Team).IsEmpty()
+		&& Eco->GetPopulation(C.Team) + Eco->GetQueuedPopulation(C.Team) + F.StatsFor(ESRUnitType::Scout).PopCost <= Eco->GetPopulationCap(C.Team)) { Order.Add(ESRUnitType::Scout); }
 	if (Count[3] < WantCatapults) { Order.Add(ESRUnitType::Catapult); }
 	if (Count[2] < WantRiders) { Order.Add(ESRUnitType::Horseman); }
 	const int32 Core = Count[0] + Count[1];
@@ -624,6 +645,45 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 		if (bRoom && Eco->CanAfford(C.Team, F.CostFor(Type))) { Best->QueueRecruit(Type); }
 		break; // one decision per think: the wanted type waits for its cost rather than another draining it
 	}
+}
+
+// ------------------------------------------------------------------ scouting
+
+void USRAISubsystem::ManageScout(FSRCommander& C, const TArray<ASRUnit*>& Mine)
+{
+	ASRUnit* Scout = nullptr;
+	for (ASRUnit* U : Mine) { if (U->GetUnitType() == ESRUnitType::Scout) { Scout = U; break; } }
+	if (!Scout || Clock < C.NextScoutOrder) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	const USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	C.NextScoutOrder = Clock + FMath::FRandRange(16.f, 28.f);
+
+	// Hurt (one more blow would finish it): home, and stay there as a look-out.
+	FVector2D Goal = MusterPoint(C);
+	if (Scout->GetHealthFrac() >= 0.6f)
+	{
+		// A look-out point: beside one of the foe's buildings (its castle most often), far enough out that neither
+		// its troops nor its towers would notice the Scout, close enough to see the place.
+		TArray<const ASRBuilding*> Places;
+		for (const ASRBuilding* B : Eco->GetBuildings()) { if (B && B->Team != C.Team && B->IsAlive()) { Places.Add(B); } }
+		const ASRBuilding* FoeCastle = Eco->GetCastle(Foe(C.Team));
+		const ASRBuilding* At = (FoeCastle && (Places.Num() == 0 || FMath::FRand() < 0.4f)) ? FoeCastle : (Places.Num() > 0 ? Places[FMath::RandRange(0, Places.Num() - 1)] : nullptr);
+		if (At)
+		{
+			const float Sight = Scout->Stats().Sight();
+			const float Out = FMath::Clamp(FMath::Max(At->GetAttackRange(), 1600.f) * Scout->GetNoticeScale() + 500.f, 900.f, Sight * 0.8f);
+			const float Angle = FMath::FRandRange(0.f, 2.f * PI);
+			Goal = At->GetFootprintCentre() + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Out;
+			Goal.X = FMath::Clamp(Goal.X, -F.MapHalfExtent.X + 300.f, F.MapHalfExtent.X - 300.f);
+			Goal.Y = FMath::Clamp(Goal.Y, -F.MapHalfExtent.Y + 300.f, F.MapHalfExtent.Y - 300.f);
+		}
+	}
+	if (Grid) { Goal = Grid->NearestWalkable(Goal); }
+	if (FVector2D::DistSquared(Scout->GetPos2D(), Goal) < FMath::Square(300.f)) { return; }
+	Battle->CommandMove({ Scout }, Goal, false, ESRFormationShape::Line, false);
+	UE_LOG(LogSovereign, Verbose, TEXT("AI %s: scout to (%.0f, %.0f)"), Side(C), Goal.X, Goal.Y);
 }
 
 // ------------------------------------------------------------------ defence
@@ -643,7 +703,8 @@ void USRAISubsystem::ManageDefence(FSRCommander& C, TArray<ASRUnit*>& Home)
 		if (!U || !U->IsActive() || U->GetTeam() == C.Team) { continue; }
 		for (const ASRBuilding* B : Eco->GetBuildings())
 		{
-			if (B && B->Team == C.Team && B->IsAlive() && FVector2D::DistSquared(B->GetFootprintCentre(), U->GetPos2D()) < FMath::Square(F.AIDefendRadius))
+			// (a Scout only counts once it is close enough to be noticed)
+			if (B && B->Team == C.Team && B->IsAlive() && FVector2D::DistSquared(B->GetFootprintCentre(), U->GetPos2D()) < FMath::Square(F.AIDefendRadius * U->GetNoticeScale()))
 			{
 				ThreatSum += U->GetPos2D();
 				ThreatPower += UnitPower(U);

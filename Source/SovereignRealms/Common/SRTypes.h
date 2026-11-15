@@ -27,7 +27,9 @@ enum class ESRBuildingType : uint8
 	Barracks,
 	Range,
 	Stable,       // trains Horse Riders
-	Workshop      // builds Catapults
+	Workshop,     // builds Catapults
+	Granary,      // holds food on top of the castle's stores
+	Treasury      // holds gold on top of the castle's stores
 };
 
 /** The build menu's tabs. */
@@ -65,7 +67,8 @@ enum class ESRFormationShape : uint8
 	Line,     // wide ranks, melee in front: the default battle line
 	Column,   // narrow and deep: for roads, gaps and long marches
 	Wedge,    // a point leading: for breaking a line
-	Square    // a compact block, ranged in the middle: for holding ground
+	Square,   // a compact block, ranged in the middle: for holding ground
+	Loose     // formation off: the group keeps its own rough shape (squeezed in if it is spread wide)
 };
 
 enum class ESRResource : uint8
@@ -158,6 +161,33 @@ struct FSRMineLevel
 	UPROPERTY(EditAnywhere, Config, Category = "Mine", meta = (ClampMin = "1")) float Health = 1250.f;
 };
 
+/** One level of a training building (barracks, archery range, stable, siege workshop): drill yards and better
+ * instructors. Level 1 is how it is built. */
+USTRUCT()
+struct FSRTrainerLevel
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Trainer") FSRCost UpgradeCost = FSRCost(0, 0);
+	UPROPERTY(EditAnywhere, Config, Category = "Trainer", meta = (ClampMin = "1")) float UpgradeTime = 30.f;
+	/** How much faster troops are trained (1 = the troop's own training time, 2 = in half the time). */
+	UPROPERTY(EditAnywhere, Config, Category = "Trainer", meta = (ClampMin = "0.1")) float TrainSpeed = 1.f;
+	/** Its health, as a multiple of the building's own (Building Stats > Max Health). */
+	UPROPERTY(EditAnywhere, Config, Category = "Trainer", meta = (ClampMin = "0.1")) float HealthScale = 1.f;
+};
+
+/** One level of a storehouse (the Granary holds food, the Treasury gold; Sovereign Feel > Buildings > Granary Levels /
+ * Treasury Levels; index 0 is level 1). What it holds is added to the castle's own stores (FSRCastleLevel::Storage). */
+USTRUCT()
+struct FSRStoreLevel
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Store") FSRCost UpgradeCost = FSRCost(0, 0);
+	UPROPERTY(EditAnywhere, Config, Category = "Store", meta = (ClampMin = "1")) float UpgradeTime = 30.f;
+	/** How much of its resource it holds at this level. */
+	UPROPERTY(EditAnywhere, Config, Category = "Store", meta = (ClampMin = "0")) int32 Capacity = 400;
+	UPROPERTY(EditAnywhere, Config, Category = "Store", meta = (ClampMin = "1")) float Health = 900.f;
+};
+
 UENUM()
 enum class ESRUnitType : uint8
 {
@@ -165,13 +195,17 @@ enum class ESRUnitType : uint8
 	Archer,
 	Horseman,     // fast cavalry: a charge doubles its first blow
 	Catapult,     // slow siege engine: long range, splash, wrecks buildings
-	Builder       // trained at the castle: raises buildings outside the castle's reach, repairs; does not fight
+	Builder,      // trained at the castle: raises buildings outside the castle's reach, repairs; does not fight
+	Scout         // trained at the castle (level 3, one at a time): very fast, sees far, hard to notice, weak in a fight
 };
+
+/** How many troop types there are (arrays indexed by ESRUnitType). */
+constexpr int32 SRNumUnitTypes = 6;
 
 /** Every troop type, in recruit-menu order. */
 inline const TArray<ESRUnitType>& SRAllUnitTypes()
 {
-	static const TArray<ESRUnitType> Types = { ESRUnitType::Shieldbearer, ESRUnitType::Archer, ESRUnitType::Horseman, ESRUnitType::Catapult, ESRUnitType::Builder };
+	static const TArray<ESRUnitType> Types = { ESRUnitType::Shieldbearer, ESRUnitType::Archer, ESRUnitType::Horseman, ESRUnitType::Catapult, ESRUnitType::Builder, ESRUnitType::Scout };
 	return Types;
 }
 
@@ -276,7 +310,8 @@ enum class ESROrder : uint8
 	AttackMove,   // go to destination, engage enemies met on the way
 	AttackTarget, // chase and attack one specific unit (or building)
 	Hold,         // stand here; strike only what is in reach (Hold Ground stance, or the H key)
-	Build         // builders: walk to a building site (or a damaged building) and work on it
+	Build,        // builders: walk to a building site (or a damaged building) and work on it
+	Guard         // keep close to a Builder or a building of our own; fight what comes near it, never chase far
 };
 
 enum class ESRAttackPhase : uint8
@@ -408,6 +443,15 @@ struct FSRUnitStats
 	/** May walk into deep water (none do yet). Everyone else meets it as a hard wall, even when shoved. */
 	UPROPERTY(EditAnywhere, Config, Category = "Movement")
 	bool bWaterWalker = false;
+
+	/** How well it hides: enemies (troops, towers, the enemy's fog of war and its commander) only notice it within this
+	 * fraction of the distance they would notice anyone else. 1 = seen like everyone; the Scout is well under 1. */
+	UPROPERTY(EditAnywhere, Config, Category = "Unit", meta = (ClampMin = "0.05", ClampMax = "1"))
+	float NoticeScale = 1.f;
+
+	/** Ground (cm) one run cycle of its sprite covers. 0 = Animation > Walk Cycle Distance (a sprinter's stride is longer). */
+	UPROPERTY(EditAnywhere, Config, Category = "Movement", meta = (ClampMin = "0"))
+	float WalkCycleDistance = 0.f;
 
 	float Sight() const { return SightRange > 0.f ? SightRange : AcquireRange; }
 };

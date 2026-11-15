@@ -62,7 +62,7 @@ Use `U(designUnits)` for every size and position. Body text is 14-17 units, head
   focus plane and clipped), pings at alert locations. +X is up, +Y is right, like the camera. LMB (drag) moves
   the camera, RMB orders the selection there (or moves the rally point with a Barracks / Archery Range selected).
 - **Build menu**: one tall Build button (B) beside the minimap opens a panel over the selection panel with three tabs,
-  Economy (Farm, Gold Mine) / Military (Barracks, Archery Range) / Defence (Watchtower), each a card with icon, name,
+  Economy (Farm, Gold Mine, Granary, Treasury) / Military (Barracks, Archery Range) / Defence (Watchtower), each a card with icon, name,
   gold cost and its number key (1-6 while the menu is open; Tab changes tab, Esc closes). Unaffordable cards dim with a
   red price (a click then flashes the gold counter). Tooltip: what it does, what it trains or yields, cost, build time,
   health, placement rule. New building types appear by their `Category` in Sovereign Feel. While placing, the refusal
@@ -144,7 +144,9 @@ are team-coloured and get an enemy-red twin), add the same name at the end of `E
     Tools/.venv/bin/python Tools/ui/gen_ui_art.py
     Tools/ue_py.py Tools/import_ui_assets.py
 
-The atlas holds 40 icons (8 x 5, twice); grow `ROWS` and the UV maths in `ASRHUD::Icon` together if it fills.
+The atlas holds 56 icons (8 x 7, twice; 49 used). `ASRHUD::Icon` reads the row count off the texture's height, so
+growing `ROWS` needs only a re-import. Until an atlas with the new rows is imported, the Granary, Treasury and Scout
+icons fall back to Food, Coin and the Builder's portrait.
 
 ## Test commands
 

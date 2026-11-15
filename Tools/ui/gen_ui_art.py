@@ -3,8 +3,9 @@
 
   T_UI_Icons.png   the icon atlas: COLS x ROWS cells of CELL px (a 16 px icon with a 1 px gutter). The order of ICONS
                    below IS the C++ enum ESRIcon (Source/SovereignRealms/Player/SRHUD.h): add new icons at the end
-                   of the list and to the enum. Every icon is drawn twice: rows 0..5 in the player's blue, rows
-                   6..11 with the team pixels (t T u) swapped to the enemy's red.
+                   of the list and to the enum. Every icon is drawn twice: rows 0..ROWS-1 in the player's blue, rows
+                   ROWS..2*ROWS-1 with the team pixels (t T u) swapped to the enemy's red. ASRHUD::Icon reads the row
+                   count off the texture's height, so growing ROWS needs no code change (only a re-import).
   T_UI_Title.png   the "SOVEREIGN REALMS" title lettering (an original chiselled-gold pixel face).
 Imported by Tools/import_ui_assets.py into /Game/SR/UI (nearest filter, no mips). A contact sheet goes to
 Saved/TexturePreview/ui.png.
@@ -15,7 +16,7 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "SourceArt", "UI")
-CELL, COLS, ROWS = 18, 8, 6
+CELL, COLS, ROWS = 18, 8, 7
 
 PAL = {
     "k": "1a1210", "y": "e8b030", "Y": "ffe07a", "o": "a86a14", "w": "f4ecd8", "g": "b9c0c8", "G": "7c8794",
@@ -531,6 +532,47 @@ tsssss..sb..
 nppnnppn....
 .pnnnnp.....
 .nn..nn....."""),
+    # a granary raised on staddle stones under a thatched roof (holds food)
+    ("Granary", """
+.....yy.....
+....yYYy....
+...yYyyYy...
+..yYyyyyYy..
+.yyyyyyyyyy.
+.oooooooooo.
+..pbpppbpp..
+..pbpnnbpp..
+..pbpnnbpp..
+..bbbbbbbb..
+..g..gg..g..
+.gg..gg..gg."""),
+    # an iron-banded strongbox with its coins (holds gold)
+    ("Treasury", """
+..dddddddd..
+.dnBBBBBBnd.
+dGGGGGGGGGGd
+dnBBBBBBBBnd
+dGGGGyyGGGGd
+dnBBByYBBBnd
+dnBBBByBBBnd
+dGGGGGGGGGGd
+.dddddddddd.
+.yY..yYy.yy.
+yyo.yyyo.yo."""),
+    # the Scout: a face deep in a team-coloured hood, the cloak drawn round the shoulders
+    ("PortraitScout", """
+....tttt....
+...ttuutt...
+..ttTTTTtt..
+..tTkkkkTt..
+..tTksskTt..
+..tTsksksT..
+..tTSssSTT..
+..tTTsnTTT..
+.tttTTTTttt.
+.tTtttttTTt.
+tTTttuttTTTt
+tTTtttttTTTt"""),
 ]
 
 

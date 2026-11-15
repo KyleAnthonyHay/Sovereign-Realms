@@ -76,6 +76,8 @@ public:
 	/** Living units (may include ones still popping in; check IsActive()). */
 	const TArray<TObjectPtr<ASRUnit>>& GetUnits() const { return Units; }
 
+	/** The nearest active enemy within Range. A hard-to-notice one (the Scout: FSRUnitStats::NoticeScale) only counts
+	 * within that fraction of Range. */
 	ASRUnit* FindNearestEnemy(const ASRUnit* For, float Range) const;
 	/**
 	 * Living units within Radius of Pos, from a bucket grid rebuilt each simulation step (so neighbour searches
@@ -184,9 +186,9 @@ public:
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> UnitCardMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> ArrowCardMesh;
 	/** Index = ESRUnitType. A type whose sheet is not imported yet borrows the Shieldbearer's. */
-	static constexpr int32 SRSpriteTypes = 5;   // one per ESRUnitType
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[5];
-	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[5];
+	static constexpr int32 SRSpriteTypes = 6;   // one per ESRUnitType (UHT wants the literal below, not this)
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[6];
+	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[6];
 	/** Catapult stones (an arrow card with the stone sheet). */
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StoneMaterial;
 	/** Workers (cosmetic miners and farmhands): 0 miner, 1 farmhand. */

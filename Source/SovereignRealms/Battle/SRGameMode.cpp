@@ -8,6 +8,8 @@
 #include "Common/SRFeelSettings.h"
 #include "Common/SRUserSettings.h"
 #include "Battle/SRGameFlowSubsystem.h"
+#include "FX/SRBirds.h"
+#include "Engine/World.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
@@ -24,6 +26,9 @@ void ASRGameMode::StartPlay()
 
 	// The player's saved options (volumes, interface scale, camera habits) override the project's defaults.
 	USRUserSettings::Get()->Apply();
+
+	// the birds flying round the map (over the title screen too)
+	if (USRFeelSettings::Get().bBirds) { GetWorld()->SpawnActor<ASRBirds>(); }
 
 	// Open on the title screen over the idle realm (or straight into a match: Sovereign Feel > Debug > Skip Main Menu,
 	// or the -SRSkipMenu command-line switch; scripted tests use the sr.StartMatch console command).

@@ -193,6 +193,12 @@ def mix(a, b, gain_b=0.8, delay=0.0):
     return m
 
 
+def pitch(x, factor):
+    """x played factor times faster (higher and shorter), by resampling."""
+    n = int(len(x) / factor)
+    return np.interp(np.linspace(0.0, len(x) - 1.0, n), np.arange(len(x)), x)
+
+
 def main_replace():
     """Every sound that used to be synthesised (Tools/audio/gen_sounds.py) now comes from CC0 recordings."""
     takes("SwordHit", [trim(cc0("sword_clash_%d.ogg" % k)) for k in range(1, 7)])
@@ -204,14 +210,20 @@ def main_replace():
     takes("ArrowHitGround", [trim(cc0("impactSoft_medium_00%d.ogg" % k)) for k in range(5)], peak=0.7)
     takes("Select", [trim(cc0(n)) for n in ("ui_click1.ogg", "ui_click2.ogg")], peak=0.7)   # a crisp click
     takes("AttackAlert", [trim(cc0("question_002.ogg"))], peak=0.75)   # under attack: a short notification, no horn
-    takes("Acknowledge", [trim(cc0("chain_0%d.ogg" % k)) for k in (1, 2, 3)], peak=0.7)
+    # a move order: a boot's dull thud with a soft wooden click on top (the click carries on small speakers)
+    takes("Acknowledge", [mix(trim(cc0("footstep_wood_00%d.ogg" % k)), trim(cc0("drop_00%d.ogg" % d)), 0.45, 0.004)
+                          for k, d in ((0, 2), (2, 3), (4, 4))], peak=0.6)
     takes("AttackOrder", [trim(cc0("blade_0%d.ogg" % k)) for k in (1, 2, 3)], peak=0.75)
     takes("UIClick", [trim(cc0("click_001.ogg"))], peak=0.7)   # (the pack's other clicks are only ~10 ms)
     takes("UIError", [trim(cc0("error_002.ogg")), trim(cc0("error_006.ogg"))], peak=0.7)
     takes("CoinPayout", [trim(cc0("item_coins_0%d.ogg" % k)) for k in (1, 2, 3, 4)], peak=0.75)
     takes("GrainPayout", [trim(cc0(n)) for n in ("dropLeather.ogg", "handleSmallLeather.ogg", "handleSmallLeather2.ogg")], peak=0.75)
     takes("BuildPlace", [trim(cc0("wood_slam_0%d.ogg" % k)) for k in (1, 2, 3, 4)])
-    takes("BuildComplete", [trim(cc0("jingles_PIZZI02.ogg"))], peak=0.75)
+    # a building finished: two last mallet knocks, then a small bell (the castle's bell, struck light and higher)
+    knock = [trim(cc0("impactPlank_medium_00%d.ogg" % k)) for k in (1, 3)]
+    ding = trim(pitch(cc0("impactBell_heavy_003.ogg"), 1.5))
+    done = mix(knock[0], knock[1], 0.85, 0.16)
+    takes("BuildComplete", [mix(done, ding, 0.55, 0.36)], peak=0.75)
     takes("RecruitReady", [trim(cc0("door_open_01.ogg"))], peak=0.75)
     takes("BuildingHit", [trim(cc0("bfh1_wood_hit_0%d.ogg" % k)) for k in (1, 2, 3)] + [trim(cc0("bfh1_rock_hit_01.ogg"))])
     # a building coming down: timbers splitting and stone tumbling, in waves over a second and a half

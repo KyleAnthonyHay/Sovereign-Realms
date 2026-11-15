@@ -1,4 +1,4 @@
-# Buildings: castle, farm, mine, tower, barracks, archery range
+# Buildings: castle, farm, mine, tower, barracks, archery range, stable, workshop, granary, treasury
 
 Scripted Blender models, exported as glTF and imported as `/Game/SR/Buildings/SM_Bld_*`. Nothing here is edited
 by hand: change the scripts and rebuild. Contract and parameters: `Docs/VISUAL_CONTRACT.md`, "Buildings".
@@ -6,7 +6,7 @@ by hand: change the scripts and rebuild. Contract and parameters: `Docs/VISUAL_C
 | File | What it is |
 | --- | --- |
 | `Tools/blender/bldkit.py` | The kit: walls with real openings, batters, parapets, merlons, timber, cloth, props, preview scene, glTF export. Authors in Unreal cm, front toward -X, UVs at 4 cm per texel. |
-| `Tools/blender/bld_castle.py`, `bld_farm.py`, `bld_mine.py`, `bld_tower.py`, `bld_barracks.py`, `bld_range.py`, `bld_stable.py`, `bld_workshop.py` | One module per building: `build(kit, state)`, `MESH`, `FOOTPRINT`, `STATES`. |
+| `Tools/blender/bld_castle.py`, `bld_farm.py`, `bld_mine.py`, `bld_tower.py`, `bld_barracks.py`, `bld_range.py`, `bld_stable.py`, `bld_workshop.py`, `bld_granary.py`, `bld_treasury.py` | One module per building: `build(kit, state)`, `MESH`, `FOOTPRINT`, `STATES`. |
 | `Tools/blender/bld_rallyflag.py` | A prop with one mesh: `build(kit)`. |
 | `Tools/blender/build_building.py` | Driver. Writes `SM_Bld_<Name>.gltf` + `.bin` and its `_Site`, `_Damaged`, `_Ruin` siblings, `<name>.json` (footprint, sockets, bounds; `states`: the siblings' mesh names, triangles, bounds, slots), `blender/<name>.blend`, and previews in `Saved/BuildingPreview/`. |
 | `Tools/textures/gen_building_textures.py` | Draws `SourceArt/Textures/T_Bld_*.png`. |
@@ -15,7 +15,7 @@ by hand: change the scripts and rebuild. Contract and parameters: `Docs/VISUAL_C
 
 ```sh
 Tools/.venv/bin/python Tools/textures/gen_building_textures.py
-for n in castle farm mine tower barracks range stable workshop rallyflag; do
+for n in castle farm mine tower barracks range stable workshop granary treasury rallyflag; do
   /Applications/Blender.app/Contents/MacOS/Blender -b -P Tools/blender/build_building.py -- $n   # all states; --state damaged for one, --no-render to skip previews
 done
 Tools/.venv/bin/python Tools/world/gen_battlefield.py      # only if a footprint, socket or the BUILDINGS table changed

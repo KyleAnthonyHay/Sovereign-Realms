@@ -37,6 +37,28 @@ void SRFormation::ComputeSlots(const TArray<ASRUnit*>& Units, const FVector2D& D
 	if (Shape == ESRFormationShape::Column) { Columns = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt(float(Num)) * 0.5f), 2, 3); }
 	else if (Shape == ESRFormationShape::Square) { Columns = FMath::Max(FMath::CeilToInt(FMath::Sqrt(float(Num))), 1); }
 
+	if (Shape == ESRFormationShape::Loose)
+	{
+		// no formation: each keeps its place relative to the group, shifted to the destination; a group spread wide is
+		// drawn in (uniformly) so it does not arrive scattered over half the map
+		const float MaxR = Spacing * (0.8f * FMath::Sqrt(float(Num)) + 1.f);
+		float R = 0.f;
+		for (const ASRUnit* Unit : Units) { R = FMath::Max(R, FVector2D::Distance(Unit->GetPos2D(), Centroid)); }
+		const float Squeeze = R > MaxR ? MaxR / R : 1.f;
+		for (int32 i = 0; i < Num; ++i)
+		{
+			FVector2D Slot = Destination + (Units[i]->GetPos2D() - Centroid) * Squeeze;
+			Slot.X = FMath::Clamp(Slot.X, -F.MapHalfExtent.X, F.MapHalfExtent.X);
+			Slot.Y = FMath::Clamp(Slot.Y, -F.MapHalfExtent.Y, F.MapHalfExtent.Y);
+			if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(Units[0]))
+			{
+				Slot = Battle->ClipToReachable(FVector(Destination.X, Destination.Y, Units[i]->GetSimPos().Z), Slot, Units[i]->GetRadius() + 15.f);
+			}
+			OutSlots[i] = Slot;
+		}
+		return;
+	}
+
 	// Melee first so they take the front ranks.
 	TArray<int32> Melee, Ranged;
 	for (int32 i = 0; i < Num; ++i)

@@ -44,6 +44,8 @@ GAMEPLAY = {
                    max_speed=160.0, body_height_cm=132.0, radius_cm=30.0),
     "builder": dict(display_name="Builder", windup=0.45, recovery=0.45, attack_interval=1.3,
                     max_speed=360.0, body_height_cm=132.0, radius_cm=34.0),
+    "scout": dict(display_name="Scout", windup=0.32, recovery=0.36, attack_interval=1.2,
+                  max_speed=820.0, body_height_cm=132.0, radius_cm=34.0),
     # cavalry and siege (256 px cells). Suggested values: nothing in SRFeelSettings existed for them when written.
     "horseman": dict(display_name="Horse Rider", windup=0.30, recovery=0.40, attack_interval=1.3,
                      max_speed=620.0, body_height_cm=202.0, radius_cm=70.0),

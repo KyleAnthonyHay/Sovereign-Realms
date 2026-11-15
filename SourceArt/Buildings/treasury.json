@@ -1,0 +1,157 @@
+{
+ "name": "treasury",
+ "mesh": "SM_Bld_Treasury",
+ "triangles": 1124,
+ "bounds": {
+  "min": [
+   -285.1,
+   -295.1,
+   -2.7
+  ],
+  "max": [
+   230.0,
+   239.7,
+   616.0
+  ]
+ },
+ "colliders": [
+  {
+   "centre": [
+    0.0,
+    0.0,
+    190.0
+   ],
+   "size": [
+    600.0,
+    600.0,
+    380
+   ],
+   "yaw": 0.0
+  }
+ ],
+ "sockets": {
+  "gate": [
+   -360.0,
+   0.0,
+   0.0
+  ],
+  "label": [
+   0.0,
+   0.0,
+   602.0
+  ],
+  "popup": [
+   -200.0,
+   0.0,
+   240.0
+  ]
+ },
+ "footprint": [
+  -300.0,
+  -300.0,
+  300.0,
+  300.0
+ ],
+ "ring_radius": 420.0,
+ "slots": [
+  "Bld_Ashlar",
+  "Bld_AshlarLarge",
+  "Bld_Banner",
+  "Bld_Beam",
+  "Bld_Bronze",
+  "Bld_Dark",
+  "Bld_Door",
+  "Bld_Flame",
+  "Bld_Frieze",
+  "Bld_Gold",
+  "Bld_Planks",
+  "Bld_Thatch",
+  "Bld_Trim"
+ ],
+ "states": {
+  "site": {
+   "mesh": "SM_Bld_Treasury_Site",
+   "triangles": 1434,
+   "bounds": {
+    "min": [
+     -300.0,
+     -301.5,
+     -4.0
+    ],
+    "max": [
+     300.0,
+     300.0,
+     485.8
+    ]
+   },
+   "slots": [
+    "Bld_AshlarLarge",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Dirt",
+    "Bld_Planks",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "damaged": {
+   "mesh": "SM_Bld_Treasury_Damaged",
+   "triangles": 1456,
+   "bounds": {
+    "min": [
+     -332.0,
+     -295.1,
+     -9.0
+    ],
+    "max": [
+     230.0,
+     298.1,
+     616.0
+    ]
+   },
+   "slots": [
+    "Bld_Ashlar",
+    "Bld_AshlarLarge",
+    "Bld_Banner",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Dark",
+    "Bld_Door",
+    "Bld_Flame",
+    "Bld_Frieze",
+    "Bld_Gold",
+    "Bld_Planks",
+    "Bld_Scorch",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "ruin": {
+   "mesh": "SM_Bld_Treasury_Ruin",
+   "triangles": 646,
+   "bounds": {
+    "min": [
+     -282.9,
+     -200.0,
+     -12.4
+    ],
+    "max": [
+     230.0,
+     200.0,
+     214.0
+    ]
+   },
+   "slots": [
+    "Bld_AshlarLarge",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Dark",
+    "Bld_Dirt",
+    "Bld_Gold",
+    "Bld_Planks",
+    "Bld_Scorch"
+   ]
+  }
+ }
+}

@@ -29,6 +29,8 @@ struct FSRPlatoon
 	FString Name;
 	TArray<TWeakObjectPtr<ASRUnit>> Members;
 	ESRFormationShape Formation = ESRFormationShape::Line;
+	/** Off: it moves as a loose group (Formation is kept for when it is switched back on). */
+	bool bFormation = true;
 	ESRStance Stance = ESRStance::Aggressive;
 	/** New recruits from the castle join this platoon and march to it. */
 	bool bReceivesRecruits = false;
@@ -44,6 +46,7 @@ struct FSRPlatoonInfo
 	FString Name;
 	ESRPlatoonKind Kind = ESRPlatoonKind::Empty;
 	ESRFormationShape Formation = ESRFormationShape::Line;
+	bool bFormation = true;
 	ESRStance Stance = ESRStance::Aggressive;
 	bool bReceivesRecruits = false;
 	int32 Shieldbearers = 0;
@@ -51,6 +54,7 @@ struct FSRPlatoonInfo
 	int32 Riders = 0;
 	int32 Catapults = 0;
 	int32 Builders = 0;
+	int32 Scouts = 0;
 	/** Mean health fraction of the living members. */
 	float Health = 1.f;
 	/** Members fighting right now. */
@@ -87,7 +91,13 @@ public:
 	void RenamePlatoon(int32 Index, const FString& Name);
 	void SetFormation(int32 Index, ESRFormationShape Shape);
 	void SetStance(int32 Index, ESRStance Stance);
+	/** Next shape (Line > Column > Wedge > Square); switches the formation on. */
 	void CycleFormation(int32 Index);
+	/** Formation on / off (off: a loose group). On re-forms it at once. */
+	void ToggleFormation(int32 Index);
+	void SetFormationOn(int32 Index, bool bOn);
+	/** The shape its moves use: its formation, or Loose when that is off. */
+	ESRFormationShape MoveShape(int32 Index) const;
 	/** Re-forms the platoon where it stands in its current formation. */
 	void Reform(int32 Index);
 	void CycleStance(int32 Index);
@@ -102,8 +112,9 @@ public:
 	/** The platoon every one of these units belongs to, or INDEX_NONE if they are not exactly one platoon's members. */
 	int32 PlatoonOf(const TArray<ASRUnit*>& Units) const;
 
-	/** A fresh recruit left the castle: joins the recruit platoon if there is one (and walks to it). */
-	void OnRecruit(ASRUnit* Unit);
+	/** A fresh recruit left its building: joins Preferred (the building's assigned platoon: made again if it was wiped
+	 * out) or else the recruit platoon if there is one, and walks to it. */
+	void OnRecruit(ASRUnit* Unit, int32 Preferred = INDEX_NONE);
 
 	static FText KindName(ESRPlatoonKind Kind);
 	/** Each platoon slot's own colour (rings under its troops, its tag over them, its row in the panel). */

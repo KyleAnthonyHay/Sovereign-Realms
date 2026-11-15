@@ -1,6 +1,7 @@
 // Copyright Sovereign Realms.
 
 #include "Battle/SRPlatoonSubsystem.h"
+#include "Buildings/SRBuilding.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Units/SRUnit.h"
@@ -101,6 +102,11 @@ void USRPlatoonSubsystem::Disband(int32 Index)
 	FSRPlatoon& P = Platoons[Index];
 	for (const TWeakObjectPtr<ASRUnit>& M : P.Members) { if (M.IsValid()) { M->SetPlatoon(INDEX_NONE); } }
 	P = FSRPlatoon();
+	// a platoon broken up on purpose: the buildings that fed it stop
+	if (USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
+	{
+		for (ASRBuilding* B : Eco->GetBuildings()) { if (B && B->GetAssignedPlatoon() == Index) { B->SetAssignedPlatoon(INDEX_NONE); } }
+	}
 }
 
 void USRPlatoonSubsystem::RenamePlatoon(int32 Index, const FString& Name)
@@ -131,7 +137,26 @@ void USRPlatoonSubsystem::CycleFormation(int32 Index)
 {
 	if (!Platoons.IsValidIndex(Index)) { return; }
 	SetFormation(Index, ESRFormationShape((uint8(Platoons[Index].Formation) + 1) % 4));
+	Platoons[Index].bFormation = true;
 	Reform(Index);
+}
+
+void USRPlatoonSubsystem::ToggleFormation(int32 Index)
+{
+	if (!Platoons.IsValidIndex(Index)) { return; }
+	Platoons[Index].bFormation = !Platoons[Index].bFormation;
+	if (Platoons[Index].bFormation) { Reform(Index); }
+}
+
+void USRPlatoonSubsystem::SetFormationOn(int32 Index, bool bOn)
+{
+	if (Platoons.IsValidIndex(Index)) { Platoons[Index].bFormation = bOn; }
+}
+
+ESRFormationShape USRPlatoonSubsystem::MoveShape(int32 Index) const
+{
+	if (!Platoons.IsValidIndex(Index)) { return ESRFormationShape::Line; }
+	return Platoons[Index].bFormation ? Platoons[Index].Formation : ESRFormationShape::Loose;
 }
 
 void USRPlatoonSubsystem::Reform(int32 Index)
@@ -192,6 +217,7 @@ FSRPlatoonInfo USRPlatoonSubsystem::GetInfo(int32 Index) const
 	I.bExists = true;
 	I.Name = P.Name;
 	I.Formation = P.Formation;
+	I.bFormation = P.bFormation;
 	I.Stance = P.Stance;
 	I.bReceivesRecruits = P.bReceivesRecruits;
 	float HealthSum = 0.f;
@@ -205,6 +231,7 @@ FSRPlatoonInfo USRPlatoonSubsystem::GetInfo(int32 Index) const
 		case ESRUnitType::Horseman: ++I.Riders; break;
 		case ESRUnitType::Catapult: ++I.Catapults; break;
 		case ESRUnitType::Builder: ++I.Builders; break;
+		case ESRUnitType::Scout: ++I.Scouts; break;
 		default: ++I.Shieldbearers; break;
 		}
 		HealthSum += M->GetHealthFrac();
@@ -232,13 +259,18 @@ int32 USRPlatoonSubsystem::PlatoonOf(const TArray<ASRUnit*>& Units) const
 	return P;
 }
 
-void USRPlatoonSubsystem::OnRecruit(ASRUnit* Unit)
+void USRPlatoonSubsystem::OnRecruit(ASRUnit* Unit, int32 Preferred)
 {
-	const int32 Index = GetRecruitTarget();
-	if (Index == INDEX_NONE || !Unit || Unit->GetTeam() != ESRTeam::Player || Unit->IsBuilder()) { return; }   // builders go to work, not to the ranks
+	if (Platoons.Num() == 0) { Reset(); }
+	const int32 Index = Platoons.IsValidIndex(Preferred) ? Preferred : GetRecruitTarget();
+	if (Index == INDEX_NONE || !Unit || Unit->GetTeam() != ESRTeam::Player || Unit->IsBuilder() || Unit->GetUnitType() == ESRUnitType::Scout) { return; }   // builders go to work, not to the ranks; the Scout goes alone
+	TArray<ASRUnit*> Before;
+	GetMembers(Index, Before);
 	Add(Index, { Unit });
+	UE_LOG(LogSovereign, Log, TEXT("PLATOON %s joins platoon %d%s"), *Unit->GetLabel(), Index + 1, Index == Preferred ? TEXT(" (its building's)") : TEXT(""));
 	const FSRPlatoonInfo Info = GetInfo(Index);
-	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this); Battle && Info.bExists)
+	// to its comrades (the first of a new platoon just goes to the rally point)
+	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this); Battle && Info.bExists && Before.Num() > 0)
 	{
 		Battle->CommandMove({ Unit }, Info.Centre, false, ESRFormationShape::Line, false);
 	}
@@ -294,6 +326,7 @@ FText USRPlatoonSubsystem::FormationName(ESRFormationShape Shape)
 	case ESRFormationShape::Column: return LOCTEXT("Column", "Column");
 	case ESRFormationShape::Wedge: return LOCTEXT("Wedge", "Wedge");
 	case ESRFormationShape::Square: return LOCTEXT("Square", "Square");
+	case ESRFormationShape::Loose: return LOCTEXT("Loose", "Loose");
 	default: return LOCTEXT("Line", "Line");
 	}
 }

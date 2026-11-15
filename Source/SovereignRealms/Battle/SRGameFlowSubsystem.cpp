@@ -189,6 +189,7 @@ bool USRGameFlowSubsystem::SaveMatch(const FString& Slot)
 	{
 		S->Gold[t] = Eco->GetResource(ESRTeam(t), ESRResource::Gold);
 		S->Food[t] = Eco->GetResource(ESRTeam(t), ESRResource::Food);
+		S->ScoutCooldown[t] = Eco->GetScoutCooldown(ESRTeam(t));
 	}
 	const FSRMatchStats& St = Battle->GetStats();
 	for (int32 t = 0; t < 2; ++t) { S->Stats.Append({ St.Recruited[t], St.TroopsLost[t], St.BuildingsBuilt[t], St.BuildingsLost[t] }); }
@@ -223,6 +224,7 @@ bool USRGameFlowSubsystem::SaveMatch(const FString& Slot)
 		O.Rally = B->GetRallyPoint();
 		O.Level = B->GetLevel();
 		O.UpgradeProgress = B->IsUpgrading() ? B->GetUpgradeFraction() : -1.f;
+		O.AssignedPlatoon = B->GetAssignedPlatoon();
 	}
 	if (const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
 	{
@@ -234,6 +236,7 @@ bool USRGameFlowSubsystem::SaveMatch(const FString& Slot)
 			O.Index = i;
 			O.Name = P->Name;
 			O.Formation = P->Formation;
+			O.bFormation = P->bFormation;
 			O.Stance = P->Stance;
 			O.bReceivesRecruits = P->bReceivesRecruits;
 		}
@@ -296,7 +299,7 @@ bool USRGameFlowSubsystem::LoadMatch(const FString& Slot)
 				if (Vein != INDEX_NONE) { Grid->ClaimVein(Vein, B); }
 			}
 		}
-		if (B) { B->SetLevelForLoad(O.Level, O.UpgradeProgress); B->ApplySaved(O.Health, O.BuildProgress, O.bDestroyed, O.Queue, O.Rally); }
+		if (B) { B->SetLevelForLoad(O.Level, O.UpgradeProgress); B->ApplySaved(O.Health, O.BuildProgress, O.bDestroyed, O.Queue, O.Rally); B->SetAssignedPlatoon(O.AssignedPlatoon); }
 	}
 
 	// troops
@@ -319,7 +322,8 @@ bool USRGameFlowSubsystem::LoadMatch(const FString& Slot)
 			if (!PlatoonMembers.IsValidIndex(P.Index) || PlatoonMembers[P.Index].Num() == 0) { continue; }
 			Platoons->Assign(P.Index, PlatoonMembers[P.Index]);
 			Platoons->RenamePlatoon(P.Index, P.Name);
-			Platoons->SetFormation(P.Index, P.Formation);
+			Platoons->SetFormation(P.Index, P.Formation == ESRFormationShape::Loose ? ESRFormationShape::Line : P.Formation);
+			Platoons->SetFormationOn(P.Index, P.bFormation);
 			Platoons->SetStance(P.Index, P.Stance);
 			if (P.bReceivesRecruits) { Platoons->SetRecruitTarget(P.Index); }
 		}
@@ -329,6 +333,7 @@ bool USRGameFlowSubsystem::LoadMatch(const FString& Slot)
 	{
 		Eco->SetStock(ESRTeam(t), ESRResource::Gold, S->Gold[t]);
 		Eco->SetStock(ESRTeam(t), ESRResource::Food, S->Food[t]);
+		Eco->SetScoutCooldown(ESRTeam(t), S->ScoutCooldown[t]);   // (0 in a save from before there were Scouts)
 	}
 	Battle->SetBattleClock(S->BattleClock);
 	if (S->Stats.Num() == 8)

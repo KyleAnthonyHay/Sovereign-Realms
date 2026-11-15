@@ -59,13 +59,19 @@ Sovereign Feel** (`Source/SovereignRealms/Common/SRFeelSettings.{h,cpp}`, overri
 | Siege Workshop | 200 gold | 24 s | 1600 | builds Catapults |
 | Watchtower | 160 gold | 18 s | 1800 | shoots 50 dmg / 1.2 s at 24 m; upgradable to level 3 |
 | Builder | 120 gold + 80 food | 14 s at the Citadel (Y) | 110 | builds outside the castle's zone and repairs (28 HP/s each); never starts a fight; at most 2 per kingdom |
-| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8 (more per level, see Raising the Citadel); trains Builders; if it falls, the kingdom falls |
+| Scout | 90 food + 60 gold | 12 s at the Citadel (J) | 90 | very fast (8.2 m/s; a Horse Rider does 6.4), sees 26 m, noticed by foes only within 45% of their usual distance; 8 dmg / 1.2 s, never picks a fight; 1 housing; Citadel level 3, one at a time, a new one every 5 minutes (see The Scout) |
+| Granary | 120 gold | 14 s | 900 | holds 400 food on top of the Citadel's stores; upgradable to level 3 (1600); limited by the Citadel's level |
+| Treasury | 140 gold | 16 s | 1100 | holds 400 gold on top of the Citadel's stores; upgradable to level 3 (1600); limited by the Citadel's level |
+| Citadel | — | — | 12000 | shoots 36 dmg / 1.4 s at 10 m; houses 8 (more per level, see Raising the Citadel); trains Builders and (level 3) the Scout; if it falls, the kingdom falls |
 
 Starting stock: 320 gold, 200 food, 3 Shieldbearers + 2 Archers each side.
 
 **Recruiting**: a barracks, range, stable, workshop or the Citadel has no queue limit (`MaxRecruitQueue` 0); each
-recruit is paid for and housed when queued. Click (or Q / E / R / T / Y) queues one, Shift queues 5 (`RecruitBatch`),
+recruit is paid for and housed when queued. Click (or Q / E / R / T / Y, J for the Scout) queues one, Shift queues 5 (`RecruitBatch`),
 Ctrl or Option queues 10 (`RecruitBatchLarge`); a batch takes as many as can be paid for and housed.
+A troop's housing is held from the moment it is paid for: the top bar's population counts troops in the field plus
+those in training (its tooltip splits them), so it never promises room that is already taken. The panel groups a long
+queue into runs ("Archer x9"); the badge over the building shows the whole queue's size.
 
 **Building states** (`ESRBuildingState`; meshes `SM_Bld_<Name>_Site / _Damaged / _Ruin` from the Blender scripts): a
 construction site (scaffold, footings, stone and timber stacks) with the walls rising course by course inside it;
@@ -91,7 +97,13 @@ them with what each is doing; click one to select it and fly there. Builders are
 dear (120 gold + 80 food, 14 s), capped by the castle's level (2 at level 1, up to 6; shown in the top bar, click it to select
 them), never join platoons from recruitment, and never pick fights. The enemy commander keeps 1 (Easy) or 2 Builders
 and uses them the same way. **Repair**: X (or the Repair button) sends the selected Builders to the nearest damaged
-building; hovering one of your damaged buildings with Builders selected shows "RMB: repair it".
+building; hovering one of your damaged buildings with Builders selected shows "RMB: repair it". **A building under
+repair is out of action** until the Builders finish: it trains nothing, pays nothing (a worker's load is lost) and a
+tower holds its fire (its panel says "Under repair: out of action"). So an idle Builder never starts mending on its own
+a building hit in the last 10 s; ordered repairs (X, RMB) start at once.
+
+**Dismiss** (K twice, or the Dismiss button twice: the first press asks): the selected troops are removed for good, no
+refund, quietly (no cry, no shake). Meant for a troop that is stuck.
 
 **Raising the Citadel** (U, or the Upgrade button on the castle; `CastleLevels`, 7 levels): the castle is how a kingdom
 grows. Each level raises the castle's own housing, the kingdom's troop ceiling (however many farms it builds), the
@@ -118,18 +130,105 @@ more reach, each upgrade dearer than the last); each mine level pays for itself 
 | 2 | 250 g | 30 s | 85 | 0.95 s | 27 m | 2300 |
 | 3 | 370 g | 40 s | 120 | 0.8 s | 30 m | 2800 |
 
+**Watchtowers are limited** by the castle's level: 2 at level 1 and one more per level (`TowerLimitBase`,
+`TowerLimitPerCastleLevel`; sites count). The build menu shows "used / allowed" on the tower; at the limit it is refused
+("Watchtower limit 2 reached: raise the Citadel for another"). The enemy commander keeps to the same limit.
+
+**Training buildings have levels** (`TrainerLevels`, the same for the barracks, archery range, stable and siege
+workshop; the Upgrade button left of the recruit button, or U): faster training, sturdier walls. It keeps training while
+it is upgraded. The enemy commander upgrades them (after its mines) when gold piles up, on Normal and Hard.
+
+| Trainer | Price | Time | Training speed | Health |
+|---|---|---|---|---|
+| 1 | - | - | 100% (a Shieldbearer in 9 s) | as built |
+| 2 | 200 g + 100 f | 30 s | 135% (6.7 s) | x1.2 |
+| 3 | 380 g + 180 f | 40 s | 180% (5 s) | x1.4 |
+
 | Gold mine | Price | Time | Gold per delivery | Health |
 |---|---|---|---|---|
 | 1 | - | - | 10 | 1250 |
 | 2 | 220 g | 30 s | 16 | 1600 |
 | 3 | 360 g + 100 f | 40 s | 23 | 2000 |
 
+**Storehouses: the Granary (food) and the Treasury (gold)** (`ESRBuildingType::Granary / Treasury`, `FSRStoreLevel`,
+`GranaryLevels` / `TreasuryLevels`; Economy tab of the build menu). The castle's level sets what a kingdom can hold;
+each finished storehouse adds its own capacity to that for its resource (`USREconomySubsystem::GetStorage` = castle +
+`GetStoreCapacity`), so the top bar's "have / hold" rises and income keeps arriving past the castle's limit. One at
+level 3 holds a little more than a level-3 castle does on its own. Upgrade with the button on its panel or U; its panel
+shows what it holds and how full the kingdom's stores of that resource are.
+
+| Granary / Treasury | Price (granary / treasury) | Time | Holds | Health (granary / treasury) |
+|---|---|---|---|---|
+| 1 | 120 g / 140 g to build | 14 s / 16 s | 400 | 900 / 1100 |
+| 2 | 180 g / 200 g | 30 s | 900 | 1200 / 1450 |
+| 3 | 320 g + 80 f / 340 g + 80 f | 40 s | 1600 | 1500 / 1800 |
+
+- **Limit**: one Granary and one Treasury with the castle at level 1, and one more of each for every two castle
+  levels (2 at level 3, 3 at level 5, 4 at level 7; `StoreLimitBase`, `StoreLimitCastleLevels`; sites count, ruins do
+  not). The build card shows "used / allowed". At castle level 7 with four level-3 storehouses a kingdom holds
+  5500 + 6400 = 11900 of that resource.
+- **A storehouse under construction or being upgraded** counts at the level it has finished (nothing until it is
+  built; the old capacity until the upgrade is done). One under repair still holds its stock.
+- **If a storehouse is destroyed, what it held goes with it**: the kingdom's stock of that resource is cut down to
+  what its remaining stores hold, at once, and the rest is lost (the alert says how much:
+  "Granary destroyed: 240 food lost with it"; `USREconomySubsystem::NotifyBuildingDestroyed`). Stock that still fits
+  is untouched. So a full Granary or Treasury is worth raiding, and worth a tower.
+- **The enemy commander** builds a Granary when its food reaches 90% of its stores and a Treasury when its gold does
+  (after its more pressing wants: troops' buildings, housing, towers), and enlarges one while that resource is above
+  85% of its stores; it keeps to the same limit.
+- **Look and sound**: the Granary is a plank barn on staddle stones under a steep thatch, sacks and baskets round it
+  (`Tools/blender/bld_granary.py`); the Treasury a squat bronze-banded stone vault with a bronze dome, braziers at the
+  door and chests of coin (`bld_treasury.py`). Selecting a Granary plays the grain thump, a Treasury the coins; in
+  life the Granary has sparrows and the odd sack set down, the Treasury a clerk counting coin.
+
 Builders at the walls speed the raising up; the new walls come up whole. The enemy commander raises its castle when its
-housing runs short or its gold stores are nearly full, and it can pay. Saved games keep the level. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine), Military (barracks, archery range),
+housing runs short or its gold stores are nearly full, and it can pay. Saved games keep the level. The build menu (B, or the Build button) groups them in tabs: Economy (farm, mine, granary, treasury), Military (barracks, archery range),
 Defence (watchtower); 1-6 picks, Tab changes tab. Placing pays the gold; the building rises course by
 course over its build time with hammering, and works when done. Delete / Backspace cancels a building under
 construction for 75% of its price. Destroyed buildings slump into rubble (runtime ones clear away; the level's own
 stand again on restart).
+
+## The Scout
+
+`ESRUnitType::Scout` (Sovereign Feel > Units > Scout, and > Scouts). A hooded runner with a light spear, trained at the
+**Citadel** (the second recruit button on its panel, or **J**) for 90 food + 60 gold in 12 s; it takes 1 housing.
+
+- **Three rules, all checked when it is queued** (`USREconomySubsystem::GetScoutRefusal`, `ASRBuilding::QueueRecruit`):
+  1. **Citadel level 3** (`ScoutCastleLevel`). Below it the button is greyed and reads "Citadel level 3".
+  2. **One at a time** (`MaxScouts` 1): alive plus in training. The button reads "In training" or "In the field".
+  3. **A 5-minute wait** (`ScoutCooldown` 300 s of game time) between two Scouts. The clock starts the moment a Scout
+     is queued and paid for, so losing or dismissing it does not shorten the wait. The button counts down
+     ("Ready in 3:12"; "In the field · 3:12" while the last one lives).
+  A refused press says why in the alert line ("A Scout needs the Citadel at level 3", "You already have a Scout (a
+  kingdom has only one at a time)", "The next Scout can be trained in 3:12"). No batches. The enemy commander is held
+  to the same three rules; the wait is saved with the game (`USRSaveGame::ScoutCooldown`).
+- **Fast and far-sighted**: 8.2 m/s (a Horse Rider 6.4, a Shieldbearer 3.9), sight 26 m (an Archer 15 m), so it lifts a
+  wide stretch of the fog as it runs. 90 health, 8 damage a blow, 0.2x against buildings: one volley finishes it.
+- **It does not pick fights** (no acquire range): it strikes what it is ordered to attack and hits back while it is
+  being hit, lets go 4 s after the last blow, and does not answer other troops' calls for help. It does not join the
+  recruit platoon (it can be put in a platoon by hand).
+- **Reduced visibility, not invisibility** (`FSRUnitStats::NoticeScale`, 0.45 for the Scout; 1 for everyone else).
+  Everything that would notice a troop at distance D notices the Scout only within 0.45 x D:
+  - enemy troops auto-acquire it at 45% of their acquire range (a Shieldbearer at 5.9 m instead of 13 m, an Archer at
+    6.8 m instead of 15 m), and lose it again at 45% of the distance they would hold another target to
+    (`USRBattleSubsystem::FindNearestEnemy`, `ASRUnit::UpdateTargeting`);
+  - watchtowers and the castle's walls shoot it only inside 45% of their reach (a level-1 tower at 10.8 m instead of
+    24 m; `ASRBuilding::StepDefence`);
+  - the **fog of war works the same way against the player**: an enemy Scout standing on ground the player can see
+    is still hidden (world, minimap, picking, health bar) until one of the player's troops is within 45% of its own
+    sight, or a building within 45% of what it sees (`USRFogSubsystem::IsUnitVisible`);
+  - the enemy commander's sight memory and its "foes at my buildings" alarm use the same fraction
+    (`USRAISubsystem::Observe`, `ManageDefence`).
+  A direct order (right-click it) is not affected: what the player can see, the player can attack. Auto-battle
+  (`sr.AutoBattle`), where both sides see the whole map, ignores it.
+- **The look**: a deep hood and a long cloak in the team's colour (`Tools/blender/char_worker.py`, variant `scout`;
+  the Builder's body, rig and sheet layout, with a sprinter's 192 cm run cycle: `FSRUnitStats::WalkCycleDistance`),
+  and its sprite is drawn thinned out, about a quarter of its texels dropped in a dither (`StealthSpriteFade` 0.72),
+  like something half seen. It is drawn whole while it strikes and for the moment it is hit. Until
+  `T_Scout_*` / `MI_UnitSprite_Scout` are imported it borrows the Builder's sheet (same layout).
+- **The enemy's Scout** (Normal and Hard, once it has six troops): trained when the three rules allow, kept out of
+  attacks and the defence, and sent every 16-28 s to a new look-out beside one of the player's buildings (the castle
+  most often), far enough out not to be noticed; below 60% health it goes home and stays (`USRAISubsystem::ManageScout`).
 
 ## Movement and orders
 
@@ -142,8 +241,11 @@ out formation slots at the goal (`SRFormation::ComputeSlots`: Line, Column, Wedg
 still steer locally (separation, sidestepping, sliding along walls). A unit chasing a target that is out of straight
 reach re-plans a grid path about once a second. Units attack buildings (walk to the nearest wall, strike it there).
 
-**Formation**: F (or the Form button) changes it and the group re-forms where it stands at once, facing the way it
-faces; a selection that is not a platoon has its own formation too. **Patrol**: P, then a click: the group attack-moves
+**Formation**: F (or clicking the Form button, or a platoon card's formation button) switches it on or off.
+Off, the group moves loose: each keeps its place relative to the others, shifted to the destination, and a group spread
+wide is drawn in so it does not arrive scattered (`ESRFormationShape::Loose`). Right-clicking the button picks the next
+shape (Line > Column > Wedge > Square), which also switches it on; switched on, the group re-forms where it stands at
+once, facing the way it faces. A selection that is not a platoon has its own setting too; platoons save theirs. **Patrol**: P, then a click: the group attack-moves
 back and forth between where it stood and the point until it is given another order (the route is drawn on the ground
 while selected; `USRBattleSubsystem::CommandPatrol`).
 
@@ -152,6 +254,13 @@ within its sight: 13 m for Shieldbearers, 15 m for Archers (bow range 8.8 m). Se
 dashed blue outline for sight, a solid orange one for archers' bow range (one merged outline per group; Sovereign Feel
 > Combat > Show Range Circles). A selected watchtower or castle shows its reach the same way (red for the enemy's),
 and so does a tower while you are placing it.
+
+**Guard** (V then a click, the Guard button, or right-click): the selected troops guard one of your Builders or one
+of your buildings. Troops cannot be guarded, only Builders; Builders in the selection do not guard (right-clicking your
+own building sends them to build or repair it while the troops guard it). Each guard takes a post in a ring round the
+ward (`GuardRingRadius` round a Builder, just outside the walls of a building) and keeps to it as the Builder walks;
+it fights foes within `GuardLeash` (14 m) of the ward, runs down one that struck the ward a little further (x1.8), and
+gives up a chase that takes it too far. A Builder that is hit calls its guards in. The order ends when the ward falls.
 
 **Stances** (per platoon or per selection, G cycles): Aggressive (chase anything in acquire range), Defensive (chase at
 most 9 m from the post, then return), Hold Ground (never move to fight; H gives a one-off hold order).
@@ -167,6 +276,11 @@ every member, a numbered tag over the platoon, its pips when zoomed far out, and
 formation (F cycles) used whenever it is moved, a stance pushed to its members, and an optional "recruits join here"
 flag (new troops from the barracks and ranges join it and march to it). Disband: the button on its card, or Delete
 with it selected (the troops stay). A platoon whose last troop falls is struck off by itself and its slot is free.
+
+**A training building can feed a platoon**: its panel's "Joins" row (none, 1-6), or Ctrl+N with the building selected
+(again: none). Every troop it trains then joins platoon N and marches to it; a platoon that was wiped out is formed
+again by the next recruit. This comes before the platoon's "recruits join here" flag. Disbanding the platoon clears the
+buildings that fed it. Saved with the game.
 
 **Rally points**: select a Barracks or Archery Range and right-click the ground (or the minimap): its recruits march
 there. The route is drawn while it is selected. Q / E train at the selected one, or at your least busy one.
@@ -229,10 +343,12 @@ health left; towers and the castle count as defenders where they reach. Difficul
   what their troops (line of sight) and buildings see. Enemy troops outside it are hidden (world, minimap, picking,
   health bars); an enemy building stays hidden until first seen, then is remembered. Unexplored land is dark,
   explored land dimmed and greyed. `sr.Fog 0|1` toggles it for tests. The enemy commander keeps its own sight memory.
+  An enemy Scout shows only from much closer (see The Scout).
 - **Saved games** (`USRGameFlowSubsystem::SaveMatch / LoadMatch`, `USRSaveGame`): pause menu Save / Load, an autosave
   every 2 minutes, Continue on the title screen. Saved: troops (type, place, health, stance, platoon), buildings
   (construction, damage, ruins, queues, rally points; the level's by name, the match's re-spawned), resources,
-  platoons, explored fog, the commander's progress, the clock, the camera. `sr.Save` / `sr.Load`.
+  platoons, explored fog, the commander's progress, the clock, the camera, each kingdom's wait before its next Scout.
+  Storehouses and their levels are saved like any building's. `sr.Save` / `sr.Load`.
 - **Behind buildings**: troops render custom depth with the team in the stencil; `M_Occlusion`
   (`Tools/build_occlusion_material.py`) shows a hidden troop as a team-coloured checker silhouette.
 - **Effects** (`ASRFXSprite`, strips in `SourceArt/FX`, instances `MI_FX_*`): a building below half health burns and
@@ -247,9 +363,9 @@ Every sound is a recording: the user's own (`SourceArt/Audio/Recorded`) and CC0 
 `SourceArt/Audio/S_<Name>[_N].wav` (48 kHz mono, peak-normalised, trimmed; several takes of a sound are picked at random)
 and `Tools/import_audio.py` brings them into `/Game/SR/Audio`. The old synthesiser (`Tools/audio/gen_sounds.py`) is
 retired. Combat: six sword clashes, six shield blocks, punchy flesh hits, wood and dirt arrow hits; orders: a belt and
-leather creak on select, a chain rattle on a move order, a blade on an attack order; Kenney interface click / error;
-coins and grain-sack payouts; timber set down for a new site, a gate opening for a recruit, a pizzicato rise when a
-building is done, wood and stone hits and a layered timber-and-rubble collapse for buildings; picks
+leather creak on select, a boot's thud with a soft wooden click on a move order, a blade on an attack order; Kenney interface click / error;
+coins and grain-sack payouts; timber set down for a new site, a gate opening for a recruit, two mallet knocks and a
+small bell when a building is done, wood and stone hits and a layered timber-and-rubble collapse for buildings; picks
 and soil for the workers; a fanfare for victory and a falling steel phrase for defeat; a 63 s morning-countryside
 ambience loop.
 Recorded sounds (`SourceArt/Audio/Recorded`, turned into game sounds by `Tools/audio/prep_recorded.py`): two bow
@@ -266,7 +382,7 @@ charge lands. A troop falls with one of four recorded grunts.
 **Building voices and life** (CC0 sounds from Kenney and OpenGameArt; sources in
 `SourceArt/Audio/Recorded/cc0/CREDITS.md`): selecting one of your buildings plays its voice: the Citadel a heavy bell,
 a farm a sheep, a mine a pick on rock, a watchtower creaking timber, the barracks a drawn blade, the archery range an
-arrow into a target, the stable a neigh, the siege workshop a saw. Standing buildings have life every 6-15 s, heard
+arrow into a target, the stable a neigh, the siege workshop a saw, the granary a thump of grain, the treasury coins. Standing buildings have life every 6-15 s, heard
 close by: the farm's sheep and birds, the barracks' armourer at the anvil, the range's targets, the stable's snorts,
 the workshop's sawing and chopping, the odd creak of a tower. Sites going up mix saw strokes into the hammering. A
 catapult's arm groans as it winds back and its stone lands with a heavy crash. Six or more troops fighting near the
@@ -322,8 +438,11 @@ What was done (following Epic's significance / instancing guidance and profiling
 ## Test commands
 
 `sr.StartMatch [0|1|2]`, `sr.AIvsAI [0|1]`, `sr.Speed <x>`, `sr.AIStatus`, `sr.Perf [s]`, `sr.Build <farm|mine|tower|
-barracks|range> X Y [enemy]`, `sr.Place <type|off>`, `sr.Damage <type> <health left 0..1> [enemy]`, `sr.Platoon <n> [assign|select|stance|formation]`, `sr.Give gold|food N`,
-`sr.Recruit shield|archer`, `sr.KillCastle enemy|player`, plus the camera / cursor / key commands listed in
+barracks|range|stable|workshop|granary|treasury> X Y [enemy]`, `sr.Place <type|off>`, `sr.Damage <type> <health left 0..1> [enemy]`, `sr.Platoon <n> [assign|select|stance|formation]`, `sr.Give gold|food N`,
+`sr.Recruit shield|archer|horse|catapult|builder|scout`, `sr.Upgrade [enemy|<building type>]` (a castle, or the
+player's first upgradable granary / treasury / mine / tower...), `sr.ScoutCooldown [seconds] [enemy]` (log or set the wait
+before the next Scout, and why one cannot be trained now), `sr.Spawn <troop> X Y [enemy]` (a free troop, for tests),
+`sr.SelectCastle granary|treasury|...`, `sr.KillCastle enemy|player`, plus the camera / cursor / key commands listed in
 `Battle/SRDebugCommands.cpp`. Drive them from the shell with `Tools/pie.py run "<cmd>"`.
 
 ## Known issues

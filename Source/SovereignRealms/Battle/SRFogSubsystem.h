@@ -16,7 +16,8 @@ class ASRBuilding;
  *
  * A grid of cells over the map (Sovereign Feel > Fog). Every FogUpdateInterval the player's troops (their line of
  * sight) and buildings light up the cells round them: those are visible now and stay explored. The enemy's troops are
- * drawn, picked, shown on the minimap and given health bars only while they stand in a visible cell; an enemy building
+ * drawn, picked, shown on the minimap and given health bars only while they stand in a visible cell (a Scout, which is
+ * hard to notice, only from much closer: IsUnitVisible); an enemy building
  * is unknown (hidden in the world and on the minimap) until it has been seen once, then remembered.
  *
  * The look: the grid is written to a small transient texture that the post-process material M_FogOfWar
@@ -45,7 +46,8 @@ public:
 
 	bool IsVisible(const FVector2D& WorldXY) const;
 	bool IsExplored(const FVector2D& WorldXY) const;
-	/** Should the player see this unit right now (own troops always)? */
+	/** Should the player see this unit right now (own troops always)? An enemy Scout (FSRUnitStats::NoticeScale under 1)
+	 * shows only when one of the player's troops or buildings is within that fraction of its sight. */
 	bool IsUnitVisible(const ASRUnit* Unit) const;
 	/** Has the player ever seen this building (own buildings always)? */
 	bool IsBuildingKnown(const ASRBuilding* Building) const;
@@ -56,6 +58,8 @@ public:
 
 private:
 	int32 CellOf(const FVector2D& WorldXY) const;
+	/** How far a building of the player's sees (cm). */
+	static float BuildingSight(const ASRBuilding* Building);
 	void Stamp(const FVector2D& Centre, float Radius);
 	void Recompute();
 	void PushTexture(float DeltaTime);

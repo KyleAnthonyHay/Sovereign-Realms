@@ -1,0 +1,141 @@
+{
+ "name": "granary",
+ "mesh": "SM_Bld_Granary",
+ "triangles": 2192,
+ "bounds": {
+  "min": [
+   -307.7,
+   -328.9,
+   -4.0
+  ],
+  "max": [
+   242.7,
+   335.0,
+   468.5
+  ]
+ },
+ "colliders": [
+  {
+   "centre": [
+    0.0,
+    0.0,
+    210.0
+   ],
+   "size": [
+    640.0,
+    640.0,
+    420
+   ],
+   "yaw": 0.0
+  }
+ ],
+ "sockets": {
+  "gate": [
+   -380.0,
+   0.0,
+   0.0
+  ],
+  "label": [
+   0.0,
+   0.0,
+   608.0
+  ],
+  "popup": [
+   -200.0,
+   0.0,
+   260.0
+  ]
+ },
+ "footprint": [
+  -320.0,
+  -320.0,
+  320.0,
+  320.0
+ ],
+ "ring_radius": 450.0,
+ "slots": [
+  "Bld_Banner",
+  "Bld_Beam",
+  "Bld_Bronze",
+  "Bld_Dark",
+  "Bld_Planks",
+  "Bld_Pot",
+  "Bld_Thatch",
+  "Bld_Trim"
+ ],
+ "states": {
+  "site": {
+   "mesh": "SM_Bld_Granary_Site",
+   "triangles": 2356,
+   "bounds": {
+    "min": [
+     -376.4,
+     -320.0,
+     -9.0
+    ],
+    "max": [
+     320.0,
+     320.0,
+     416.8
+    ]
+   },
+   "slots": [
+    "Bld_Beam",
+    "Bld_Dirt",
+    "Bld_Planks",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "damaged": {
+   "mesh": "SM_Bld_Granary_Damaged",
+   "triangles": 2690,
+   "bounds": {
+    "min": [
+     -346.0,
+     -328.9,
+     -8.8
+    ],
+    "max": [
+     242.7,
+     335.0,
+     484.0
+    ]
+   },
+   "slots": [
+    "Bld_Banner",
+    "Bld_Beam",
+    "Bld_Bronze",
+    "Bld_Char",
+    "Bld_Dark",
+    "Bld_Planks",
+    "Bld_Pot",
+    "Bld_Scorch",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  },
+  "ruin": {
+   "mesh": "SM_Bld_Granary_Ruin",
+   "triangles": 1278,
+   "bounds": {
+    "min": [
+     -286.7,
+     -238.0,
+     -11.9
+    ],
+    "max": [
+     218.1,
+     275.0,
+     250.7
+    ]
+   },
+   "slots": [
+    "Bld_Char",
+    "Bld_Scorch",
+    "Bld_Thatch",
+    "Bld_Trim"
+   ]
+  }
+ }
+}

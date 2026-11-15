@@ -295,7 +295,7 @@ void ASRUnit::StepVisual(float Dt)
 	if (bWalking && !bWasWalking)
 	{
 		// Start on a contact frame, alternating the leading foot from one run to the next.
-		WalkDistance = bNextStepRight ? F.WalkCycleDistance * 0.5f : 0.f;
+		WalkDistance = bNextStepRight ? (S.WalkCycleDistance > 0.f ? S.WalkCycleDistance : F.WalkCycleDistance) * 0.5f : 0.f;
 		bNextStepRight = !bNextStepRight;
 	}
 	if (bWalking) { WalkDistance += Moved; }
@@ -357,7 +357,7 @@ void ASRUnit::StepVisual(float Dt)
 		{
 			const int32 Frames = Sheet.Anim(ESRSpriteAnim::Walk).Frames;
 			Anim = ESRSpriteAnim::Walk;
-			Frame = FMath::FloorToInt(FMath::Frac(WalkDistance / FMath::Max(F.WalkCycleDistance, 1.f)) * Frames) % Frames;
+			Frame = FMath::FloorToInt(FMath::Frac(WalkDistance / FMath::Max(S.WalkCycleDistance > 0.f ? S.WalkCycleDistance : F.WalkCycleDistance, 1.f)) * Frames) % Frames;
 		}
 		else
 		{
@@ -381,7 +381,11 @@ void ASRUnit::StepVisual(float Dt)
 		Scale.X *= 1.f - 0.05f * Arc;
 	}
 
-	ApplySprite(Anim, Frame, 1.f, Offset, Scale);
+	// A hard-to-notice troop (the Scout) is drawn thinned out, texel by texel, like something half seen: whole while
+	// it strikes (it has given itself away) and just after it is hit.
+	float Fade = 1.f;
+	if (S.NoticeScale < 1.f && bActive && AttackPhase == ESRAttackPhase::Ready && HitFlash <= 0.f) { Fade = F.StealthSpriteFade; }
+	ApplySprite(Anim, Frame, Fade, Offset, Scale);
 }
 
 void ASRUnit::StepHorseSounds(float Dt)

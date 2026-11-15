@@ -759,35 +759,16 @@ def build_mist():
     return mat
 
 
-# M_Birds: SM_Birds is a flock of flat gulls 26 m out from its pivot. The material swings every vertex round the pivot
-# (the flock circles) and beats the wing tips (COLOR.r = 1 at a tip, UV1.x = that bird's phase). Unlit pale shapes.
-BIRDS_CODE = r"""
-float a = Time * Speed + dot(Pivot.xy, float2(0.0013, 0.0021));
-float s = sin(a), c = cos(a);
-float3 d = P - Pivot;
-float3 r = float3(d.x * c - d.y * s, d.x * s + d.y * c, d.z);
-float beat = sin(Time * Flap + Phase.x * 6.2832);
-r.z += Tip * beat * Amp + sin(a * 2.7 + Phase.x * 6.2832) * 70.0;      // wing beat; the bird itself rises and sinks a little
-return r - d;
-"""
-
-
+# M_Birds: the birds (ASRBirds, a procedural mesh rebuilt each frame: it moves and beats the wings itself). Unlit,
+# two-sided flat shapes in their vertex colour (pale gulls, dark rooks, brown geese, darker wing tips).
 def build_birds():
     mat = get_material("M_Birds")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
     mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     mat.set_editor_property("two_sided", True)
+    mat.set_editor_property("used_with_static_lighting", False)
     g = G(mat)
-    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
-    params = [
-        ("P", P), ("Pivot", g.node(unreal.MaterialExpressionObjectPositionWS)), ("Time", g.node(unreal.MaterialExpressionTime)),
-        ("Tip", g.node(unreal.MaterialExpressionVertexColor), "R"), ("Phase", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)),
-        ("Speed", g.scalar("Speed", 0.07, "Birds")),          # radians per second round the pivot
-        ("Flap", g.scalar("Flap", 9.0, "Birds")), ("Amp", g.scalar("Amp", 20.0, "Birds")),
-    ]
-    wpo = g.custom(BIRDS_CODE, F3, params, "Birds: circle the pivot, beat the wing tips")
-    g.out(wpo, MP.MP_WORLD_POSITION_OFFSET)
-    g.out(g.vector("Colour", lin(0.62, 0.6, 0.54), "Birds"), MP.MP_EMISSIVE_COLOR)       # pale gulls: they must read over dark turf
+    g.out(g.node(unreal.MaterialExpressionVertexColor), MP.MP_EMISSIVE_COLOR)
     g.finish()
     return mat
 
@@ -948,7 +929,7 @@ def build_sprite():
 
 
 def make_sprite_instances(sprite, shadow):
-    for troop in ("Shieldbearer", "Archer", "Miner", "Farmer", "Builder"):
+    for troop in ("Shieldbearer", "Archer", "Miner", "Farmer", "Builder", "Scout"):
         make_instance("MI_UnitSprite_" + troop, sprite, textures={
             "SpriteSheet": CHAR + "T_%s_Color" % troop, "TeamMask": CHAR + "T_%s_TeamMask" % troop, "NormalSheet": CHAR + "T_%s_Normal" % troop})
         make_instance("MI_UnitSpriteShadow_" + troop, shadow, textures={"SpriteSheet": CHAR + "T_%s_Color" % troop})
@@ -1286,9 +1267,10 @@ if not ONLY or "prop" in ONLY:
                   vectors={"SizeA": lin(64, 32, 0, 0)}, textures={"TexA": "T_Wood"})
     make_instance("MI_Prop_Log", prop, scalars={"Moss": 0.0, "Roughness": 0.85},
                   vectors={"SizeA": lin(16, 16, 0, 0), "SizeB": lin(32, 64, 0, 0)}, textures={"TexA": "T_LogEnd", "TexB": "T_Bark"})
+if not ONLY or "atmosphere" in ONLY or "birds" in ONLY:
+    build_birds()
 if not ONLY or "atmosphere" in ONLY:
     build_cloud_shadow()
-    build_birds()
     mist = build_mist()
     make_instance("MI_Mist_Valley", mist, scalars={"UseMap": 0.0, "Scale": 1500.0, "Cover": 0.3, "Soft": 0.5, "Strength": 0.42})
 if not ONLY or "foliage" in ONLY:

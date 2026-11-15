@@ -28,7 +28,7 @@ TC = unreal.TextureCompressionSettings
 
 # source file stem -> (asset name, kind)
 SHEETS = []
-for troop in ("shieldbearer", "archer", "arrow", "miner", "farmer", "horseman", "catapult", "stone", "builder"):
+for troop in ("shieldbearer", "archer", "arrow", "miner", "farmer", "horseman", "catapult", "stone", "builder", "scout"):
     cap = troop.capitalize()
     SHEETS.append((troop + "_color", "T_%s_Color" % cap, "color"))
     SHEETS.append((troop + "_teammask", "T_%s_TeamMask" % cap, "mask"))

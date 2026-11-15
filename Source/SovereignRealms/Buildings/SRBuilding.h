@@ -145,10 +145,20 @@ public:
 	/** Trains troops at all (finished barracks or range). */
 	bool CanRecruit() const { return Stats().bRecruits && IsFinished(); }
 	/** Is this the kind of building that trains Type (finished or not)? */
-	bool Trains(ESRUnitType Type) const { return Stats().bRecruits && Stats().RecruitType == Type; }
+	bool Trains(ESRUnitType Type) const { return Stats().bRecruits && (Stats().RecruitType == Type || (IsCastle() && Type == ESRUnitType::Scout)); }
 	bool IsRecruiter() const { return Stats().bRecruits; }
 	ESRBuildingState GetState() const { return State; }
 	bool IsCastle() const { return BuildingType == ESRBuildingType::Castle; }
+	/** A barracks, archery range, stable or siege workshop (levelled by FSRTrainerLevel). */
+	bool IsTrainer() const { return BuildingType == ESRBuildingType::Barracks || BuildingType == ESRBuildingType::Range || BuildingType == ESRBuildingType::Stable || BuildingType == ESRBuildingType::Workshop; }
+	/** A Granary or a Treasury (levelled by FSRStoreLevel): adds to what the kingdom can hold. */
+	bool IsStore() const { return BuildingType == ESRBuildingType::Granary || BuildingType == ESRBuildingType::Treasury; }
+	/** What a storehouse holds at its level (0 for anything else; the economy counts it once the building is finished). */
+	int32 GetStoreCapacity() const;
+	/** How much faster than the troop's own time it trains (its level). */
+	float GetTrainSpeed() const;
+	/** Seconds this building takes to train one of Type, at its level. */
+	float GetTrainTime(ESRUnitType Type) const;
 	FVector2D ToLocal2D(const FVector2D& World) const;
 	FVector2D ToWorld2D(const FVector2D& Local) const;
 	FVector LocalToWorldPoint(const FVector& Local) const;
@@ -186,7 +196,7 @@ public:
 	int32 GetLevel() const { return Level; }
 	bool IsUpgrading() const { return UpgradeProgress >= 0.f; }
 	float GetUpgradeFraction() const { return FMath::Max(UpgradeProgress, 0.f); }
-	/** The castle, watchtowers and gold mines have levels (Sovereign Feel > Buildings > *Levels); others have one. */
+	/** The castle, watchtowers, gold mines, training buildings and storehouses have levels (Sovereign Feel > Buildings > *Levels); farms have one. */
 	int32 GetMaxLevel() const;
 	bool IsUpgradable() const { return GetMaxLevel() > 1; }
 	/** Finished, below its top level and not already being upgraded. */
@@ -211,6 +221,11 @@ public:
 	void SetLevelForLoad(int32 InLevel, float InUpgradeProgress);
 	/** Builders at its walls working on it right now (counted each frame while it needs work). */
 	int32 GetBuildersWorking() const { return BuildersWorking; }
+	/** Builders are mending it: until they finish it does not work (no training, payouts or shooting). */
+	bool IsUnderRepair() const { return bRepairing; }
+	/** The platoon this building's recruits join (and march to), or INDEX_NONE: the platoon panel's recruit platoon. */
+	int32 GetAssignedPlatoon() const { return AssignedPlatoon; }
+	void SetAssignedPlatoon(int32 Index) { AssignedPlatoon = Index; }
 
 	/** Set by SpawnBuilding: not part of the level, so it is destroyed (not just reset) when the battle resets. */
 	bool IsRuntimeBuilt() const { return bRuntimeBuilt; }
@@ -283,6 +298,8 @@ private:
 	/** Its life, now and then, heard close by (the farm's sheep and birds, the armourer's anvil, the range's targets...). */
 	void StepLife(float Dt);     // -1 = not worked out yet (a saved game): asked of the economy on first need
 	int32 BuildersWorking = 0;
+	bool bRepairing = false;
+	int32 AssignedPlatoon = INDEX_NONE;
 	void CountBuilders();
 	void StepRepair(float Dt);
 

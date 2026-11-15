@@ -122,6 +122,31 @@ USRFeelSettings::USRFeelSettings()
 	Builder.PopCost = 0;   // builders have their own limit (the castle's level), not the troops' housing
 	Builder.bBuilder = true;
 
+	// Scout: a hooded runner with a light spear. Outruns cavalry, sees a long way, and is only noticed from close by
+	// (NoticeScale); a single blow from anything nearly finishes it. It never picks a fight (no acquire range): it
+	// strikes only what it is ordered to, or what is hitting it.
+	Scout.DisplayName = TEXT("Scout");
+	Scout.MaxHealth = 90.f;
+	Scout.Radius = 34.f;
+	Scout.Mass = 0.7f;
+	Scout.MaxSpeed = 820.f;          // the Horse Rider does 640
+	Scout.Acceleration = 3600.f;
+	Scout.Deceleration = 3800.f;
+	Scout.TurnRateDeg = 720.f;
+	Scout.bRanged = false;
+	Scout.AttackRange = 34.f;
+	Scout.AcquireRange = 0.f;
+	Scout.SightRange = 2600.f;       // an Archer sees 1500, a Catapult 1800
+	Scout.Damage = 8.f;
+	Scout.AttackInterval = 1.2f;
+	Scout.WindupTime = 0.32f;
+	Scout.RecoveryTime = 0.36f;
+	Scout.KnockbackImpulse = 60.f;
+	Scout.BuildingDamageScale = 0.2f;
+	Scout.PopCost = 1;
+	Scout.NoticeScale = 0.45f;       // foes notice it at under half their usual distance
+	Scout.WalkCycleDistance = 192.f; // a sprinter's stride (Tools/blender/char_worker.py, scout)
+
 	// ---- buildings (shapes from SourceArt/Buildings/<type>.json; the tower is SM_Bld_Tower) ----
 	auto Mesh = [](const TCHAR* Name) { return TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(FString::Printf(TEXT("/Game/SR/Buildings/%s.%s"), Name, Name))); };
 
@@ -133,7 +158,7 @@ USRFeelSettings::USRFeelSettings()
 	CastleStats.TerritoryRadius = 4200.f;   // the building zone: beyond it a Builder must go and build
 	CastleStats.bPlayerBuildable = false;
 	CastleStats.Category = ESRBuildCategory::Defence;
-	CastleStats.Blurb = TEXT("The seat of your kingdom: houses troops, shoots from its walls and trains Builders. If it falls, you lose.");
+	CastleStats.Blurb = TEXT("The seat of your kingdom: houses troops, shoots from its walls, trains Builders and (from level 3) a Scout. If it falls, you lose.");
 	CastleStats.bRecruits = true;
 	CastleStats.RecruitType = ESRUnitType::Builder;
 	CastleStats.Mesh = Mesh(TEXT("SM_Bld_Castle"));
@@ -261,6 +286,46 @@ USRFeelSettings::USRFeelSettings()
 	WorkshopStats.LabelOffset = FVector(200.f, 0.f, 680.f);
 	WorkshopStats.PopupOffset = FVector(0.f, 0.f, 460.f);
 
+	// Granary and treasury: SourceArt/Buildings/granary.json, treasury.json (Tools/blender/bld_granary.py, bld_treasury.py).
+	GranaryStats.DisplayName = TEXT("Granary");
+	GranaryStats.MaxHealth = 900.f;
+	GranaryStats.Cost = FSRCost(120, 0);
+	GranaryStats.BuildTime = 14.f;
+	GranaryStats.PopProvided = 0;
+	GranaryStats.Mesh = Mesh(TEXT("SM_Bld_Granary"));
+	GranaryStats.Category = ESRBuildCategory::Economy;
+	GranaryStats.Blurb = TEXT("Holds food on top of the Citadel's stores, so the harvest is not lost when they are full.");
+	GranaryStats.FootprintMin = FVector2D(-320.f, -320.f);
+	GranaryStats.FootprintMax = FVector2D(320.f, 320.f);
+	GranaryStats.BlockHeight = 420.f;
+	GranaryStats.GateOffset = FVector(-380.f, 0.f, 0.f);
+	GranaryStats.LabelOffset = FVector(0.f, 0.f, 608.f);
+	GranaryStats.PopupOffset = FVector(-200.f, 0.f, 260.f);
+
+	TreasuryStats = GranaryStats;
+	TreasuryStats.DisplayName = TEXT("Treasury");
+	TreasuryStats.MaxHealth = 1100.f;
+	TreasuryStats.Cost = FSRCost(140, 0);
+	TreasuryStats.BuildTime = 16.f;
+	TreasuryStats.Mesh = Mesh(TEXT("SM_Bld_Treasury"));
+	TreasuryStats.Blurb = TEXT("Holds gold on top of the Citadel's stores: an iron-banded strongroom for what the mines bring in.");
+	TreasuryStats.FootprintMin = FVector2D(-300.f, -300.f);
+	TreasuryStats.FootprintMax = FVector2D(300.f, 300.f);
+	TreasuryStats.BlockHeight = 380.f;
+	TreasuryStats.GateOffset = FVector(-360.f, 0.f, 0.f);
+	TreasuryStats.LabelOffset = FVector(0.f, 0.f, 602.f);
+	TreasuryStats.PopupOffset = FVector(-200.f, 0.f, 240.f);
+
+	// Storehouse levels: price, time, what it holds, health. One at level 3 holds as much again as a level-3 castle;
+	// a kingdom may have one of each, plus one for every two castle levels (StoreLimitBase / StoreLimitCastleLevels).
+	auto SL = [](int32 G, int32 Fd, float Time, int32 Cap, float Hp)
+	{
+		FSRStoreLevel L; L.UpgradeCost = FSRCost(G, Fd); L.UpgradeTime = Time; L.Capacity = Cap; L.Health = Hp;
+		return L;
+	};
+	GranaryLevels = { SL(0, 0, 0.f, 400, 900.f), SL(180, 0, 30.f, 900, 1200.f), SL(320, 80, 40.f, 1600, 1500.f) };
+	TreasuryLevels = { SL(0, 0, 0.f, 400, 1100.f), SL(200, 0, 30.f, 900, 1450.f), SL(340, 80, 40.f, 1600, 1800.f) };
+
 	// Castle levels. Level 1 matches CastleStats above. Each level: price, time, castle housing, troop ceiling,
 	// builders, building zone (cm), health, storage (gold, food). The stores always hold the next level's price; the
 	// troop ceiling stops at 120 a side; the zone stays well short of halfway to the enemy (the castles are ~148 m apart).
@@ -297,6 +362,14 @@ USRFeelSettings::USRFeelSettings()
 		return L;
 	};
 	MineLevels = { ML(0, 0, 0.f, 10, 1250.f), ML(220, 0, 30.f, 16, 1600.f), ML(360, 100, 40.f, 23, 2000.f) };
+
+	// training buildings: level 2 trains a third faster, level 3 nearly twice as fast
+	auto TrL = [](int32 G, int32 Fd, float Time, float Speed, float Hp)
+	{
+		FSRTrainerLevel L; L.UpgradeCost = FSRCost(G, Fd); L.UpgradeTime = Time; L.TrainSpeed = Speed; L.HealthScale = Hp;
+		return L;
+	};
+	TrainerLevels = { TrL(0, 0, 0.f, 1.f, 1.f), TrL(200, 100, 30.f, 1.35f, 1.2f), TrL(380, 180, 40.f, 1.8f, 1.4f) };
 
 	AIBuildOrder = { ESRBuildingType::Barracks, ESRBuildingType::Farm, ESRBuildingType::Range, ESRBuildingType::Mine, ESRBuildingType::Farm,
 		ESRBuildingType::Tower, ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Farm };

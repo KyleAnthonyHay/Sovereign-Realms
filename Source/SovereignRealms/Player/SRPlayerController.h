@@ -98,8 +98,14 @@ public:
 	void ResetForNewMatch();
 	/** The command buttons of the selection panel (same as the A / F / G / Delete keys). */
 	void ArmAttackMoveCommand() { ArmAttackMove(); }
+	/** Right-click on the Form button: the next shape (and formation on). */
 	void CycleFormationCommand() { OnCycleFormation(); }
+	/** F / the Form button: formation on or off (off: they move as a loose group). */
+	void ToggleFormationCommand();
 	void ArmPatrolCommand() { ArmPatrol(); }
+	/** V: the next click picks what the selected troops guard (one of your Builders or buildings). */
+	void ArmGuardCommand();
+	bool IsGuardArmed() const { return bGuardArmed; }
 	bool IsPatrolArmed() const { return bPatrolArmed; }
 	void IssuePatrol(const FVector& GroundPoint);
 	/** Disband the selected platoon (its troops stay selected). */
@@ -107,7 +113,11 @@ public:
 	/** The formation a selection that is not a platoon takes (F cycles it). */
 	ESRFormationShape GetLooseFormation() const { return LooseFormation; }
 	/** The formation the current selection would move in. */
+	/** The shape the selection's moves use: its formation, or Loose when formation is off. */
 	ESRFormationShape GetSelectionFormation() const;
+	/** The selection's chosen shape (kept while formation is off) and whether formation is on. */
+	ESRFormationShape GetSelectionFormationShape() const;
+	bool GetSelectionFormationOn() const;
 	/** Does the selection march at its slowest member's pace (its platoon's setting, or the loose-selection one)? */
 	bool GetSelectionMarchTogether() const;
 	/** M, or the March button: toggle marching together for the selected platoon (or for loose selections). */
@@ -150,10 +160,18 @@ public:
 	void IssueAttackBuilding(ASRBuilding* Target);
 	/** The selected builders go and work on one of our buildings (a site, or a damaged one). False if none are selected. */
 	bool IssueBuild(ASRBuilding* Building);
+	/** The selected troops (not Builders) guard Ward (a Builder of yours) or WardBuilding (a building of yours). False if
+	 * there is nobody to send or nothing that can be guarded. */
+	bool IssueGuard(ASRUnit* Ward, ASRBuilding* WardBuilding);
 	/** A building was just laid: the selected builders go to it, or (outside the castle's zone) the nearest free one. */
 	void SendBuildersTo(ASRBuilding* Building);
 	/** The selected builders go to the nearest of our buildings that needs work (X, or the Repair button). */
 	void RepairCommand();
+	/** K: the selected troops are dismissed (removed). Asks first: a second press within a moment does it. */
+	void DismissCommand();
+	/** The building's recruits join platoon Index from now on (INDEX_NONE: none). Ctrl+1-6 with it selected, or its panel. */
+	void AssignBuildingPlatoon(ASRBuilding* Building, int32 Index);
+	bool IsDismissArmed() const;
 	/** U: upgrade the selected building if it has levels, otherwise the castle. */
 	void UpgradeCastleCommand();
 	/** Upgrade one of our buildings a level (its Upgrade button). */
@@ -227,6 +245,7 @@ private:
 	void OnRecruitHorseman() { RecruitHotkey(ESRUnitType::Horseman); }
 	void OnRecruitCatapult() { RecruitHotkey(ESRUnitType::Catapult); }
 	void OnRecruitBuilder() { RecruitHotkey(ESRUnitType::Builder); }
+	void OnRecruitScout() { RecruitHotkey(ESRUnitType::Scout); }
 	void RecruitHotkey(ESRUnitType Type);
 
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MappingContext;
@@ -246,14 +265,17 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildMenuAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildTabAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> PatrolAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> GuardAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> HoldAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> FormationAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> StanceAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CancelAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DeleteAction;
 	UPROPERTY(Transient) TObjectPtr<ASRPlacementPreview> Preview;
-	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[5];
+	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[6];   // one per ESRUnitType
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RepairAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> DismissAction;
+	double DismissArmedTime = -100.0;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> UpgradeAction;
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
@@ -283,10 +305,12 @@ private:
 
 	bool bAttackMoveArmed = false;
 	bool bPatrolArmed = false;
+	bool bGuardArmed = false;
 	bool bBuildMenuOpen = false;
 	ESRBuildCategory BuildMenuTab = ESRBuildCategory::Economy;
 	ESRFormationShape LooseFormation = ESRFormationShape::Line;
 	bool bLooseMarchTogether = true;
+	bool bLooseFormationOn = true;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> MarchAction;
 
 	bool bCursorOverride = false;

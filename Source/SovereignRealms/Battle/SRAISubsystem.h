@@ -96,6 +96,7 @@ struct FSRCommander
 	float LastFoeAttack = -1000.f;
 	bool bFoeAtHome = false;        // a foe force is near our buildings right now
 	float ShieldRatio = 0.55f;      // what it trains now (adapts to the foe)
+	float NextScoutOrder = 0.f;     // when its Scout is next sent somewhere to look
 };
 
 /**
@@ -116,7 +117,10 @@ struct FSRCommander
  *             castle once it is weak), and goes when its free army is AIAttackAdvantage times what it expects to
  *             meet there; strikes at once when the foe's army is caught away from home; reinforces an attack that
  *             is winning; falls back to regroup when the fight there turns against it;
- *   raids     sends a small party at an undefended farm or mine every AIRaidInterval to keep the foe honest.
+ *   raids     sends a small party at an undefended farm or mine every AIRaidInterval to keep the foe honest;
+ *   stores    builds a Granary / Treasury (and enlarges them) when its food / gold stores are full;
+ *   scouting  (Normal, Hard) trains its one Scout when the rules allow (castle level 3, one at a time, the wait
+ *             between two) and keeps it watching the foe's kingdom from a distance.
  * Difficulty (Easy / Normal / Hard) scales timing, the advantage it waits for and how fully it adapts; it never
  * gives the commander extra resources.
  */
@@ -166,6 +170,9 @@ private:
 	void ManageDefence(FSRCommander& C, TArray<ASRUnit*>& Home);
 	void ManageAttack(FSRCommander& C, TArray<ASRUnit*>& Home);
 	void ManageRaid(FSRCommander& C, TArray<ASRUnit*>& Home);
+	/** Its Scout (if it has one) goes from one look-out to the next round the foe's kingdom, well outside the
+	 * distance at which it would be noticed; hurt, it comes home. What it sees feeds Observe like any troop's eyes. */
+	void ManageScout(FSRCommander& C, const TArray<ASRUnit*>& Mine);
 	void StepAttack(FSRCommander& C, FSRAttack& A);
 	void EndAttack(FSRCommander& C, FSRAttack& A, const TCHAR* Why);
 	bool TryBuild(FSRCommander& C, ESRBuildingType Type);

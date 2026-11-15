@@ -64,6 +64,7 @@ void USREconomySubsystem::Reset()
 	Alerts.Reset();
 	LastAttackAlert.Reset();
 	LastAttackTime[0] = LastAttackTime[1] = -100.0;
+	ScoutCooldownLeft[0] = ScoutCooldownLeft[1] = 0.f;
 	// Buildings put up during the last match come down; the level's own stand again.
 	const TArray<TObjectPtr<ASRBuilding>> Copy = Buildings;
 	for (ASRBuilding* Building : Copy)
@@ -99,6 +100,7 @@ void USREconomySubsystem::Step(float Dt)
 
 	for (int32 i = 0; i < 2; ++i)
 	{
+		ScoutCooldownLeft[i] = FMath::Max(0.f, ScoutCooldownLeft[i] - Dt);
 		Flash[i] = FMath::Max(0.f, Flash[i] - Dt / FMath::Max(F.InsufficientFlashTime, 0.05f));
 		Pulse[i] = FMath::Max(0.f, Pulse[i] - Dt / 0.45f);
 	}
@@ -114,7 +116,7 @@ void USREconomySubsystem::Step(float Dt)
 void USREconomySubsystem::AddResource(ESRTeam Team, ESRResource Resource, int32 Amount, bool bIgnoreStorage)
 {
 	int32& Value = Stock[int32(Team)][int32(Resource)];
-	// the stores hold only so much (the castle's level); what does not fit is lost
+	// the stores hold only so much (the castle's level, plus granaries / treasuries); what does not fit is lost
 	const int32 Cap = bIgnoreStorage ? 999999 : FMath::Max(GetStorage(Team, Resource), Value);
 	Value = FMath::Clamp(Value + Amount, 0, Cap);
 	if (Team == ESRTeam::Player && Amount > 0) { Pulse[int32(Resource)] = 1.f; }
@@ -290,7 +292,7 @@ void USREconomySubsystem::LogStatus() const
 	{
 		if (!Building) { continue; }
 		FString Queue;
-		for (ESRUnitType Type : Building->GetQueue()) { Queue += TEXT("SAHCB")[FMath::Clamp(int32(Type), 0, 4)]; }
+		for (ESRUnitType Type : Building->GetQueue()) { Queue += TEXT("SAHCBO")[FMath::Clamp(int32(Type), 0, SRNumUnitTypes - 1)]; }   // (O: scOut)
 		UE_LOG(LogSovereign, Log, TEXT("  %-16s %-9s team=%d pos=(%6.0f,%6.0f) payout=%.2f queue=[%s] build=%.2f rally=(%.0f,%.0f) sel=%d site=%.2f%s builders=%d hp=%.0f"),
 			*Building->GetActorNameOrLabel(), *Building->GetDisplayName(), int32(Building->Team), Building->GetActorLocation().X, Building->GetActorLocation().Y,
 			Building->GetPayoutFraction(), *Queue, Building->GetBuildFraction(), Building->GetRallyPoint().X, Building->GetRallyPoint().Y, Building->IsSelected() ? 1 : 0,
@@ -350,6 +352,12 @@ int32 USREconomySubsystem::GetPopulationCeiling(ESRTeam Team) const
 	return GetCastle(Team) ? F.CastleLevel(GetCastleLevel(Team)).PopulationCeiling : F.MaxPopulation;
 }
 
+int32 USREconomySubsystem::GetMaxTowers(ESRTeam Team) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return F.TowerLimitBase + F.TowerLimitPerCastleLevel * FMath::Max(0, GetCastleLevel(Team) - 1);
+}
+
 int32 USREconomySubsystem::GetMaxBuilders(ESRTeam Team) const
 {
 	return USRFeelSettings::Get().CastleLevel(GetCastleLevel(Team)).Builders;
@@ -358,7 +366,75 @@ int32 USREconomySubsystem::GetMaxBuilders(ESRTeam Team) const
 int32 USREconomySubsystem::GetStorage(ESRTeam Team, ESRResource Resource) const
 {
 	const FSRCost& S = USRFeelSettings::Get().CastleLevel(GetCastleLevel(Team)).Storage;
-	return Resource == ESRResource::Gold ? S.Gold : S.Food;
+	return (Resource == ESRResource::Gold ? S.Gold : S.Food) + GetStoreCapacity(Team, Resource);
+}
+
+int32 USREconomySubsystem::GetStoreCapacity(ESRTeam Team, ESRResource Resource) const
+{
+	const ESRBuildingType Type = Resource == ESRResource::Gold ? ESRBuildingType::Treasury : ESRBuildingType::Granary;
+	int32 Cap = 0;
+	for (const ASRBuilding* B : Buildings)
+	{
+		if (B && B->Team == Team && B->BuildingType == Type && B->IsFinished()) { Cap += B->GetStoreCapacity(); }
+	}
+	return Cap;
+}
+
+int32 USREconomySubsystem::GetMaxStores(ESRTeam Team) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return F.StoreLimitBase + FMath::Max(0, GetCastleLevel(Team) - 1) / FMath::Max(1, F.StoreLimitCastleLevels);
+}
+
+int32 USREconomySubsystem::CountStanding(ESRBuildingType Type, ESRTeam Team) const
+{
+	int32 N = 0;
+	for (const ASRBuilding* B : Buildings)
+	{
+		N += (B && B->Team == Team && B->BuildingType == Type && B->IsAlive()) ? 1 : 0;
+	}
+	return N;
+}
+
+int32 USREconomySubsystem::GetScoutCount(ESRTeam Team, int32* OutQueued) const
+{
+	int32 Alive = 0, Queued = 0;
+	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
+	{
+		for (const ASRUnit* U : Battle->GetUnits())
+		{
+			Alive += (U && U->IsAlive() && U->GetTeam() == Team && U->GetUnitType() == ESRUnitType::Scout) ? 1 : 0;
+		}
+	}
+	for (const ASRBuilding* B : Buildings)
+	{
+		if (!B || B->Team != Team || !B->IsAlive()) { continue; }
+		for (ESRUnitType T : B->GetQueue()) { Queued += T == ESRUnitType::Scout ? 1 : 0; }
+	}
+	if (OutQueued) { *OutQueued = Queued; }
+	return Alive;
+}
+
+FText USREconomySubsystem::GetScoutRefusal(ESRTeam Team) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (GetCastleLevel(Team) < F.ScoutCastleLevel)
+	{
+		return FText::Format(NSLOCTEXT("SREconomy", "ScoutLevel", "A Scout needs the Citadel at level {0}"), FText::AsNumber(F.ScoutCastleLevel));
+	}
+	int32 Queued = 0;
+	if (GetScoutCount(Team, &Queued) + Queued >= F.MaxScouts)
+	{
+		return F.MaxScouts == 1 ? NSLOCTEXT("SREconomy", "ScoutOne", "You already have a Scout (a kingdom has only one at a time)")
+			: FText::Format(NSLOCTEXT("SREconomy", "ScoutMany", "You can have at most {0} Scouts"), FText::AsNumber(F.MaxScouts));
+	}
+	if (const float Left = GetScoutCooldown(Team); Left > 0.f)
+	{
+		const int32 Sec = FMath::CeilToInt(Left);
+		return FText::Format(NSLOCTEXT("SREconomy", "ScoutWait", "The next Scout can be trained in {0}:{1}"), FText::AsNumber(Sec / 60),
+			FText::FromString(FString::Printf(TEXT("%02d"), Sec % 60)));
+	}
+	return FText::GetEmpty();
 }
 
 void USREconomySubsystem::NotifyPopulationCapped(ESRTeam Team)
@@ -426,6 +502,14 @@ ASRBuilding* USREconomySubsystem::PlaceBuilding(ESRBuildingType Type, ESRTeam Te
 		if (OutReason) { *OutReason = Placement.Reason; }
 		return nullptr;
 	}
+	if ((Type == ESRBuildingType::Granary || Type == ESRBuildingType::Treasury) && CountStanding(Type, Team) >= GetMaxStores(Team))
+	{
+		if (OutReason)
+		{
+			*OutReason = FText::Format(NSLOCTEXT("SREconomy", "StoreCap", "You can have at most {0} of these (raise the Citadel for more)"), FText::AsNumber(GetMaxStores(Team)));
+		}
+		return nullptr;
+	}
 	const FSRCost& Cost = F.BuildingStatsFor(Type).Cost;
 	if (!TrySpend(Team, Cost))
 	{
@@ -484,6 +568,31 @@ void USREconomySubsystem::NotifyUnitAttacked(const ASRUnit* Victim)
 void USREconomySubsystem::NotifyBuildingDestroyed(ASRBuilding* Building)
 {
 	if (!Building) { return; }
+	// A storehouse that falls takes what it held with it: whatever no longer fits in the kingdom's remaining stores
+	// is lost (it is already out of GetStorage: the building is down by the time this is called).
+	// (Only one that was finished: a site held nothing.)
+	if (Building->IsStore() && Building->GetBuildProgress() >= 1.f)
+	{
+		const ESRResource Resource = Building->BuildingType == ESRBuildingType::Granary ? ESRResource::Food : ESRResource::Gold;
+		int32& Value = Stock[int32(Building->Team)][int32(Resource)];
+		const int32 Lost = Value - GetStorage(Building->Team, Resource);
+		if (Lost > 0)
+		{
+			Value -= Lost;
+			UE_LOG(LogSovereign, Log, TEXT("STORE %s %s fell: %d %s lost (now %d of %d)"), Building->Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"),
+				*Building->GetDisplayName(), Lost, Resource == ESRResource::Food ? TEXT("food") : TEXT("gold"), Value, GetStorage(Building->Team, Resource));
+			if (Building->Team == ESRTeam::Player)
+			{
+				const FVector2D At = Building->GetFootprintCentre();
+				PushAlert(ESRAlertKind::BuildingLost, FText::Format(NSLOCTEXT("SREconomy", "StoreLost", "{0} destroyed: {1} {2} lost with it"),
+					FText::FromString(Building->GetDisplayName()), FText::AsNumber(Lost),
+					Resource == ESRResource::Food ? NSLOCTEXT("SREconomy", "FoodWord", "food") : NSLOCTEXT("SREconomy", "GoldWord", "gold")), &At);
+				Flash[int32(Resource)] = 1.f;
+				if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->NotifyBuildingDestroyed(Building); }
+				return;   // (the alert above stands in for the plain "destroyed" one)
+			}
+		}
+	}
 	if (Building->Team == ESRTeam::Player)
 	{
 		const FVector2D At = Building->GetFootprintCentre();

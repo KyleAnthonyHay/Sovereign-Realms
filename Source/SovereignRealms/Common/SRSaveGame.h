@@ -37,6 +37,7 @@ struct FSRSavedBuilding
 	UPROPERTY() FVector2D Rally = FVector2D::ZeroVector;
 	UPROPERTY() int32 Level = 1;
 	UPROPERTY() float UpgradeProgress = -1.f;
+	UPROPERTY() int32 AssignedPlatoon = INDEX_NONE;
 };
 
 USTRUCT()
@@ -46,6 +47,7 @@ struct FSRSavedPlatoon
 	UPROPERTY() int32 Index = 0;
 	UPROPERTY() FString Name;
 	UPROPERTY() ESRFormationShape Formation = ESRFormationShape::Line;
+	UPROPERTY() bool bFormation = true;
 	UPROPERTY() ESRStance Stance = ESRStance::Aggressive;
 	UPROPERTY() bool bReceivesRecruits = false;
 };
@@ -77,6 +79,8 @@ public:
 	UPROPERTY() float BattleClock = 0.f;
 	UPROPERTY() int32 Gold[2] = { 0, 0 };
 	UPROPERTY() int32 Food[2] = { 0, 0 };
+	/** Seconds each kingdom still waits before it may train another Scout (USREconomySubsystem::GetScoutCooldown). */
+	UPROPERTY() float ScoutCooldown[2] = { 0.f, 0.f };
 	UPROPERTY() TArray<int32> Stats;       // FSRMatchStats, flattened
 	UPROPERTY() TArray<FSRSavedUnit> Units;
 	UPROPERTY() TArray<FSRSavedBuilding> Buildings;

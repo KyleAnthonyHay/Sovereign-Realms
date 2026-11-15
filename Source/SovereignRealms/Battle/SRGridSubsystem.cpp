@@ -276,6 +276,16 @@ FSRPlacement USRGridSubsystem::CheckPlacement(ESRBuildingType Type, ESRTeam Team
 	const FSRBuildingStats& S = F.BuildingStatsFor(Type);
 	const FVector2D FootCentre = (S.FootprintMin + S.FootprintMax) * 0.5f;
 
+	// watchtowers are limited by the castle's level
+	if (Type == ESRBuildingType::Tower)
+	{
+		if (const USREconomySubsystem* Eco = USREconomySubsystem::Get(this); Eco && Eco->CountBuildings(Type, Team) >= Eco->GetMaxTowers(Team))
+		{
+			Out.Reason = FText::Format(LOCTEXT("TowerLimit", "Watchtower limit {0} reached: raise the Citadel for another"), FText::AsNumber(Eco->GetMaxTowers(Team)));
+			return Out;
+		}
+	}
+
 	// Where the footprint's centre should go: the cursor, or the vein a mine snaps onto.
 	FVector2D Centre = Want;
 	if (Type == ESRBuildingType::Mine)

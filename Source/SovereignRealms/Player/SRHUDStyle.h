@@ -48,12 +48,13 @@ namespace SRId
 	{
 		Pause = 1, Help, Minimap, PlatoonHeader, CancelBuild, LegendClose, Builders, Upgrade,
 		Build = 10,       // + 0 toggle, 1..3 tabs, 4..9 entries
-		Command = 20,     // + 0..8
-		Recruit = 30,     // + 0..1
+		Command = 20,     // + 0..19
+		Recruit = 40,     // + unit type
 		Slot = 100,       // + platoon * 5 + {0 row, 1 formation, 2 stance, 3 recruits, 4 disband}
 		Menu = 300,       // + entry
 		Screen = 340,     // + control on a sub-screen
 		Setting = 400,    // + row
-		BuilderRow = 200  // + builder in the top bar's list
+		BuilderRow = 200, // + builder in the top bar's list
+		JoinPlatoon = 220 // + 0 none, 1.. platoon (a training building's panel)
 	};
 }
