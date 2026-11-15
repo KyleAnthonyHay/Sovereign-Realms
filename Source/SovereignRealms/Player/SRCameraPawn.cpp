@@ -87,7 +87,7 @@ void ASRCameraPawn::FocusOn(const FVector2D& WorldXY, bool bSnap)
 		float GroundZ = FocusZ;
 		if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
 		{
-			if (Battle->SampleGround(Focus, 20000.f, GroundZ)) { FocusZ = GroundZ; }
+			if (Battle->SampleGround(Focus, 20000.f, GroundZ)) { FocusZ = FMath::Min(GroundZ, USRFeelSettings::Get().FocusHeightMax); }
 		}
 		ApplyView(0.f);
 	}
@@ -187,9 +187,10 @@ void ASRCameraPawn::Tick(float DeltaSeconds)
 	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
 	{
 		float GroundZ = FocusZ;
-		if (Battle->SampleGround(Focus, FocusZ + 3000.f, GroundZ))
+		if (Battle->SampleGround(Focus, 20000.f, GroundZ))
 		{
-			FocusZ = FMath::Lerp(FocusZ, GroundZ, SmoothAlpha(Dt, 0.25f));
+			// mountains are scenery: the view stays on the ground troops can stand on (FocusHeightMax)
+			FocusZ = FMath::Lerp(FocusZ, FMath::Min(GroundZ, F.FocusHeightMax), SmoothAlpha(Dt, 0.25f));
 		}
 	}
 

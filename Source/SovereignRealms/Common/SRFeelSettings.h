@@ -111,7 +111,11 @@ public:
 
 	/** Camera focus is clamped to +/- this (cm) around the world origin. Also clamps move orders. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds")
-	FVector2D MapHalfExtent = FVector2D(12000.f, 12000.f);
+	FVector2D MapHalfExtent = FVector2D(14000.f, 14000.f);
+
+	/** The camera rides the ground under its focus (hills, terraces, the heights) but never higher than this (cm): panning across a mountain must not lift the view off the field. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds", meta = (ClampMin = "0.0"))
+	float FocusHeightMax = 560.f;
 
 	/** Motion blur smears units while panning and hides fast attack animation, so the game camera turns it off. Untick to let post-process volumes decide. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera")

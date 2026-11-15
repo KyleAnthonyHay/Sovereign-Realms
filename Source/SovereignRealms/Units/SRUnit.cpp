@@ -864,11 +864,14 @@ void ASRUnit::Nudge(const FVector2D& Delta)
 	// a shove never pushes anyone into deep water
 	const FVector2D Edge = FVector2D(To) + Delta.GetSafeNormal() * GetRadius() * 0.6f;
 	if (!Stats().bWaterWalker && Battle->IsDeepWater(Edge) && !Battle->IsDeepWater(GetPos2D())) { return; }
-	if (!Battle->IsPathBlocked(SimPos, To))
-	{
-		SimPos.X = To.X;
-		SimPos.Y = To.Y;
-	}
+	if (Battle->IsPathBlocked(SimPos, To)) { return; }
+	// nor off a cliff or up a ledge: the ground under the shove must be ground this troop could have stepped onto
+	// (the heights and the mountains are tall enough that a shove over the edge would drop a troop out of the fight)
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	float ToZ = SimPos.Z;
+	if (!Battle->SampleGround(FVector2D(To), SimPos.Z, ToZ) || ToZ - SimPos.Z > F.StepHeight || SimPos.Z - ToZ > F.MaxDropHeight) { return; }
+	SimPos.X = To.X;
+	SimPos.Y = To.Y;
 }
 
 void ASRUnit::FollowGround(float Dt)
@@ -876,6 +879,9 @@ void ASRUnit::FollowGround(float Dt)
 	float GroundZ = SimPos.Z;
 	if (Battle->SampleGround(GetPos2D(), SimPos.Z, GroundZ))
 	{
+		// No step ever takes a troop down more than MaxDropHeight, so ground far below is a seam between two terrain
+		// meshes seen for a frame (a ramp against its cliff), not somewhere to fall: stay at this height.
+		if (SimPos.Z - GroundZ > USRFeelSettings::Get().MaxDropHeight + 30.f) { return; }
 		SimPos.Z = FMath::FInterpTo(SimPos.Z, GroundZ, Dt, 20.f);
 	}
 }
