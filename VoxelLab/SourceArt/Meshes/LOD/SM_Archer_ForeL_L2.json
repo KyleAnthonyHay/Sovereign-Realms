@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_ForeL_L2",
+ "faces": 124,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0984,
+   -0.3828,
+   -0.2344
+  ],
+  [
+   0.1016,
+   0.0672,
+   0.1156
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_ForeL",
+ "voxel": 0.05,
+ "triangles": 248
+}

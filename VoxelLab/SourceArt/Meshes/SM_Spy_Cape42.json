@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_Cape42",
+ "faces": 148,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0534,
+   -0.0765,
+   -0.175
+  ],
+  [
+   0.0515,
+   0.0784,
+   0.0284
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.3,
+  0.275,
+  0.825
+ ],
+ "part": "Cape42",
+ "triangles": 297,
+ "blocks": 12
+}

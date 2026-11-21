@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_ForeL",
+ "faces": 527,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0859,
+   -0.1941,
+   -0.4406
+  ],
+  [
+   0.127,
+   0.0779,
+   0.0694
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.34906,
+  0.0,
+  0.95224
+ ],
+ "part": "ForeL",
+ "triangles": 1054,
+ "blocks": 63
+}

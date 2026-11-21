@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_Spyglass",
+ "faces": 253,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0427,
+   -0.3119,
+   -0.0952
+  ],
+  [
+   0.0777,
+   0.1266,
+   0.2295
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.37198,
+  -0.24229,
+  0.66022
+ ],
+ "part": "Spyglass",
+ "triangles": 506,
+ "blocks": 12
+}

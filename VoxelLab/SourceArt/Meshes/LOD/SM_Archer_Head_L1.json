@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_Head_L1",
+ "faces": 2201,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.325,
+   -0.225,
+   -0.375
+  ],
+  [
+   0.325,
+   0.45,
+   0.475
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_Head",
+ "voxel": 0.025,
+ "triangles": 4402
+}

@@ -19,6 +19,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import numpy as np
+import minehill
 
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 SRC = os.path.join(ROOT, "SourceArt")
@@ -44,6 +45,9 @@ CELL = 0.25
 W, D = 196.0, 96.0        # the field
 CY = 10.0                 # its middle in y
 DEPTH = 1.0               # metres of ground
+# A mine never stands alone on flat ground: the Gold Mine stands in SM_MineMound, the terraced hill of References/Remake/
+# mine_mound.png (assets/mine_mound.py), placed at the mine's own place and turn; the row leaves room for its wings.
+MOUND = "SM_MineMound"
 
 
 def meta(mesh):
@@ -71,22 +75,30 @@ def village_scale(layout, mesh):
 def plan():
     layout = json.load(open(os.path.join(SRC, "layout.json")))
     items, labels, foot = [], [], []
-    widths = []
+    widths, wings = [], []
     chosen = [(built(meshes), title, door) for meshes, title, door in BUILDINGS]
     for mesh, title, door in chosen:
         (x0, y0, _), (x1, y1, _) = bounds(mesh)
         s = village_scale(layout, mesh)
-        widths.append((x1 - x0) * s)
+        wing = 0.0
+        if mesh == "SM_MineCliff" and os.path.exists(os.path.join(MESHES, MOUND + ".json")):
+            mb = minehill.mound_bounds()
+            wing = max(x0 - mb[0], mb[2] - x1, 0.0) * s - GAP + 2.0      # the hill's wings reach beyond the mine: 2 m clear of the neighbours
+        wings.append(max(wing, 0.0))
+        widths.append((x1 - x0) * s + 2 * wings[-1])
     total = sum(widths) + GAP * (len(widths) - 1)
     x = -total / 2.0
-    for (mesh, title, door), w in zip(chosen, widths):
+    for (mesh, title, door), w, wing in zip(chosen, widths, wings):
         (x0, y0, _), (x1, y1, z1) = bounds(mesh)
         s = village_scale(layout, mesh)
-        cx = x - x0 * s
+        cx = x + wing - x0 * s
         cy = FRONT - y0 * s
         z = 0.04 if mesh == "SM_Bridge" else -0.01         # the underside of a floor just under the grass, not on it
         items.append(dict(mesh=mesh, pos=[round(cx, 3), round(cy, 3), z], yaw=0.0, scale=round(s, 3), group="buildings"))
         foot.append((x0 * s + cx, y0 * s + cy, x1 * s + cx, y1 * s + cy))
+        if mesh == "SM_MineCliff" and os.path.exists(os.path.join(MESHES, MOUND + ".json")):
+            items.append(dict(mesh=MOUND, pos=[round(cx, 3), round(cy, 3), 0.0], yaw=0.0, scale=round(s, 3), group="rocks", tags=["MineMound"]))
+            foot.append(minehill.mound_rect(cx, cy, 0.0, s))             # (nothing is strewn in its hill)
         # what the asset asks to have placed with it (dummies, wheat, sheep...): its own space, yaw 0 here
         for pr in meta(mesh).get("props", []):
             px, py, pz = pr["pos"]
@@ -181,8 +193,9 @@ def build_ground(X, Y, h, road):
     from voxlib import Vox, IDS
     V.reset_scene()
     nx, ny = X.shape
-    nz = int(DEPTH / CELL)
-    v = Vox(nx, ny, nz, CELL, origin=(nx / 2.0, ny / 2.0 - CY / CELL, nz), name="flat", seed=5)
+    nz0 = int(DEPTH / CELL)                                 # the field's top
+    nz = nz0 + int(max(0.0, float(h.max())) / CELL)         # (room for the mine's mound)
+    v = Vox(nx, ny, nz, CELL, origin=(nx / 2.0, ny / 2.0 - CY / CELL, nz0), name="flat", seed=5)
     top = np.round((h + DEPTH) / CELL).astype(np.int32)
     K = np.arange(nz, dtype=np.int32)[None, None, :]
     solid = K < top[:, :, None]

@@ -1,0 +1,18 @@
+{
+ "name": "SM_Chicken",
+ "faces": 422,
+ "collision": "complex",
+ "bounds": [
+  [
+   -0.25,
+   -0.375,
+   0.0
+  ],
+  [
+   0.25,
+   0.375,
+   0.75
+  ]
+ ],
+ "lights": []
+}

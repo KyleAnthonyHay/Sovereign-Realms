@@ -1,0 +1,21 @@
+{
+ "name": "SM_Swordsman_Cape40_L2",
+ "faces": 72,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1375,
+   -0.1844,
+   -0.2484
+  ],
+  [
+   0.1625,
+   0.1156,
+   0.0016
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Swordsman_Cape40",
+ "voxel": 0.05,
+ "triangles": 144
+}

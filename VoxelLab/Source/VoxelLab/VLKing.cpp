@@ -13,6 +13,8 @@
 #include "VLPlayerController.h"
 #include "VLFootDust.h"
 #include "VLSwordsmanCombat.h"
+#include "VLBattle.h"
+#include "VLConstruction.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -29,6 +31,10 @@
 #include "Materials/MaterialInterface.h"
 #include "Sound/SoundBase.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/PackageName.h"
+
+bool VLRigLodOn();      // (VLKingRig.cpp: vl.Opt.RigLOD, vl.Opt.UnitGI)
+bool VLUnitGI();
 
 namespace
 {
@@ -46,6 +52,7 @@ namespace
 AVLKing::AVLKing()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bTickEvenWhenPaused = true;        // (paused, only the menu's input is read: Tick)
 	Data = TSoftObjectPtr<UVLCharacterData>(FSoftObjectPath(TEXT("/Game/Voxel/King/DA_King.DA_King")));
 	// whoever the player is not controlling walks to orders under an AI controller (troops get one when spawned)
 	AIControllerClass = AAIController::StaticClass();
@@ -91,23 +98,15 @@ AVLKing::AVLKing()
 	Dust = CreateDefaultSubobject<UVLFootDust>(TEXT("Dust"));
 	Dust->SetupAttachment(GetCapsuleComponent());
 
-	Boom = CreateDefaultSubobject<USpringArmComponent>(TEXT("Boom"));
-	Boom->SetupAttachment(GetCapsuleComponent());
-	Boom->TargetArmLength = TargetArm;
-	Boom->SocketOffset = FVector(0.f, 0.f, 40.f);
-	Boom->bUsePawnControlRotation = true;
-	Boom->bEnableCameraLag = true;
-	Boom->CameraLagSpeed = 7.f;
-	Boom->bDoCollisionTest = false;             // a high diorama camera: trees and roofs must not yank it in
-
-	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
-	Camera->SetupAttachment(Boom);
-	Camera->SetFieldOfView(40.f);
-	Camera->bUsePawnControlRotation = false;
+	// (the spring arm and the cameras: only on a pawn the player controls, EnsureCameraRig)
 
 	if (USkeletalMeshComponent* Skel = GetMesh())
 	{
 		Skel->SetVisibility(false);
+		Skel->PrimaryComponentTick.bStartWithTickEnabled = false;      // (registering turned a tick switched off here back on)
+		Skel->SetUsingAbsoluteLocation(true);       // (and it need not be moved with the capsule: there is nothing of it)
+		Skel->SetUsingAbsoluteRotation(true);
+		Skel->SetUsingAbsoluteScale(true);
 		Skel->SetComponentTickEnabled(false);
 	}
 }
@@ -130,7 +129,9 @@ void AVLKing::BeginPlay()
 	{
 		LookSpeedSetting = FMath::Clamp(SavedSpeed, 0.1f, 2.f);
 	}
+	MaxHealth = VLRules::Troop(UnitKind).Health;          // the rules for its kind (UVLBattle)
 	BuildFigure();
+	Post = GetFeet();
 	// look the way the postcard does
 	for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
 	{
@@ -142,10 +143,37 @@ void AVLKing::BeginPlay()
 	}
 	HomeYaw = OverviewYaw = CamYaw;
 	OverviewFocus = FVector(0.f, 0.f, 0.f);
-	Camera->SetFieldOfView(CameraFOV);
+	if (USkeletalMeshComponent* Skel = GetMesh())
+	{
+		Skel->SetComponentTickEnabled(false);       // hidden, with no mesh: nothing to animate
+	}
+	if (!bTroop)
+	{
+		// King David's own pace (VLRules: 520 / 950 against a troop's 420 / 760). Half of it is a longer stride and half
+		// a quicker step, so the feet stay planted (StrideScale); he gets up to speed, brakes and is trailed by the
+		// camera in the same time and distance as before.
+		const VLRules::FTroop& Rules = VLRules::Troop(TEXT("King"));
+		if (Rules.WalkSpeed > 0.f)
+		{
+			const float Was = WalkSpeed, WasRun = RunSpeed;
+			WalkSpeed = Rules.WalkSpeed;
+			RunSpeed = FMath::Max(Rules.RunSpeed, Rules.WalkSpeed);
+			StrideScale = FMath::Sqrt(WalkSpeed / FMath::Max(Was, 1.f));
+			const float Quicker = RunSpeed / FMath::Max(WasRun, 1.f);
+			GetCharacterMovement()->MaxAcceleration *= Quicker;
+			GetCharacterMovement()->BrakingDecelerationWalking *= Quicker;
+			BoomLagScale = Quicker;
+			if (Boom)
+			{
+				Boom->CameraLagSpeed = 7.f * BoomLagScale;
+			}
+		}
+	}
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
+		EnsureCameraRig();
+		Camera->SetFieldOfView(CameraFOV);
 		PC->SetControlRotation(FRotator(HeroPitch(Zoom), CamYaw, 0.f));
 		// the pointer stays visible and is never locked to the window
 		FInputModeGameAndUI Mode;
@@ -156,12 +184,69 @@ void AVLKing::BeginPlay()
 		PC->PlayerCameraManager->ViewPitchMin = -80.f;
 		PC->PlayerCameraManager->ViewPitchMax = 10.f;
 	}
-	OverviewCamera = GetWorld()->SpawnActor<ACameraActor>(FVector::ZeroVector, FRotator::ZeroRotator);
-	if (OverviewCamera)
+	UpdateOverviewCamera(0.f, true);        // (the overview camera itself: EnsureCameraRig, for the player's pawn only)
+	RigRegister(true);
+}
+
+namespace
+{
+	/** The enemy's twin of a unit material, or null: "<name>_Enemy" beside it (MI_King_paint_Enemy, MI_King_sway_Enemy:
+	 *  TeamMix 1, which turns the green cloth red; Tools/ue/import_king.py makes them). Shared by every enemy unit. */
+	UMaterialInterface* VLEnemyTwin(const UMaterialInterface* Base)
 	{
-		OverviewCamera->GetCameraComponent()->SetFieldOfView(OverviewFOV);
-		OverviewCamera->GetCameraComponent()->SetConstraintAspectRatio(false);
-		UpdateOverviewCamera(0.f, true);
+		static TMap<FName, TWeakObjectPtr<UMaterialInterface>> Twins;
+		static TSet<FName> Missing;
+		if (!Base)
+		{
+			return nullptr;
+		}
+		const FString Package = Base->GetOutermost()->GetName() + TEXT("_Enemy");
+		const FName Key(*Package);
+		if (Missing.Contains(Key))
+		{
+			return nullptr;
+		}
+		if (const TWeakObjectPtr<UMaterialInterface>* Found = Twins.Find(Key); Found && Found->IsValid())
+		{
+			return Found->Get();
+		}
+		UMaterialInterface* Twin = FPackageName::DoesPackageExist(Package)
+			? LoadObject<UMaterialInterface>(nullptr, *(Package + TEXT(".") + Base->GetName() + TEXT("_Enemy"))) : nullptr;
+		if (Twin)
+		{
+			Twins.Add(Key, Twin);
+		}
+		else
+		{
+			Missing.Add(Key);
+		}
+		return Twin;
+	}
+
+	/** A part's look by its side. Every unit writes custom depth, with its side in the stencil: 1 the player's (which
+	 *  M_Silhouette shows through trees and buildings), 2 the enemy's (never shown; but, being in the custom depth, a
+	 *  unit standing in front of another does not bring the silhouette out). The enemy's cloth is red. */
+	void VLTeamLook(UStaticMeshComponent* Mesh, int32 Team, bool bDepth)
+	{
+		const bool bEnemy = Team != 0;
+		Mesh->SetRenderCustomDepth(bDepth);          // (off behind the title screen and far from the camera: AVLKing::RigLate)
+		Mesh->SetCustomDepthStencilValue(bEnemy ? 2 : 1);
+		const UStaticMesh* Asset = Mesh->GetStaticMesh();
+		for (int32 i = 0; Asset && i < Asset->GetStaticMaterials().Num(); ++i)
+		{
+			Mesh->SetMaterial(i, bEnemy ? VLEnemyTwin(Asset->GetMaterial(i)) : nullptr);      // (null: the mesh's own)
+		}
+	}
+}
+
+void AVLKing::RefreshSilhouette()
+{
+	for (UStaticMeshComponent* Mesh : Meshes)
+	{
+		if (Mesh)
+		{
+			VLTeamLook(Mesh, Team, bDepthOn);
+		}
 	}
 }
 
@@ -179,7 +264,10 @@ void AVLKing::BuildFigure()
 	// The joints live in character space (X forward, Y right); only the MESHES are turned to face forward. (Turning the
 	// whole figure turned the joints with it: the limbs then swung sideways and sat in front of and behind the body.)
 	Figure->SetRelativeRotation(FRotator::ZeroRotator);
-	Boom->SetRelativeLocation(FVector(0.f, 0.f, Half * 0.45f));
+	if (Boom)
+	{
+		Boom->SetRelativeLocation(FVector(0.f, 0.f, Half * 0.45f));
+	}
 	Health = MaxHealth;
 
 	// every part is a joint at its pivot, hung from its parent's joint (or from the figure), with its mesh on it
@@ -210,6 +298,12 @@ void AVLKing::BuildFigure()
 		Joint->SetRelativeLocation(P.Pivot - Base);
 		Joint->RegisterComponent();
 		Joints.Add(P.Name, Joint);
+		// its node of the pose buffer (a parent is always listed before its children)
+		const int32 NodeIndex = RigNodes.AddDefaulted();
+		RigNodes[NodeIndex].Joint = Joint;
+		RigNodes[NodeIndex].Parent = Parent == Figure ? RigFigure : RigIndex.FindRef(P.Parent);
+		RigNodes[NodeIndex].RelLoc = P.Pivot - Base;
+		RigIndex.Add(P.Name, NodeIndex);
 		if (!P.Mesh)
 		{
 			continue;
@@ -222,10 +316,19 @@ void AVLKing::BuildFigure()
 		Mesh->SetCastShadow(true);
 		Mesh->bCastContactShadow = true;
 		Mesh->bAffectDistanceFieldLighting = false;    // he moves every frame: keep him out of the global distance field
-		Mesh->SetRenderCustomDepth(true);              // M_Silhouette shows him through trees and buildings
-		Mesh->SetCustomDepthStencilValue(1);
+		bUnitGI = VLUnitGI();
+		if (!bUnitGI)
+		{
+			// nor in Lumen's scene (a card capture for every part, every frame it moved) or the indirect lighting cache
+			// (the project has no static lighting): a figure this small adds nothing to the bounce that can be seen
+			Mesh->bAffectDynamicIndirectLighting = false;
+			Mesh->IndirectLightingCacheQuality = ILCQ_Off;
+		}
+		VLTeamLook(Mesh, Team, bDepthOn);              // custom depth + stencil for M_Silhouette; the enemy's red cloth
 		Mesh->RegisterComponent();
 		Meshes.Add(Mesh);
+		RigNodes[NodeIndex].Mesh = Mesh;
+		RigNodes[NodeIndex].MeshRot = FRotator(0.f, Loaded->MeshYaw, 0.f).Quaternion();
 	}
 	auto At = [&Pivot](const TCHAR* Name) { const FVector* V = Pivot.Find(Name); return V ? *V : FVector::ZeroVector; };
 	Rig.Body = Part(TEXT("Body"));
@@ -241,6 +344,25 @@ void AVLKing::BuildFigure()
 	Rig.LegR = Part(TEXT("LegR"));
 	Rig.ShinR = Part(TEXT("ShinR"));
 	SwordJoint = Part(TEXT("Sword"));                  // moved by hand each frame: in the scabbard, or with the fist
+	const TCHAR* Weapon = TEXT("Sword");
+	if (!SwordJoint && Part(TEXT("Hammer")))
+	{
+		SwordJoint = Part(TEXT("Hammer"));             // the Builder: its hammer is held and swung as a sword is
+		Weapon = TEXT("Hammer");
+	}
+	Rig.iBody = RigFind(TEXT("Body"));
+	Rig.iChest = RigFind(TEXT("Chest"));
+	Rig.iHead = RigFind(TEXT("Head"));
+	Rig.iArmL = RigFind(TEXT("ArmL"));
+	Rig.iForeL = RigFind(TEXT("ForeL"));
+	Rig.iArmR = RigFind(TEXT("ArmR"));
+	Rig.iForeR = RigFind(TEXT("ForeR"));
+	Rig.iHandR = RigFind(TEXT("HandR"));
+	Rig.iLegL = RigFind(TEXT("LegL"));
+	Rig.iShinL = RigFind(TEXT("ShinL"));
+	Rig.iLegR = RigFind(TEXT("LegR"));
+	Rig.iShinR = RigFind(TEXT("ShinR"));
+	Rig.iSword = RigFind(Weapon);
 	Rig.HipL = At(TEXT("LegL"));
 	Rig.HipR = At(TEXT("LegR"));
 	Rig.HipHeight = FMath::Max(20.f, Rig.HipL.Z);
@@ -251,7 +373,7 @@ void AVLKing::BuildFigure()
 	Rig.ForeVecR = At(TEXT("HandR")) - At(TEXT("ForeR"));
 	Rig.ForeAxis = Rig.ForeVecR.GetSafeNormal(UE_SMALL_NUMBER, FVector(0.f, 0.f, -1.f));
 	Rig.Blade = Loaded->SwordBladeDir.GetSafeNormal();
-	Rig.GripOff = At(TEXT("Sword")) - At(TEXT("HandR"));
+	Rig.GripOff = At(Weapon) - At(TEXT("HandR"));
 	// the cape's panels, column by column from the yoke down
 	CapeCols = FMath::Clamp(Loaded->CapeCols, 0, CapeMaxCols);
 	CapeRows = FMath::Clamp(Loaded->CapeRows, 0, CapeMaxRows);
@@ -262,6 +384,7 @@ void AVLKing::BuildFigure()
 			FCapePanel& N = Cape[C][R];
 			const FName Name(*FString::Printf(TEXT("Cape%d%d"), C, R));
 			N.Joint = Part(Name);
+			N.Node = RigFind(Name);
 			FVector Down = (R + 1 < CapeRows ? At(*FString::Printf(TEXT("Cape%d%d"), C, R + 1)) : FVector::ZeroVector) - Pivot.FindRef(Name);
 			if (R + 1 >= CapeRows)
 			{
@@ -271,15 +394,23 @@ void AVLKing::BuildFigure()
 			N.Slope = FMath::RadiansToDegrees(FMath::Atan2(-Down.X, -Down.Z));     // it hangs a little away from him as modelled
 		}
 	}
-	if (Loaded->DustMaterial)
+	if (bFootDust && Dust && Loaded->DustMaterial)
 	{
 		Dust->Setup(Loaded->DustMaterial);
+	}
+	else if (Dust)
+	{
+		// (troops raise no dust: no pool of 40 cubes and no material of their own for each of them)
+		Dust->DestroyComponent();
+		Dust = nullptr;
+		bFootDust = false;
 	}
 	if (Loaded->FlashMaterial)
 	{
 		FlashMID = UMaterialInstanceDynamic::Create(Loaded->FlashMaterial, this);
 	}
 	FigureRest = Figure->GetRelativeLocation();
+	RigBuild();
 	UE_LOG(LogVoxelLab, Log, TEXT("King: %d parts, height %.0f, legs %.0f + %.0f, cape %d x %d, sword %s"), Loaded->Parts.Num(), Loaded->Height, Rig.Thigh, Rig.Shin,
 		CapeCols, CapeRows, SwordJoint ? (Loaded->bHasSheath ? TEXT("with scabbard") : TEXT("in hand only")) : TEXT("none"));
 }
@@ -433,8 +564,12 @@ void AVLKing::FinishOrder(bool bArrived)
 	StopOrder();
 	if (bHad)
 	{
-		UE_LOG(LogVoxelLab, Log, TEXT("%s %s %.0f cm from its goal after %.1f s (%d fresh routes)"), *DisplayName, bArrived ? TEXT("arrived") : TEXT("GAVE UP"),
-			FVector::Dist2D(GetFeet(), OrderGoal), AutoTime, Replans);
+		static const IConsoleVariable* BattleLog = IConsoleManager::Get().FindConsoleVariable(TEXT("vl.BattleLog"));
+		if (!bArrived || (BattleLog && BattleLog->GetInt() != 0))       // (an arrival: one line per unit per order, only when asked for)
+		{
+			UE_LOG(LogVoxelLab, Log, TEXT("%s %s %.0f cm from its goal after %.1f s (%d fresh routes)"), *DisplayName, bArrived ? TEXT("arrived") : TEXT("GAVE UP"),
+				FVector::Dist2D(GetFeet(), OrderGoal), AutoTime, Replans);
+		}
 		if (UVLCommand* Command = UVLCommand::Get(this))
 		{
 			Command->OnOrderEnded(this, bArrived);
@@ -453,6 +588,7 @@ bool AVLKing::AutoSteer(float DeltaSeconds, FVector& OutWish)
 	{
 		return false;
 	}
+	FVLOptTiming::FScope Timing(FVLOptTiming::Steer);
 	const FVector2D Pos(GetActorLocation());
 	// corners reached (or passed close by) fall away; the last point is walked right onto
 	while (Waypoints.Num() > 0)
@@ -511,13 +647,37 @@ bool AVLKing::AutoSteer(float DeltaSeconds, FVector& OutWish)
 	FVector2D Dir = (FVector2D(Waypoints[0]) - Pos).GetSafeNormal();
 	// keep a little apart from the others on the way (their capsules would only block each other)
 	const float Personal = 115.f;
-	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+	// (B: only the units of the cells round it, from the battle's spatial hash, in the registry's order; the rules
+	// below are as they were. Without a battle, or with vl.Opt.Registry 0: every unit)
+	FVLUnits Near;
+	if (const UVLBattle* Battle = UVLBattle::Get(this))
 	{
-		if (*It == this || FMath::Abs(It->GetActorLocation().Z - GetActorLocation().Z) > 150.f)
+		Battle->UnitsNear(GetActorLocation(), Personal, Near);
+	}
+	else
+	{
+		for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+		{
+			Near.Add(*It);
+		}
+	}
+	const FVector MyLocation = GetActorLocation();
+	for (const AVLKing* Other : Near)
+	{
+		if (Other == this)
 		{
 			continue;
 		}
-		const FVector2D Away = Pos - FVector2D(It->GetActorLocation());
+		const FVector OtherLocation = Other->GetActorLocation();
+		if (FMath::Abs(OtherLocation.Z - MyLocation.Z) > 150.f)
+		{
+			continue;
+		}
+		const FVector2D Away = Pos - FVector2D(OtherLocation);
+		if (Away.SizeSquared() >= FMath::Square(double(Personal)))
+		{
+			continue;           // (most of them: no square root)
+		}
 		const float D = Away.Size();
 		if (D < Personal && D > 1.f)
 		{
@@ -567,7 +727,10 @@ void AVLKing::SetOrbit(float Yaw, float Pitch, float Distance)
 	ManualPitch = Pitch;
 	ManualArm = Distance;
 	TargetArm = Distance;
-	Boom->TargetArmLength = Distance;
+	if (Boom)
+	{
+		Boom->TargetArmLength = Distance;
+	}
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->SetControlRotation(FRotator(Pitch, Yaw, 0.f));      // at once: a preview starts from a settled view
@@ -576,7 +739,10 @@ void AVLKing::SetOrbit(float Yaw, float Pitch, float Distance)
 
 void AVLKing::SetCameraLag(bool bLag)
 {
-	Boom->bEnableCameraLag = bLag;
+	if (Boom)
+	{
+		Boom->bEnableCameraLag = bLag;
+	}
 }
 
 void AVLKing::SetFreeCamera(const FVector& Location, const FRotator& Rotation, float FOV)
@@ -664,13 +830,20 @@ void AVLKing::LookAt(const FVector& Point, float InZoom, float InYaw)
 void AVLKing::TakeControlOf(AVLKing* Unit)
 {
 	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (!Unit || !PC)
+	if (!Unit || !PC || Unit->Team != Team)
 	{
-		return;
+		return;                                 // never one of the enemy's
 	}
 	if (Unit == this)
 	{
-		SetHeroMode(true);
+		if (!bDead)
+		{
+			SetHeroMode(true);
+		}
+		return;
+	}
+	if (Unit->IsDead() && Unit->IsTroop())
+	{
 		return;
 	}
 	// the new one looks the way this one did
@@ -697,7 +870,8 @@ void AVLKing::TakeControlOf(AVLKing* Unit)
 
 void AVLKing::Attack(int32 Kind)
 {
-	if (bTroop && !UVLSwordsmanCombat::CanFight(this))
+	const bool bHammer = UnitKind == TEXT("Builder") && (IsPlayerControlled() || UVLBuilderWork::IsAtWork(this));    // a builder the player plays (or one at its work) swings its hammer
+	if (bTroop && !UVLSwordsmanCombat::CanFight(this) && !bHammer)
 	{
 		return;                                 // of the troops the swordsman fights with a sword, as the king does
 	}
@@ -749,17 +923,96 @@ void AVLKing::StartSwing(int32 Kind)
 	}
 }
 
-void AVLKing::HitDummies()
+float AVLKing::SwingDamage() const
+{
+	return VLRules::Troop(UnitKind).Damage;
+}
+
+void AVLKing::HitDummies(float Share)
 {
 	const FVector Me = GetActorLocation();
 	const FVector Fwd = GetActorForwardVector();
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	// a foe in front of the blade: the one it is fighting if that is in reach, else the nearest in the arc, else a
+	// foe's building whose walls are within reach
+	if (UVLBattle* Battle = UVLBattle::Get(this))
 	{
-		if (!It->ActorHasTag(TEXT("Dummy")))
+		AActor* Struck = nullptr;
+		const UVLSwordsmanCombat* Combat = UVLSwordsmanCombat::For(this, false);
+		AActor* Fighting = Combat ? Combat->GetTarget() : nullptr;
+		float Best = 240.f;
+		// (B: the units within the blade's reach from the battle's spatial hash, in the registry's order)
+		FVLUnits Near;
+		Battle->UnitsNear(Me, 240.f, Near);
+		for (AVLKing* Other : Near)
 		{
-			continue;
+			FVector To = Other->GetActorLocation() - Me;
+			To.Z = 0.f;
+			const float D = To.Size();
+			if (!Battle->IsHostile(Other, Team) || D > 240.f || FMath::Abs(Other->GetActorLocation().Z - Me.Z) > 150.f || (D > 60.f && FVector::DotProduct(To / D, Fwd) < 0.1f))
+			{
+				continue;
+			}
+			if (Other == Fighting)
+			{
+				Struck = Other;
+				break;
+			}
+			if (D < Best)
+			{
+				Best = D;
+				Struck = Other;
+			}
 		}
-		FVector To = It->GetActorLocation() - Me;
+		if (!Struck)
+		{
+			float BestB = 190.f;
+			for (const FVLBuildingState& B : Battle->GetBuildings())
+			{
+				FVector Wall;
+				if (!B.IsAlive() || B.Team == Team || B.Team < 0)
+				{
+					continue;
+				}
+				// (to its hit box: its walls grown by VLRules::BuildingHitPad, so a blade at the eaves or a prop still lands)
+				const float D = FMath::Max(0.f, Battle->DistanceTo(B.Actor.Get(), GetFeet(), &Wall) - VLRules::BuildingHitPad);
+				const FVector To = (Wall - Me).GetSafeNormal2D();
+				if (D < BestB && (D < 40.f || FVector::DotProduct(To, Fwd) > 0.f))
+				{
+					BestB = D;
+					Struck = B.Actor.Get();
+				}
+			}
+		}
+		if (Struck && Battle->Damage(Struck, SwingDamage() * Share, this, Team) > 0.f && Cast<AVLKing>(Struck))
+		{
+			Battle->PlayAt(TEXT("S_SwordHit"), Struck->GetActorLocation(), 0.55f, 3500.f, 0.06f);
+		}
+	}
+	// (B: the level's dummies from the battle's cached list, not a walk over every actor on every blow)
+	TArray<AActor*, TInlineAllocator<16>> DummyList;
+	if (const UVLBattle* Battle = UVLBattle::Get(this); Battle && UVLBattle::UseRegistry())
+	{
+		for (const TWeakObjectPtr<AActor>& D : Battle->Dummies())
+		{
+			if (AActor* A = D.Get())
+			{
+				DummyList.Add(A);
+			}
+		}
+	}
+	else
+	{
+		for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+		{
+			if (It->ActorHasTag(TEXT("Dummy")))
+			{
+				DummyList.Add(*It);
+			}
+		}
+	}
+	for (AActor* Dummy : DummyList)
+	{
+		FVector To = Dummy->GetActorLocation() - Me;
 		To.Z = 0.f;
 		const float Dist = To.Size();
 		if (Dist > 230.f || FVector::DotProduct(To.GetSafeNormal(), Fwd) < 0.2f)
@@ -769,7 +1022,7 @@ void AVLKing::HitDummies()
 		// it rocks and thunks: in one place for every sword (a dummy several fighters hit rocks about its own rest pose)
 		if (UVLSwordFx* Fx = UVLSwordFx::Get(this))
 		{
-			Fx->HitDummy(*It, To.GetSafeNormal(), this);
+			Fx->HitDummy(Dummy, To.GetSafeNormal(), this);
 		}
 	}
 }
@@ -780,19 +1033,61 @@ void AVLKing::UpdateOverviewCamera(float DeltaSeconds, bool bSnap)
 	{
 		return;
 	}
-	const float Dist = FMath::Lerp(OverviewNear, OverviewFar, OverviewZoom * OverviewZoom);
-	const float Pitch = OverviewPitch(OverviewZoom);
+	// (the title screen's backdrop frames the whole map from its own distance, past the overview's zoom limits)
+	const bool bTitle = TitleDistance > 0.f;
+	const float Dist = bTitle ? TitleDistance : FMath::Lerp(OverviewNear, OverviewFar, OverviewZoom * OverviewZoom);
+	const float Pitch = bTitle ? TitlePitch : OverviewPitch(OverviewZoom);
 	const FRotator Rot(Pitch, OverviewYaw, 0.f);
-	const FVector Want = OverviewFocus - Rot.Vector() * Dist;
-	if (bSnap)
+	FVector Focus = bTitle ? TitleFocus : OverviewFocus;
+	// The camera and the ground (UVLCameraGround; not the title's shot, which is far over everything). The view turns
+	// about a point ON the ground: the focus rides the terrain's surface (it was at height 0 everywhere, so over high
+	// ground the whole view hung under it), smoothly, a little slower the further out the view is.
+	UVLCameraGround* Ground = bTitle ? nullptr : UVLCameraGround::Get(this);
+	if (Ground && !Ground->IsActive())
 	{
-		OverviewCamera->SetActorLocationAndRotation(Want, Rot);
+		Ground = nullptr;
+	}
+	if (Ground)
+	{
+		if (!bFocusGround || !FocusGroundAt.Equals(FVector2D(Focus), 5.f))      // (asked again only once the focus has moved)
+		{
+			float Z = 0.f;
+			if (Ground->SurfaceAt(FVector2D(Focus), Z))
+			{
+				FocusGroundAt = FVector2D(Focus);
+				FocusGroundWant = Z;
+				if (!bFocusGround)
+				{
+					FocusGroundZ = Z;
+					bFocusGround = true;
+				}
+			}
+		}
+		if (bFocusGround)
+		{
+			FocusGroundZ = bSnap ? FocusGroundWant : FMath::FInterpTo(FocusGroundZ, FocusGroundWant, DeltaSeconds, FMath::Lerp(6.f, 2.5f, OverviewZoom));
+			Focus.Z = FocusGroundZ;
+		}
 	}
 	else
 	{
-		OverviewCamera->SetActorLocationAndRotation(FMath::VInterpTo(OverviewCamera->GetActorLocation(), Want, DeltaSeconds, 9.f),
-			FMath::RInterpTo(OverviewCamera->GetActorRotation(), Rot, DeltaSeconds, 9.f));
+		bFocusGround = false;
 	}
+	const FVector Want = Focus - Rot.Vector() * Dist;
+	FVector Eye = bSnap ? Want : FMath::VInterpTo(OverviewCamera->GetActorLocation(), Want, DeltaSeconds, 9.f);
+	FRotator Look = Rot;
+	// and the eye itself never comes nearer the ground under it than its clearance: it is lifted there (a low angle
+	// close in, a hill behind the view, a turn about a point on a slope), and looks down at the focus more steeply
+	if (Ground && Ground->KeepAbove(Eye, OverviewFloor, DeltaSeconds, bSnap, UVLCameraGround::OverviewClearance(), TEXT("overview")) > 0.f)
+	{
+		const float Flat = FMath::Max(Dist * FMath::Cos(FMath::DegreesToRadians(Pitch)), 1.f);
+		Look.Pitch = FMath::Clamp(-FMath::RadiansToDegrees(FMath::Atan2(float(Eye.Z - Focus.Z), Flat)), -89.f, Pitch);
+	}
+	else if (!Ground)
+	{
+		OverviewFloor.bValid = false;
+	}
+	OverviewCamera->SetActorLocationAndRotation(Eye, bSnap ? Look : FMath::RInterpTo(OverviewCamera->GetActorRotation(), Look, DeltaSeconds, 9.f));
 }
 
 AActor* AVLKing::PickUnderCursor(APlayerController* PC, FVector* Ground) const
@@ -805,11 +1100,33 @@ AActor* AVLKing::PickUnderCursor(APlayerController* PC, FVector* Ground) const
 	return PickAt(PC, FVector2D(MX, MY), Ground);
 }
 
-AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground) const
+AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground, bool bBoxes) const
 {
 	const float MX = Point.X, MY = Point.Y;
+	// What the pointer's ray meets first that can be seen: the hidden walls (the river's and the cliffs' barriers, the
+	// map's edge), the water and the backdrop are passed through even if the level has them stopping the trace.
 	FHitResult Hit;
-	const bool bHit = PC->GetHitResultAtScreenPosition(Point, ECC_Visibility, false, Hit);
+	bool bHit = false;
+	FVector Origin = FVector::ZeroVector, Dir = FVector::ForwardVector;
+	const bool bRay = PC->DeprojectScreenPositionToWorld(Point.X, Point.Y, Origin, Dir);
+	if (bRay)
+	{
+		FCollisionQueryParams Params(TEXT("Pointer"), false);
+		for (int32 Try = 0; Try < 8 && !bHit; ++Try)
+		{
+			if (!GetWorld()->LineTraceSingleByChannel(Hit, Origin, Origin + Dir * 200000.f, ECC_Visibility, Params))
+			{
+				break;
+			}
+			const AActor* Struck = Hit.GetActor();
+			if (Struck && (UVLGrid::IsUnseen(Struck) || Struck->IsA<APawn>()))
+			{
+				Params.AddIgnoredActor(Struck);
+				continue;
+			}
+			bHit = true;
+		}
+	}
 	if (bHit && Ground)
 	{
 		*Ground = Hit.ImpactPoint;
@@ -819,9 +1136,22 @@ AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* 
 	AVLKing* Best = nullptr;
 	float BestDist = TNumericLimits<float>::Max();
 	const FVector Eye = PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : GetActorLocation();
-	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+	// (B: the units from the battle's registry; the selectable buildings below from its cached list)
+	const UVLBattle* PickBattle = UVLBattle::Get(this);
+	TArray<AVLKing*> PickLocal;
+	if (!PickBattle)
 	{
-		AVLKing* Unit = *It;
+		for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+		{
+			PickLocal.Add(*It);
+		}
+	}
+	for (AVLKing* Unit : PickBattle ? PickBattle->AllUnits() : PickLocal)
+	{
+		if (Unit->IsDead())
+		{
+			continue;
+		}
 		FVector2D Feet, Head;
 		const float Half = Unit->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 		if (PC->ProjectWorldLocationToScreen(Unit->GetActorLocation() - FVector(0.f, 0.f, Half), Feet) && PC->ProjectWorldLocationToScreen(Unit->GetActorLocation() + FVector(0.f, 0.f, Half), Head))
@@ -850,18 +1180,34 @@ AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* 
 	// Anywhere on a building counts, not only the faces the trace happens to meet first (its banners, lanterns and
 	// props, the gaps in its roof, its yard, a tree in front): the pointer's ray against each selectable building's
 	// own box (the mesh's bounds, turned with it); the nearest box the ray enters wins.
-	FVector Origin, Dir;
-	if (PC->DeprojectScreenPositionToWorld(Point.X, Point.Y, Origin, Dir))
+	// (not for orders; and never a box that lies behind what the pointer is on: a hill, a cliff, another building)
+	if (bBoxes && bRay)
 	{
 		AActor* BestBuilding = nullptr;
-		float BestT = TNumericLimits<float>::Max();
-		for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+		float BestT = bHit ? Hit.Distance + 1.f : TNumericLimits<float>::Max();
+		TArray<AActor*, TInlineAllocator<64>> SelectableList;
+		if (PickBattle && UVLBattle::UseRegistry())
 		{
-			AActor* A = *It;
-			if (!A->ActorHasTag(TEXT("Selectable")) || A->IsA<AVLKing>())
+			for (const TWeakObjectPtr<AActor>& S : PickBattle->Selectables())
 			{
-				continue;
+				if (AActor* A = S.Get())
+				{
+					SelectableList.Add(A);
+				}
 			}
+		}
+		else
+		{
+			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+			{
+				if (It->ActorHasTag(TEXT("Selectable")) && !It->IsA<AVLKing>())
+				{
+					SelectableList.Add(*It);
+				}
+			}
+		}
+		for (AActor* A : SelectableList)
+		{
 			const UStaticMeshComponent* SMC = A->FindComponentByClass<UStaticMeshComponent>();
 			if (!SMC || !SMC->GetStaticMesh())
 			{
@@ -922,14 +1268,54 @@ bool AVLKing::OrderAt(const FVector2D& Point, bool bRun, bool bQueue)
 	TArray<AVLKing*> Units;
 	Command->GetSelection(Units);
 	FVector Ground = FVector::ZeroVector;
-	AActor* Hit = PickAt(PC, Point, &Ground);
+	AActor* Hit = PickAt(PC, Point, &Ground, false);    // a foe or the tower only where the pointer is on the thing itself
+	UE_LOG(LogVoxelLab, Log, TEXT("order at %.0f %.0f of the view: %d unit(s), ground %s, on %s"), Point.X, Point.Y, Units.Num(), *Ground.ToCompactString(), *GetNameSafe(Hit));
 	if (Units.Num() == 0 || Ground.IsZero() || Units.Contains(Cast<AVLKing>(Hit)))
 	{
 		return false;
 	}
-	if (Hit && UVLCommand::IsTower(Hit) && Units.ContainsByPredicate([](const AVLKing* U) { return U->IsRanged(); }))
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	// Builders and a site or a damaged building of their side: they go to work on it (VLConstruction.*); the rest of
+	// the selection takes the order as usual
+	// Builders and a free gold mine (a neutral one, or one fallen and abandoned): they claim it (the mine's price; it
+	// is theirs when they have worked it through). The rest of the selection takes the order as usual
+	if (UVLConstruction* Construction = UVLConstruction::Get(this); Hit && Construction && Construction->IsFreeMine(Hit)
+		&& Units.ContainsByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); }))
+	{
+		Construction->ClaimMine(Hit, Team, Units.FilterByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); }));      // (refused: it says why)
+		Units.RemoveAll([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
+		if (Units.Num() == 0)
+		{
+			return true;
+		}
+	}
+	if (UVLConstruction* Construction = UVLConstruction::Get(this); Hit && Battle && Battle->TeamOf(Hit) == Team && Construction && Construction->OrderWork(Units, Hit))
+	{
+		Units.RemoveAll([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
+		if (Units.Num() == 0)
+		{
+			return true;
+		}
+	}
+	if (Hit && Battle && Battle->IsHostile(Hit, Team) && Units.ContainsByPredicate([](const AVLKing* U) { return UVLCommand::CanAttack(U); }))
+	{
+		Command->OrderAttack(Units, Hit, bRun);         // a foe (a unit, a building): attack it
+	}
+	else if (Hit && UVLCommand::IsTower(Hit) && (!Battle || Battle->TeamOf(Hit) == Team || Battle->TeamOf(Hit) == UVLBattle::Neutral)
+		&& Units.ContainsByPredicate([](const AVLKing* U) { return U->IsRanged(); }))
 	{
 		Command->OrderGarrison(Units, Hit, bRun);       // onto the watch tower
+	}
+	else if (Hit && !bQueue && Command->CanBeGuarded(Hit, Team) && Units.ContainsByPredicate([](const AVLKing* U) { return U->GetKind() != TEXT("Builder"); }))
+	{
+		// one of the player's own buildings, Builders or King David: the troops guard it (the main game's right
+		// click); Builders with them go there
+		Command->OrderGuard(Units, Hit);
+		TArray<AVLKing*> Builders = Units.FilterByPredicate([](const AVLKing* U) { return U->GetKind() == TEXT("Builder"); });
+		if (Builders.Num() > 0)
+		{
+			Command->OrderMove(Builders, Ground, bRun, Command->SelectionFormation(), bQueue);
+		}
 	}
 	else
 	{
@@ -952,6 +1338,10 @@ void AVLKing::BoxSelect(const FVector2D& A, const FVector2D& B, bool bShift)
 	TArray<AVLKing*> InBox;
 	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
 	{
+		if (It->IsDead() || It->Team != Team)
+		{
+			continue;           // the box gathers only the player's own
+		}
 		const FVector Probe[2] = { It->GetFeet(), It->GetActorLocation() + FVector(0.f, 0.f, 30.f) };
 		for (const FVector& P : Probe)
 		{
@@ -982,6 +1372,83 @@ bool AVLKing::ClickAt(const FVector2D& Point, bool bShift)
 	}
 	AActor* Hit = PickAt(PC, Point);
 	AVLKing* HitUnit = Cast<AVLKing>(Hit);
+	UVLBattle* Battle = UVLBattle::Get(this);
+	// an armed click (P, V, A: the main game's patrol, guard, attack-move)
+	if (const EVLArm Armed = Command->GetArmed(); Armed == EVLArm::Patrol || Armed == EVLArm::Guard || Armed == EVLArm::AttackMove)
+	{
+		TArray<AVLKing*> Sel;
+		Command->GetSelection(Sel);
+		Command->Arm(EVLArm::None);
+		if (Armed == EVLArm::Guard)
+		{
+			if (Hit && Command->CanBeGuarded(Hit, Team) && Command->OrderGuard(Sel, Hit) > 0)
+			{
+				return true;
+			}
+			if (Battle)
+			{
+				Battle->PushAlert(HitUnit && HitUnit->Team == Team ? TEXT("Troops cannot be guarded: only buildings, Builders and King David")
+					: TEXT("Guard: click one of your buildings, a Builder or King David"));
+				Battle->Play2D(TEXT("S_UIError"), 0.4f);
+			}
+			return false;
+		}
+		if (Armed == EVLArm::AttackMove && Hit && Battle && Battle->IsHostile(Hit, Team))
+		{
+			Command->OrderAttack(Sel, Hit, false);     // A, then a click on a foe: attack it
+			return true;
+		}
+		FVector Ground = FVector::ZeroVector;
+		PickAt(PC, Point, &Ground, false);
+		if (Ground.IsZero())
+		{
+			return false;
+		}
+		if (Armed == EVLArm::Patrol)
+		{
+			// Shift: one more point of the patrol, and P stays armed for the next
+			if (bShift)
+			{
+				Command->ExtendPatrol(Sel, Ground, Command->SelectionFormation());
+				Command->Arm(EVLArm::Patrol);
+			}
+			else
+			{
+				Command->OrderPatrol(Sel, { Ground }, false, Command->SelectionFormation());
+			}
+		}
+		else
+		{
+			Command->OrderAttackMove(Sel, Ground, false, Command->SelectionFormation(), bShift);
+			if (bShift)
+			{
+				Command->Arm(EVLArm::AttackMove);  // Shift: one more point of the way
+			}
+		}
+		return true;
+	}
+	if (Hit && Battle && Battle->IsHostile(Hit, Team))
+	{
+		// a foe (a unit or a building), with fighters selected: they attack it (Shift: at a run). Without: it is shown
+		TArray<AVLKing*> Fighters;
+		Command->GetSelection(Fighters);
+		if (Command->OrderAttack(Fighters, Hit, bShift) > 0)
+		{
+			return true;
+		}
+		if (!bShift)
+		{
+			Command->ClearSelection();
+			Selected = Hit;         // (read only: the player cannot command the enemy's)
+			LastClicked = nullptr;
+		}
+		return false;
+	}
+	if (HitUnit && HitUnit->Team != Team)
+	{
+		HitUnit = nullptr;          // (a fallen or neutral one)
+		Hit = nullptr;
+	}
 	if (!HitUnit && Command->IsAttackGroundArmed())
 	{
 		// A, then a click on the ground: the selection's archers shoot at that spot
@@ -1039,10 +1506,66 @@ bool AVLKing::ClickAt(const FVector2D& Point, bool bShift)
 	return false;
 }
 
+bool AVLKing::SelectKindAt(const FVector2D& Point, bool bAdd)
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	UVLCommand* Command = UVLCommand::Get(this);
+	AVLKing* Of = PC ? Cast<AVLKing>(PickAt(PC, Point)) : nullptr;
+	if (!Command || !Of || Of->IsDead() || Of->Team != Team)
+	{
+		return false;
+	}
+	int32 SizeX = 0, SizeY = 0;
+	PC->GetViewportSize(SizeX, SizeY);
+	TArray<AVLKing*> Same;
+	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+	{
+		FVector2D Screen;
+		if (It->IsAlive() && It->Team == Team && It->GetKind() == Of->GetKind() && It->IsTroop() == Of->IsTroop()
+			&& PC->ProjectWorldLocationToScreen(It->GetActorLocation(), Screen) && Screen.X >= 0.f && Screen.Y >= 0.f && Screen.X <= SizeX && Screen.Y <= SizeY)
+		{
+			Same.Add(*It);
+		}
+	}
+	Command->Select(Same, bAdd);
+	Selected = Of;
+	LastClicked = nullptr;
+	UE_LOG(LogVoxelLab, Log, TEXT("selected every %s in view: %d"), *Of->GetKind(), Same.Num());
+	return true;
+}
+
+void AVLKing::SelectPlatoon(int32 Index, bool bLook)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command)
+	{
+		return;
+	}
+	TArray<AVLKing*> Members;
+	Command->GetPlatoon(Index, Members);
+	if (Members.Num() == 0)
+	{
+		return;
+	}
+	Command->Select(Members);
+	Selected = Members[0];
+	if (bLook)
+	{
+		const FVector Centre = Command->PlatoonCentre(Index);
+		OverviewFocus = FVector(Centre.X, Centre.Y, 0.f);
+	}
+}
+
 void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 {
 	UVLCommand* Command = UVLCommand::Get(this);
 	if (!Command)
+	{
+		return;
+	}
+	// building (VLConstruction.*): B the build menu, X repair, Delete a site / building; while a building is being
+	// placed it has the mouse
+	if (UVLConstruction* Construction = UVLConstruction::Get(this); Construction && Construction->OverviewInput(PC, HUD, this))
 	{
 		return;
 	}
@@ -1060,24 +1583,11 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 
 	if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) && bMouse)
 	{
-		// the panel's button (train a troop, empty the tower), an order (Ctrl / Cmd + click: for a trackpad), or the
-		// start of a click or of a box
-		const int32 Button = HUD ? HUD->TrainButtonAt(Mouse, FVector2D(SizeX, SizeY)) : -1;
-		if (Button >= 0)
+		// the interface first (a press on a panel, the minimap, a button: AVLHUD answers it as it draws), then an
+		// order (Ctrl / Cmd + click: for a trackpad), or the start of a click or of a box
+		if (HUD && HUD->OnMousePress(Mouse, false))
 		{
-			AActor* Building = Selected.Get();
-			if (UVLCommand::IsTower(Building))
-			{
-				if (Command->TowerCount(Building) > 0)
-				{
-					AVLGameMode::PlayOrderSound(this);      // "Send them out"
-				}
-				Command->EmptyTower(Building);
-			}
-			else if (AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>())
-			{
-				GM->Train(Building);
-			}
+			// the interface took it: nothing in the world
 		}
 		else if (bCtrl && Units.Num() > 0)
 		{
@@ -1108,9 +1618,13 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		}
 		else
 		{
-			if (ClickAt(DragPos, bShift))
+			if (bAlt && Command->GetArmed() == EVLArm::None && SelectKindAt(DragPos, bShift))
 			{
-				AVLGameMode::PlayOrderSound(this);      // an attack order
+				// Alt / Option + click: all of that kind in view (the main game's double click)
+			}
+			else if (ClickAt(DragPos, bShift))
+			{
+				AVLGameMode::PlayOrderSound(this);      // an order
 			}
 			if (PC->GetPawn() != this)
 			{
@@ -1119,7 +1633,25 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		}
 		Command->GetSelection(Units);
 	}
-	if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && bMouse)
+	UVLBattle* Battle = UVLBattle::Get(this);
+	AActor* SelBuilding = (Selected.IsValid() && !Cast<AVLKing>(Selected.Get()) && Battle && Battle->FindBuilding(Selected.Get()) && Battle->TeamOf(Selected.Get()) == Team) ? Selected.Get() : nullptr;
+	if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && bMouse && HUD && HUD->OnMousePress(Mouse, true))
+	{
+		// a right click on the interface (the minimap: the selection goes there, or a barracks' / range's rally point;
+		// a platoon's formation button): AVLHUD answers it; nothing in the world
+	}
+	else if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && bMouse && Units.Num() == 0 && SelBuilding && !UVLBattle::TroopFor(SelBuilding).IsEmpty())
+	{
+		// a barracks / range selected and nobody: a right click on the ground is where its recruits muster
+		FVector Ground = FVector::ZeroVector;
+		PickAt(PC, Mouse, &Ground);
+		if (!Ground.IsZero())
+		{
+			Battle->SetRally(SelBuilding, Ground);
+			AVLGameMode::PlayOrderSound(this);
+		}
+	}
+	else if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && bMouse)
 	{
 		// Shift + right click: a point on their pathway (as in the main game). A double right click: there at a run.
 		const double Now = GetWorld()->GetRealTimeSeconds();
@@ -1140,7 +1672,13 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		{
 			continue;
 		}
-		if (bCtrl || bAlt)
+		if ((bCtrl || bAlt) && Units.Num() == 0 && SelBuilding && !UVLBattle::TroopFor(SelBuilding).IsEmpty())
+		{
+			// a barracks / range selected: its recruits join platoon N (again: none)
+			const FVLBuildingState* B = Battle->FindBuilding(SelBuilding);
+			Battle->SetFeedPlatoon(SelBuilding, (B && B->FeedPlatoon == i) ? INDEX_NONE : i);
+		}
+		else if (bCtrl || bAlt)
 		{
 			Command->AssignPlatoon(i, Units);
 		}
@@ -1150,40 +1688,121 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		}
 		else
 		{
+			const double Now = GetWorld()->GetRealTimeSeconds();
 			TArray<AVLKing*> Members;
 			Command->GetPlatoon(i, Members);
 			if (Members.Num() > 0)
 			{
-				Command->Select(Members);
-				Selected = Members[0];
-				const double Now = GetWorld()->GetRealTimeSeconds();
-				if (LastPlatoonKey == i && Now - LastPlatoonTime < 0.4)
-				{
-					const FVector Centre = Command->PlatoonCentre(i);
-					OverviewFocus = FVector(Centre.X, Centre.Y, 0.f);
-				}
+				SelectPlatoon(i, LastPlatoonKey == i && Now - LastPlatoonTime < 0.4);
 				LastPlatoonKey = i;
 				LastPlatoonTime = Now;
 			}
+		}
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::Delete))
+	{
+		const int32 P = Command->PlatoonOf(Units);
+		if (P != INDEX_NONE)
+		{
+			Command->DisbandPlatoon(P);     // Delete: break up the selected platoon (the troops stay selected)
 		}
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::F))
 	{
 		Command->CycleFormation();
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::A) && !bCtrl && !bAlt)
+	if (PC->WasInputKeyJustPressed(EKeys::G))
 	{
-		Command->ArmAttackGround(true);         // (only with archers selected) the next click on the ground is where they shoot
+		Command->CycleStance();         // Aggressive > Defensive > Hold ground
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::U) && SelBuilding && Battle)
+	{
+		Battle->Upgrade(SelBuilding);   // raise the selected building a level
+	}
+	else if (PC->WasInputKeyJustPressed(EKeys::U) && !Selected.IsValid() && Units.Num() == 0 && Battle && Battle->GetCastle(Team))
+	{
+		Battle->Upgrade(Battle->GetCastle(Team));      // nothing selected: the castle (the main game's U)
+	}
+	// ---- the main game's orders (the command card has them too)
+	auto UIClick = [Battle]() { if (Battle) { Battle->Play2D(TEXT("S_UIClick"), 0.4f); } };
+	if (PC->WasInputKeyJustReleased(EKeys::A) && !bTapKeyPanned[0] && TapKeyDownAt[0] >= 0.0 && !bCtrl && !bAlt && Units.Num() > 0)
+	{
+		Command->CycleAttackArm();      // a tap: attack-move (archers alone: attack ground); again: the other
+		UIClick();
+	}
+	if (PC->WasInputKeyJustReleased(EKeys::S) && !bTapKeyPanned[1] && TapKeyDownAt[1] >= 0.0 && !bCtrl && !bAlt && Units.Num() > 0)
+	{
+		Command->OrderStop(Units);      // a tap: stop (a hold pans)
+		AVLGameMode::PlayOrderSound(this);
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::H) && Units.Num() > 0)
+	{
+		Command->OrderHold(Units);      // stand fast: only what is in reach
+		AVLGameMode::PlayOrderSound(this);
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::P) && Units.Num() > 0)
+	{
+		Command->Arm(EVLArm::Patrol);   // then a click (Shift: more points)
+		UIClick();
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::V) && Command->SelectionCanGuard())
+	{
+		Command->Arm(EVLArm::Guard);    // then a click on a building, a Builder or the king
+		UIClick();
+		if (Battle)
+		{
+			Battle->PushAlert(TEXT("Guard: click one of your buildings, a Builder or King David"));
+		}
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::O) && Units.Num() > 0)
+	{
+		if (Command->OrderRoam(Units) > 0)
+		{
+			AVLGameMode::PlayOrderSound(this);
+		}
+		else if (Battle)
+		{
+			Battle->PushAlert(TEXT("Only the Spy roams"));
+		}
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::M) && Units.Num() > 1)
+	{
+		Command->ToggleMarchTogether();
+		UIClick();
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::K) && Units.Num() > 0)
+	{
+		Command->DismissCommand();      // the first press asks, a second does it
+		UIClick();
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::SpaceBar) || PC->WasInputKeyJustPressed(EKeys::Home))
+	{
+		// centre the view on the selection (or the selected building)
+		FVector C = FVector::ZeroVector;
+		for (const AVLKing* U : Units)
+		{
+			C += U->GetActorLocation();
+		}
+		if (Units.Num() > 0)
+		{
+			C /= Units.Num();
+			OverviewFocus = FVector(C.X, C.Y, 0.f);
+		}
+		else if (Selected.IsValid())
+		{
+			OverviewFocus = FVector(Selected->GetActorLocation().X, Selected->GetActorLocation().Y, 0.f);
+		}
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::RightMouseButton))
 	{
-		Command->ArmAttackGround(false);
+		Command->Arm(EVLArm::None);     // a right click lets an armed click go
 	}
+	PC->CurrentMouseCursor = Command->GetArmed() != EVLArm::None ? EMouseCursor::Crosshairs : EMouseCursor::Default;     // (armed: the main game's crosshair)
 	if (PC->WasInputKeyJustPressed(EKeys::Enter))
 	{
-		if (AVLKing* Chosen = Cast<AVLKing>(Selected.Get()))
+		if (AVLKing* Chosen = Cast<AVLKing>(Selected.Get()); Chosen && Chosen->Team == Team && Chosen->IsAlive())
 		{
-			TakeControlOf(Chosen);
+			TakeControlOf(Chosen);          // any of the player's own: the king, a swordsman, an archer
 		}
 	}
 }
@@ -1203,69 +1822,68 @@ void AVLKing::PollInput(float DeltaSeconds)
 		if (GetController() && AutoSteer(DeltaSeconds, Wish))
 		{
 			GetCharacterMovement()->MaxWalkSpeed = bAutoRun ? RunSpeed : WalkSpeed;
+			if (PaceCap > 0.f)
+			{
+				GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, PaceCap);     // marching together
+			}
 			AddMovementInput(Wish, 1.f);
 		}
 		return;
 	}
-	// the menu: Esc (or P) opens and closes it; while it is open everything stands still
+	// the menus: Esc (or P) opens the pause menu (and backs out of a screen); while one is up the world's input is not read
 	AVLHUD* HUD = Cast<AVLHUD>(PC->GetHUD());
 	UpdateCursorMode(PC, HUD);
 	if (HUD)
 	{
-		if (PC->WasInputKeyJustPressed(EKeys::Escape) || PC->WasInputKeyJustPressed(EKeys::P))
+		// (P: in the overview with units selected it is Patrol, OverviewCommands; the pause menu otherwise)
+		const UVLCommand* Cmd = UVLCommand::Get(this);
+		const bool bPatrolKey = !bHeroMode && !HUD->bMenu && Cmd && Cmd->NumSelected() > 0;
+		if (PC->WasInputKeyJustPressed(EKeys::Escape) || (PC->WasInputKeyJustPressed(EKeys::P) && !bPatrolKey))
 		{
-			HUD->bMenu = !HUD->bMenu;
+			HUD->OnEscape();
+		}
+		if (PC->WasInputKeyJustPressed(EKeys::F1))
+		{
+			HUD->ToggleLegend();            // the controls overlay (in the menus: the Controls screen)
 		}
 		if (HUD->bMenu)
 		{
-			int32 SizeX = 0, SizeY = 0;
-			PC->GetViewportSize(SizeX, SizeY);
-			float MX = 0.f, MY = 0.f;
-			HUD->Hover = PC->GetMousePosition(MX, MY) ? HUD->ButtonAt(FVector2D(MX, MY), FVector2D(SizeX, SizeY)) : -1;
-			const bool bClick = PC->WasInputKeyJustPressed(EKeys::LeftMouseButton);
-			if (PC->WasInputKeyJustPressed(EKeys::Enter) || (bClick && HUD->Hover == 0))
+			HUD->MenuInput(PC, this);
+			if (HUD->IsTitle())
 			{
-				HUD->bMenu = false;
-			}
-			else if (PC->WasInputKeyJustPressed(EKeys::M) || (bClick && (HUD->Hover == 1 || HUD->Hover == 2)))
-			{
-				// the other two maps (M: the next one round: town > flatlands > village)
-				UGameplayStatics::OpenLevel(this, FName(*AVLHUD::MapPath(HUD->OtherMap(HUD->Hover == 2 ? 1 : 0))));
-			}
-			else if (PC->WasInputKeyJustPressed(EKeys::I) || (bClick && HUD->Hover == AVLHUD::NumButtons - 2))
-			{
-				CycleLookInvert();
-			}
-			else if (PC->WasInputKeyJustPressed(EKeys::U) || (bClick && HUD->Hover == AVLHUD::NumButtons - 5))
-			{
-				if (AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>())
+				// behind the title screen the overview drifts slowly round the realm
+				if (bHeroMode)
 				{
-					GM->CycleMusicVolume();
+					SetHeroMode(false);
+					OverviewZoom = 0.32f;
 				}
-			}
-			else if (PC->WasInputKeyJustPressed(EKeys::V) || (bClick && HUD->Hover == AVLHUD::NumButtons - 4))
-			{
-				CycleCameraAngle();
-			}
-			else if (PC->WasInputKeyJustPressed(EKeys::L) || (bClick && HUD->Hover == AVLHUD::NumButtons - 3))
-			{
-				CycleLookSpeed();
-			}
-			else if (PC->WasInputKeyJustPressed(EKeys::X) || (bClick && HUD->Hover == AVLHUD::NumButtons - 1))
-			{
-				UKismetSystemLibrary::QuitGame(this, PC, EQuitPreference::Quit, false);
+				OverviewYaw += 3.f * DeltaSeconds;
+				UpdateOverviewCamera(DeltaSeconds);
 			}
 			return;
 		}
 	}
+	if (bDead)
+	{
+		// the king fallen, waiting to rise again: the overview only
+		if (bHeroMode)
+		{
+			SetHeroMode(false);
+		}
+	}
 
-	if (PC->WasInputKeyJustPressed(EKeys::Tab) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top))
+	if ((PC->WasInputKeyJustPressed(EKeys::Tab) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top)) && !bDead)
 	{
 		SetHeroMode(!bHeroMode);
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::V))
 	{
-		CycleCameraAngle();         // Classic (steep) > Low > Battlefield (shallow), as in the main game
+		// (in the overview with troops selected V is Guard, as in the main game: OverviewCommands)
+		const UVLCommand* Cmd = UVLCommand::Get(this);
+		if (bHeroMode || !Cmd || !Cmd->SelectionCanGuard())
+		{
+			CycleCameraAngle();     // Classic (steep) > Low > Battlefield (shallow), as in the main game
+		}
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::C))
 	{
@@ -1360,7 +1978,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 	{
 		VPC->TakeGestures(Pad, Pinch, Twist);
 	}
-	Step -= Pinch * 0.64f;
+	Step -= Pinch * 0.41f;        // (0.64 before the zoom range grew 1.55 times)
 	Turn += Twist * 1.0f;
 	if (bHeroMode)
 	{
@@ -1377,33 +1995,71 @@ void AVLKing::PollInput(float DeltaSeconds)
 	if (CVarInputLog.GetValueOnGameThread() != 0 && (Step != 0.f || Pinch != 0.f || !Pad.IsZero() || PC->WasInputKeyJustPressed(EKeys::LeftMouseButton)))
 	{
 		UE_LOG(LogVoxelLab, Log, TEXT("input seen: %s step %.3f pinch %.3f pad %.1f %.1f click %d | zoom %.2f overview %.2f arm %.0f armed %d attack %.2f"), bHeroMode ? TEXT("hero") : TEXT("overview"),
-			Step, Pinch, Pad.X, Pad.Y, PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) ? 1 : 0, Zoom, OverviewZoom, Boom->TargetArmLength, bArmed ? 1 : 0, AttackTime);
+			Step, Pinch, Pad.X, Pad.Y, PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) ? 1 : 0, Zoom, OverviewZoom, Boom ? Boom->TargetArmLength : 0.f, bArmed ? 1 : 0, AttackTime);
 	}
 	if (!bHeroMode)
 	{
 		// ---- overview: the camera roams, the mouse selects
 		OverviewYaw += Turn;
-		OverviewZoom = FMath::Clamp(OverviewZoom + Step, 0.f, 1.f);
+		OverviewZoom = FMath::Clamp(OverviewZoom + Step * OverviewZoomStepScale, 0.f, 1.f);
 		if (bReset)
 		{
 			OverviewYaw = HomeYaw;
 		}
 		const FRotator Yaw(0.f, OverviewYaw, 0.f);
 		const FVector Ahead = FRotationMatrix(Yaw).GetUnitAxis(EAxis::X), Right = FRotationMatrix(Yaw).GetUnitAxis(EAxis::Y);
-		if (bStick)
+		// A and S are attack-move and Stop too (OverviewCommands): with units selected a quick tap is the order and a
+		// hold pans once it has lasted CommandKeyTapSeconds; with nobody selected, or while another pan key is down,
+		// they pan at once (the main game's rule)
+		FVector2D PanStick = Stick;
 		{
-			const FVector Dir = (Ahead * Stick.X + Right * Stick.Y).GetClampedToMaxSize(1.f);
-			const float Speed = FMath::Lerp(1400.f, 6750.f, OverviewZoom) * (bRun ? 1.8f : 1.f);
+			const UVLCommand* Cmd = UVLCommand::Get(this);
+			const bool bOrders = Cmd && Cmd->NumSelected() > 0;
+			const double Now = GetWorld()->GetRealTimeSeconds();
+			static const FKey TapKeys[2] = { EKeys::A, EKeys::S };
+			const FVector2D Own[2] = { FVector2D(0.f, -1.f), FVector2D(-1.f, 0.f) };     // each one's part of the stick
+			const bool bOtherKeys = PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::D) || PC->IsInputKeyDown(EKeys::Up) || PC->IsInputKeyDown(EKeys::Down)
+				|| PC->IsInputKeyDown(EKeys::Left) || PC->IsInputKeyDown(EKeys::Right);
+			for (int32 k = 0; k < 2; ++k)
+			{
+				if (PC->WasInputKeyJustPressed(TapKeys[k]))
+				{
+					TapKeyDownAt[k] = Now;
+					bTapKeyPanned[k] = false;
+				}
+				if (!PC->IsInputKeyDown(TapKeys[k]))
+				{
+					continue;
+				}
+				if (!bOrders || bOtherKeys || bTapKeyPanned[1 - k] || bTapKeyPanned[k] || Now - TapKeyDownAt[k] >= CommandKeyTapSeconds)
+				{
+					bTapKeyPanned[k] = true;
+				}
+				else
+				{
+					PanStick -= Own[k];     // not yet: it may be a tap
+				}
+			}
+		}
+		if (PanStick.SizeSquared() > 0.04f)
+		{
+			const FVector Dir = (Ahead * PanStick.X + Right * PanStick.Y).GetClampedToMaxSize(1.f);
+			const float Speed = FMath::Lerp(1400.f, 11900.f, OverviewZoom) * (bRun ? 1.8f : 1.f);
 			OverviewFocus += Dir * Speed * DeltaSeconds;
 		}
 		if (!Pad.IsZero())
 		{
 			// the ground moves with the fingers: further out, a point of scroll covers more ground
-			const float PerPoint = FMath::Lerp(1.f, 4.95f, OverviewZoom);
+			const float PerPoint = FMath::Lerp(1.f, 8.7f, OverviewZoom);
 			OverviewFocus += (Ahead * Pad.Y - Right * Pad.X) * PerPoint;
 		}
-		OverviewFocus.X = FMath::Clamp(OverviewFocus.X, -9000.f, 9000.f);
-		OverviewFocus.Y = FMath::Clamp(OverviewFocus.Y, -9000.f, 9000.f);
+		FBox2D Roam(FVector2D(-9000.f, -9000.f), FVector2D(9000.f, 9000.f));
+		if (const UVLGrid* Grid = UVLGrid::Get(this); Grid && Grid->IsBuilt())
+		{
+			Roam += Grid->GetBounds();      // (a map bigger than the town: as far as its ground goes)
+		}
+		OverviewFocus.X = FMath::Clamp(OverviewFocus.X, Roam.Min.X, Roam.Max.X);
+		OverviewFocus.Y = FMath::Clamp(OverviewFocus.Y, Roam.Min.Y, Roam.Max.Y);
 		if (ViewMode == 3)
 		{
 			UpdateOverviewCamera(DeltaSeconds);
@@ -1461,7 +2117,10 @@ void AVLKing::PollInput(float DeltaSeconds)
 		const float Pitch = FMath::Clamp((ManualPitch != 0.f ? ManualPitch : HeroPitch(Zoom)) + LookPitch, -80.f, 8.f);
 		const FRotator Now = PC->GetControlRotation();
 		PC->SetControlRotation(FRotator(FMath::FInterpTo(Now.Pitch > 180.f ? Now.Pitch - 360.f : Now.Pitch, Pitch, DeltaSeconds, 6.f), CamYaw, 0.f));
-		Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, TargetArm, DeltaSeconds, 6.f);
+		if (Boom)
+		{
+			Boom->TargetArmLength = FMath::FInterpTo(Boom->TargetArmLength, TargetArm, DeltaSeconds, 6.f);
+		}
 	}
 
 	// ---- moving him: the keys in hero mode, or an order
@@ -1480,6 +2139,10 @@ void AVLKing::PollInput(float DeltaSeconds)
 		Wish = (FRotationMatrix(Yaw).GetUnitAxis(EAxis::X) * Stick.X + FRotationMatrix(Yaw).GetUnitAxis(EAxis::Y) * Stick.Y).GetClampedToMaxSize(1.f);
 	}
 	GetCharacterMovement()->MaxWalkSpeed = bRun ? RunSpeed : WalkSpeed;
+	if (PaceCap > 0.f && bAutoWalk)
+	{
+		GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, PaceCap);     // on an order with his troops: their pace
+	}
 	if (MoveSpeedCap > 0.f && bHeroMode)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, MoveSpeedCap);     // an archer drawing her bow
@@ -1507,7 +2170,7 @@ float AVLKing::HeroPitch(float InZoom) const
 {
 	// the camera-angle setting, as in the main game: Classic (the tuned pitches), Low, Battlefield (shallow, more of
 	// the land ahead). Near and far ends of the zoom each get their own pitch.
-	static const float Hero[3][2] = { { 0.f, 0.f }, { -11.f, -27.f }, { -6.f, -17.f } };
+	static const float Hero[3][2] = { { 0.f, 0.f }, { -11.f, -36.f }, { -6.f, -23.f } };
 	const int32 A = FMath::Clamp(CameraAngle, 0, 2);
 	const float Near = A == 0 ? PitchNear : Hero[A][0];
 	const float Far = A == 0 ? PitchFar : Hero[A][1];
@@ -1516,7 +2179,7 @@ float AVLKing::HeroPitch(float InZoom) const
 
 float AVLKing::OverviewPitch(float InZoom) const
 {
-	static const float Over[3][2] = { { 0.f, 0.f }, { -16.f, -30.f }, { -11.f, -21.f } };
+	static const float Over[3][2] = { { 0.f, 0.f }, { -16.f, -43.f }, { -11.f, -30.5f } };
 	const int32 A = FMath::Clamp(CameraAngle, 0, 2);
 	const float Near = A == 0 ? OverviewPitchNear : Over[A][0];
 	const float Far = A == 0 ? OverviewPitchFar : Over[A][1];
@@ -1650,11 +2313,24 @@ void AVLKing::UpdateCursorMode(APlayerController* PC, const AVLHUD* HUD)
 	}
 }
 
-bool AVLKing::GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDistance) const
+bool AVLKing::GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDistance, bool* bOutSky) const
 {
 	FVector Origin, Dir;
+	if (!GetWorld() || !GetAimRay(PC, Origin, Dir))
+	{
+		return false;
+	}
+	return GetAimPointAlong(Origin, Dir, OutPoint, SkyDistance, bOutSky);
+}
+
+bool AVLKing::GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVector& OutPoint, float SkyDistance, bool* bOutSky) const
+{
 	UWorld* World = GetWorld();
-	if (!World || !GetAimRay(PC, Origin, Dir))
+	if (bOutSky)
+	{
+		*bOutSky = false;
+	}
+	if (!World)
 	{
 		return false;
 	}
@@ -1665,9 +2341,11 @@ bool AVLKing::GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDis
 	// the point level with him onwards (and clear of his own body).
 	const float Level = bLook ? FMath::Max(0.f, float(FVector::DotProduct(Me - Origin, Dir))) + GetCapsuleComponent()->GetScaledCapsuleRadius() + 40.f : 0.f;
 	const float Far = Level + 60000.f;
-	FCollisionQueryParams Params(TEXT("AimPoint"), false, this);
+	// (complex, as an arrow's trace is: what the aim meets is what the arrow meets)
+	FCollisionQueryParams Params(TEXT("AimPoint"), true, this);
 	bool bFound = false;
 	FVector Point = FVector::ZeroVector;
+	float Reach = Far;
 	for (int32 Try = 0; Try < 12; ++Try)
 	{
 		FHitResult Hit;
@@ -1678,7 +2356,7 @@ bool AVLKing::GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDis
 		const AActor* Struck = Hit.GetActor();
 		if (Struck && (Struck->IsA<APawn>() || Struck->ActorHasTag(TEXT("Canopy"))))
 		{
-			Params.AddIgnoredActor(Struck);     // units, and the leaves the camera cuts away: the aim passes through
+			Params.AddIgnoredActor(Struck);     // units (a foe is found below), and the leaves the camera cuts away: the aim passes through
 			continue;
 		}
 		if (Hit.bStartPenetrating && Hit.GetComponent())
@@ -1687,8 +2365,35 @@ bool AVLKing::GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDis
 			continue;
 		}
 		Point = Hit.ImpactPoint;
+		Reach = float(FVector::DotProduct(Point - Origin, Dir));
 		bFound = true;
 		break;
+	}
+	// A foe's body the ray passes through before that catches it (units do not stop a visibility trace; an arrow
+	// strikes a foe's body, UVLArrows::UnitOnPath): the point on the ray in the middle of the body.
+	if (const UVLBattle* Battle = UVLBattle::Get(this))
+	{
+		const FVector From = Origin + Dir * Level;
+		for (TActorIterator<AVLKing> It(World); It; ++It)
+		{
+			const AVLKing* U = *It;
+			if (U == this || !Battle->IsHostile(U, Team))
+			{
+				continue;
+			}
+			const UCapsuleComponent* Cap = U->GetCapsuleComponent();
+			const float Half = Cap->GetScaledCapsuleHalfHeight(), Rad = Cap->GetScaledCapsuleRadius();
+			const FVector C = U->GetActorLocation();
+			FVector OnRay, OnBody;
+			FMath::SegmentDistToSegmentSafe(From, Origin + Dir * Reach, C - FVector(0.f, 0.f, Half * 0.9f), C + FVector(0.f, 0.f, Half * 0.9f), OnRay, OnBody);
+			const float Along = float(FVector::DotProduct(OnRay - Origin, Dir));
+			if (FVector::DistSquared(OnRay, OnBody) <= FMath::Square(Rad) && Along < Reach)
+			{
+				Reach = Along;
+				Point = OnRay;
+				bFound = true;
+			}
+		}
 	}
 	if (!bFound)
 	{
@@ -1696,6 +2401,10 @@ bool AVLKing::GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDis
 		{
 			Point = Origin + Dir * (Level + FMath::Max(SkyDistance, 300.f));        // nothing ahead: along the crosshair
 			bFound = true;
+			if (bOutSky)
+			{
+				*bOutSky = true;
+			}
 		}
 		else if (Dir.Z < -0.01f)
 		{
@@ -1752,11 +2461,12 @@ bool AVLKing::PointerYaw(APlayerController* PC, float& OutYaw) const
 
 void AVLKing::ReceiveDamage(float Amount, AActor* From)
 {
-	if (Amount <= 0.f)
+	if (Amount <= 0.f || bDead)
 	{
 		return;
 	}
 	Health = FMath::Max(0.f, Health - Amount);
+	LastHurtTime = GetWorld()->GetTimeSeconds();
 	HitPauseLeft = FMath::Max(0.f, HitPauseSeconds);
 	FlashLeft = FMath::Max(0.f, HitFlashSeconds);
 	if (FlashMID && !bFlashOn && FlashLeft > 0.f)
@@ -1767,7 +2477,113 @@ void AVLKing::ReceiveDamage(float Amount, AActor* From)
 		}
 		bFlashOn = true;
 	}
-	UE_LOG(LogVoxelLab, Log, TEXT("King hurt: %.0f from %s, health %.0f"), Amount, From ? *From->GetName() : TEXT("nobody"), Health);
+	if (!bTroop)
+	{
+		UE_LOG(LogVoxelLab, Log, TEXT("King hurt: %.0f from %s, health %.0f"), Amount, From ? *From->GetName() : TEXT("nobody"), Health);
+	}
+	if (Health <= 0.f)
+	{
+		if (UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			Battle->OnUnitKilled(this, From);
+		}
+		else
+		{
+			Die();
+		}
+	}
+}
+
+void AVLKing::Die()
+{
+	if (bDead)
+	{
+		return;
+	}
+	bDead = true;
+	DeadTime = 0.f;
+	Health = 0.f;
+	StopOrder();
+	ClearQueue();
+	if (UVLSwordsmanCombat* S = UVLSwordsmanCombat::For(this, false))
+	{
+		S->Stop();
+	}
+	if (UVLArcherCombat* A = UVLArcherCombat::For(this, false))
+	{
+		A->Stop();
+		A->LetDown();
+	}
+	GarrisonIn = nullptr;
+	PendingGarrison = nullptr;
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	// the player was playing it: a troop hands the controls back to the king; the king himself goes to the overview
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		AVLKing* King = nullptr;
+		for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+		{
+			if (!It->IsTroop() && It->Team == Team)
+			{
+				King = *It;
+			}
+		}
+		if (bTroop && King && King != this)
+		{
+			TakeControlOf(King);
+			if (King->IsDead())
+			{
+				King->SetHeroMode(false);
+			}
+		}
+		else
+		{
+			SetHeroMode(false);
+		}
+	}
+}
+
+void AVLKing::Revive(const FVector& Feet)
+{
+	bDead = false;
+	DeadTime = 0.f;
+	Health = MaxHealth;
+	SetActorHiddenInGame(false);
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	SetActorLocation(Feet + FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 5.f), false, nullptr, ETeleportType::TeleportPhysics);
+	RigSetFigure(FigureLocal.GetLocation(), FQuat::Identity);
+	bRigForce = true;
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	Post = Feet;
+	LastStruckBy = nullptr;
+	UE_LOG(LogVoxelLab, Log, TEXT("%s rises again at %s"), *DisplayName, *Feet.ToCompactString());
+}
+
+void AVLKing::TickDeath(float DeltaSeconds)
+{
+	DeadTime += DeltaSeconds;
+	// he topples over sideways (stiffly: a wooden toy), lies a moment, and is gone
+	const float Fall = FMath::Clamp(DeadTime / 0.55f, 0.f, 1.f);
+	const float Ease = Fall * Fall * (3.f - 2.f * Fall);
+	RigSetFigure(FigureRest + FVector(0.f, 0.f, 18.f * Ease - FMath::Max(0.f, DeadTime - VLRules::CorpseSeconds + 0.8f) * 60.f), FRotator(0.f, 0.f, -84.f * Ease).Quaternion());
+	if (DeadTime >= VLRules::CorpseSeconds)
+	{
+		if (bTroop)
+		{
+			if (AController* C = GetController(); C && !Cast<APlayerController>(C))
+			{
+				C->UnPossess();
+				C->Destroy();
+			}
+			Destroy();
+		}
+		else if (!IsHidden())
+		{
+			SetActorHiddenInGame(true);         // the king: until he rises again at his castle (UVLBattle)
+		}
+	}
 }
 
 float AVLKing::TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
@@ -2062,7 +2878,7 @@ void AVLKing::Animate(float Dt, float AnimDt)
 		while (HitsLanded < Now.Hits && T >= Now.HitAt[HitsLanded])
 		{
 			++HitsLanded;
-			HitDummies();                    // every blow of a swing can land
+			HitDummies(1.f / FMath::Max(Now.Hits, 1));     // every blow of a swing can land (its share of the swing's damage)
 		}
 		if (bComboQueued && T >= Now.ChainAt)
 		{
@@ -2085,7 +2901,7 @@ void AVLKing::Animate(float Dt, float AnimDt)
 	else if (bWasFalling)
 	{
 		CrouchVel += FMath::Min(LandImpulse * LastFallSpeed, 34.f);     // the landing: the knees take it
-		if (bFootDust && LastFallSpeed > 320.f)
+		if (bFootDust && Dust && LastFallSpeed > 320.f)
 		{
 			const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 			Dust->Emit(Feet, -GetActorForwardVector(), 2 * Dust->PuffsPerStep + 1, 1.6f);     // and the ground gives up a puff
@@ -2101,7 +2917,7 @@ void AVLKing::Animate(float Dt, float AnimDt)
 	// ---------------------------------------------------------------- what is shown, on the pose's clock
 	const float WantGait = bFalling ? FMath::Min(Gait, 1.f) : (Speed < 12.f ? 0.f : FMath::GetMappedRangeValueClamped(FVector2D(WalkSpeed, RunSpeed), FVector2D(1.f, 2.f), Speed) * FMath::Clamp(Speed / (WalkSpeed * 0.8f), 0.f, 1.f));
 	Gait = FMath::FInterpTo(Gait, WantGait, AnimDt, 9.f);
-	const float Stride = FMath::Max(40.f, Loaded->StrideLength) * (1.f + 0.35f * FMath::Clamp(Gait - 1.f, 0.f, 1.f));
+	const float Stride = FMath::Max(40.f, Loaded->StrideLength) * StrideScale * (1.f + 0.35f * FMath::Clamp(Gait - 1.f, 0.f, 1.f));
 	Phase = FMath::Fmod(Phase + (Speed / Stride) * AnimDt * 2.f * PI, 2.f * PI);
 	IdleTime += AnimDt;
 	Air = FMath::FInterpConstantTo(Air, bFalling ? 1.f : 0.f, AnimDt, bFalling ? 9.f : 14.f);
@@ -2134,6 +2950,25 @@ void AVLKing::Animate(float Dt, float AnimDt)
 		}
 	}
 
+	// ---------------------------------------------------------------- the pose
+	// Built now for a unit whose pose the game needs this frame (the player's, the King, an archer with a shot on the
+	// way) and whenever the old path or "every unit, every frame" is asked for. Otherwise it is left to the late pass
+	// (RigLate), which knows where the camera is: a unit out of view is not posed at all, a far one less often. The
+	// clocks above have moved on either way, so the pose is right the moment it is built.
+	RigPoseDt += AnimDt;
+	RigSincePose += Dt;
+	if (bRigLegacy || bRigDemand || bFootDust || bFootsteps || !bTroop || IsPlayerControlled() || !VLRigLodOn())
+	{
+		PoseNow(true);
+	}
+}
+
+void AVLKing::PoseFigure(float AnimDt)
+{
+	const FVector Velocity = GetVelocity();
+	const float Speed = Velocity.Size2D();
+	const bool bFalling = GetCharacterMovement()->IsFalling();
+
 	const float W = FMath::Clamp(Gait, 0.f, 1.f);
 	const float R = FMath::Clamp(Gait - 1.f, 0.f, 1.f);
 	const float Idle = 1.f - W;
@@ -2146,9 +2981,11 @@ void AVLKing::Animate(float Dt, float AnimDt)
 	// ---- walking and running. The feet are placed (forward and back along the ground, lifted on the way forward)
 	// and the legs solved to reach them; the pelvis rides lowest when the feet are furthest apart.
 	float P[P_Count] = {};
-	P[P_Drop] = W * ((0.5f + 1.5f * R) + (3.4f + 1.6f * R) * Sw * Sw);
+	// (a longer stride, StrideScale: the feet reach further, so the pelvis drops further for the legs to reach them;
+	// the reach stays Stride / 2 pi, which keeps a planted foot still on the ground)
+	P[P_Drop] = W * ((0.5f + 1.5f * R) + (3.4f + 1.6f * R) * StrideScale * StrideScale * StrideScale * Sw * Sw);     // (~ what a 67 cm leg needs at that reach)
 	{
-		const float Reach = W * (23.f + 7.f * R), Lift = W * (6.f + 10.f * R);
+		const float Reach = W * (23.f + 7.f * R) * StrideScale, Lift = W * (6.f + 10.f * R) * FMath::Sqrt(StrideScale);
 		P[P_FootLX] = Reach * Sw;
 		P[P_FootLZ] = Lift * FMath::Pow(FMath::Max(0.f, FMath::Cos(Phase + 0.3f)), 1.2f);
 		P[P_FootRX] = -Reach * Sw;
@@ -2285,33 +3122,33 @@ void AVLKing::Animate(float Dt, float AnimDt)
 	const FQuat TiltQ = Rot(-Tilt, 0.f, 0.f);
 	const FVector HipMid(0.f, 0.f, Rig.HipHeight);
 	const float DropNow = P[P_Drop] * (1.f - Air), ShiftNow = P[P_Shift] * (1.f - Air);
-	Figure->SetRelativeLocationAndRotation(FigureRest + FVector(ShiftNow, 0.f, -DropNow) + HipMid - TiltQ.RotateVector(HipMid), TiltQ);
+	RigSetFigure(FigureRest + FVector(ShiftNow, 0.f, -DropNow) + HipMid - TiltQ.RotateVector(HipMid), TiltQ);
 	const FQuat PelvisQ = Rot(-P[P_PelvLean], P[P_PelvTwist], P[P_PelvSide]);
 	const FQuat ChestQ = Rot(-P[P_ChestLean], P[P_ChestTwist], P[P_ChestSide]);
 	const FQuat HeadQ = Rot(-P[P_HeadLean], P[P_HeadTwist], 0.f);
-	Rig.Body->SetRelativeRotation(PelvisQ);
-	Rig.Chest->SetRelativeRotation(PelvisQ.Inverse() * ChestQ);
+	RigSetRelRot(Rig.iBody, PelvisQ);
+	RigSetRelRot(Rig.iChest, PelvisQ.Inverse() * ChestQ);
 	if (Rig.Head)
 	{
-		Rig.Head->SetRelativeRotation(ChestQ.Inverse() * HeadQ);
+		RigSetRelRot(Rig.iHead, ChestQ.Inverse() * HeadQ);
 	}
 	if (Rig.ArmL && Rig.ForeL)
 	{
-		Rig.ArmL->SetRelativeRotation(Rot(P[P_ArmLP], P[P_ArmLIn], P[P_ArmLOut]));
-		Rig.ForeL->SetRelativeRotation(Rot(P[P_ElbowL] - Loaded->ElbowRestL, 0.f, 0.f));
+		RigSetRelRot(Rig.iArmL, Rot(P[P_ArmLP], P[P_ArmLIn], P[P_ArmLOut]));
+		RigSetRelRot(Rig.iForeL, Rot(P[P_ElbowL] - Loaded->ElbowRestL, 0.f, 0.f));
 	}
 	if (Rig.ArmR && Rig.ForeR)
 	{
-		Rig.ArmR->SetRelativeRotation(Rot(P[P_ArmRP], -P[P_ArmRIn], -P[P_ArmROut]));
-		Rig.ForeR->SetRelativeRotation(Rot(P[P_ElbowR] - Loaded->ElbowRestR, 0.f, 0.f));
+		RigSetRelRot(Rig.iArmR, Rot(P[P_ArmRP], -P[P_ArmRIn], -P[P_ArmROut]));
+		RigSetRelRot(Rig.iForeR, Rot(P[P_ElbowR] - Loaded->ElbowRestR, 0.f, 0.f));
 	}
 	// legs: solved to their footholds on the ground, taken over by the airborne angles as he leaves it
 	KneeBack = FVector(1000.f, 0.f, 0.f);
 	for (int32 Side = 0; Side < 2; ++Side)
 	{
-		USceneComponent* Leg = Side == 0 ? Rig.LegL : Rig.LegR;
-		USceneComponent* Shin = Side == 0 ? Rig.ShinL : Rig.ShinR;
-		if (!Leg || !Shin)
+		const int32 Leg = Side == 0 ? Rig.iLegL : Rig.iLegR;
+		const int32 Shin = Side == 0 ? Rig.iShinL : Rig.iShinR;
+		if (Leg < 0 || Shin < 0)
 		{
 			continue;
 		}
@@ -2323,8 +3160,8 @@ void AVLKing::Animate(float Dt, float AnimDt)
 		Knee = FMath::Lerp(Knee, P[Side == 0 ? P_AirKneeL : P_AirKneeR], Air);
 		Roll = FMath::Lerp(Roll, Side == 0 ? 4.f : -4.f, Air);
 		const FQuat ThighQ = Rot(0.f, 0.f, Roll) * Rot(Pitch, 0.f, 0.f);
-		Leg->SetRelativeRotation(ThighQ);
-		Shin->SetRelativeRotation(Rot(-Knee, 0.f, 0.f));
+		RigSetRelRot(Leg, ThighQ);
+		RigSetRelRot(Shin, Rot(-Knee, 0.f, 0.f));
 		const FVector KneeAt = Hip + ThighQ.RotateVector(FVector(0.f, 0.f, -Rig.Thigh));
 		const FVector Heel = KneeAt + (ThighQ * Rot(-Knee, 0.f, 0.f)).RotateVector(FVector(-9.f, 0.f, -Rig.Shin));
 		KneeBack.X = FMath::Min3(KneeBack.X, KneeAt.X - 8.f, Heel.X);
@@ -2335,7 +3172,7 @@ void AVLKing::Animate(float Dt, float AnimDt)
 	// lifted (the cosine below is the one that lifts it, above), and comes down as that half ends: read from the
 	// cycle and not from the height of the sole, so that it holds at any speed and frame rate (a slow walk hardly
 	// lifts the feet). Two steps a cycle: one every Stride / (2 Speed) seconds.
-	if ((bFootDust || bFootsteps) && AnimDt > 0.f)
+	if (((bFootDust && Dust) || bFootsteps) && AnimDt > 0.f)
 	{
 		const float LiftCos = FMath::Cos(Phase + 0.3f);
 		const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
@@ -2347,7 +3184,7 @@ void AVLKing::Animate(float Dt, float AnimDt)
 			{
 				const FVector& Hip = Side == 0 ? Rig.HipL : Rig.HipR;
 				const FVector Foot = Feet + GetActorQuat().RotateVector(FVector(P[Side == 0 ? P_FootLX : P_FootRX] - 6.f, Hip.Y, 0.f));
-				if (bFootDust && R > 0.5f)
+				if (bFootDust && Dust && R > 0.5f)
 				{
 					Dust->Emit(Foot, Back, Dust->PuffsPerStep);
 				}
@@ -2359,16 +3196,22 @@ void AVLKing::Animate(float Dt, float AnimDt)
 			bFootDown[Side] = bDown;
 		}
 		SkidTimer -= AnimDt;
-		if (!bFalling && LastSpeed > 420.f && (LastSpeed - Speed) / AnimDt > 1500.f && SkidTimer <= 0.f)
+		if (!bFalling && LastSpeed > WalkSpeed && (LastSpeed - Speed) / AnimDt > 1500.f * (RunSpeed / 760.f) && SkidTimer <= 0.f)
 		{
 			SkidTimer = 0.07f;
-			Dust->Emit(Feet - Back * 14.f, -Back, 2, 1.2f);        // thrown ahead of him, the way he was going
+			if (Dust)
+			{
+				Dust->Emit(Feet - Back * 14.f, -Back, 2, 1.2f);        // thrown ahead of him, the way he was going
+			}
 		}
 	}
 	LastSpeed = Speed;
-	Dust->Advance(AnimDt);
+	if (Dust)
+	{
+		Dust->Advance(AnimDt);
+	}
 	UpdateSword(P, AnimDt);
-	UpdateCape(AnimDt);
+	UpdateCape(bRigCapeHeld ? 0.f : AnimDt);        // (far off, RigLate: the cloth holds its shape)
 }
 
 void AVLKing::UpdateSword(const float* Pose, float AnimDt)
@@ -2380,7 +3223,7 @@ void AVLKing::UpdateSword(const float* Pose, float AnimDt)
 	// The wrist. The sword is one with the fist, so the blade is aimed by the hand: turned about the forearm as far as
 	// it takes (nothing shows of that), then bent sideways towards the wanted line, as far as a wrist bends.
 	{
-		const FVector Want = Rig.ForeR->GetComponentQuat().UnrotateVector(Rig.Chest->GetComponentQuat().RotateVector(FVector(Pose[P_BladeX], Pose[P_BladeY], Pose[P_BladeZ]).GetSafeNormal()));
+		const FVector Want = RigWorldRot(Rig.iForeR).UnrotateVector(RigWorldRot(Rig.iChest).RotateVector(FVector(Pose[P_BladeX], Pose[P_BladeY], Pose[P_BladeZ]).GetSafeNormal()));
 		const FVector A = Rig.ForeAxis;
 		const FVector B0 = (Rig.Blade - A * FVector::DotProduct(Rig.Blade, A)).GetSafeNormal();
 		FVector B1 = Want - A * FVector::DotProduct(Want, A);
@@ -2394,22 +3237,23 @@ void AVLKing::UpdateSword(const float* Pose, float AnimDt)
 		const float Bend = FMath::Clamp(FMath::Asin(FMath::Clamp(FVector::DotProduct(Want, A), -1.f, 1.f)), FMath::DegreesToRadians(-25.f), FMath::DegreesToRadians(50.f));
 		const FQuat BendQ = FQuat::FindBetweenNormals(B1, (B1 * FMath::Cos(Bend) + A * FMath::Sin(Bend)).GetSafeNormal());
 		const FQuat WantQ = BendQ * TwistQ;
-		WristQ = FQuat::Slerp(WristQ, WantQ, 1.f - FMath::Exp(-AnimDt * 28.f)).GetNormalized();
-		Rig.HandR->SetRelativeRotation(WristQ);
+		WristQ = bRigResume ? WantQ : FQuat::Slerp(WristQ, WantQ, 1.f - FMath::Exp(-AnimDt * 28.f)).GetNormalized();     // (posed again after a gap: where it should be)
+		RigSetRelRot(Rig.iHandR, WristQ);
 	}
 	if (!Loaded->bHasSheath)
 	{
-		SwordJoint->SetWorldLocationAndRotation(Rig.HandR->GetComponentTransform().TransformPosition(Rig.GripOff), Rig.HandR->GetComponentQuat());
+		const FTransform Hand = RigWorld(Rig.iHandR);
+		RigSetWorldLocRot(Rig.iSword, Hand.TransformPosition(Rig.GripOff), Hand.GetRotation());
 		return;
 	}
-	const FTransform Hip = Rig.Body->GetComponentTransform();
-	const FVector SheathPos = Hip.TransformPosition(Loaded->SwordSheathPos - Rig.Body->GetRelativeLocation());
+	const FTransform Hip = RigWorld(Rig.iBody);
+	const FVector SheathPos = Hip.TransformPosition(Loaded->SwordSheathPos - RigRelLoc(Rig.iBody));
 	const FVector4 Q = Loaded->SwordSheathQuat;
 	const FQuat Delta(Q.X, Q.Y, Q.Z, Q.W);
 	const FQuat SheathRot = Hip.GetRotation() * Delta;
 	if (DrawVis <= 0.f)
 	{
-		SwordJoint->SetWorldLocationAndRotation(SheathPos, SheathRot);
+		RigSetWorldLocRot(Rig.iSword, SheathPos, SheathRot);
 		return;
 	}
 	// Drawing (and, backwards, sheathing): the hand goes to the hilt in the scabbard, closes on it, and from then on
@@ -2418,15 +3262,16 @@ void AVLKing::UpdateSword(const float* Pose, float AnimDt)
 	const float ReachW = FMath::Min(Smooth((DrawVis - 0.05f) / 0.33f), 1.f - Smooth((DrawVis - 0.82f) / 0.18f));
 	if (ReachW > 0.f)
 	{
-		const FQuat CarryRot = Rig.HandR->GetComponentQuat();
-		const FVector CarryPos = Rig.HandR->GetComponentTransform().TransformPosition(Rig.GripOff);
+		const FTransform CarryHand = RigWorld(Rig.iHandR);
+		const FQuat CarryRot = CarryHand.GetRotation();
+		const FVector CarryPos = CarryHand.TransformPosition(Rig.GripOff);
 		const FVector Along = Delta.RotateVector(Rig.Blade);                               // down the scabbard, body space
 		FVector GripPos = FMath::Lerp(SheathPos, CarryPos, Travel);
 		GripPos += Hip.GetRotation().RotateVector(-Along * 34.f + FVector(46.f, 0.f, 10.f)) * FMath::Sin(Travel * PI);
 		const FQuat GripRot = FQuat::Slerp(SheathRot, CarryRot, Travel);
 		const FQuat HandRot = FQuat::Slerp(CarryRot, GripRot, ReachW);
 		// the arm: shoulder and elbow solved so the wrist is where that hold puts it (chest space)
-		const FTransform Chest = Rig.Chest->GetComponentTransform();
+		const FTransform Chest = RigWorld(Rig.iChest);
 		const FVector Target = Chest.InverseTransformPosition(GripPos - GripRot.RotateVector(Rig.GripOff)) - Rig.ShoulderR;
 		const float Lu = Rig.UpperR.Size(), Lf = Rig.ForeVecR.Size();
 		const float D = FMath::Clamp(Target.Size(), FMath::Abs(Lu - Lf) + 2.f, Lu + Lf - 0.3f);
@@ -2447,19 +3292,20 @@ void AVLKing::UpdateSword(const float* Pose, float AnimDt)
 				ShoulderQ = FQuat::FindBetweenNormals(E1, P1) * ShoulderQ;
 			}
 		}
-		const FQuat ShoulderNow = Rig.ArmR->GetRelativeRotation().Quaternion();
-		Rig.ArmR->SetRelativeRotation(FQuat::Slerp(ShoulderNow, ShoulderQ, ReachW));
-		Rig.ForeR->SetRelativeRotation(Rot(FMath::Lerp(Pose[P_ElbowR] - Loaded->ElbowRestR, Elbow, ReachW), 0.f, 0.f));
-		Rig.HandR->SetWorldRotation(HandRot);
+		const FQuat ShoulderNow = RigRelRot(Rig.iArmR);
+		RigSetRelRot(Rig.iArmR, FQuat::Slerp(ShoulderNow, ShoulderQ, ReachW));
+		RigSetRelRot(Rig.iForeR, Rot(FMath::Lerp(Pose[P_ElbowR] - Loaded->ElbowRestR, Elbow, ReachW), 0.f, 0.f));
+		RigSetWorldRot(Rig.iHandR, HandRot);
 	}
 	if (Travel <= 0.f)
 	{
-		SwordJoint->SetWorldLocationAndRotation(SheathPos, SheathRot);
+		RigSetWorldLocRot(Rig.iSword, SheathPos, SheathRot);
 		return;
 	}
-	const FVector InHand = Rig.HandR->GetComponentTransform().TransformPosition(Rig.GripOff);
+	const FTransform HandNow = RigWorld(Rig.iHandR);
+	const FVector InHand = HandNow.TransformPosition(Rig.GripOff);
 	const float Taken = Smooth(Travel / 0.12f);         // the moment the hand closes: the last of any gap is taken up
-	SwordJoint->SetWorldLocationAndRotation(FMath::Lerp(SheathPos, InHand, Taken), FQuat::Slerp(SheathRot, Rig.HandR->GetComponentQuat(), Taken));
+	RigSetWorldLocRot(Rig.iSword, FMath::Lerp(SheathPos, InHand, Taken), FQuat::Slerp(SheathRot, HandNow.GetRotation(), Taken));
 }
 
 void AVLKing::UpdateCape(float AnimDt)
@@ -2472,10 +3318,23 @@ void AVLKing::UpdateCape(float AnimDt)
 	const FVector Origin = GetActorLocation();
 	const FVector Fwd = ActorQ.GetForwardVector(), Right = ActorQ.GetRightVector();
 	const float Ground = Origin.Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	const float ChestYaw = FRotator::NormalizeAxis((ActorQ.Inverse() * Rig.Chest->GetComponentQuat()).Rotator().Yaw);
+	const float ChestYaw = FRotator::NormalizeAxis((ActorQ.Inverse() * RigWorldRot(Rig.iChest)).Rotator().Yaw);
 	const FVector ChestFwd = (ActorQ * FRotator(0.f, ChestYaw, 0.f).Quaternion()).GetForwardVector();
-	const float CapeShift = Figure->GetRelativeLocation().X - FigureRest.X;
+	const float CapeShift = FigureLocal.GetLocation().X - FigureRest.X;
 	const bool bStep = AnimDt > 1e-5f && bCapeStarted;
+	if (bRigResume)
+	{
+		// posed again after a gap (it was out of view): the cloth hangs as it did, at rest
+		for (int32 C = 0; C < CapeCols; ++C)
+		{
+			for (int32 Row = 0; Row < CapeRows; ++Row)
+			{
+				FCapePanel& N = Cape[C][Row];
+				N.Vel = N.Acc = FVector::ZeroVector;
+				N.PitchVel = N.RollVel = 0.f;
+			}
+		}
+	}
 	if (bStep)
 	{
 		CapeTime += AnimDt;
@@ -2492,11 +3351,11 @@ void AVLKing::UpdateCape(float AnimDt)
 		for (int32 Row = 0; Row < CapeRows; ++Row)
 		{
 			FCapePanel& N = Cape[C][Row];
-			if (!N.Joint)
+			if (!N.Joint || N.Node < 0)
 			{
 				break;
 			}
-			const FVector Hinge = N.Joint->GetComponentLocation();       // the panel above has been turned already
+			const FVector Hinge = RigWorldLoc(N.Node);       // the panel above has been turned already
 			if (bStep)
 			{
 				const float Deep = float(Row + 1) / float(CapeRows);
@@ -2555,7 +3414,7 @@ void AVLKing::UpdateCape(float AnimDt)
 				}
 				N.Pitch = FMath::Min(N.Pitch, 88.f);
 			}
-			N.Joint->SetWorldRotation(ActorQ * Rot(0.f, N.Yaw, 0.f) * Rot(0.f, 0.f, N.Roll) * Rot(-N.Pitch, 0.f, 0.f));
+			RigSetWorldRot(N.Node, ActorQ * Rot(0.f, N.Yaw, 0.f) * Rot(0.f, 0.f, N.Roll) * Rot(-N.Pitch, 0.f, 0.f));
 			N.Prev = Hinge;
 			YawAbove = N.Yaw;
 		}
@@ -2681,6 +3540,25 @@ void AVLKing::PlayFootstep(const FVector& At, float RunBlend)
 void AVLKing::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	bRigPosedAtTick = false;
+	if (GetWorld()->IsPaused())
+	{
+		// the pause menu is up: only its input
+		if (Cast<APlayerController>(GetController()))
+		{
+			PollInput(DeltaSeconds);
+		}
+		return;
+	}
+	if (bDead)
+	{
+		if (Cast<APlayerController>(GetController()))
+		{
+			PollInput(DeltaSeconds);        // (the king in the overview, waiting to rise again)
+		}
+		TickDeath(DeltaSeconds);
+		return;
+	}
 	PollInput(DeltaSeconds);
 	UpdateSafety(DeltaSeconds);
 	// Being hurt holds the POSE for a moment, nothing else: the pose's clock stops while the game's runs on, and

@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_Head_L1",
+ "faces": 778,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2141,
+   -0.2141,
+   -0.0188
+  ],
+  [
+   0.1859,
+   0.1859,
+   0.4312
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_Head",
+ "voxel": 0.025,
+ "triangles": 1556
+}

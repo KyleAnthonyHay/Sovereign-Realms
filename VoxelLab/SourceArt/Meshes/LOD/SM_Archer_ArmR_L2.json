@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_ArmR_L2",
+ "faces": 86,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1375,
+   -0.15,
+   -0.2844
+  ],
+  [
+   0.1125,
+   0.15,
+   0.0656
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_ArmR",
+ "voxel": 0.05,
+ "triangles": 172
+}

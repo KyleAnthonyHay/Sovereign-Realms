@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_ShinL_L1",
+ "faces": 206,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.125,
+   -0.2,
+   -0.35
+  ],
+  [
+   0.125,
+   0.1,
+   0.075
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_ShinL",
+ "voxel": 0.025,
+ "triangles": 412
+}

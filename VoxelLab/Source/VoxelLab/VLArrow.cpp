@@ -1,4 +1,7 @@
 #include "VLArrow.h"
+#include "VLGrid.h"
+#include "VLBattle.h"
+#include "Components/CapsuleComponent.h"
 #include "VoxelLab.h"
 #include "VLKing.h"
 #include "VLSwordsmanCombat.h"
@@ -23,6 +26,8 @@ namespace
 	TAutoConsoleVariable<int32> CVarArrowPool(TEXT("vl.Arrow.Pool"), 96, TEXT("at most this many arrows at once (flying and stuck): beyond it the oldest is reused"));
 	TAutoConsoleVariable<float> CVarArrowSink(TEXT("vl.Arrow.Sink"), 9.f, TEXT("cm an arrow's point goes into what it hits"));
 	TAutoConsoleVariable<float> CVarArrowReleaseVolume(TEXT("vl.Arrow.ReleaseVolume"), 0.3f, TEXT("volume of the bow's twang, heard from close by"));
+	TAutoConsoleVariable<float> CVarArrowDrawVolume(TEXT("vl.Arrow.DrawVolume"), 0.35f, TEXT("volume of the bow's creak as it is drawn"));
+	TAutoConsoleVariable<float> CVarArrowDrawGap(TEXT("vl.Arrow.DrawGap"), 0.22f, TEXT("seconds at least between two creaks of bows being drawn (a volley's do not pile up)"));
 	TAutoConsoleVariable<float> CVarArrowFlyVolume(TEXT("vl.Arrow.FlyVolume"), 0.1f, TEXT("volume of the arrow's whoosh as it leaves"));
 	TAutoConsoleVariable<float> CVarArrowHitVolume(TEXT("vl.Arrow.HitVolume"), 0.26f, TEXT("volume of an arrow landing in wood or in the ground"));
 	TAutoConsoleVariable<float> CVarArrowNear(TEXT("vl.Arrow.Near"), 900.f, TEXT("full volume within this many cm of where the player is looking"));
@@ -30,7 +35,7 @@ namespace
 	TAutoConsoleVariable<float> CVarArrowSoundGap(TEXT("vl.Arrow.SoundGap"), 0.06f, TEXT("seconds at least between two sounds of a kind (a volley's sounds do not pile up)"));
 	TAutoConsoleVariable<int32> CVarArcherLog(TEXT("vl.ArcherLog"), 0, TEXT("1: log every shot, every landing and every archery sound"));
 
-	enum { ArrowSoundRelease, ArrowSoundFly, ArrowSoundWood, ArrowSoundGround };
+	enum { ArrowSoundRelease, ArrowSoundFly, ArrowSoundWood, ArrowSoundGround, ArrowSoundDraw };
 
 	void LoadArrowSounds(const TCHAR* Base, TArray<TObjectPtr<USoundBase>>& Out)
 	{
@@ -124,6 +129,7 @@ void UVLArrows::Load()
 	LoadArrowSounds(TEXT("S_ArrowFly"), FlySounds);
 	LoadArrowSounds(TEXT("S_ArrowHitWood"), WoodSounds);
 	LoadArrowSounds(TEXT("S_ArrowHitGround"), GroundSounds);
+	LoadArrowSounds(TEXT("S_BowDraw"), DrawSounds);
 	// placed left and right by where it happens; how loud it is, is worked out in Play
 	Pan = NewObject<USoundAttenuation>(this);
 	Pan->Attenuation.bAttenuate = false;
@@ -143,13 +149,13 @@ void UVLArrows::Load()
 void UVLArrows::Play(int32 Kind, const FVector& At, float Volume)
 {
 	UWorld* World = GetWorld();
-	TArray<TObjectPtr<USoundBase>>& Set = Kind == ArrowSoundRelease ? ReleaseSounds : Kind == ArrowSoundFly ? FlySounds : Kind == ArrowSoundWood ? WoodSounds : GroundSounds;
+	TArray<TObjectPtr<USoundBase>>& Set = Kind == ArrowSoundRelease ? ReleaseSounds : Kind == ArrowSoundFly ? FlySounds : Kind == ArrowSoundWood ? WoodSounds : Kind == ArrowSoundDraw ? DrawSounds : GroundSounds;
 	if (!World || Set.Num() == 0)
 	{
 		return;
 	}
 	const double Now = World->GetTimeSeconds();
-	if (LastTime[Kind] >= 0.0 && Now - LastTime[Kind] < CVarArrowSoundGap.GetValueOnGameThread())
+	if (LastTime[Kind] >= 0.0 && Now - LastTime[Kind] < (Kind == ArrowSoundDraw ? CVarArrowDrawGap : CVarArrowSoundGap).GetValueOnGameThread())
 	{
 		return;
 	}
@@ -174,7 +180,7 @@ void UVLArrows::Play(int32 Kind, const FVector& At, float Volume)
 	UGameplayStatics::PlaySoundAtLocation(World, Set[Index], At, Volume, Pitch, 0.f, Pan);
 	if (CVarArcherLog.GetValueOnGameThread() != 0)
 	{
-		static const TCHAR* Names[4] = { TEXT("release"), TEXT("fly"), TEXT("wood"), TEXT("ground") };
+		static const TCHAR* Names[5] = { TEXT("release"), TEXT("fly"), TEXT("wood"), TEXT("ground"), TEXT("draw") };
 		UE_LOG(LogVoxelLab, Log, TEXT("arrow sound t=%.3f %s clip %d vol %.3f, %.0f cm from the focus"), Now, Names[Kind], Index + 1, Volume, Far);
 	}
 }
@@ -243,6 +249,8 @@ void UVLArrows::Release(int32 Index)
 	A.State = EState::Free;
 	A.Ignore = nullptr;
 	A.Shooter = nullptr;
+	A.Source = nullptr;
+	A.Team = -1;
 }
 
 void UVLArrows::SetFade(int32 Index, float Alpha)
@@ -284,6 +292,12 @@ void UVLArrows::OnWorldBeginPlay(UWorld& InWorld)
 			DummyRest.Add(*It, It->GetActorQuat());
 		}
 	}
+}
+
+void UVLArrows::PlayDraw(const FVector& At)
+{
+	Load();
+	Play(ArrowSoundDraw, At, CVarArrowDrawVolume.GetValueOnGameThread());
 }
 
 void UVLArrows::PlaySwish(const FVector& At)
@@ -332,6 +346,8 @@ void UVLArrows::Fire(AVLKing* Shooter, const FVector& Tip, const FVector& Veloci
 	A.Age = 0.f;
 	A.Ignore = Ignore;
 	A.Shooter = Shooter;
+	A.Source = Shooter;
+	A.Team = Shooter ? Shooter->Team : -1;
 	A.Shown = -1.f;
 	if (UStaticMeshComponent* C = Components[Index])
 	{
@@ -345,6 +361,76 @@ void UVLArrows::Fire(AVLKing* Shooter, const FVector& Tip, const FVector& Veloci
 	Play(ArrowSoundFly, Tip, CVarArrowFlyVolume.GetValueOnGameThread());
 }
 
+void UVLArrows::FireFrom(AActor* Source, int32 Team, const FVector& Tip, const FVector& Velocity, float Gravity, float Damage)
+{
+	Fire(nullptr, Tip, Velocity, Gravity, Source, Damage);
+	// (Fire took the newest free arrow: find it again and give it its side)
+	for (FArrow& A : Arrows)
+	{
+		if (A.State == EState::Flying && A.Age == 0.f && A.Ignore.Get() == Source && !A.Source.IsValid())
+		{
+			A.Source = Source;
+			A.Team = Team;
+		}
+	}
+}
+
+AVLKing* UVLArrows::UnitOnPath(const FArrow& A, const FVector& From, const FVector& To, float& OutT) const
+{
+	if (A.Team < 0)
+	{
+		return nullptr;
+	}
+	AVLKing* Best = nullptr;
+	OutT = 2.f;
+	const FVector Seg = To - From;
+	const double SegSize = Seg.Size(), SegSizeSquared = Seg.SizeSquared();
+	// (B: only the units whose cells this stretch of flight passes over, from the battle's spatial hash, a body's
+	// width to either side; in the registry's order. The tests below are as they were for every unit)
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	FVLUnits Near;
+	if (Battle)
+	{
+		const float Pad = 250.f;
+		Battle->UnitsInBox(FVector2D(FMath::Min(From.X, To.X) - Pad, FMath::Min(From.Y, To.Y) - Pad), FVector2D(FMath::Max(From.X, To.X) + Pad, FMath::Max(From.Y, To.Y) + Pad), Near);
+	}
+	else
+	{
+		for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+		{
+			Near.Add(*It);
+		}
+	}
+	const AVLKing* Shooter = A.Shooter.Get();
+	for (AVLKing* U : Near)
+	{
+		if (!U->IsAlive() || U->Team == A.Team || U->Team < 0 || U == Shooter)
+		{
+			continue;
+		}
+		// the body: a vertical segment from its feet to its head, with its capsule's radius (and a little more)
+		const UCapsuleComponent* Cap = U->GetCapsuleComponent();
+		const float Half = Cap->GetScaledCapsuleHalfHeight(), Rad = Cap->GetScaledCapsuleRadius() + 14.f;
+		const FVector C = U->GetActorLocation();
+		if (FVector::DistSquared(C, From) > FMath::Square(SegSize + Half + Rad + 50.f))
+		{
+			continue;
+		}
+		FVector OnArrow, OnBody;
+		FMath::SegmentDistToSegmentSafe(From, To, C - FVector(0.f, 0.f, Half * 0.9f), C + FVector(0.f, 0.f, Half * 0.9f), OnArrow, OnBody);
+		if (FVector::DistSquared(OnArrow, OnBody) <= FMath::Square(Rad))
+		{
+			const float T = SegSizeSquared > 1.f ? FVector::DotProduct(OnArrow - From, Seg) / SegSizeSquared : 0.f;
+			if (T < OutT)
+			{
+				OutT = T;
+				Best = U;
+			}
+		}
+	}
+	return Best;
+}
+
 void UVLArrows::Land(int32 Index, const FHitResult& Hit)
 {
 	FArrow& A = Arrows[Index];
@@ -352,7 +438,9 @@ void UVLArrows::Land(int32 Index, const FHitResult& Hit)
 	AActor* Struck = Hit.GetActor();
 	const AVLKing* By = A.Shooter.Get();
 	const bool bLog = CVarArcherLog.GetValueOnGameThread() != 0;
-	if (Struck && Struck->ActorHasTag(TEXT("Water")))
+	// (the water stops no trace: an arrow that comes down on the bed of the river or the sea went into the water)
+	const UVLGrid* Grid = UVLGrid::Get(this);
+	if ((Struck && Struck->ActorHasTag(TEXT("Water"))) || (Grid && Grid->WaterLevelAt(Hit.ImpactPoint) > Hit.ImpactPoint.Z + 10.f))
 	{
 		if (bLog)
 		{
@@ -362,10 +450,24 @@ void UVLArrows::Land(int32 Index, const FHitResult& Hit)
 		return;
 	}
 	A.Tip = Hit.ImpactPoint + Way * CVarArrowSink.GetValueOnGameThread();
-	if (Struck && A.Damage > 0.f)
+	if (A.Damage > 0.f && A.Team >= 0)
 	{
-		AVLKing* From = A.Shooter.Get();
-		UGameplayStatics::ApplyDamage(Struck, A.Damage, From ? From->GetController() : nullptr, From, nullptr);     // (dummies have no health yet)
+		if (UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			AActor* Target = Struck;
+			if (!Target || !Battle->FindBuilding(Target))
+			{
+				// a prop, the mound, the ground at its foot, a hidden wall: inside a foe's building's hit box it is the building
+				if (AActor* Wall = Battle->BuildingAt(Hit.ImpactPoint, A.Team))
+				{
+					Target = Wall;
+				}
+			}
+			if (Target)
+			{
+				Battle->Damage(Target, A.Damage, A.Source.Get(), A.Team);     // a foe's building (never a friend's; dummies have no health)
+			}
+		}
 	}
 	A.State = EState::Stuck;
 	const float Flight = A.Age;
@@ -408,6 +510,7 @@ void UVLArrows::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	FVLOptTiming::FScope Timing(FVLOptTiming::Arrows);
 	// dummies knocked by a bow: a small rock on the foot, settling back to how they stood
 	for (int32 i = Knocks.Num() - 1; i >= 0; --i)
 	{
@@ -430,6 +533,11 @@ void UVLArrows::Tick(float DeltaSeconds)
 	const float Life = FMath::Max(CVarArrowLife.GetValueOnGameThread(), 0.05f);
 	const float FadeFor = FMath::Clamp(CVarArrowFade.GetValueOnGameThread(), 0.01f, Life);
 	const float MaxFlight = CVarArrowMaxFlight.GetValueOnGameThread();
+	// (B: where every unit stands now, once for all the arrows of this tick)
+	if (const UVLBattle* Battle = UVLBattle::Get(this); Battle && Arrows.ContainsByPredicate([](const FArrow& A) { return A.State == EState::Flying; }))
+	{
+		Battle->RefreshUnitHash();
+	}
 	for (int32 i = 0; i < Arrows.Num(); ++i)
 	{
 		FArrow& A = Arrows[i];
@@ -475,7 +583,50 @@ void UVLArrows::Tick(float DeltaSeconds)
 			}
 		}
 		FHitResult Hit;
-		if (World->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Params))
+		const bool bHit = World->LineTraceSingleByChannel(Hit, From, To, ECC_Visibility, Params);
+		// a foe's body in the way, before whatever the trace met (units do not stop a visibility trace)
+		float T = 2.f;
+		if (AVLKing* Foe = UnitOnPath(A, From, To, T); Foe && (!bHit || T <= Hit.Time))
+		{
+			if (UVLBattle* Battle = UVLBattle::Get(this))
+			{
+				Battle->Damage(Foe, A.Damage, A.Source.Get(), A.Team);
+				Battle->PlayAt(TEXT("S_ArrowHitFlesh"), Foe->GetActorLocation(), 0.4f, 3500.f, 0.05f);
+			}
+			if (CVarArcherLog.GetValueOnGameThread() != 0)
+			{
+				UE_LOG(LogVoxelLab, Log, TEXT("arrow strikes %s after %.2f s (damage %.0f)"), *Foe->GetDisplayName(), A.Age, A.Damage);
+			}
+			Release(i);
+			continue;
+		}
+		// a foe's building: its hit box (grown past its walls and eaves, VLRules::BuildingHitPad), not only its mesh's
+		// collision, which props, the mound or a hidden wall can stand in front of
+		if (A.Team >= 0 && A.Damage > 0.f)
+		{
+			float BT = 2.f;
+			if (UVLBattle* Battle = UVLBattle::Get(this))
+			{
+				if (AActor* Wall = Battle->BuildingOnPath(From, To, A.Team, BT); Wall && (!bHit || BT <= Hit.Time + 0.02f))
+				{
+					if (bHit && Hit.GetActor() == Wall)
+					{
+						Land(i, Hit);           // its own mesh, where the trace met it: it sticks there (Land does the damage)
+						continue;
+					}
+					// into the box short of anything solid (by its walls, under its eaves): struck, the arrow is spent
+					// (S_BuildingHit is the battle's)
+					Battle->Damage(Wall, A.Damage, A.Source.Get(), A.Team);
+					if (CVarArcherLog.GetValueOnGameThread() != 0)
+					{
+						UE_LOG(LogVoxelLab, Log, TEXT("arrow strikes building %s after %.2f s (damage %.0f)"), *Wall->GetName(), A.Age, A.Damage);
+					}
+					Release(i);
+					continue;
+				}
+			}
+		}
+		if (bHit)
 		{
 			Land(i, Hit);
 			continue;

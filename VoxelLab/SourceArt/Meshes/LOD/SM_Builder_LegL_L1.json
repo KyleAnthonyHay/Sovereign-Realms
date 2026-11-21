@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_LegL_L1",
+ "faces": 429,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.15,
+   -0.225,
+   -0.425
+  ],
+  [
+   0.225,
+   0.225,
+   0.125
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_LegL",
+ "voxel": 0.025,
+ "triangles": 858
+}

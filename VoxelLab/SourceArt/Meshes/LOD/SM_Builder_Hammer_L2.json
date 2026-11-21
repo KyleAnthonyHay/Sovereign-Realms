@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_Hammer_L2",
+ "faces": 153,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0859,
+   -0.3938,
+   -0.0906
+  ],
+  [
+   0.1141,
+   0.1562,
+   0.3594
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_Hammer",
+ "voxel": 0.05,
+ "triangles": 306
+}

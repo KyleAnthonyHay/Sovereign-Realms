@@ -1,0 +1,21 @@
+{
+ "name": "SM_Swordsman_ShinL_L2",
+ "faces": 81,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1375,
+   -0.1875,
+   -0.35
+  ],
+  [
+   0.1125,
+   0.1125,
+   0.1
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Swordsman_ShinL",
+ "voxel": 0.05,
+ "triangles": 162
+}

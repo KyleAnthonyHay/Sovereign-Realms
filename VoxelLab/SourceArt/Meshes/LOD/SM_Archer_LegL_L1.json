@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_LegL_L1",
+ "faces": 91,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.075,
+   -0.1,
+   -0.4
+  ],
+  [
+   0.1,
+   0.1,
+   0.1
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_LegL",
+ "voxel": 0.025,
+ "triangles": 182
+}

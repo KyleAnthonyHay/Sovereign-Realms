@@ -1,0 +1,18 @@
+{
+ "name": "SM_HighlandSea",
+ "faces": 198826,
+ "collision": "complex",
+ "bounds": [
+  [
+   -570.0,
+   -570.0,
+   -9.5
+  ],
+  [
+   570.0,
+   570.0,
+   -7.5
+  ]
+ ],
+ "lights": []
+}

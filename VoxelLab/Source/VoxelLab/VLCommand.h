@@ -2,9 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "VLKing.h"
 #include "VLCommand.generated.h"
-
-class AVLKing;
 
 /** How a group stands at the end of a move (the main game's ESRFormationShape). */
 UENUM()
@@ -15,6 +14,17 @@ enum class EVLFormation : uint8
 	Wedge,      // 1, 3, 5, ... from the point back
 	Square,
 	Loose       // no formation: each keeps its place in the group
+};
+
+/** What the next left click in the overview does (a key or a command-card button arms it). */
+UENUM()
+enum class EVLArm : uint8
+{
+	None,
+	AttackGround,   // A (archers): they shoot at the spot clicked
+	AttackMove,     // A: march there, fighting what they meet (Shift + click: one more point of the way)
+	Patrol,         // P: between where they stand and there (Shift + click: one more point of the loop)
+	Guard           // V: the building, Builder or King David clicked
 };
 
 /**
@@ -30,6 +40,23 @@ enum class EVLFormation : uint8
  *   click on a training dummy             the fighters of the selection attack it (Shift: at a run)
  *   Ctrl|Cmd|Alt + 1..6, 1..6, Shift + 1..6    make / select / add to platoon N
  *   F                                     the next formation (of the selected platoon, or of loose selections)
+ *
+ * STANDING ORDERS (the main game's Stop, Hold, Patrol, Guard, Roam, attack-move, March together, Dismiss). These are
+ * the calls for any commander, the player's input and the enemy's AI alike; each takes the units it is for and
+ * replaces whatever they were doing:
+ *   OrderStop(Units)                      drop every order; stand (they still answer foes by their stance)
+ *   OrderHold(Units)                      stand fast until the next order: strike only what is already in reach
+ *   OrderPatrol(Units, Points, ...)       walk from where they stand through Points and back, round and round,
+ *                                         fighting what they meet; ExtendPatrol adds a point to a patrol under way
+ *   OrderAttackMove(Units, Ground, ...)   march there fighting what they meet, and march on after each fight
+ *   OrderGuard(Units, Ward)               posts in a ring round a building, a Builder or King David of their side;
+ *                                         they fight what comes within GuardLeash of it, and the order ends when it falls
+ *   OrderRoam(Units)                      the Spies among them wander on their own; struck, a Spy runs home
+ *   Dismiss(Units)                        troops removed for good (no refund)
+ * Any other order (OrderMove, OrderAttack, OrderAttackGround, OrderGarrison) ends a standing order; the units' own
+ * fights on the way (UVLBattle's), an archer walking into range and a defensive unit's walk back to its post do not
+ * (they run with bInnerOrder set). TickOrders (from UVLBattle::Tick) walks the patrols, keeps guards at their posts
+ * and moves the roamers on.
  */
 UCLASS()
 class VOXELLAB_API UVLCommand : public UWorldSubsystem
@@ -70,7 +97,9 @@ public:
 	static bool CanAttack(const AVLKing* Unit);
 	/** Those of Units that can fight go and attack Target (a dummy) until they get another order; the others are
 	 *  left as they are. Returns how many were ordered. */
-	int32 OrderAttack(const TArray<AVLKing*>& Units, AActor* Target, bool bRun);
+	int32 OrderAttack(const TArray<AVLKing*>& Units, AActor* Target, bool bRun, bool bMarker = true);
+	/** A unit fell (UVLBattle): out of the selection, its platoon and the tower. */
+	void OnUnitDied(AVLKing* Unit);
 	/** The unit drops the attack it was ordered to (OrderMove does this: any other order ends an attack). */
 	void StopAttack(AVLKing* Unit);
 	/** Attack-ground (archers only): A in the overview arms it, if the selection has archers; the next left click on
@@ -82,14 +111,84 @@ public:
 	/** The archers among Units shoot at that spot of the ground (walking into range first). Returns how many. */
 	int32 OrderAttackGround(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun);
 
+	// ---- standing orders (see the class comment)
+	void OrderStop(const TArray<AVLKing*>& Units);
+	void OrderHold(const TArray<AVLKing*>& Units);
+	/** Points: one or more points of the ground (world cm); the patrol starts where the group stands. */
+	void OrderPatrol(const TArray<AVLKing*>& Units, const TArray<FVector>& Points, bool bRun = false, EVLFormation Shape = EVLFormation::Line);
+	/** One more point on the patrol these units are on together (a new patrol from where they stand if none). */
+	void ExtendPatrol(const TArray<AVLKing*>& Units, const FVector& Point, EVLFormation Shape = EVLFormation::Line);
+	/** bQueue: one more point of the attack-move these units are on together (Shift + click). */
+	void OrderAttackMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun = false, EVLFormation Shape = EVLFormation::Line, bool bQueue = false);
+	/** Returns how many took a post (Builders do not guard; nobody guards itself). */
+	int32 OrderGuard(const TArray<AVLKing*>& Units, AActor* Ward);
+	/** Can units of Team guard it: a standing building of theirs, or a living Builder or King of theirs. */
+	bool CanBeGuarded(const AActor* Ward, int32 Team) const;
+	/** Returns how many Spies set out. */
+	int32 OrderRoam(const TArray<AVLKing*>& Units);
+	/** Troops gone for good, quietly (no refund; the king cannot be dismissed). Returns how many. */
+	int32 Dismiss(const TArray<AVLKing*>& Units);
+	/** Ends whatever standing order these units are on (patrol, attack-move route, guard, hold, roam). */
+	void ClearStanding(const TArray<AVLKing*>& Units);
+	/** Walks the patrols and attack-moves, keeps guards at their posts, moves the roamers on (UVLBattle::Tick). */
+	void TickOrders(float Dt);
+	/** UVLBattle::Damage: a unit was struck (a roaming Spy runs home). */
+	void OnStruck(AVLKing* Victim, AActor* By);
+	/** Set while an order is given on the units' own account (TGuardValue): it does not end their standing orders. */
+	bool bInnerOrder = false;
+	/** cm round its ward a guard fights in (a foe that struck the ward or the guard: 1.8 times as far). */
+	static constexpr float GuardLeash = 1800.f;
+	// what a unit is on (the HUD, the AI)
+	/** The thing it guards, if it is on guard. OutLeash: how far from it the guard goes for foes. */
+	AActor* GuardWardOf(const AVLKing* Unit, float* OutLeash = nullptr) const;
+	void GetGuards(const AActor* Ward, TArray<AVLKing*>& Out) const;
+	bool IsRoaming(const AVLKing* Unit) const;
+	/** The route it walks with its group, if any: its points, whether it loops (a patrol), the one it heads for. */
+	bool GetRoute(const AVLKing* Unit, TArray<FVector>& OutPoints, bool& bOutLoop, int32& OutNext, int32* OutId = nullptr) const;
+	/** "Patrolling", "Guarding the Castle", "Holding", "Roaming", "Attack-move", or empty: for the selection panel. */
+	FString DescribeOrders(const TArray<AVLKing*>& Units) const;
+	// march together: on the march everyone keeps the slowest one's pace (always in a formation; Loose: the setting)
+	bool MarchTogether(const TArray<AVLKing*>& Units, EVLFormation Shape) const;
+	bool SelectionMarchTogether() const;
+	/** M: the setting of the selected platoon (else of loose selections), on / off; a march under way follows. */
+	void ToggleMarchTogether();
+	// the player's armed clicks
+	void Arm(EVLArm Mode);
+	EVLArm GetArmed() const;
+	/** A: attack-move (archers only: attack-ground first); pressed again while armed, the other one. */
+	void CycleAttackArm();
+	/** K: the first press asks (an alert), a second within DismissAskSeconds dismisses the selection's troops. */
+	void DismissCommand();
+	bool IsDismissAsked() const;
+	static constexpr float DismissAskSeconds = 2.5f;
+	static constexpr float ArmSeconds = 10.f;
+	/** Does the selection have anyone who can guard (V)? */
+	bool SelectionCanGuard() const;
+
 	// ---- platoons (1..6)
 	static constexpr int32 MaxPlatoons = 6;
 	void AssignPlatoon(int32 Index, const TArray<AVLKing*>& Units);
 	void AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units);
 	void GetPlatoon(int32 Index, TArray<AVLKing*>& Out) const;
 	EVLFormation PlatoonFormation(int32 Index) const { return Platoons[FMath::Clamp(Index, 0, MaxPlatoons - 1)].Formation; }
+	EVLStance PlatoonStance(int32 Index) const { return Platoons[FMath::Clamp(Index, 0, MaxPlatoons - 1)].Stance; }
+	/** The platoon panel's buttons: the next formation / stance of platoon Index (the stance pushed to its members),
+	 *  and breaking it up (Delete; its troops stay where they are). */
+	void CyclePlatoonFormation(int32 Index);
+	void CyclePlatoonStance(int32 Index);
+	void DisbandPlatoon(int32 Index);
+	/** G: the selection's stance, Aggressive > Defensive > Hold (its platoon's, pushed to the members; else each unit's). */
+	void CycleStance();
+	/** The selection's stance (its platoon's, or its first unit's). */
+	EVLStance SelectionStance() const;
+	static const TCHAR* StanceName(EVLStance Stance);
 	/** The platoon these units are exactly the members of, or INDEX_NONE. */
 	int32 PlatoonOf(const TArray<AVLKing*>& Units) const;
+	/** The platoon a unit is in (the first, if several), or INDEX_NONE; every living member's at once (the HUD, once
+	 *  a frame); the selection as a set (IsSelected for many units). */
+	int32 PlatoonIndexOf(const AVLKing* Unit) const;
+	void GetPlatoonMap(TMap<const AVLKing*, int32>& Out) const;
+	void GetSelectionSet(TSet<const AVLKing*>& Out) const;
 	/** "Swordsmen", "Archers", "Mixed host", ... from who is in it. */
 	FString PlatoonName(int32 Index) const;
 	FVector PlatoonCentre(int32 Index) const;
@@ -121,7 +220,51 @@ private:
 	{
 		TArray<TWeakObjectPtr<AVLKing>> Members;
 		EVLFormation Formation = EVLFormation::Line;
+		EVLStance Stance = EVLStance::Aggressive;
+		bool bMarchTogether = true;
 	};
+	/** A group's way through points: a patrol (loops) or an attack-move (stops at the last). */
+	struct FRoute
+	{
+		TArray<TWeakObjectPtr<AVLKing>> Members;
+		TArray<FVector> Points;
+		int32 Next = 0;
+		bool bLoop = true;
+		bool bRun = false;
+		EVLFormation Shape = EVLFormation::Line;
+		float Settle = 0.f;         // seconds before it next looks whether the leg is done
+		int32 Tries = 0;            // legs walked again after a fight (or a block) that left them short of the point
+		int32 Id = 0;
+	};
+	struct FGuardPost
+	{
+		TWeakObjectPtr<AVLKing> Unit;
+		TWeakObjectPtr<AActor> Ward;
+		FVector2D Offset = FVector2D::ZeroVector;   // from the ward's middle (a unit) / the post itself (a building)
+		FVector2D SentFor = FVector2D(1e9f, 1e9f);  // where the ward was when it was last sent to its post
+		bool bSent = false;
+	};
+	struct FRoamer
+	{
+		TWeakObjectPtr<AVLKing> Unit;
+		TArray<FVector2D> Visited;
+		float LegTime = 0.f;
+	};
+	void IssueLeg(FRoute& R);
+	int32 FindRoute(const TArray<AVLKing*>& Units, bool bLoop) const;
+	bool WardPos(const AActor* Ward, FVector& Out) const;
+	bool PickRoamPoint(FRoamer& R);
+	void GuardPostWorld(const FGuardPost& G, FVector2D& Out) const;
+	TArray<FRoute> Routes;
+	TArray<FGuardPost> GuardPosts;
+	TArray<FRoamer> Roamers;
+	int32 NextRouteId = 1;
+	float OrdersClock = 0.f;
+	bool bQuietMove = false;        // a leg of a standing order: no order marker
+	bool bLooseMarchTogether = true;
+	EVLArm Armed = EVLArm::None;
+	double ArmedAt = -1.0;
+	double DismissAskedAt = -100.0;
 	struct FTower
 	{
 		TWeakObjectPtr<AActor> Actor;
@@ -143,7 +286,6 @@ private:
 	EVLFormation LooseFormation = EVLFormation::Line;
 	TArray<FTower> Towers;
 	TArray<FMarker> Markers;
-	double AttackGroundArmedAt = -1.0;
 };
 
 namespace VLFormation

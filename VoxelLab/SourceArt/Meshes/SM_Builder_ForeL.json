@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_ForeL",
+ "faces": 496,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0745,
+   -0.1941,
+   -0.4406
+  ],
+  [
+   0.127,
+   0.0723,
+   0.0739
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.34906,
+  0.0,
+  0.95224
+ ],
+ "part": "ForeL",
+ "triangles": 993,
+ "blocks": 46
+}

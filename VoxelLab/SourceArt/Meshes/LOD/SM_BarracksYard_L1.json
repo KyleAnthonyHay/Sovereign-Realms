@@ -1,0 +1,21 @@
+{
+ "name": "SM_BarracksYard_L1",
+ "faces": 11993,
+ "collision": "none",
+ "bounds": [
+  [
+   -9.5,
+   -9.75,
+   -0.25
+  ],
+  [
+   9.75,
+   8.75,
+   9.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_BarracksYard",
+ "voxel": 0.25,
+ "triangles": 23986
+}

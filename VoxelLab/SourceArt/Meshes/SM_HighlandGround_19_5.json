@@ -1,0 +1,18 @@
+{
+ "name": "SM_HighlandGround_19_5",
+ "faces": 9719,
+ "collision": "complex",
+ "bounds": [
+  [
+   243.0,
+   -135.0,
+   -10.0
+  ],
+  [
+   268.75,
+   -108.0,
+   -3.75
+  ]
+ ],
+ "lights": []
+}

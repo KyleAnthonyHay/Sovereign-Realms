@@ -5,7 +5,10 @@
 #include "VLTroop.h"
 #include "VLGrid.h"
 #include "VLCommand.h"
+#include "VLBattle.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "VLCharacterData.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
@@ -23,6 +26,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "GameFramework/WorldSettings.h"
+#include "GameFramework/GameUserSettings.h"
 #include "UnrealClient.h"
 #include "RenderTimer.h"
 #include "RHI.h"
@@ -268,7 +272,7 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdControl(TEXT("vl.Control"), TEXT("vl.Control king|<unit name>: take control of that unit"),
+	FAutoConsoleCommandWithWorldAndArgs CmdControl(TEXT("vl.Control"), TEXT("vl.Control king|<unit name>: take control of one of the player's units"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			AVLKing* Me = FindKing(World);
@@ -276,9 +280,13 @@ namespace
 			{
 				return;
 			}
-			const FString Name = Args.Num() ? FString::Join(Args, TEXT(" ")) : TEXT("king");
+			const FString Name = (Args.Num() ? FString::Join(Args, TEXT(" ")) : FString(TEXT("king"))).Replace(TEXT("_"), TEXT(" "));
 			for (TActorIterator<AVLKing> It(World); It; ++It)
 			{
+				if (It->Team != UVLBattle::Player || It->IsDead())
+				{
+					continue;       // never the enemy's
+				}
 				if (Name.Equals(TEXT("king"), ESearchCase::IgnoreCase) ? !It->IsTroop() : It->GetDisplayName().Equals(Name, ESearchCase::IgnoreCase))
 				{
 					Me->TakeControlOf(*It);
@@ -287,15 +295,31 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdMenu(TEXT("vl.Menu"), TEXT("vl.Menu 0|1: close / open the menu"),
+	FAutoConsoleCommandWithWorldAndArgs CmdMenu(TEXT("vl.Menu"), TEXT("vl.Menu 0|1|main|new|pause|settings|controls|end: close the menu / the pause menu / that screen"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr)
 			{
 				if (AVLHUD* HUD = Cast<AVLHUD>(PC->GetHUD()))
 				{
-					HUD->bMenu = Arg(Args, 0, 1) > 0.5f;
+					const FString W = Args.Num() ? Args[0].ToLower() : FString(TEXT("1"));
+					const EVLScreen Screen = W == TEXT("main") ? EVLScreen::Main : W == TEXT("new") ? EVLScreen::NewGame : W == TEXT("settings") ? EVLScreen::Settings
+						: W == TEXT("end") ? EVLScreen::End : W == TEXT("controls") ? EVLScreen::Controls : (W == TEXT("0") ? EVLScreen::None : EVLScreen::Pause);
+					HUD->SetScreen(Screen);
+					UE_LOG(LogVoxelLab, Log, TEXT("menu: screen %d"), int32(Screen));
 				}
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdRestart(TEXT("vl.Restart"), TEXT("vl.Restart [0|1|2]: this map again with a new match (difficulty: this one's)"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const UVLBattle* Battle = UVLBattle::Get(World);
+			APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			const AVLHUD* HUD = PC ? Cast<AVLHUD>(PC->GetHUD()) : nullptr;
+			if (HUD)
+			{
+				AVLHUD::OpenMatch(World, HUD->CurrentMap(), Args.Num() ? FCString::Atoi(*Args[0]) : (Battle ? Battle->GetDifficulty() : 1));
 			}
 		}));
 
@@ -341,6 +365,22 @@ namespace
 		for (TActorIterator<AVLKing> It(World); It; ++It)
 		{
 			const bool bKing = !It->IsTroop();
+			if (It->IsDead())
+			{
+				continue;
+			}
+			if (Who.Equals(TEXT("enemy"), ESearchCase::IgnoreCase))
+			{
+				if (It->Team != UVLBattle::Player)
+				{
+					Out.Add(*It);
+				}
+				continue;
+			}
+			if (It->Team != UVLBattle::Player && !It->GetDisplayName().Equals(Name, ESearchCase::IgnoreCase))
+			{
+				continue;       // (the group words mean the player's own units)
+			}
 			if (Who.Equals(TEXT("all"), ESearchCase::IgnoreCase)
 				|| (Who.Equals(TEXT("troops"), ESearchCase::IgnoreCase) && !bKing)
 				|| (Who.Equals(TEXT("king"), ESearchCase::IgnoreCase) && bKing)
@@ -673,6 +713,29 @@ namespace
 			}
 		}));
 
+	FAutoConsoleCommandWithWorldAndArgs CmdUIClick(TEXT("vl.UIClick"), TEXT("vl.UIClick U V [right]: a click on the interface at that point of the view (fractions 0..1), as the mouse's would be"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			AVLHUD* HUD = PC ? Cast<AVLHUD>(PC->GetHUD()) : nullptr;
+			FVector2D P;
+			if (HUD && ViewPoint(World, Args, 0, P))
+			{
+				const bool bTaken = HUD->OnMousePress(P, Args.Num() > 2);
+				UE_LOG(LogVoxelLab, Log, TEXT("uiclick: %.3f %.3f %s"), Arg(Args, 0, 0.5f), Arg(Args, 1, 0.5f), bTaken ? TEXT("taken by the interface") : TEXT("not on the interface"));
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdHUD(TEXT("vl.HUD"), TEXT("vl.HUD: log the interface's buttons of the last frame (id, centre as fractions of the view) and its screen"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			if (const AVLHUD* HUD = PC ? Cast<AVLHUD>(PC->GetHUD()) : nullptr)
+			{
+				HUD->LogButtons();
+			}
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs CmdBox(TEXT("vl.Box"), TEXT("vl.Box U0 V0 U1 V1 [shift]: drag a selection box between two points of the view (fractions 0..1)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
@@ -722,13 +785,27 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map town|flatlands|village: open that map"),
+	FAutoConsoleCommandWithWorldAndArgs CmdMusic(TEXT("vl.Music"), TEXT("vl.Music [0..1]: the music setting, applied but not saved (0: nothing plays, no song stays loaded); alone: what the music is doing"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (AVLGameMode* GM = World ? World->GetAuthGameMode<AVLGameMode>() : nullptr)
+			{
+				if (Args.Num() > 0)
+				{
+					GM->ApplyMusicSetting(FCString::Atof(*Args[0]));
+				}
+				UE_LOG(LogVoxelLab, Log, TEXT("MUSIC: %s"), *GM->DescribeMusic());
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map town|realm|flatlands|village|highlands: open that map"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (Args.Num() > 0 && World)
 			{
-				const int32 Map = Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 1 : (Args[0].StartsWith(TEXT("v"), ESearchCase::IgnoreCase) ? 2 : 0);
-				UGameplayStatics::OpenLevel(World, FName(*AVLHUD::MapPath(Map)));
+				const int32 Map = Args[0].StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 4 : Args[0].StartsWith(TEXT("r"), ESearchCase::IgnoreCase) ? 1 : (Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : (Args[0].StartsWith(TEXT("v"), ESearchCase::IgnoreCase) ? 3 : 0));
+				const UVLBattle* Battle = UVLBattle::Get(World);
+				AVLHUD::OpenMatch(World, Map, Battle ? Battle->GetDifficulty() : 1);       // a match there at once (no title screen)
 			}
 		}));
 
@@ -745,6 +822,7 @@ namespace
 AVLGameMode::AVLGameMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bTickEvenWhenPaused = true;        // (the command inbox works while the game is paused)
 	DefaultPawnClass = AVLKing::StaticClass();
 	HUDClass = AVLHUD::StaticClass();
 	PlayerControllerClass = AVLPlayerController::StaticClass();     // the trackpad's gestures
@@ -753,149 +831,91 @@ AVLGameMode::AVLGameMode()
 void AVLGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	StopRecording();
+	StopMusic();
 	Super::EndPlay(EndPlayReason);
 }
 
 FString AVLGameMode::TroopFor(const AActor* Building)
 {
-	if (!Building)
-	{
-		return FString();
-	}
-	if (Building->ActorHasTag(TEXT("Name:Barracks")))
-	{
-		return TEXT("Swordsman");
-	}
-	if (Building->ActorHasTag(TEXT("Name:Archery Range")))
-	{
-		return TEXT("Archer");
-	}
-	return FString();
-}
-
-AVLGameMode::FQueue* AVLGameMode::QueueFor(const AActor* Building)
-{
-	for (FQueue& Q : Queues)
-	{
-		if (Q.Building.Get() == Building)
-		{
-			return &Q;
-		}
-	}
-	return nullptr;
-}
-
-const AVLGameMode::FQueue* AVLGameMode::QueueFor(const AActor* Building) const
-{
-	return const_cast<AVLGameMode*>(this)->QueueFor(Building);
+	return UVLBattle::TroopFor(Building);
 }
 
 void AVLGameMode::Train(AActor* Building)
 {
-	if (TroopFor(Building).IsEmpty())
+	if (UVLBattle* Battle = UVLBattle::Get(this))
 	{
-		return;
-	}
-	FQueue* Q = QueueFor(Building);
-	if (!Q)
-	{
-		Q = &Queues.AddDefaulted_GetRef();
-		Q->Building = Building;
-	}
-	if (Q->Count < MaxQueue)
-	{
-		++Q->Count;
+		Battle->Train(Building, 1);
 	}
 }
 
 int32 AVLGameMode::Queued(const AActor* Building) const
 {
-	const FQueue* Q = QueueFor(Building);
-	return Q ? Q->Count : 0;
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	return Battle ? Battle->QueueLength(Building) : 0;
 }
 
 float AVLGameMode::Progress(const AActor* Building) const
 {
-	const FQueue* Q = QueueFor(Building);
-	return (Q && Q->Count > 0) ? FMath::Clamp(Q->Time / FMath::Max(TrainSeconds, 0.1f), 0.f, 1.f) : 0.f;
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	return Battle ? Battle->TrainProgress(Building) : 0.f;
 }
 
 AVLTroop* AVLGameMode::SpawnTroopAt(const FString& Kind, const FVector& Ground, float Yaw)
 {
-	const TSoftObjectPtr<UVLCharacterData> Data = AVLTroop::DataFor(Kind);
-	if (!Data.LoadSynchronous())
-	{
-		UE_LOG(LogVoxelLab, Warning, TEXT("no character data for %s (%s)"), *Kind, *Data.ToString());
-		return nullptr;
-	}
-	const FTransform At(FRotator(0.f, Yaw, 0.f), Ground + FVector(0.f, 0.f, 95.f));
-	AVLTroop* T = GetWorld()->SpawnActorDeferred<AVLTroop>(AVLTroop::StaticClass(), At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
-	if (!T)
-	{
-		return nullptr;
-	}
-	const int32 Number = ++Numbers.FindOrAdd(Kind);
-	T->SetCharacterData(Data);
-	T->SetKind(Kind);
-	T->SetDisplayName(FString::Printf(TEXT("%s %d"), *Kind, Number));
-	T->FinishSpawning(At);
-	return T;
+	UVLBattle* Battle = UVLBattle::Get(this);
+	return Battle ? Battle->SpawnTroop(Kind, UVLBattle::Player, Ground, Yaw) : nullptr;
 }
 
-void AVLGameMode::SpawnTroop(FQueue& Q, const FString& Kind)
+void AVLGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
-	AActor* B = Q.Building.Get();
-	UWorld* World = GetWorld();
-	if (!B || !World)
-	{
-		return;
-	}
-	// Buildings face their local +Y (Blender's -Y). The troop appears in front of the hall (in the yard, if the
-	// building has one) and walks out to gather in rows of five outside the front: through the yard's gate, by a
-	// route on the path grid, like any order.
-	FVector Origin, Extent;
-	B->GetActorBounds(true, Origin, Extent);
-	const FVector Front = B->GetActorRotation().RotateVector(FVector(0.f, 1.f, 0.f));
-	const FVector Side = B->GetActorRotation().RotateVector(FVector(1.f, 0.f, 0.f));
-	const float Reach = FMath::Abs(Front.X) * Extent.X + FMath::Abs(Front.Y) * Extent.Y;
-	const FVector Base(Origin.X, Origin.Y, B->GetActorLocation().Z);
-	const int32 N = Q.Trained++;
-	FVector Door = Base + Front * FMath::Min(Reach * 0.3f, 250.f);
-	FVector Rally = Base + Front * (Reach + 520.f + (N / 5 % 3) * 130.f) + Side * (((N % 5) - 2) * 125.f);
-	UVLGrid* Grid = UVLGrid::Get(this);
-	if (Grid && Grid->EnsureBuilt())
-	{
-		const int32 Out = Grid->NearestNode(Base + Front * (Reach + 520.f), 40, Grid->MainRegion());
-		const int32 In = Grid->NearestNode(Door, 40, Grid->MainRegion());
-		if (In != INDEX_NONE)
-		{
-			Door = Grid->NodePos(In);
-		}
-		if (Out != INDEX_NONE)
-		{
-			TArray<FVector> Fitted;
-			Grid->FitSlots(Grid->NodePos(Out), { FVector2D(Rally) }, Fitted);
-			Rally = Fitted[0];
-		}
-	}
-	if (AVLTroop* T = SpawnTroopAt(Kind, Door, Front.Rotation().Yaw))
-	{
-		if (UVLCommand* Command = UVLCommand::Get(this))
-		{
-			Command->OrderMove({ T }, Rally, false, EVLFormation::Line);
-		}
-		UE_LOG(LogVoxelLab, Log, TEXT("trained %s at %s"), *T->GetDisplayName(), *B->GetName());
-	}
+	Super::InitGame(MapName, Options, ErrorMessage);
+	bMatchOption = UGameplayStatics::HasOption(Options, TEXT("Match"));
+	OptionDifficulty = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("Difficulty"), 1), 0, 2);
 }
 
 void AVLGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	float SavedMusic = 1.f;
-	if (GConfig && GConfig->GetFloat(TEXT("VoxelLab.Audio"), TEXT("Music"), SavedMusic, GGameUserSettingsIni))
+	// A window by default, not full screen (full screen grabbed the mouse badly on the Mac, user request 2026-11-21):
+	// once per install, a saved full-screen mode is put back to a window (16:9, 85% of the desktop, at most 1600 x 900).
+	// F11 / Alt+Enter still toggle full screen, and that choice is kept from then on.
+	if (!GIsEditor && GEngine && GConfig)
 	{
-		MusicSetting = FMath::Clamp(SavedMusic, 0.f, 1.f);
+		bool bDone = false;
+		GConfig->GetBool(TEXT("VoxelLab.Video"), TEXT("WindowedByDefault"), bDone, GGameUserSettingsIni);
+		if (!bDone)
+		{
+			if (UGameUserSettings* S = GEngine->GetGameUserSettings())
+			{
+				const FIntPoint Desk = S->GetDesktopResolution();
+				int32 W = FMath::Min(1600, FMath::RoundToInt(Desk.X * 0.85f));
+				int32 H = FMath::RoundToInt(W * 9.f / 16.f);
+				if (Desk.Y > 0 && H > Desk.Y * 0.85f)
+				{
+					H = FMath::RoundToInt(Desk.Y * 0.85f);
+					W = FMath::RoundToInt(H * 16.f / 9.f);
+				}
+				S->SetFullscreenMode(EWindowMode::Windowed);
+				if (W >= 640 && H >= 360)
+				{
+					S->SetScreenResolution(FIntPoint(W, H));
+				}
+				S->ApplyResolutionSettings(false);
+				S->ConfirmVideoMode();
+				S->SaveSettings();
+				UE_LOG(LogVoxelLab, Log, TEXT("window: windowed by default, %d x %d"), W, H);
+			}
+			GConfig->SetBool(TEXT("VoxelLab.Video"), TEXT("WindowedByDefault"), true, GGameUserSettingsIni);
+			GConfig->Flush(false, GGameUserSettingsIni);
+		}
 	}
+	// TEMP: music off by default (user request, 2026-11-21) — restore: read the saved setting again
+	//float SavedMusic = 1.f;
+	//if (GConfig && GConfig->GetFloat(TEXT("VoxelLab.Audio"), TEXT("Music"), SavedMusic, GGameUserSettingsIni))
+	//{
+	//	MusicSetting = FMath::Clamp(SavedMusic, 0.f, 1.f);
+	//}
+	MusicSetting = 0.f;
 	auto Load = [](const FString& Name) { return LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Voxel/Audio/%s.%s"), *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet); };
 	if (USoundBase* Loop = Load(TEXT("S_AmbientLoop")))
 	{
@@ -905,15 +925,12 @@ void AVLGameMode::BeginPlay()
 			Ambient->FadeIn(2.5f, AmbientVolume);
 		}
 	}
-	for (int32 i = 1; i <= 8; ++i)
+	// the soundtrack starts at a song picked by chance; no song is loaded (and nothing is played) while the music is off
+	Song = FMath::RandRange(0, NumSongs - 1) - 1;
+	if (MusicSetting > 0.f)
 	{
-		if (USoundBase* S = Load(FString::Printf(TEXT("S_Music_%d"), i)))
-		{
-			Songs.Add(S);
-		}
+		NextSong();
 	}
-	Song = Songs.Num() > 0 ? FMath::RandRange(0, Songs.Num() - 1) - 1 : -1;
-	NextSong();
 	OrderSound = Load(TEXT("S_OrderMove"));
 	// the shuffle is placed left and right by where the group is; how loud it is, is worked out here (TickShuffle)
 	ShufflePan = NewObject<USoundAttenuation>(this);
@@ -940,11 +957,12 @@ void AVLGameMode::CycleMusicVolume()
 	{
 		Next = 0.f;
 	}
-	MusicSetting = Next;
-	if (Music)
-	{
-		Music->SetVolumeMultiplier(FMath::Max(MusicVolume * MusicSetting, 0.0001f));
-	}
+	SetMusicSetting(Next);
+}
+
+void AVLGameMode::SetMusicSetting(float Setting)
+{
+	ApplyMusicSetting(Setting);
 	if (GConfig)
 	{
 		GConfig->SetFloat(TEXT("VoxelLab.Audio"), TEXT("Music"), MusicSetting, GGameUserSettingsIni);
@@ -952,21 +970,109 @@ void AVLGameMode::CycleMusicVolume()
 	}
 }
 
+FString AVLGameMode::DescribeMusic() const
+{
+	FString InMemory;
+	for (int32 i = 1; i <= NumSongs; ++i)
+	{
+		const FString Name = FString::Printf(TEXT("S_Music_%d"), i);
+		if (FindObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Voxel/Audio/%s.%s"), *Name, *Name)))
+		{
+			InMemory += FString::Printf(TEXT(" %d"), i);
+		}
+	}
+	return FString::Printf(TEXT("setting %.2f, %s, %s; songs in memory:%s"), MusicSetting, Music ? (Music->IsPlaying() ? TEXT("a component, playing") : TEXT("a component, silent")) : TEXT("no component"),
+		bSongLoading ? *FString::Printf(TEXT("loading S_Music_%d"), Song + 1) : (SongPlaying ? *SongPlaying->GetName() : TEXT("no song")), InMemory.IsEmpty() ? TEXT(" none") : *InMemory);
+}
+
+void AVLGameMode::ApplyMusicSetting(float Setting)
+{
+	MusicSetting = FMath::Clamp(Setting, 0.f, 1.f);
+	if (MusicSetting <= 0.f)
+	{
+		StopMusic();                // off: nothing plays, nothing stays loaded
+	}
+	else if (Music && Music->IsPlaying())
+	{
+		Music->SetVolumeMultiplier(MusicVolume * MusicSetting);
+	}
+	else if (!bSongLoading)
+	{
+		NextSong();                 // turned on: the next song is loaded and fades in
+	}
+}
+
+void AVLGameMode::StopMusic()
+{
+	if (Music)
+	{
+		Music->Stop();
+		Music->DestroyComponent();
+		Music = nullptr;
+	}
+	if (SongLoad.IsValid())
+	{
+		SongLoad->CancelHandle();       // (a load still under way, or the hold on the song loaded)
+		SongLoad.Reset();
+	}
+	SongPlaying = nullptr;
+	bSongLoading = false;
+}
+
 void AVLGameMode::NextSong()
 {
-	if (Songs.Num() == 0)
+	if (MusicSetting <= 0.f || bSongLoading)
 	{
 		return;
 	}
-	Song = (Song + 1) % Songs.Num();
-	if (!Music)
+	Song = (Song + 1) % NumSongs;
+	// loaded in the background (a song is streamed from disk as it plays: Tools/ue/import_audio.py), then played
+	const FString Name = FString::Printf(TEXT("S_Music_%d"), Song + 1);
+	const FSoftObjectPath Path(FString::Printf(TEXT("/Game/Voxel/Audio/%s.%s"), *Name, *Name));
+	bSongLoading = true;
+	TWeakObjectPtr<AVLGameMode> Weak(this);
+	const int32 Wanted = Song;
+	TSharedPtr<FStreamableHandle> Load = UAssetManager::GetStreamableManager().RequestAsyncLoad(Path, FStreamableDelegate::CreateLambda([Weak, Path, Wanted]()
 	{
-		Music = UGameplayStatics::CreateSound2D(this, Songs[Song], MusicVolume * MusicSetting, 1.f, 0.f, nullptr, true, false);
-	}
-	if (Music)
+		AVLGameMode* GM = Weak.Get();
+		if (!GM || !GM->bSongLoading || GM->Song != Wanted)
+		{
+			return;
+		}
+		GM->bSongLoading = false;
+		USoundBase* Sound = Cast<USoundBase>(Path.ResolveObject());
+		if (GM->MusicSetting <= 0.f || !Sound)
+		{
+			GM->SongLoad.Reset();
+			if (!Sound)
+			{
+				UE_LOG(LogVoxelLab, Warning, TEXT("music: %s could not be loaded"), *Path.ToString());
+				GM->SongFailures++;
+			}
+			return;
+		}
+		GM->SongFailures = 0;
+		GM->SongPlaying = Sound;
+		if (!GM->Music)
+		{
+			GM->Music = UGameplayStatics::CreateSound2D(GM, Sound, GM->MusicVolume * GM->MusicSetting, 1.f, 0.f, nullptr, true, false);
+			if (GM->Music)
+			{
+				GM->Music->bIsUISound = true;       // it plays on through the pause menu
+			}
+		}
+		if (GM->Music)
+		{
+			GM->Music->SetSound(Sound);
+			GM->Music->FadeIn(3.f, GM->MusicVolume * GM->MusicSetting);
+		}
+	}), FStreamableManager::AsyncLoadHighPriority);
+	// (the hold on the song before this one goes with the old handle)
+	SongLoad = Load;
+	if (!Load.IsValid())
 	{
-		Music->SetSound(Songs[Song]);
-		Music->FadeIn(3.f, FMath::Max(MusicVolume * MusicSetting, 0.0001f));
+		bSongLoading = false;
+		++SongFailures;
 	}
 }
 
@@ -997,11 +1103,22 @@ void AVLGameMode::TickShuffle(float DeltaSeconds)
 	};
 	TArray<FGroup, TInlineAllocator<8>> Groups;
 	const float Radius2 = FMath::Square(ShuffleGroupRadius);
-	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+	// (B: the units from the battle's registry, in the order they came into the world)
+	FVLOptTiming::FScope Timing(FVLOptTiming::Shuffle);
+	const UVLBattle* ShuffleBattle = UVLBattle::Get(this);
+	if (!ShuffleBattle)
 	{
-		AVLKing* U = *It;
+		ShuffleTimers.Reset();
+		return;
+	}
+	for (AVLKing* U : ShuffleBattle->AllUnits())
+	{
+		if (!U->IsTroop() || U->IsGarrisoned())
+		{
+			continue;
+		}
 		const float Speed = U->GetVelocity().Size2D();
-		if (!U->IsTroop() || U->IsGarrisoned() || Speed < 40.f || U->GetCharacterMovement()->IsFalling())
+		if (Speed < 40.f || U->GetCharacterMovement()->IsFalling())
 		{
 			continue;
 		}
@@ -1060,11 +1177,24 @@ void AVLGameMode::TickShuffle(float DeltaSeconds)
 void AVLGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (bTroopShuffle)
+	if (!bMatchStarted && bMatchOption)
+	{
+		// opened from the New Game screen (Restart, vl.Map): the match starts at once
+		bMatchStarted = true;
+		if (UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			Battle->StartMatch(OptionDifficulty);
+		}
+	}
+	if (GetWorld()->IsPaused())
+	{
+		PollTimer = 1.f;            // only the command inbox, below
+	}
+	else if (bTroopShuffle)
 	{
 		TickShuffle(DeltaSeconds);
 	}
-	if (Music && !Music->IsPlaying() && Songs.Num() > 0)
+	if (MusicSetting > 0.f && !bSongLoading && SongFailures < NumSongs && (!Music || !Music->IsPlaying()))
 	{
 		NextSong();                             // one song after another
 	}
@@ -1075,26 +1205,8 @@ void AVLGameMode::Tick(float DeltaSeconds)
 			Spinner->AddActorLocalRotation(FRotator(22.f * DeltaSeconds, 0.f, 0.f));    // the sails, about their axle
 		}
 	}
-	for (int32 i = Queues.Num() - 1; i >= 0; --i)
-	{
-		FQueue& Q = Queues[i];
-		if (!Q.Building.IsValid())
-		{
-			Queues.RemoveAt(i);
-			continue;
-		}
-		if (Q.Count <= 0)
-		{
-			continue;
-		}
-		Q.Time += DeltaSeconds;
-		if (Q.Time >= TrainSeconds)
-		{
-			Q.Time = 0.f;
-			--Q.Count;
-			SpawnTroop(Q, TroopFor(Q.Building.Get()));
-		}
-	}
+#if !UE_BUILD_SHIPPING
+	// (recordings and the command inbox are for tests: neither is in a Shipping build)
 	if (GRecording.bActive)
 	{
 		APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
@@ -1149,4 +1261,5 @@ void AVLGameMode::Tick(float DeltaSeconds)
 			GEngine->Exec(GetWorld(), *Line);
 		}
 	}
+#endif
 }

@@ -1,0 +1,21 @@
+{
+ "name": "SM_FarmCottage_B_L1",
+ "faces": 1414,
+ "collision": "none",
+ "bounds": [
+  [
+   -2.9375,
+   -2.5,
+   0.0
+  ],
+  [
+   2.8125,
+   2.5,
+   5.0
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_FarmCottage_B",
+ "voxel": 0.25,
+ "triangles": 2828
+}

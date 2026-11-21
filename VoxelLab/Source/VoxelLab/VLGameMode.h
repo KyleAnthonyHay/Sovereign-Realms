@@ -23,13 +23,18 @@ public:
 
 	/** The player's music volume (Esc menu / U): 0..100% of MusicVolume, saved. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Audio")
-	float MusicSetting = 1.f;
+	float MusicSetting = 0.f;       // TEMP: music off by default (user request, 2026-11-21) — restore to 1.f
 
 	void CycleMusicVolume();
+	/** Settings > Music: 0..1, applied at once and saved. */
+	void SetMusicSetting(float Setting);
 	float GetMusicSetting() const { return MusicSetting; }
+	/** The same without saving it (vl.Music, for tests); and what the music is doing now, for the log. */
+	void ApplyMusicSetting(float Setting);
+	FString DescribeMusic() const;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Audio")
-	float AmbientVolume = 0.4f;
+	float AmbientVolume = 0.15f;    // TEMP: ambience low (user request, 2026-11-21) — restore to 0.4f
 
 	// ---- the order click: the player sends units somewhere from the overview (S_OrderMove, not in space)
 	UPROPERTY(EditAnywhere, Category = "Voxel|Audio")
@@ -74,32 +79,41 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Audio|Shuffle")
 	float ShuffleGroupRadius = 700.f;
 
-	// ---- training troops: the barracks trains swordsmen, the archery range archers
+	// ---- training troops: the barracks trains swordsmen, the archery range archers (the rules: UVLBattle)
 	/** "Swordsman", "Archer", or empty if the building trains nothing. */
 	static FString TroopFor(const AActor* Building);
-	/** Queue one at that building; it walks out of the front after TrainSeconds (one at a time per building). */
+	/** Queue one at that building (paid for and housed: UVLBattle::Train); it walks out of the front when trained. */
 	void Train(AActor* Building);
 	/** How many are queued there (the one in training included), and how far the current one is (0..1). */
 	int32 Queued(const AActor* Building) const;
 	float Progress(const AActor* Building) const;
 
-	UPROPERTY(EditAnywhere, Category = "Voxel|Training")
-	float TrainSeconds = 3.f;
-
-	UPROPERTY(EditAnywhere, Category = "Voxel|Training")
-	int32 MaxQueue = 9;
+	// ---- the match: the level is opened with ?Match=1?Difficulty=N from the New Game screen (or Restart, vl.Map); without
+	// them the title screen comes up over it (AVLHUD)
+	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	bool HasMatchOption() const { return bMatchOption; }
 
 private:
 	float PollTimer = 0.f;
+	bool bMatchOption = false;
+	int32 OptionDifficulty = 1;
+	bool bMatchStarted = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UAudioComponent> Music;
 	UPROPERTY(Transient)
 	TObjectPtr<class UAudioComponent> Ambient;
+	/** The song playing (or fading in). The songs are not loaded while the music setting is 0: the next one is loaded
+	 *  when it is wanted (in the background), and let go of when the music is turned off. */
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<class USoundBase>> Songs;
+	TObjectPtr<class USoundBase> SongPlaying;
+	TSharedPtr<struct FStreamableHandle> SongLoad;
+	bool bSongLoading = false;
+	int32 SongFailures = 0;         // songs in a row that would not load (all of them: the music gives up)
+	static constexpr int32 NumSongs = 8;        // S_Music_1..8
 	int32 Song = -1;
 	void NextSong();
+	void StopMusic();
 
 	UPROPERTY(Transient)
 	TObjectPtr<class USoundBase> OrderSound;
@@ -111,22 +125,10 @@ private:
 	TMap<TWeakObjectPtr<AVLKing>, float> ShuffleTimers;
 	void TickShuffle(float DeltaSeconds);
 
-	struct FQueue
-	{
-		TWeakObjectPtr<AActor> Building;
-		int32 Count = 0;
-		float Time = 0.f;
-		int32 Trained = 0;
-	};
-	TArray<FQueue> Queues;
-	TMap<FString, int32> Numbers;      // "Swordsman" -> how many have been trained (for their names)
 
 	/** The windmill's sails (actors tagged Spin), turned a little every frame. */
 	TArray<TWeakObjectPtr<AActor>> Spinners;
 
-	FQueue* QueueFor(const AActor* Building);
-	const FQueue* QueueFor(const AActor* Building) const;
-	void SpawnTroop(FQueue& Q, const FString& Kind);
 
 public:
 	/** Puts a troop on the ground at a point, with no training (vl.Spawn: for tests). */

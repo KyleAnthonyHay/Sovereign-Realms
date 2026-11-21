@@ -1,0 +1,21 @@
+{
+ "name": "SM_Swordsman_ForeL_L1",
+ "faces": 372,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.093,
+   -0.1977,
+   -0.4422
+  ],
+  [
+   0.132,
+   0.0773,
+   0.0828
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Swordsman_ForeL",
+ "voxel": 0.025,
+ "triangles": 744
+}

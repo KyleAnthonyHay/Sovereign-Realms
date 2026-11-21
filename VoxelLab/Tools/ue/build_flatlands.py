@@ -66,6 +66,11 @@ def bounds_walls(g):
         a.set_actor_scale3d(unreal.Vector(sx, sy, 40.0))
         a.set_folder_path("Bounds")
         a.set_actor_hidden_in_game(True)
+        # a hidden wall stops pawns only: clicks, arrows and the camera pass (UVLGrid::ApplyLevelCollision sets the same at play)
+        a.tags = [unreal.Name("Barrier")]
+        a.static_mesh_component.set_editor_property("use_default_collision", False)
+        a.static_mesh_component.set_collision_response_to_all_channels(unreal.CollisionResponseType.ECR_IGNORE)
+        a.static_mesh_component.set_collision_response_to_channel(unreal.CollisionChannel.ECC_PAWN, unreal.CollisionResponseType.ECR_BLOCK)
         a.static_mesh_component.set_editor_property("cast_shadow", False)
         a.static_mesh_component.set_visibility(False)
 

@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_LegL_L2",
+ "faces": 103,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0875,
+   -0.1375,
+   -0.4
+  ],
+  [
+   0.1625,
+   0.1625,
+   0.15
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_LegL",
+ "voxel": 0.05,
+ "triangles": 206
+}

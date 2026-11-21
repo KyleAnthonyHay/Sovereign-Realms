@@ -1,0 +1,18 @@
+{
+ "name": "SM_RealmWater",
+ "faces": 192258,
+ "collision": "complex",
+ "bounds": [
+  [
+   -25.5,
+   -150.25,
+   -6.5
+  ],
+  [
+   125.25,
+   208.0,
+   1.75
+  ]
+ ],
+ "lights": []
+}

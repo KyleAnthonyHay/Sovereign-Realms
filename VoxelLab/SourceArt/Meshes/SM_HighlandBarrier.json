@@ -1,0 +1,18 @@
+{
+ "name": "SM_HighlandBarrier",
+ "faces": 7076,
+ "collision": "complex",
+ "bounds": [
+  [
+   -260.5,
+   -262.5,
+   -10.0
+  ],
+  [
+   269.5,
+   269.5,
+   49.0
+  ]
+ ],
+ "lights": []
+}

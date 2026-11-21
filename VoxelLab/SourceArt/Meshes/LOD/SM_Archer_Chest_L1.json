@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_Chest_L1",
+ "faces": 347,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2,
+   -0.2,
+   -0.025
+  ],
+  [
+   0.2,
+   0.15,
+   0.35
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_Chest",
+ "voxel": 0.025,
+ "triangles": 694
+}

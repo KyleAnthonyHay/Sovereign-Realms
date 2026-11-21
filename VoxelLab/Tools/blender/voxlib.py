@@ -84,6 +84,38 @@ def noise3(shape, scale, seed=0, octaves=3):
     return out / total
 
 
+def terraces(h, voxel=0.5, risers=(2, 1), first=None):
+    """A smooth height field (metres over the ground, any shape) cut into the shallow terraces of a voxel hill: returns
+    the height in whole blocks. The steps up from the ground are `risers` blocks high in turn, again and again
+    ((2, 1): a 1 m bank, then half a metre, then 1 m, ...), so a gentle slope becomes many low grass shelves with thin
+    dirt edges and not one ruled ramp or a sheer wall. `first`: the height of the lowest step alone, if it is to differ
+    (2 blocks of 0.5 m and no unit steps onto the hill from the ground). Heights below half the lowest step are 0."""
+    h = np.asarray(h, np.float32) / float(voxel)
+    levels = [0]
+    seq = ([int(first)] if first else []) + list(risers) * 64
+    for r in seq:
+        levels.append(levels[-1] + int(r))
+        if levels[-1] > float(h.max()) + 1:
+            break
+    levels = np.array(levels, np.int32)
+    # a column takes the highest level it reaches (the lowest: once it is half way up it)
+    reach = np.concatenate([[0.0], [levels[1] * 0.5], levels[2:].astype(np.float32)])
+    idx = np.clip(np.searchsorted(reach, h, side="right") - 1, 0, len(levels) - 1)
+    return levels[idx]
+
+
+def blob_outline(n, lo, hi, seed=0, lobes=(2, 3, 5)):
+    """How far a hill reaches in each of n directions round its middle (metres, between lo and hi): a few slow waves of
+    random phase, so the foot is an irregular, organic line and never a circle or the building's own rectangle."""
+    rng = np.random.default_rng(seed)
+    a = np.arange(n, dtype=np.float32) * (2.0 * math.pi / n)
+    w = np.zeros(n, np.float32)
+    for k in lobes:
+        w += np.sin(a * k + rng.uniform(0, 2 * math.pi)) * rng.uniform(0.6, 1.0) / math.sqrt(k)
+    w = (w - w.min()) / max(float(w.max() - w.min()), 1e-6)
+    return lo + (hi - lo) * w
+
+
 # ---------------------------------------------------------------------------------------------------- the grid
 
 class Vox:

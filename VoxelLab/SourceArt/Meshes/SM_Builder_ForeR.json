@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_ForeR",
+ "faces": 278,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1186,
+   -0.2214,
+   -0.293
+  ],
+  [
+   0.0826,
+   0.0838,
+   0.085
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.34386,
+  0.0,
+  0.95164
+ ],
+ "part": "ForeR",
+ "triangles": 556,
+ "blocks": 34
+}

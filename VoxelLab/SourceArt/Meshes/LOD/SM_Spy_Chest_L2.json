@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_Chest_L2",
+ "faces": 575,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.6,
+   -0.2875,
+   -0.0375
+  ],
+  [
+   0.3,
+   0.5125,
+   0.5125
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_Chest",
+ "voxel": 0.05,
+ "triangles": 1150
+}

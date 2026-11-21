@@ -1,0 +1,21 @@
+{
+ "name": "SM_Bridge_L1",
+ "faces": 1259,
+ "collision": "none",
+ "bounds": [
+  [
+   -2.0,
+   -3.5,
+   -2.5
+  ],
+  [
+   2.0,
+   3.5,
+   1.75
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Bridge",
+ "voxel": 0.25,
+ "triangles": 2518
+}

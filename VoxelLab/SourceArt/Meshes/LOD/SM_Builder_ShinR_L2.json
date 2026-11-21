@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_ShinR_L2",
+ "faces": 79,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1375,
+   -0.2375,
+   -0.35
+  ],
+  [
+   0.1125,
+   0.1125,
+   0.1
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_ShinR",
+ "voxel": 0.05,
+ "triangles": 158
+}

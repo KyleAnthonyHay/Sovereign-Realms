@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_ArmL",
+ "faces": 792,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0849,
+   -0.1279,
+   -0.3809
+  ],
+  [
+   0.168,
+   0.1274,
+   0.0874
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.3125,
+  0.0,
+  1.25
+ ],
+ "part": "ArmL",
+ "triangles": 1584,
+ "blocks": 88
+}

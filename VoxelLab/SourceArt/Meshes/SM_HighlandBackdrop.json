@@ -1,0 +1,18 @@
+{
+ "name": "SM_HighlandBackdrop",
+ "faces": 210153,
+ "collision": "none",
+ "bounds": [
+  [
+   -432.0,
+   -410.0,
+   -10.0
+  ],
+  [
+   570.0,
+   570.0,
+   144.0
+  ]
+ ],
+ "lights": []
+}

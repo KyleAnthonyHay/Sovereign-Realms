@@ -1,0 +1,21 @@
+{
+ "name": "SM_TownHall_L1",
+ "faces": 5247,
+ "collision": "none",
+ "bounds": [
+  [
+   -5.5,
+   -5.0,
+   0.0
+  ],
+  [
+   5.5,
+   5.0,
+   11.75
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_TownHall",
+ "voxel": 0.25,
+ "triangles": 10494
+}

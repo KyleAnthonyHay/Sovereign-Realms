@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_Body_L1",
+ "faces": 265,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.275,
+   -0.225,
+   -0.05
+  ],
+  [
+   0.275,
+   0.175,
+   0.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_Body",
+ "voxel": 0.025,
+ "triangles": 530
+}

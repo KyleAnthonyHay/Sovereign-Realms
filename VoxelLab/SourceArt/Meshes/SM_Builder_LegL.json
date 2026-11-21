@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_LegL",
+ "faces": 3274,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.142,
+   -0.2173,
+   -0.4298
+  ],
+  [
+   0.2144,
+   0.2144,
+   0.1265
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegL",
+ "triangles": 6549,
+ "blocks": 304
+}

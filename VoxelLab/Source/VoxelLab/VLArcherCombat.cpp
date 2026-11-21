@@ -1,4 +1,5 @@
 #include "VLArcherCombat.h"
+#include "VLBattle.h"
 #include "VoxelLab.h"
 #include "VLArrow.h"
 #include "VLCharacterData.h"
@@ -12,6 +13,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "HAL/IConsoleManager.h"
 
 namespace
@@ -83,12 +85,20 @@ UVLArcherCombat* UVLArcherCombat::For(AVLKing* Unit, bool bCreate)
 	{
 		return nullptr;
 	}
-	UVLArcherCombat* Combat = Unit->FindComponentByClass<UVLArcherCombat>();
+	// (B: the unit remembers its component, and that it has been looked for: no component search per call)
+	UVLArcherCombat* Combat = Unit->BowCombat;
+	if (!Combat && !(Unit->CompLooked & 2))
+	{
+		Combat = Unit->FindComponentByClass<UVLArcherCombat>();
+		Unit->BowCombat = Combat;
+		Unit->CompLooked |= 2;
+	}
 	if (!Combat && bCreate && CanFight(Unit))
 	{
 		Combat = NewObject<UVLArcherCombat>(Unit, TEXT("ArcherCombat"));
 		Combat->RegisterComponent();
 		Combat->AddTickPrerequisiteActor(Unit);     // the figure is posed first (AVLKing::Animate), then the bow arm
+		Unit->BowCombat = Combat;
 	}
 	return Combat;
 }
@@ -131,6 +141,7 @@ int32 UVLArcherCombat::OrderAttackGround(const TArray<AVLKing*>& Units, const FV
 
 void UVLArcherCombat::Begin(AActor* InTarget, bool bRun)
 {
+	SetComponentTickEnabled(true);      // (it rests, unticked, while there is nothing for it to do: TickComponent)
 	Mode = InTarget ? EMode::Actor : EMode::None;
 	Target = InTarget;
 	ShotsLeft = -1;
@@ -143,6 +154,7 @@ void UVLArcherCombat::Begin(AActor* InTarget, bool bRun)
 
 void UVLArcherCombat::BeginGround(const FVector& Ground, int32 InShots, bool bRun)
 {
+	SetComponentTickEnabled(true);
 	Mode = EMode::Ground;
 	Target = nullptr;
 	GroundTarget = Ground;
@@ -187,6 +199,7 @@ void UVLArcherCombat::StartBash()
 		return;
 	}
 	BashTime = 0.f;             // a blow with the bow
+	SetComponentTickEnabled(true);
 	bBashLanded = false;
 	if (UVLArrows* Arrows = UVLArrows::Get(this))
 	{
@@ -199,6 +212,7 @@ void UVLArcherCombat::StartBash()
 
 void UVLArcherCombat::LeftButton()
 {
+	SetComponentTickEnabled(true);
 	if (bLocked)
 	{
 		LetDown();                  // a second click on a locked draw: the string comes down, no shot
@@ -235,6 +249,23 @@ void UVLArcherCombat::Bash(AVLKing* Unit)
 			++Struck;
 		}
 	}
+	// a foe in front of her takes the blow
+	if (UVLBattle* Battle = UVLBattle::Get(Unit))
+	{
+		FVLUnits Near;
+		Battle->UnitsNear(Me, BashReach, Near);
+		for (AVLKing* Other : Near)
+		{
+			FVector To = Other->GetActorLocation() - Me;
+			To.Z = 0.f;
+			if (Battle->IsHostile(Other, Unit->Team) && To.Size() <= BashReach && FVector::DotProduct(To.GetSafeNormal(), Ahead) > 0.3f)
+			{
+				Battle->Damage(Other, BashDamage, Unit, Unit->Team);
+				++Struck;
+				break;
+			}
+		}
+	}
 	if (Struck == 0 && ArcherLogOn())
 	{
 		UE_LOG(LogVoxelLab, Log, TEXT("%s swings the bow at nothing"), *Unit->GetDisplayName());
@@ -248,12 +279,22 @@ void UVLArcherCombat::Shoot()
 		bQuick = true;              // not drawn (a short click): a quick draw-and-shoot
 	}
 	bLooseQueued = true;
+	SetComponentTickEnabled(true);
 }
 
 FVector UVLArcherCombat::OrderTarget() const
 {
 	if (Mode == EMode::Actor && Target.IsValid())
 	{
+		const UVLBattle* Battle = UVLBattle::Get(this);
+		const AActor* Owner = GetOwner();
+		if (Battle && Owner && (Cast<AVLKing>(Target.Get()) || Battle->FindBuilding(Target.Get())))
+		{
+			// a foe's chest (where it will be when the arrow gets there) or a point of a building's wall facing her
+			FVector At = Battle->AimPoint(Target.Get(), Owner->GetActorLocation());
+			At += Target->GetVelocity() * (FVector::Dist(Owner->GetActorLocation(), At) / FMath::Max(ArrowSpeed, 100.f));
+			return At;
+		}
 		return Target->GetActorLocation() + FVector(0.f, 0.f, AimHeight);
 	}
 	return GroundTarget;
@@ -290,6 +331,18 @@ bool UVLArcherCombat::Setup(AVLKing* Unit)
 		StringL = Unit->GetJoint(TEXT("BowStringL"));
 		ArrowJoint = Unit->GetJoint(TEXT("Arrow"));
 		Quiver = Unit->GetJoint(TEXT("Quiver"));
+		iChest = Unit->RigFind(TEXT("Chest"));
+		iHead = Unit->RigFind(TEXT("Head"));
+		iArmL = Unit->RigFind(TEXT("ArmL"));
+		iForeL = Unit->RigFind(TEXT("ForeL"));
+		iArmR = Unit->RigFind(TEXT("ArmR"));
+		iForeR = Unit->RigFind(TEXT("ForeR"));
+		iHandR = Unit->RigFind(TEXT("HandR"));
+		iBow = Unit->RigFind(TEXT("Bow"));
+		iStringU = Unit->RigFind(TEXT("BowStringU"));
+		iStringL = Unit->RigFind(TEXT("BowStringL"));
+		iArrow = Unit->RigFind(TEXT("Arrow"));
+		iQuiver = Unit->RigFind(TEXT("Quiver"));
 		if (!Chest || !ArmL || !ForeL || !ArmR || !ForeR || !Bow)
 		{
 			bBroken = true;
@@ -297,6 +350,14 @@ bool UVLArcherCombat::Setup(AVLKing* Unit)
 			return false;
 		}
 		bSetup = true;
+		// (when the unit is posed outside its Tick, or this component rests, the unit asks for the bow arm's pose)
+		Unit->AddRigPoser(this, [this](AVLKing* Posed)
+		{
+			if (bSetup && !bBroken)
+			{
+				Pose(Posed, 0.f);
+			}
+		});
 		if (const UVLCharacterData* Data = Unit->GetCharacterData())
 		{
 			MeshYaw = Data->MeshYaw;
@@ -319,13 +380,10 @@ bool UVLArcherCombat::Setup(AVLKing* Unit)
 			StringFixL = FQuat::FindBetweenNormals(AlongL, FVector::UpVector);
 			for (int32 Half = 0; Half < 2; ++Half)
 			{
-				USceneComponent* Joint = Half == 0 ? StringU : StringL;
+				const int32 Joint = Half == 0 ? iStringU : iStringL;
 				const FQuat& Fix = Half == 0 ? StringFixU : StringFixL;
-				if (USceneComponent* MeshComponent = Joint->GetNumChildrenComponents() > 0 ? Joint->GetChildComponent(0) : nullptr)
-				{
-					MeshComponent->SetRelativeRotation(Fix * MeshQ);
-				}
-				Joint->SetRelativeRotation(Fix.Inverse());
+				Unit->RigSetMeshRot(Joint, Fix * MeshQ);
+				Unit->RigSetRelRot(Joint, Fix.Inverse());
 			}
 		}
 		else
@@ -336,7 +394,7 @@ bool UVLArcherCombat::Setup(AVLKing* Unit)
 			StringMid = BowString * 26.75f;
 			UE_LOG(LogVoxelLab, Warning, TEXT("%s: no BowStringU / BowStringL parts (re-import SM_Archer): the string will not draw"), *Unit->GetDisplayName());
 		}
-		ArrowMesh = ArrowJoint && ArrowJoint->GetNumChildrenComponents() > 0 ? Cast<UStaticMeshComponent>(ArrowJoint->GetChildComponent(0)) : nullptr;
+		ArrowMesh = Unit->RigMesh(iArrow);
 		bArrowShown = true;
 		ShowArrow(false);           // her right hand is empty until she takes an arrow from the quiver
 		BuiltCant = -1000.f;
@@ -359,7 +417,7 @@ bool UVLArcherCombat::Setup(AVLKing* Unit)
 		{
 			Angle = -Angle;
 		}
-		Bow->SetRelativeRotation(FQuat(BowAxis, Angle));
+		Unit->RigSetRelRot(iBow, FQuat(BowAxis, Angle));
 		BowRestFrame = ArcherFrame(BowAxis, BowStringCanted).Inverse();
 		UE_LOG(LogVoxelLab, Log, TEXT("%s: bow turned %.0f deg in her fist (string %.0f deg inside the forearm), upper arm %.1f, elbow to grip %.1f, string %.1f cm"),
 			*Unit->GetDisplayName(), FMath::RadiansToDegrees(Angle), BowCant, UpperL.Size(), GripL.Size(), (StringEndU - StringEndL).Size());
@@ -410,6 +468,19 @@ void UVLArcherCombat::TickHands(AVLKing* Unit, float Dt)
 		return;
 	}
 	Unit->bRightMouseAims = true;       // the right button draws the bow: it does not turn the camera
+	if (TestLookTime > 0.f)
+	{
+		// (vl.Bow look) the hero camera turned until the crosshair's ray passes through the point, as the mouse would
+		TestLookTime -= Dt;
+		FVector O, D;
+		if (Unit->IsMouseLooking() && Unit->GetAimRay(PC, O, D))
+		{
+			const FRotator Have = D.Rotation(), Want = (TestLook - O).Rotation(), Ctrl = PC->GetControlRotation();
+			Unit->LookPitch = 0.f;
+			Unit->SetOrbit(Ctrl.Yaw + FMath::FindDeltaAngleDegrees(Have.Yaw, Want.Yaw),
+				FRotator::NormalizeAxis(Ctrl.Pitch) + FMath::FindDeltaAngleDegrees(Have.Pitch, Want.Pitch), Unit->Boom ? Unit->Boom->TargetArmLength : 1500.f);
+		}
+	}
 	const AVLHUD* HUD = Cast<AVLHUD>(PC->GetHUD());
 	const bool bMenu = HUD && HUD->bMenu;
 	// The right button (the right trigger): held, it draws; let go, she looses. The left button (the left shoulder)
@@ -506,7 +577,7 @@ void UVLArcherCombat::Approach(AVLKing* Unit, const FVector& At)
 	}
 	const FVector Me = Unit->GetFeet();
 	const FVector2D Away = (FVector2D(Me) - FVector2D(At)).GetSafeNormal();
-	const float Stand = Range * StandAt - FMath::FRandRange(0.f, 150.f);
+	const float Stand = Range * StandAt - FMath::FRandRange(0.f, 200.f);       // (2810-2610 cm with Range 3120)
 	// Somewhere at shooting distance, on her side of the target if that will do: ground she can stand on with
 	// nothing right in front of the bow. Else round to either side, then nearer.
 	UVLGrid* Grid = UVLGrid::Get(Unit);
@@ -546,7 +617,10 @@ void UVLArcherCombat::Approach(AVLKing* Unit, const FVector& At)
 	}
 	++Approaches;
 	bInternalOrder = true;          // (UVLCommand::OrderMove ends attacks: not this one)
-	Command->OrderMove({ Unit }, Dest, bOrderRun, EVLFormation::Line);
+	{
+		TGuardValue<bool> Inner(Command->bInnerOrder, true);    // nor a patrol or a guard she is on
+		Command->OrderMove({ Unit }, Dest, bOrderRun, EVLFormation::Line);
+	}
 	bInternalOrder = false;
 	bApproaching = Unit->HasOrder();
 	if (ArcherLogOn())
@@ -574,7 +648,13 @@ bool UVLArcherCombat::ClearShot(const AVLKing* Unit, const FVector& From, const 
 	}
 	FHitResult Hit;
 	const float Far = FMath::Min(700.f, float(FVector::Dist(From, At)) * 0.7f);
-	return !World || !World->LineTraceSingleByChannel(Hit, From, From + Dir * Far, ECC_Visibility, Params) || Hit.GetActor() == Target.Get();
+	if (!World || !World->LineTraceSingleByChannel(Hit, From, From + Dir * Far, ECC_Visibility, Params) || Hit.GetActor() == Target.Get())
+	{
+		return true;
+	}
+	// a building aimed at: what the trace met (its props, the mound, its eaves) inside its hit box is the building
+	const UVLBattle* Battle = UVLBattle::Get(Unit);
+	return Battle && Target.IsValid() && Battle->FindBuilding(Target.Get()) && Battle->BuildingAt(Hit.ImpactPoint, Unit->Team) == Target.Get();
 }
 
 void UVLArcherCombat::TickOrders(AVLKing* Unit, float Dt)
@@ -583,7 +663,8 @@ void UVLArcherCombat::TickOrders(AVLKing* Unit, float Dt)
 	{
 		return;
 	}
-	if (bHands || (Mode == EMode::Actor && !Target.IsValid()))
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (bHands || Unit->IsDead() || (Mode == EMode::Actor && (!Target.IsValid() || (Battle && !Battle->IsAlive(Target.Get())))))
 	{
 		Stop();
 		return;
@@ -616,7 +697,7 @@ void UVLArcherCombat::TickOrders(AVLKing* Unit, float Dt)
 			// (the furthest she tries from the ground: what the full pull would let an arrow reach, whatever the arc)
 			if (bTower || Dist > ArrowSpeed * ArrowSpeed / FMath::Max(ArrowGravity, 1.f) * 0.9f)
 			{
-				UE_LOG(LogVoxelLab, Log, TEXT("%s cannot shoot that far (%.0f cm%s)"), *Unit->GetDisplayName(), Dist, bTower ? TEXT(", from the tower") : TEXT(""));
+				UE_CLOG(ArcherLogOn(), LogVoxelLab, Log, TEXT("%s cannot shoot that far (%.0f cm%s)"), *Unit->GetDisplayName(), Dist, bTower ? TEXT(", from the tower") : TEXT(""));
 				Stop();
 				return;
 			}
@@ -631,8 +712,20 @@ void UVLArcherCombat::TickOrders(AVLKing* Unit, float Dt)
 		}
 		bEngaged = true;
 		Cooldown = FMath::FRandRange(0.05f, FMath::Max(FirstShotDelay, 0.06f));
-		UE_LOG(LogVoxelLab, Log, TEXT("%s shoots at %s from %.0f cm%s"), *Unit->GetDisplayName(), Mode == EMode::Actor ? *Target->GetName() : *GroundTarget.ToCompactString(), Dist,
+		UE_CLOG(ArcherLogOn(), LogVoxelLab, Log, TEXT("%s shoots at %s from %.0f cm%s"), *Unit->GetDisplayName(), Mode == EMode::Actor ? *Target->GetName() : *GroundTarget.ToCompactString(), Dist,
 			bTower ? TEXT(" (from the tower)") : TEXT(""));
+	}
+	// a foe that has moved out of her reach since: into range again (or, from the tower, let it go)
+	if (Mode == EMode::Actor && Dist > (bTower ? TowerRange : Range) * 1.15f && Phase == EPhase::Rest && !bLooseQueued)
+	{
+		if (bTower)
+		{
+			Stop();
+			return;
+		}
+		bEngaged = false;
+		Approaches = 0;
+		return;
 	}
 	AimPoint = At + ShotScatter;
 	bHasAim = true;
@@ -676,25 +769,103 @@ void UVLArcherCombat::Loose(AVLKing* Unit)
 	const FVector Tip = ArrowTip;
 	FVector Dir = ArrowWay;
 	bool bReach = true;
-	// the pull on this arrow: what gives the shallow arc wanted over this distance (the same for the aim and the flight)
-	const float Gravity = bHasAim ? ShotGravity(Tip, AimPoint) : ArrowGravity;
-	if (bHasAim)
+	// In the player's hands the arrow goes to what the crosshair is on, exactly, on its arc. Her spread is put in the
+	// aim, not the launch: a point of the same surface (the ground, a wall, a dummy) within distance x tan(HeroSpread)
+	// of the crosshair's, or across the shot on a foe's body. (Turning the launch by the spread instead carried these
+	// fast, flat arrows, which come down at only 1-3 degrees, far along the ground or over the top of what they were
+	// aimed at: 0.3 degrees up landed up to 1.9 m beyond the crosshair at 30 m, 2.7 m at 50 m.) The crosshair on the
+	// sky: it flies the way the crosshair points, off by up to HeroSpread.
+	FVector At = AimPoint;
+	bool bExact = false, bSky = false;
+	if (bHands && bHasAim)
 	{
-		bReach = UVLArrows::SolveArc(Tip, AimPoint, ArrowSpeed, Gravity, Dir);
+		APlayerController* PC = Cast<APlayerController>(Unit->GetController());
+		FVector O, D;
+		if (TestAimTime > 0.f)
+		{
+			bExact = true;          // (vl.Bow aim: that point)
+		}
+		else if (PC && Unit->GetAimRay(PC, O, D))
+		{
+			FVector P;
+			if (Unit->GetAimPointAlong(O, D, P, SkyAimDistance, &bSky))
+			{
+				At = P;
+				bExact = true;
+				const float Spread = FMath::DegreesToRadians(FMath::Max(HeroSpread, 0.f));
+				const float R = float(FVector::Dist(Tip, P)) * FMath::Tan(Spread);
+				if (bSky)
+				{
+					Dir = Spread > 0.f ? FMath::VRandCone(D, Spread) : D;
+				}
+				else if (R > 0.5f)
+				{
+					// a point of the same surface within R (the spread at that distance), or across the shot for a foe's body
+					UWorld* World = Unit->GetWorld();
+					FCollisionQueryParams Params(SCENE_QUERY_STAT(VLArcherSpread), true, Unit);
+					FHitResult Hit;
+					const bool bSurface = World->LineTraceSingleByChannel(Hit, P - D * 20.f, P + D * 20.f, ECC_Visibility, Params);
+					const FVector N = bSurface ? FVector(Hit.ImpactNormal) : (Tip - P).GetSafeNormal(UE_SMALL_NUMBER, -D);
+					FVector A = FVector::CrossProduct(N, FVector::UpVector);
+					A = A.SizeSquared() > 0.01f ? A.GetSafeNormal() : FVector::CrossProduct(N, FVector::ForwardVector).GetSafeNormal();
+					const FVector B = FVector::CrossProduct(N, A);
+					const float Turn = FMath::FRandRange(0.f, 2.f * UE_PI), Far = R * FMath::Sqrt(FMath::FRand());
+					FVector Q = P + (A * FMath::Cos(Turn) + B * FMath::Sin(Turn)) * Far;
+					if (bSurface)
+					{
+						FHitResult Onto;
+						Q = World->LineTraceSingleByChannel(Onto, Q + N * 30.f, Q - N * 30.f, ECC_Visibility, Params) ? FVector(Onto.ImpactPoint) : P;
+					}
+					At = Q;
+				}
+			}
+		}
 	}
-	// not every arrow of a volley flies the same. At a spot of the ground a flatter arrow comes in lower, so the same
-	// error up or down would carry it further along the ground: less of it, by as much as the arc is flatter.
-	const float PitchSpread = bHands ? HeroSpread : SpreadPitch * (Mode == EMode::Ground ? Gravity / FMath::Max(ArrowGravity, 1.f) : 1.f);
+	// the pull on this arrow: what gives the shallow arc wanted over this distance (the same for the aim and the flight)
+	const float Gravity = bHasAim ? ShotGravity(Tip, At) : ArrowGravity;
+	if (bHasAim && !bSky)
+	{
+		bReach = UVLArrows::SolveArc(Tip, At, ArrowSpeed, Gravity, Dir);
+	}
 	FRotator Way = Dir.Rotation();
-	Way.Yaw += FMath::FRandRange(-1.f, 1.f) * (bHands ? HeroSpread : SpreadYaw);
-	Way.Pitch += FMath::FRandRange(-1.f, 1.f) * PitchSpread;
-	Dir = Way.Vector();
+	if (!bExact)
+	{
+		// not every arrow of a volley flies the same. At a spot of the ground the same error up or down carries an
+		// arrow further along the ground the flatter it comes in (by 1 / the slope it comes down at): less of it, by
+		// that slope, so that it lands about as far off along the ground as across. (It was scaled by the pull, which
+		// since ArrowSpeed 6210 is always the full one: 0.8 degrees landed up to 5 m off at 28 m.)
+		float PitchSpread = bHands ? HeroSpread : SpreadPitch;
+		if (Mode == EMode::Ground && !bHands)
+		{
+			const float Flat = FMath::Max(float(FVector::Dist2D(Tip, At)), 1.f);
+			const float Across = FMath::Max(float(FVector2D(Dir.X, Dir.Y).Size()) * ArrowSpeed, 1.f);
+			const float Down = Gravity * (Flat / Across) - float(Dir.Z) * ArrowSpeed;      // cm/s down, as it lands
+			PitchSpread *= FMath::Clamp(Down / Across, 0.f, 1.f);
+		}
+		Way.Yaw += FMath::FRandRange(-1.f, 1.f) * (bHands ? HeroSpread : SpreadYaw);
+		Way.Pitch += FMath::FRandRange(-1.f, 1.f) * PitchSpread;
+		Dir = Way.Vector();
+	}
 	Arrows->Fire(Unit, Tip, Dir * ArrowSpeed, Gravity, Unit->GarrisonIn.Get(), ArrowDamage);
 	++Shots;
 	if (ArcherLogOn())
 	{
 		UE_LOG(LogVoxelLab, Log, TEXT("%s looses arrow %d from %s at %s (%.0f cm off%s): pitch %.1f yaw %.1f, pull %.0f, she faces %.1f"), *Unit->GetDisplayName(), Shots, *Tip.ToCompactString(),
-			*AimPoint.ToCompactString(), FVector::Dist2D(Tip, AimPoint), bReach ? TEXT("") : TEXT(", OUT OF REACH"), Way.Pitch, Way.Yaw, Gravity, Unit->GetActorRotation().Yaw);
+			*At.ToCompactString(), FVector::Dist2D(Tip, At), bReach ? (bSky ? TEXT(", the sky") : TEXT("")) : TEXT(", OUT OF REACH"), Way.Pitch, Way.Yaw, Gravity, Unit->GetActorRotation().Yaw);
+	}
+	if (ArcherLogOn() && bHands)
+	{
+		// (for measuring the aim) what is drawn under the crosshair: the first thing its ray meets from the camera
+		APlayerController* PC = Cast<APlayerController>(Unit->GetController());
+		FVector O, D;
+		if (PC && Unit->GetAimRay(PC, O, D))
+		{
+			FHitResult Hit;
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(VLArcherCrosshair), true, Unit);
+			const bool bHit = Unit->GetWorld()->LineTraceSingleByChannel(Hit, O, O + D * 80000.f, ECC_Visibility, Params);
+			UE_LOG(LogVoxelLab, Log, TEXT("aimtest shot %d: eye %s dir %s crosshair %s on %s, aim %s, tip %s"), Shots, *O.ToCompactString(), *D.ToCompactString(),
+				bHit ? *Hit.ImpactPoint.ToCompactString() : TEXT("sky"), bHit && Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("-"), *At.ToCompactString(), *Tip.ToCompactString());
+		}
 	}
 }
 
@@ -767,6 +938,10 @@ void UVLArcherCombat::TickShot(AVLKing* Unit, float Dt)
 		}
 		else if (PhaseTime >= NockSeconds * Scale && AimW > 0.9f)
 		{
+			if (UVLArrows* Creak = UVLArrows::Get(this); Creak && GetOwner())
+			{
+				Creak->PlayDraw(GetOwner()->GetActorLocation() + FVector(0.f, 0.f, 60.f));     // the bow creaks as it is drawn
+			}
 			Go(EPhase::Draw);
 		}
 		break;
@@ -813,13 +988,15 @@ void UVLArcherCombat::TickShot(AVLKing* Unit, float Dt)
 
 void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 {
-	const FQuat FigQ = Unit->Figure->GetComponentQuat();
+	// (every joint is read from and written to the unit's pose buffer, AVLKing::Rig...: the same turns and places as
+	// the components had, without moving ~70 of them at every write)
+	const FQuat FigQ = Unit->RigWorldRot(AVLKing::RigFigure);
 	const FVector Up = FigQ.GetUpVector(), Fwd = FigQ.GetForwardVector(), Right = FigQ.GetRightVector();
 	const float W = ArcherSmooth(AimW);
 	const float Scale = bQuick ? FMath::Max(QuickScale, 0.1f) : 1.f;
 
 	// what the gait gave the bow arm (before it is changed)
-	const FRotator Gait = ArmL->GetRelativeRotation();
+	const FRotator Gait = Unit->RigRelRotator(iArmL);
 	const float GaitSwing = FRotator::NormalizeAxis(Gait.Pitch), GaitOut = FRotator::NormalizeAxis(Gait.Roll);
 
 	// ---- a blow with the bow: wound back to her left, swept across her front, and back to the carry
@@ -833,16 +1010,16 @@ void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 	// ---- aiming: the chest side on, the head still on the target
 	if (W > 0.f || BashW > 0.f)
 	{
-		Chest->SetWorldRotation(FQuat(Up, FMath::DegreesToRadians(ChestTwist * W + BashYaw * 0.5f * BashW)) * Chest->GetComponentQuat());
+		Unit->RigSetWorldRot(iChest, FQuat(Up, FMath::DegreesToRadians(ChestTwist * W + BashYaw * 0.5f * BashW)) * Unit->RigWorldRot(iChest));
 	}
 	if (W > 0.f)
 	{
 		if (Head)
 		{
-			Head->SetWorldRotation(FQuat::Slerp(Head->GetComponentQuat(), FigQ * FRotator(AimPitch * 0.4f, 0.f, 0.f).Quaternion(), W));
+			Unit->RigSetWorldRot(iHead, FQuat::Slerp(Unit->RigWorldRot(iHead), FigQ * FRotator(AimPitch * 0.4f, 0.f, 0.f).Quaternion(), W));
 		}
 	}
-	const FQuat ChestQ = Chest->GetComponentQuat();
+	const FQuat ChestQ = Unit->RigWorldRot(iChest);
 
 	// ---- the bow arm. The bow is rigid in the fist, so where the bow is to stand decides the forearm.
 	// carried: upright before her left hip, leaning forward a little (more at a run), its string towards her body
@@ -853,14 +1030,14 @@ void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 	const FQuat UpperCarry = ChestQ * FRotator(CarryArmPitch + CarrySwing * GaitSwing, 0.f, CarryArmOut + 0.3f * GaitOut).Quaternion();
 	FQuat UpperQ = UpperCarry, ForeQ = ForeCarry;
 	const FVector Aim = FigQ.RotateVector(FRotator(AimPitch, 0.f, 0.f).Vector());
-	const FVector Cheek = (Head ? Head->GetComponentLocation() : Chest->GetComponentLocation() + Up * 30.f) + FigQ.RotateVector(Anchor);
+	const FVector Cheek = (Head ? Unit->RigWorldLoc(iHead) : Unit->RigWorldLoc(iChest) + Up * 30.f) + FigQ.RotateVector(Anchor);
 	if (W > 0.f)
 	{
 		// aimed: upright in the plane of the shot, the string straight back along it; the grip as far out along the
 		// line of the arrow (which passes her cheek) as the upper arm lets the elbow go
 		const FVector Along = (Up - Aim * FVector::DotProduct(Up, Aim)).GetSafeNormal(UE_SMALL_NUMBER, Up);
 		const FQuat ForeAim = ArcherFrame(Along, -Aim) * BowRestFrame;
-		const FVector Shoulder = ArmL->GetComponentLocation();
+		const FVector Shoulder = Unit->RigWorldLoc(iArmL);
 		const FVector C0 = Cheek - Along * NockAbove - ForeAim.RotateVector(GripL) - Shoulder;
 		const float B = FVector::DotProduct(C0, Aim);
 		const float Under = B * B - C0.SizeSquared() + UpperL.SizeSquared();
@@ -878,11 +1055,11 @@ void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 		UpperQ = FQuat::Slerp(UpperQ, ChestQ * FRotator(58.f, BashYaw * 0.45f, 14.f).Quaternion(), BashW);
 		ForeQ = FQuat::Slerp(ForeQ, ArcherFrame(Out, -Up) * BowRestFrame, BashW);
 	}
-	ArmL->SetWorldRotation(UpperQ);
-	ForeL->SetWorldRotation(ForeQ);
+	Unit->RigSetWorldRot(iArmL, UpperQ);
+	Unit->RigSetWorldRot(iForeL, ForeQ);
 
 	// ---- the bow as it now stands
-	const FTransform BowT = Bow->GetComponentTransform();
+	const FTransform BowT = Unit->RigWorld(iBow);
 	const FVector Grip = BowT.GetLocation();
 	const FVector Along = BowT.GetRotation().RotateVector(BowAxis);
 	const FVector Shot = -BowT.GetRotation().RotateVector(BowString);       // the way an arrow on the string points
@@ -898,8 +1075,8 @@ void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 	bool bStringHeld = false;
 	if (HandW > 0.f || Phase != EPhase::Rest)
 	{
-		const FVector QuiverAt = Quiver ? Quiver->GetComponentTransform().TransformPositionNoScale(QuiverAxis.GetSafeNormal() * (QuiverMouth + GrabAbove))
-			: ArmR->GetComponentLocation() - Fwd * 30.f + Up * 8.f;
+		const FVector QuiverAt = Quiver ? Unit->RigWorld(iQuiver).TransformPositionNoScale(QuiverAxis.GetSafeNormal() * (QuiverMouth + GrabAbove))
+			: Unit->RigWorldLoc(iArmR) - Fwd * 30.f + Up * 8.f;
 		const FVector PoleReach = Fwd * 0.3f + Right * 0.8f + Up * 0.6f;
 		const FVector PoleDraw = -Fwd * 0.5f + Right * 0.85f + Up * 0.05f;
 		FVector Goal = Full, Pole = PoleDraw;
@@ -931,12 +1108,12 @@ void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 			break;
 		}
 		FQuat UpperIK, ForeIK;
-		ArcherSolveArm(ArmR->GetComponentLocation(), ChestQ, UpperR, GripR, Goal, Pole, UpperIK, ForeIK);
+		ArcherSolveArm(Unit->RigWorldLoc(iArmR), ChestQ, UpperR, GripR, Goal, Pole, UpperIK, ForeIK);
 		const float H = ArcherSmooth(HandW);
-		const FQuat UpperNow = ArmR->GetComponentQuat(), ForeNow = ForeR->GetComponentQuat();
-		ArmR->SetWorldRotation(FQuat::Slerp(UpperNow, UpperIK, H));
-		ForeR->SetWorldRotation(FQuat::Slerp(ForeNow, ForeIK, H));
-		HandAt = ForeR->GetComponentTransform().TransformPositionNoScale(GripR);
+		const FQuat UpperNow = Unit->RigWorldRot(iArmR), ForeNow = Unit->RigWorldRot(iForeR);
+		Unit->RigSetWorldRot(iArmR, FQuat::Slerp(UpperNow, UpperIK, H));
+		Unit->RigSetWorldRot(iForeR, FQuat::Slerp(ForeNow, ForeIK, H));
+		HandAt = Unit->RigWorld(iForeR).TransformPositionNoScale(GripR);
 	}
 
 	// ---- the string: straight between the limbs, or from each limb to the hand that draws it
@@ -946,13 +1123,13 @@ void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 		const FVector Apex = bStringHeld ? BowT.InverseTransformPositionNoScale(HandAt) : StringMid;
 		for (int32 Half = 0; Half < 2; ++Half)
 		{
-			USceneComponent* Joint = Half == 0 ? StringU : StringL;
+			const int32 Joint = Half == 0 ? iStringU : iStringL;
 			const FVector& End = Half == 0 ? StringEndU : StringEndL;
 			const FQuat& Fix = Half == 0 ? StringFixU : StringFixL;
 			const FVector Rest = StringMid - End, Now = Apex - End;
 			const float RestLength = FMath::Max(float(Rest.Size()), 1.f);
-			Joint->SetRelativeRotation(FQuat::FindBetweenNormals(Rest / RestLength, Now.GetSafeNormal(UE_SMALL_NUMBER, Rest / RestLength)) * Fix.Inverse());
-			Joint->SetRelativeScale3D(FVector(1.f, 1.f, FMath::Max(float(Now.Size()) / RestLength, 0.05f)));
+			Unit->RigSetRelRot(Joint, FQuat::FindBetweenNormals(Rest / RestLength, Now.GetSafeNormal(UE_SMALL_NUMBER, Rest / RestLength)) * Fix.Inverse());
+			Unit->RigSetRelScale(Joint, FVector(1.f, 1.f, FMath::Max(float(Now.Size()) / RestLength, 0.05f)));
 		}
 	}
 
@@ -962,13 +1139,13 @@ void UVLArcherCombat::Pose(AVLKing* Unit, float Dt)
 		FVector Way = (Shelf - HandAt).GetSafeNormal(UE_SMALL_NUMBER, Shot);
 		if (Phase == EPhase::Nock && Quiver)
 		{
-			const FVector Down = -Quiver->GetComponentQuat().RotateVector(QuiverAxis.GetSafeNormal());
+			const FVector Down = -Unit->RigWorldRot(iQuiver).RotateVector(QuiverAxis.GetSafeNormal());
 			const float U = ArcherSmooth(PhaseTime / FMath::Max(NockSeconds * Scale * 0.7f, 0.01f));
 			Way = FMath::Lerp(Down, Way, U).GetSafeNormal(UE_SMALL_NUMBER, Way);
 		}
 		ArrowWay = Way;
 		ArrowTip = HandAt + Way * VLArrowGeom::Length;
-		ArrowJoint->SetWorldLocationAndRotation(HandAt + Way * VLArrowGeom::NockOffset, FQuat::FindBetweenNormals(VLArrowGeom::Dir.GetSafeNormal(), Way));
+		Unit->RigSetWorldLocRot(iArrow, HandAt + Way * VLArrowGeom::NockOffset, FQuat::FindBetweenNormals(VLArrowGeom::Dir.GetSafeNormal(), Way));
 	}
 	else
 	{
@@ -987,8 +1164,23 @@ void UVLArcherCombat::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	}
 	TickHands(Unit, DeltaTime);
 	TickOrders(Unit, DeltaTime);
-	Pose(Unit, DeltaTime);          // (as the shot stands: its arrow leaves from where this puts it)
+	if (Unit->RigPosedAtTick())
+	{
+		Pose(Unit, DeltaTime);      // (as the shot stands: its arrow leaves from where this puts it)
+	}
 	TickShot(Unit, DeltaTime);
+	// While a shot is on its way the figure is posed in every Tick, seen or not: the arrow leaves from where the pose
+	// has it (a shot takes several frames to get to the loose, so the pose is there in time). Otherwise the unit poses
+	// her, bow arm and all, only when she is seen (AVLKing::RigLate).
+	const bool bShot = Phase != EPhase::Rest || bWantDraw || bLooseQueued;
+	Unit->RigDemandPose(bShot);
+	// nothing at all to do (no order, not the player's, the bow down and at rest): no tick until something wakes it
+	// (an order, the player's hands, vl.Bow)
+	if (!bShot && !bHands && Mode == EMode::None && BashTime < 0.f && AimW <= 0.f && HandW <= 0.f && AimPitch == 0.f && !bStringDrawn && !bTestDraw
+		&& TestAimTime <= 0.f && TestLookTime <= 0.f && !Cast<APlayerController>(Unit->GetController()))
+	{
+		SetComponentTickEnabled(false);
+	}
 }
 
 FString UVLArcherCombat::Describe() const
@@ -998,11 +1190,11 @@ FString UVLArcherCombat::Describe() const
 	{
 		return TEXT("(not set up)");
 	}
-	const FQuat FigQ = Unit->Figure->GetComponentQuat();
-	const FTransform BowT = Bow->GetComponentTransform();
+	const FQuat FigQ = Unit->RigWorldRot(AVLKing::RigFigure);
+	const FTransform BowT = Unit->RigWorld(iBow);
 	const FVector Along = BowT.GetRotation().RotateVector(BowAxis), StringWay = BowT.GetRotation().RotateVector(BowString);
 	const FVector Grip = Unit->GetActorTransform().InverseTransformPositionNoScale(BowT.GetLocation());
-	const FVector Hand = ForeR->GetComponentTransform().TransformPositionNoScale(GripR);
+	const FVector Hand = Unit->RigWorld(iForeR).TransformPositionNoScale(GripR);
 	const FVector Brace = BowT.TransformPositionNoScale(StringMid + BowAxis * NockAbove);
 	const float Half = Unit->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 	const FVector At = OrderTarget();
@@ -1012,7 +1204,7 @@ FString UVLArcherCombat::Describe() const
 			bEngaged ? TEXT("shooting") : bApproaching ? TEXT("walking in") : TEXT("waiting")),
 		Unit->IsGarrisoned() ? TEXT(" on the tower") : TEXT(""), AimW, HandW, AimPitch, Shots,
 		FVector::DotProduct(Along, FigQ.GetUpVector()), -FVector::DotProduct(StringWay, FigQ.GetForwardVector()), FVector::DotProduct(StringWay, FigQ.GetRightVector()),
-		FVector::DotProduct(StringWay, FigQ.GetUpVector()), Grip.X, Grip.Y, Grip.Z + Half, FVector::Dist(Hand, Brace), StringU ? StringU->GetRelativeScale3D().Z : 1.f);
+		FVector::DotProduct(StringWay, FigQ.GetUpVector()), Grip.X, Grip.Y, Grip.Z + Half, FVector::Dist(Hand, Brace), StringU ? Unit->RigRelScale(iStringU).Z : 1.f);
 }
 
 // ------------------------------------------------------------------------------------------------ console
@@ -1101,6 +1293,17 @@ namespace
 			else if (Args[0].Equals(TEXT("shoot"), ESearchCase::IgnoreCase))
 			{
 				Combat->Shoot();
+			}
+			else if (Args[0].Equals(TEXT("look"), ESearchCase::IgnoreCase) && Args.Num() >= 3)
+			{
+				// the crosshair put on a point (the ground there without Z) by turning the camera, for 30 s
+				const float X = FCString::Atof(*Args[1]), Y = FCString::Atof(*Args[2]);
+				Combat->SetTestLook(Args.Num() >= 4 ? FVector(X, Y, FCString::Atof(*Args[3])) : ArcherGround(World, X, Y), 30.f);
+			}
+			else if (Args[0].Equals(TEXT("spread"), ESearchCase::IgnoreCase) && Args.Num() >= 2)
+			{
+				Combat->HeroSpread = FCString::Atof(*Args[1]);
+				UE_LOG(LogVoxelLab, Log, TEXT("vl.Bow: hero spread %.2f deg"), Combat->HeroSpread);
 			}
 			else if (Args[0].Equals(TEXT("aim"), ESearchCase::IgnoreCase) && Args.Num() >= 3)
 			{

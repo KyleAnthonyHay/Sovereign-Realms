@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_HoodB",
+ "faces": 86,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0875,
+   -0.0375,
+   -0.1875
+  ],
+  [
+   0.0875,
+   0.0625,
+   0.0
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.2875,
+  1.475
+ ],
+ "part": "HoodB",
+ "triangles": 172,
+ "blocks": 4
+}

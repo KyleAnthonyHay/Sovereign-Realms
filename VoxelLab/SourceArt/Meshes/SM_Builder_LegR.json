@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_LegR",
+ "faces": 3160,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2166,
+   -0.2148,
+   -0.4292
+  ],
+  [
+   0.1423,
+   0.2139,
+   0.1293
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegR",
+ "triangles": 6320,
+ "blocks": 301
+}

@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_ArmR_L2",
+ "faces": 94,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1422,
+   -0.15,
+   -0.3891
+  ],
+  [
+   0.1078,
+   0.1,
+   0.0609
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_ArmR",
+ "voxel": 0.05,
+ "triangles": 188
+}

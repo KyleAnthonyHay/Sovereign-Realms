@@ -39,7 +39,9 @@ class UStaticMeshComponent;
  *
  * HER AIM is AVLKing::GetAimPoint: where the crosshair's ray meets the world ahead of her. What the ray meets between
  * the camera and her (a tree, a roof or a fence near the lens, drawn under the crosshair) does not count, nor do
- * units or the tree crowns the camera cuts away; if the ray meets nothing, the point SkyAimDistance along it. So she
+ * friendly units or the tree crowns the camera cuts away; a foe's body does. The arrow is solved to pass exactly
+ * through that point (from where its point is on the bow, with the pull it flies with), the spread being a point of
+ * the same surface near it; if the ray meets nothing (the sky) it is loosed along the crosshair's ray. So she
  * shoots where the crosshair points and never turns round to shoot back at the camera. With the pointer shown (the
  * free view): what the pointer is over, else the ground at her feet.
  *
@@ -75,10 +77,12 @@ public:
 	/** No more shots on orders (an arrow on the string is still loosed). */
 	void Stop();
 	bool IsAttacking() const { return Mode != EMode::None; }
+	/** What she was ordered to shoot at (null for a spot of the ground). */
+	AActor* GetTarget() const { return Mode == EMode::Actor ? Target.Get() : nullptr; }
 
 	// ---- the player's hands (also vl.Bow)
 	/** As if the right mouse button were held / let go (letting go looses). */
-	void SetTestDraw(bool bHeld) { bTestDraw = bHeld; }
+	void SetTestDraw(bool bHeld) { bTestDraw = bHeld; SetComponentTickEnabled(true); }
 	/** Loose as soon as the bow is drawn (a quick draw-and-shoot if it is not: a short click). */
 	void Shoot();
 	/** As the left mouse button: lock the draw the right button holds; let a locked draw down; else a blow with the bow. */
@@ -89,7 +93,10 @@ public:
 	void StartBash();
 	bool IsDrawLocked() const { return bLocked; }
 	/** Aim at this point instead of the mouse pointer for a while. */
-	void SetTestAim(const FVector& Point, float Seconds) { TestAim = Point; TestAimTime = Seconds; }
+	void SetTestAim(const FVector& Point, float Seconds) { TestAim = Point; TestAimTime = Seconds; SetComponentTickEnabled(true); }
+	/** Turn the hero camera, for a while, until the crosshair's ray passes through this point (vl.Bow look): the
+	 *  crosshair is then on it, as if the mouse had put it there. */
+	void SetTestLook(const FVector& Point, float Seconds) { TestLook = Point; TestLookTime = Seconds; SetComponentTickEnabled(true); }
 	/** Drawing, holding or loosing: she faces her aim and strafes. */
 	bool InBattleState() const { return bBattle; }
 	/** One line for vl.Archers. */
@@ -140,7 +147,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer")
 	float RaiseSeconds = 0.24f;
 
-	/** Degrees an arrow may be off, left or right and up or down: in the player's hands, and on orders. */
+	/** Degrees an arrow may be off, left or right and up or down: in the player's hands, and on orders. In the
+	 *  player's hands HeroSpread is not put on the launch but in the aim: a point of the same surface as the
+	 *  crosshair's within distance x tan(HeroSpread) of it (or across the shot on a foe), hit exactly. On orders at a
+	 *  spot of the ground SpreadPitch is scaled by the slope the arrow comes down at. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer")
 	float HeroSpread = 0.3f;
 
@@ -157,12 +167,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer")
 	float FaceWithin = 6.f;
 
-	/** What an arrow does to what it hits, and a blow with the bow (dummies have no health yet). */
+	/** What an arrow does to a foe it hits (x0.35 against buildings: UVLBattle), and a blow with the bow. The main game's
+	 *  archer did 18 every 1.5 s (29 every 2.4 s, her ShotInterval, is the same damage a second); raised to 40 (+38%)
+	 *  so archers are worth fielding (VLRules::Troop("Archer").Damage too). */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer")
-	float ArrowDamage = 10.f;
+	float ArrowDamage = 40.f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer")
-	float BashDamage = 4.f;
+	float BashDamage = 10.f;
 
 	/** The blow with the bow: how long the swipe takes, how far in front of her it reaches (cm), and how many degrees
 	 *  a dummy rocks from it. */
@@ -187,13 +199,13 @@ public:
 	// ---- on orders
 	/** cm she shoots from: further off she walks to StandAt of it first. On the tower's lookout: TowerRange. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer|Orders")
-	float Range = 2400.f;
+	float Range = 3120.f;         // (2400 + 30%)
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer|Orders")
 	float StandAt = 0.9f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer|Orders")
-	float TowerRange = 4200.f;
+	float TowerRange = 5460.f;    // (4200 + 30%)
 
 	/** Seconds from one shot to the next, each off by up to ShotJitter of it; the first after up to FirstShotDelay. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Archer|Orders")
@@ -314,6 +326,8 @@ private:
 	TObjectPtr<USceneComponent> Quiver;
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> ArrowMesh;
+	// the same joints as nodes of the unit's pose buffer (AVLKing::RigWorld and the like): the pose is read and written there
+	int32 iChest = -1, iHead = -1, iArmL = -1, iForeL = -1, iArmR = -1, iForeR = -1, iHandR = -1, iBow = -1, iStringU = -1, iStringL = -1, iArrow = -1, iQuiver = -1;
 
 	FVector UpperL = FVector::ZeroVector;       // shoulder -> elbow
 	FVector GripL = FVector::ZeroVector;        // elbow -> the middle of the bow's grip
@@ -362,6 +376,8 @@ private:
 	void Bash(AVLKing* Unit);
 	FVector TestAim = FVector::ZeroVector;
 	float TestAimTime = 0.f;
+	FVector TestLook = FVector::ZeroVector;
+	float TestLookTime = 0.f;
 
 	// ---- orders
 	EMode Mode = EMode::None;

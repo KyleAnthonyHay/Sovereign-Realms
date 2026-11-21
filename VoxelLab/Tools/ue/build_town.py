@@ -40,6 +40,7 @@ def water(name):
         return None
     a.tags = [unreal.Name("Water")]
     c = a.static_mesh_component
+    c.set_editor_property("use_default_collision", False)     # else the mesh asset's BlockAll comes back when the level is loaded
     c.set_collision_enabled(unreal.CollisionEnabled.QUERY_ONLY)
     c.set_collision_object_type(unreal.CollisionChannel.ECC_WORLD_DYNAMIC)
     c.set_collision_response_to_all_channels(unreal.CollisionResponseType.ECR_IGNORE)

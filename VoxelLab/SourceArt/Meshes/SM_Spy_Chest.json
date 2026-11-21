@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_Chest",
+ "faces": 6985,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.6075,
+   -0.2825,
+   -0.0158
+  ],
+  [
+   0.2821,
+   0.5036,
+   0.4912
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.9125
+ ],
+ "part": "Chest",
+ "triangles": 13970,
+ "blocks": 615
+}

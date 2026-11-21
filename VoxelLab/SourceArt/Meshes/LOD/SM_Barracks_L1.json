@@ -1,0 +1,21 @@
+{
+ "name": "SM_Barracks_L1",
+ "faces": 3918,
+ "collision": "none",
+ "bounds": [
+  [
+   -5.5,
+   -4.0,
+   0.0
+  ],
+  [
+   5.25,
+   4.0,
+   8.5
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Barracks",
+ "voxel": 0.25,
+ "triangles": 7836
+}

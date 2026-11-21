@@ -297,9 +297,14 @@ def heights():
         h = np.where(in_rect(X, Y, (x0, y0, x1, y1)), z, h)
     for pk in (PADDOCK_A, PADDOCK_B):
         h = np.where(in_rect(X, Y, pk, 0.5), 0.0, h)
-    # behind the mine the ground stands as high as its cliff (the asset is a cliff face with the portal in it)
-    m = footprint("mine")
-    h = np.where(in_rect(X, Y, (m[0] - 3, m[3] - 1.0, m[2] + 3, m[3] + 7)), np.maximum(h, 3.0), h)
+    # the mine stands in a hill of its own, not against a sheer bank: minehill.hill, the terraced hill of References/
+    # Remake/mine_mound.png (highest behind the mine, rolling off in shelves on both its sides, open before its mouth),
+    # clear of the watch tower's pad
+    import minehill
+    mx, my, mz = BUILD["mine"][1], BUILD["mine"][2], BUILD["mine"][3]
+    mh = minehill.hill(X, Y, mx, my, BUILD["mine"][4], 6.5, (6.0, 10.0), 3, noise2(X, Y, 7.0, 403))
+    t = footprint("tower", 1.5)
+    h = np.where((mh > 0) & ~in_rect(X, Y, t[:4]), np.maximum(h, mz + mh), h)
 
     # ---- paths
     pz, psurf, psteps = path_fields(X, Y)

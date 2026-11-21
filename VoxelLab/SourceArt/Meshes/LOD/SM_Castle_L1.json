@@ -1,0 +1,21 @@
+{
+ "name": "SM_Castle_L1",
+ "faces": 12425,
+ "collision": "none",
+ "bounds": [
+  [
+   -7.0,
+   -5.5,
+   0.0
+  ],
+  [
+   7.0,
+   5.5,
+   12.0
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Castle",
+ "voxel": 0.25,
+ "triangles": 24850
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_Body",
+ "faces": 1750,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2875,
+   -0.3309,
+   -0.275
+  ],
+  [
+   0.2875,
+   0.1525,
+   0.2463
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.7
+ ],
+ "part": "Body",
+ "triangles": 3501,
+ "blocks": 170
+}

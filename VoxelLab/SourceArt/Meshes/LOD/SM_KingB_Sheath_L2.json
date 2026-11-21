@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_Sheath_L2",
+ "faces": 144,
+ "collision": "none",
+ "bounds": [
+  [
+   0.1641,
+   -0.25,
+   -0.4266
+  ],
+  [
+   0.5141,
+   0.15,
+   0.1734
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_Sheath",
+ "voxel": 0.05,
+ "triangles": 288
+}

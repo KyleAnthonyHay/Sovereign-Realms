@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "VLCameraGround.h"
 #include "VLKing.generated.h"
 
 class USpringArmComponent;
@@ -11,6 +12,22 @@ class UVLCharacterData;
 class ACameraActor;
 class UMaterialInstanceDynamic;
 class UVLFootDust;
+class UVLSwordsmanCombat;
+class UVLArcherCombat;
+class UVLSpy;
+namespace VLRules { struct FTroop; }
+
+/** A unit's kind (AVLKing::UnitKind) as a number: no string compares in the battle's loops (B: UVLBattle's registry). */
+enum class EVLUnitKind : uint8
+{
+	King,
+	Swordsman,
+	Archer,
+	Spy,
+	Builder,
+	Other,          // any other name: fights by a swordsman's rules, as VLRules::Troop(name) has it
+	Unknown = 0xFF  // not looked up yet
+};
 
 /** What a foot comes down on: which set of step sounds plays (S_Step_<Surface>_<n>). */
 UENUM()
@@ -20,6 +37,15 @@ enum class EVLStepSurface : uint8
 	Cement,     // stone, cobble, gravel, the castle steps, the plaza
 	Wood,       // the bridge, the dock, planks, decks, the tower's lookout
 	Carpet      // soft: the shuffle of marching troops (AVLGameMode)
+};
+
+/** How a unit reacts to foes it was not told to fight (the main game's ESRStance; per platoon, G cycles it). */
+UENUM()
+enum class EVLStance : uint8
+{
+	Aggressive,     // goes for any foe in its sight, and chases it
+	Defensive,      // goes for foes in its sight, but no further than VLRules::DefensiveLeash from its post, then back
+	Hold            // never moves to fight: strikes / shoots only what is already in reach
 };
 
 /** The recorded steps of one surface, and which was played last (never the same twice running). */
@@ -64,6 +90,9 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
 
 	/** Walks there by himself (vl.Walk, or an order from the overview), until the player takes the controls: by a
 	 *  route round whatever is in the way (UVLGrid), not in a straight line. */
@@ -77,9 +106,24 @@ public:
 	/** The point of the ground under it. */
 	FVector GetFeet() const;
 	/** An archer: stands behind the melee in a formation, and can man the watch tower. */
-	bool IsRanged() const { return UnitKind == TEXT("Archer"); }
+	bool IsRanged() const { return KindId() == EVLUnitKind::Archer; }
 	const FString& GetKind() const { return UnitKind; }
-	void SetKind(const FString& InKind) { UnitKind = InKind; }
+	void SetKind(const FString& InKind) { UnitKind = InKind; CachedKind = EVLUnitKind::Unknown; CachedRules = nullptr; }
+	// ---- B: unit caches (UVLBattle's registry; CacheKind is in VLBattle.cpp). UnitKind as a number and its rules,
+	// looked up once (SetKind is the only writer of UnitKind after construction); the combat components the unit has,
+	// kept by their own For() helpers (CompLooked: bit 0 sword, 1 bow, 2 spy = looked for already).
+	EVLUnitKind KindId() const { if (CachedKind == EVLUnitKind::Unknown) { CacheKind(); } return CachedKind; }
+	const VLRules::FTroop& KindRules() const { if (!CachedRules) { CacheKind(); } return *CachedRules; }
+	void CacheKind() const;
+	mutable EVLUnitKind CachedKind = EVLUnitKind::Unknown;
+	mutable const VLRules::FTroop* CachedRules = nullptr;
+	UPROPERTY(Transient)
+	TObjectPtr<UVLSwordsmanCombat> SwordCombat;
+	UPROPERTY(Transient)
+	TObjectPtr<UVLArcherCombat> BowCombat;
+	UPROPERTY(Transient)
+	TObjectPtr<UVLSpy> SpyComp;
+	uint8 CompLooked = 0;
 	bool IsGarrisoned() const { return GarrisonIn.IsValid(); }
 	/** The tower whose lookout it stands on, and the one it is walking to (UVLCommand keeps both). */
 	TWeakObjectPtr<AActor> GarrisonIn;
@@ -110,6 +154,45 @@ public:
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	float GetHealth() const { return Health; }
+	float GetHealthFrac() const { return MaxHealth > 0.f ? FMath::Clamp(Health / MaxHealth, 0.f, 1.f) : 0.f; }
+
+	// ---- the battle (UVLBattle): its side, how it fights on its own, and its death
+	/** 0 the player's, 1 the enemy's. */
+	UPROPERTY(EditAnywhere, Category = "Voxel|Battle")
+	int32 Team = 0;
+	/** The look of its side: the custom-depth stencil (1 the player's, whose units show through trees and buildings in
+	 *  M_Silhouette; 2 the enemy's, never shown) and the enemy's red cloth (the "_Enemy" materials). Call after
+	 *  changing Team on a unit that is already built. */
+	void RefreshSilhouette();
+	UPROPERTY(EditAnywhere, Category = "Voxel|Battle")
+	EVLStance Stance = EVLStance::Aggressive;
+	/** On a move it fights what it meets (the commander's orders); a plain move ignores foes. */
+	bool bAttackMove = false;
+	/** The attack it is on was its own idea (a foe in its sight), not an order: it lets go by its stance. */
+	bool bAutoAttack = false;
+	/** H (UVLCommand::OrderHold): it stands where it is and strikes only what is in reach, until its next order. */
+	bool bHoldOrder = false;
+	/** Holding its ground: the Hold stance, or a hold order. */
+	bool IsHolding() const { return bHoldOrder || Stance == EVLStance::Hold; }
+	/** March together (UVLCommand::OrderMove): no faster than this on its order (cm/s; 0 = its own pace). */
+	float PaceCap = 0.f;
+	/** Where it took up the fight (a defensive unit goes back there). */
+	FVector Post = FVector::ZeroVector;
+	TWeakObjectPtr<AActor> LastStruckBy;
+	double LastStruckTime = -100.0;
+	double LastHurtTime = -100.0;
+	bool IsAlive() const { return !bDead; }
+	bool IsDead() const { return bDead; }
+	/** Health 0: it falls (and, a troop, is gone CorpseSeconds later; the king rises again at his castle). */
+	void Die();
+	/** The king, back on his feet at a point with full health. */
+	void Revive(const FVector& Feet);
+	void HealFull() { Health = MaxHealth; }
+	/** Health back, up to its most (the king's rest: UVLBattle::TickKingRest). */
+	void Heal(float Amount) { Health = FMath::Min(MaxHealth, Health + FMath::Max(0.f, Amount)); }
+	float DeadFor() const { return bDead ? DeadTime : 0.f; }
+	/** Damage of one swing (split over its blows): the rules for its kind. */
+	float SwingDamage() const;
 
 	/** "king", a unit's name ("Swordsman 2"), the name of a selectable building ("Town Hall"), or anything else to
 	 *  clear the selection (vl.Select). */
@@ -230,17 +313,17 @@ public:
 	float ArmNear = 650.f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
-	float ArmFar = 9500.f;
+	float ArmFar = 21900.f;       // (was 9500 at -45: 1.55 times further along the same curve, for the 416 m realm)
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
 	float PitchNear = -20.f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
-	float PitchFar = -45.f;
+	float PitchFar = -59.f;
 
 	/** One notch of the mouse wheel, as a share of the whole zoom range (both views). */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
-	float ZoomStep = 0.05f;
+	float ZoomStep = 0.032f;      // (0.05 / 1.55: a notch moves the camera as far as it did before the range grew)
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
 	float CameraFOV = 40.f;
@@ -250,13 +333,18 @@ public:
 	float OverviewNear = 2400.f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
-	float OverviewFar = 19500.f;        // (was 11000 at -40: 1.4 times further along the same curve)
+	float OverviewFar = 68000.f;        // (was 19500 at -46: 1.96 times further along the same curve; takes in most of the 416 m realm)
+
+	/** A wheel notch in the overview, as a share of ZoomStep: its range was stretched more than the hero view's
+	 *  (1.96 against 1.55), and a notch should still move the camera as far as it did. */
+	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
+	float OverviewZoomStepScale = 0.79f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
 	float OverviewPitchNear = -26.f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
-	float OverviewPitchFar = -46.f;
+	float OverviewPitchFar = -65.f;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")
 	float OverviewFOV = 30.f;
@@ -344,9 +432,14 @@ public:
 	 *  from where it passes this unit onwards, so nothing between the camera and the unit (a tree, a roof, a fence
 	 *  close to the lens) can catch it and turn the unit round; if it meets nothing within reach, a point SkyDistance
 	 *  along the crosshair's way. With the pointer shown: what the pointer is over, else the ground at the unit's
-	 *  feet. Units and the tree crowns the camera cuts away (actors tagged Canopy) never catch it. While mouse-looking
+	 *  feet. Friendly units and the tree crowns the camera cuts away (actors tagged Canopy) never catch it; a foe's
+	 *  body does (the aim is on the ray, in its middle). The traces are complex, as the arrows' are. While mouse-looking
 	 *  the point is always in front of the unit as the camera sees it. */
-	bool GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDistance = 3000.f) const;
+	bool GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDistance = 3000.f, bool* bOutSky = nullptr) const;
+	/** The same along a given ray from the camera (Origin, Dir: GetAimRay's, or one a little off it for an archer's
+	 *  spread). A foe whose body the ray passes through (before anything else) catches it: the point is on the ray, in
+	 *  the middle of that body. bOutSky: the ray met nothing, the point is SkyDistance along it. */
+	bool GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVector& OutPoint, float SkyDistance = 3000.f, bool* bOutSky = nullptr) const;
 	void UpdateCursorMode(APlayerController* PC, const class AVLHUD* HUD);
 	float LookPitch = 0.f;
 	bool bMouseLookActive = false;
@@ -394,6 +487,49 @@ public:
 	/** For components that pose parts of the figure themselves, after Animate (UVLArcherCombat): a part's joint by
 	 *  its name, and the character's data. */
 	USceneComponent* GetJoint(FName Name) const { return Part(Name); }
+
+	// ---- the rig's pose (optimisation pass, A1-A3). The figure is posed in a buffer: every joint's transform relative
+	// to its parent joint, the figure's relative to the capsule. Nothing moves a component while it is posed; the
+	// components (joints and meshes) are written once a frame, after everything has ticked and the camera has been
+	// placed (RigLateUpdate), and only for units in view. So a joint COMPONENT's transform is only up to date while the
+	// unit is seen: whoever needs a part's place (a bow, a hand) asks the buffer (RigWorld), which is always exact.
+	// vl.Opt.RigBatch 0: the old way (every write moves the components at once), for comparing.
+	static constexpr int32 RigFigure = -1;
+	/** A part's node by its name, or INDEX_NONE. */
+	int32 RigFind(FName Name) const;
+	FQuat RigRelRot(int32 Node) const;
+	FRotator RigRelRotator(int32 Node) const;
+	FVector RigRelLoc(int32 Node) const;
+	FVector RigRelScale(int32 Node) const;
+	/** As USceneComponent::SetRelativeRotation / SetRelativeScale3D / SetWorldRotation / SetWorldLocationAndRotation. */
+	void RigSetRelRot(int32 Node, const FQuat& Q);
+	void RigSetRelScale(int32 Node, const FVector& Scale);
+	void RigSetWorldRot(int32 Node, const FQuat& Q);
+	void RigSetWorldLocRot(int32 Node, const FVector& Location, const FQuat& Q);
+	/** The mesh on a joint, and its turn against that joint. */
+	UStaticMeshComponent* RigMesh(int32 Node) const;
+	FQuat RigMeshRot(int32 Node) const;
+	void RigSetMeshRot(int32 Node, const FQuat& Q);
+	/** A joint (or RigFigure) in the world, as posed. */
+	FTransform RigWorld(int32 Node) const;
+	FQuat RigWorldRot(int32 Node) const { return RigWorld(Node).GetRotation(); }
+	FVector RigWorldLoc(int32 Node) const { return RigWorld(Node).GetLocation(); }
+	/** The figure was posed in this frame's Tick (not left to the late pass): a component that poses parts of it after
+	 *  Animate (the archer's bow arm) does so in its own tick. Otherwise its poser is called when the unit is posed. */
+	bool RigPosedAtTick() const { return bRigPosedAtTick; }
+	/** A component needs the pose in every Tick for the game's sake (an archer about to loose: her arrow leaves from
+	 *  where the pose puts it), seen or not. */
+	void RigDemandPose(bool bDemand) { bRigDemand = bDemand; }
+	/** Poses parts of the figure after Animate. Called when the unit is posed outside its Tick (and, for a component
+	 *  that is not ticking, in the Tick's pose as well). */
+	void AddRigPoser(UActorComponent* Owner, TFunction<void(AVLKing*)> Pose);
+	/** (vl.RigCheck) the worst difference between the buffer and the components, cm / degrees. */
+	void RigCompare(double& OutCm, double& OutDeg) const;
+	/** (vl.RigCheck) the same pose built both ways, through the buffer and through the components as before the
+	 *  optimisation pass: the worst difference between the joints' world transforms, cm / degrees. */
+	void RigSelfCheck(double& OutCm, double& OutDeg);
+	/** After everything has ticked and the camera is placed: poses the units left to it and writes the components. */
+	static void RigLateUpdate(UWorld* World, ELevelTick TickType, float DeltaSeconds);
 	UVLCharacterData* GetCharacterData() const { return Loaded; }
 	/** Set by UVLArcherCombat while the player plays an archer: she moves no faster than this (cm/s; 0 = no limit)
 	 *  while she draws, and the right mouse button draws her bow instead of turning the camera. */
@@ -406,14 +542,28 @@ public:
 	/** What is under the mouse: the king, a selectable building, or nothing. Ground receives the point hit, if any. */
 	AActor* PickUnderCursor(APlayerController* PC, FVector* Ground = nullptr) const;
 	/** The same, under a point of the viewport. */
-	AActor* PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground = nullptr) const;
+	/**
+	 * Ground: the first thing seen under the point (hidden walls, the water and the backdrop are passed through).
+	 * bBoxes: a building also counts anywhere inside its bounding box (for selecting it); without, only where the
+	 * pointer meets its own geometry (for orders: a box in the way must not turn a move into something else).
+	 */
+	AActor* PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground = nullptr, bool bBoxes = true) const;
 	/** What the mouse does in the overview, at a point of the viewport (also vl.Click / vl.Box / vl.RightClick):
 	 *  a click selects the unit or building there (Shift: adds the unit or takes it out) or, on a training dummy,
 	 *  has the selection's fighters attack it (UVLCommand::OrderAttack; Shift: at a run), a box every unit in it,
 	 *  a right click sends the selection there or, on the watch tower, has its archers man it. */
 	/** True if the click gave an attack order (it was on a training dummy, with fighters selected). */
 	bool ClickAt(const FVector2D& Point, bool bShift);
+	/** The title screen's backdrop (AVLHUD): the overview camera circles Focus at Distance and Pitch, whatever the
+	 *  overview's zoom limits; Distance <= 0 gives the overview back. */
+	void SetTitleShot(const FVector& Focus, float Distance, float Pitch) { TitleFocus = Focus; TitleDistance = Distance; TitlePitch = Pitch; }
+	bool HasTitleShot() const { return TitleDistance > 0.f; }
+	/** Selects platoon Index (the key 1..6, or its row in the platoon panel); bLook: the view goes to it as well. */
+	void SelectPlatoon(int32 Index, bool bLook);
 	void BoxSelect(const FVector2D& A, const FVector2D& B, bool bShift);
+	/** Alt / Option + click (the main game's double click): every unit of the player's of the kind under the point
+	 *  that is in view (bAdd: added to the selection). False if there is no unit of the player's there. */
+	bool SelectKindAt(const FVector2D& Point, bool bAdd);
 	/** True if an order was given. */
 	bool OrderAt(const FVector2D& Point, bool bRun, bool bQueue = false);
 
@@ -436,15 +586,39 @@ public:
 
 private:
 	void BuildFigure();
-	void HitDummies();
+	/** A blow of a swing landing (Share: its part of the swing's damage): the dummies in front of him rock, and the
+	 *  foe in front of him (the one he is fighting, if it is there) or else a foe's building takes it. */
+	void HitDummies(float Share = 1.f);
+	bool bDead = false;
+	float DeadTime = 0.f;
+	void TickDeath(float DeltaSeconds);
 	void StartSwing(int32 Kind);
 	/** Dt: the game's time (the swing's and the draw's own clocks). AnimDt: the time the pose moves on by (0 while a hit holds it). */
 	void Animate(float Dt, float AnimDt);
+	/** The pose itself, from the gait and the clocks Animate keeps: the figure, the sword, the cape. AnimDt: the time
+	 *  the pose has moved on since it was last built (more than a frame's for a unit posed at a lower rate). */
+	void PoseFigure(float AnimDt);
+	void PoseNow(bool bAtTick);
+	void EnsureCameraRig();
+	void RigBuild();
+	void RigSetFigure(const FVector& Location, const FQuat& Q);
+	void RigSetLegacy(bool bLegacy);
+	void RigFlush(double Tolerance, bool bForce);
+	void RigLate(const struct FVLRigView& View);
+	void RigSyncFromComponents();
+	void RigRegister(bool bRegister);
+	void WakeRigPosers();
+	void RigScanExtras();
+	void UpdateCustomDepth(bool bWant);
+	const FTransform& RigLocal(int32 Node, uint64& OutStamp) const;
 	void UpdateSword(const float* Pose, float AnimDt);
 	void UpdateCape(float AnimDt);
 	void UpdateFlash(float Dt);
 	void PollInput(float DeltaSeconds);
 	void UpdateOverviewCamera(float DeltaSeconds, bool bSnap = false);
+	FVector TitleFocus = FVector::ZeroVector;
+	float TitleDistance = 0.f;
+	float TitlePitch = -38.f;
 	USceneComponent* Part(FName Name) const;
 
 	UPROPERTY(Transient)
@@ -483,6 +657,9 @@ private:
 		USceneComponent* ShinL = nullptr;
 		USceneComponent* LegR = nullptr;
 		USceneComponent* ShinR = nullptr;
+		// the same joints as nodes of the pose buffer (INDEX_NONE: the figure has no such part)
+		int32 iBody = -1, iChest = -1, iHead = -1, iArmL = -1, iForeL = -1, iArmR = -1, iForeR = -1, iHandR = -1;
+		int32 iLegL = -1, iShinL = -1, iLegR = -1, iShinR = -1, iSword = -1;
 		FVector HipL = FVector::ZeroVector, HipR = FVector::ZeroVector;      // in the figure
 		float Thigh = 32.f, Shin = 35.f;
 		FVector ShoulderR = FVector::ZeroVector;                              // in the chest
@@ -494,12 +671,69 @@ private:
 	};
 	FRig Rig;
 
+	// the pose buffer (see the Rig... functions above). Nodes are in the order of the character's parts: a parent
+	// before its children.
+	struct FRigNode
+	{
+		USceneComponent* Joint = nullptr;
+		UStaticMeshComponent* Mesh = nullptr;
+		int32 Parent = -1;                           // RigFigure: hung from the figure
+		FVector RelLoc = FVector::ZeroVector;        // against the parent joint
+		FQuat RelRot = FQuat::Identity;
+		FVector RelScale = FVector::OneVector;
+		FQuat MeshRot = FQuat::Identity;             // the mesh against its joint
+		uint64 RelStamp = 1;
+		mutable uint64 LocalStamp = 0;
+		mutable FTransform Local;                    // in the capsule's space
+		// what the components hold
+		FVector WrittenLoc = FVector::ZeroVector;
+		FQuat WrittenRot = FQuat::Identity;
+		FVector WrittenScale = FVector::OneVector;
+		FTransform Sent;                             // the mesh's transform as last given to the renderer
+		double Reach = 30.0;                         // how far the mesh reaches from its joint (cm)
+		int32 Children = 0;                          // attached components it had when last looked at
+		bool bSent = false;
+	};
+	TArray<FRigNode> RigNodes;
+	TMap<FName, int32> RigIndex;
+	struct FRigExtra
+	{
+		TWeakObjectPtr<USceneComponent> Component;   // something else hung from a joint (the spy's lantern)
+	};
+	TArray<FRigExtra> RigExtras;
+	struct FRigPoser
+	{
+		TWeakObjectPtr<UActorComponent> Owner;
+		TFunction<void(AVLKing*)> Pose;
+	};
+	TArray<FRigPoser> RigPosers;
+	FTransform FigureLocal = FTransform::Identity;   // the figure against the capsule
+	uint64 FigureStamp = 1;
+	mutable uint64 RigClock = 1;
+	bool bRigLegacy = false;
+	bool bRigPosedAtTick = false;
+	bool bRigPosedThisFrame = false;
+	bool bRigDemand = false;
+	bool bRigDirty = true;         // the buffer has changed since the components were written
+	bool bRigForce = true;         // the next write gives the renderer every part, however little it moved
+	bool bRigStale = false;        // out of view: the components were left where they were
+	bool bRigResume = false;       // posed again after a gap: the cape and the wrist start afresh
+	bool bRigCapeHeld = false;     // far off: the cape holds its shape
+	bool bDepthOn = true;          // its parts write custom depth (the silhouette)
+	bool bUnitGI = false;          // its parts are in Lumen's scene (vl.Opt.UnitGI 1: as before the optimisation pass)
+	float RigPoseDt = 0.f;         // pose time not yet shown
+	float RigSincePose = 0.f;      // seconds since it was posed
+	int32 RigSerial = 0;
+	FVector RigFlushedAt = FVector::ZeroVector;
+	float BoomLagScale = 1.f;
+
 	// the cape: every column a chain of panels, each swung about the hinge at its top edge
 	static constexpr int32 CapeMaxCols = 6;
 	static constexpr int32 CapeMaxRows = 5;
 	struct FCapePanel
 	{
 		USceneComponent* Joint = nullptr;
+		int32 Node = -1;                     // its node of the pose buffer
 		float Length = 25.f;
 		float Slope = 0.f;                   // degrees it hangs away from him at rest
 		float Pitch = 0.f, PitchVel = 0.f;   // degrees back from its rest hang, in the actor's frame
@@ -543,7 +777,7 @@ private:
 	// hero camera: the diorama view of the reference picture
 	float CamYaw = -62.f;      // set from the postcard camera at BeginPlay
 	float HomeYaw = -62.f;
-	float Zoom = 0.3f;        // 0 close .. 1 far: distance and pitch both follow it
+	float Zoom = 0.19f;        // 0 close .. 1 far: distance and pitch both follow it
 	float ManualPitch = 0.f;   // vl.Orbit can pin the pitch and distance (0 = follow the zoom)
 	float ManualArm = 0.f;
 	float TargetArm = 1500.f;
@@ -553,7 +787,14 @@ private:
 	bool bHeroMode = true;
 	FVector OverviewFocus = FVector::ZeroVector;
 	float OverviewYaw = -62.f;
-	float OverviewZoom = 0.355f;
+	float OverviewZoom = 0.18f;
+	// (its place over the ground: UVLCameraGround. OverviewFocus is a point of the map, its Z unused: the view turns
+	// about the ground's surface there, FocusGroundZ, which follows the ground smoothly as the focus moves)
+	FVLCameraFloor OverviewFloor;
+	FVector2D FocusGroundAt = FVector2D::ZeroVector;
+	float FocusGroundWant = 0.f;
+	float FocusGroundZ = 0.f;
+	bool bFocusGround = false;
 	TWeakObjectPtr<AActor> Selected;
 	TWeakObjectPtr<AActor> LastClicked;
 	double LastClickTime = 0.0;
@@ -607,6 +848,14 @@ private:
 	FVector2D DragPos = FVector2D::ZeroVector;
 	int32 LastPlatoonKey = -1;
 	double LastPlatoonTime = -1.0;
+	// A and S in the overview are both pan keys and orders (attack-move, stop): with units selected a quick tap is the
+	// order and a hold pans (after CommandKeyTapSeconds), as in the main game. [0] A, [1] S.
+	double TapKeyDownAt[2] = { -1.0, -1.0 };
+	bool bTapKeyPanned[2] = { false, false };
+	static constexpr double CommandKeyTapSeconds = 0.17;
+	/** How much longer (and slower) his gait's stride is than the figure's own: King David's quicker pace is half a
+	 *  longer stride, half a quicker step (sqrt of his speed over a troop's each), so his feet stay planted. */
+	float StrideScale = 1.f;
 	void OverviewCommands(APlayerController* PC, class AVLHUD* HUD, bool bRun);
 	void PlayFootstep(const FVector& At, float RunBlend);
 	UPROPERTY(Transient)

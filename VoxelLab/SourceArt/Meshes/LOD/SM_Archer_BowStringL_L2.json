@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_BowStringL_L2",
+ "faces": 45,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0953,
+   -0.1953,
+   -0.0281
+  ],
+  [
+   0.0047,
+   0.0047,
+   0.5719
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_BowStringL",
+ "voxel": 0.05,
+ "triangles": 90
+}

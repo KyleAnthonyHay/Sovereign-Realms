@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_ArmR_L1",
+ "faces": 204,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1734,
+   -0.125,
+   -0.3945
+  ],
+  [
+   0.0766,
+   0.125,
+   0.0805
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_ArmR",
+ "voxel": 0.025,
+ "triangles": 408
+}

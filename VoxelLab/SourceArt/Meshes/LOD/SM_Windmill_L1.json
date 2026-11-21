@@ -1,0 +1,21 @@
+{
+ "name": "SM_Windmill_L1",
+ "faces": 2924,
+ "collision": "none",
+ "bounds": [
+  [
+   -3.5,
+   -3.75,
+   0.0
+  ],
+  [
+   3.5,
+   3.5,
+   10.75
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Windmill",
+ "voxel": 0.25,
+ "triangles": 5848
+}

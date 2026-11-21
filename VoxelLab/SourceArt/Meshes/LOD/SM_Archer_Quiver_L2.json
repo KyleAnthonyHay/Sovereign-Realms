@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_Quiver_L2",
+ "faces": 260,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2953,
+   -0.1375,
+   -0.2391
+  ],
+  [
+   0.1547,
+   0.1125,
+   0.5609
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_Quiver",
+ "voxel": 0.05,
+ "triangles": 520
+}

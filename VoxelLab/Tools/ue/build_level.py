@@ -48,6 +48,12 @@ P = dict(
     vignette=0.45,
     lamp_lumens=9.0,          # per litre of glow voxels... see lamps()
     lamp_radius=480.0,
+    # Each lamp is a point light of a few metres' reach: in daylight its pool of light cannot be told from the sunlit
+    # ground at the overview's middle zoom (190 m) and beyond. It is whole to 220 m and fades out over the next 80 m
+    # (the Graphics presets scale both down: r.LightMaxDrawDistanceScale, VLGraphics.cpp). Tools/ue/patch_optim.py puts
+    # the same on maps already built.
+    lamp_draw=30000.0,
+    lamp_fade=8000.0,
     lamp_color=(1.0, 0.76, 0.48),
 )
 P.update(LOOK)
@@ -255,6 +261,8 @@ def lamps(name, x, y, z, yaw, scale, folder):
         lc.set_editor_property("source_radius", 12.0)
         lc.set_editor_property("cast_shadows", False)
         lc.set_editor_property("volumetric_scattering_intensity", 0.6)
+        lc.set_editor_property("max_draw_distance", P["lamp_draw"])
+        lc.set_editor_property("max_distance_fade_range", P["lamp_fade"])
         n += 1
     return n
 
@@ -310,6 +318,11 @@ def walls(half):
         a.set_actor_scale3d(unreal.Vector(sx, sy, 40.0))
         a.set_folder_path("Bounds")
         a.set_actor_hidden_in_game(True)
+        # a hidden wall stops pawns only: clicks, arrows and the camera pass (UVLGrid::ApplyLevelCollision sets the same at play)
+        a.tags = [unreal.Name("Barrier")]
+        a.static_mesh_component.set_editor_property("use_default_collision", False)
+        a.static_mesh_component.set_collision_response_to_all_channels(unreal.CollisionResponseType.ECR_IGNORE)
+        a.static_mesh_component.set_collision_response_to_channel(unreal.CollisionChannel.ECC_PAWN, unreal.CollisionResponseType.ECR_BLOCK)
         a.static_mesh_component.set_editor_property("cast_shadow", False)
         a.static_mesh_component.set_visibility(False)
 

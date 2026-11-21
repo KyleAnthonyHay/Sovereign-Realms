@@ -1,0 +1,21 @@
+{
+ "name": "SM_ArcheryHall_L1",
+ "faces": 11829,
+ "collision": "none",
+ "bounds": [
+  [
+   -10.0,
+   -7.25,
+   -0.25
+  ],
+  [
+   10.0,
+   7.0,
+   7.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_ArcheryHall",
+ "voxel": 0.25,
+ "triangles": 23658
+}

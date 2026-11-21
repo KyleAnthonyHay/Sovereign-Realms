@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_ShinL",
+ "faces": 910,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1213,
+   -0.2225,
+   -0.35
+  ],
+  [
+   0.1462,
+   0.1225,
+   0.075
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.15,
+  0.0,
+  0.35
+ ],
+ "part": "ShinL",
+ "triangles": 1821,
+ "blocks": 97
+}

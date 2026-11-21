@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_HoodA",
+ "faces": 129,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1175,
+   -0.075,
+   -0.1625
+  ],
+  [
+   0.1175,
+   0.1,
+   0.075
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.2375,
+  1.6375
+ ],
+ "part": "HoodA",
+ "triangles": 258,
+ "blocks": 6
+}

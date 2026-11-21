@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_Cape01_L1",
+ "faces": 45,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0484,
+   -0.0984,
+   -0.15
+  ],
+  [
+   0.0766,
+   0.0766,
+   -0.0
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_Cape01",
+ "voxel": 0.025,
+ "triangles": 90
+}

@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_Head_L2",
+ "faces": 155,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.3,
+   -0.2,
+   0.0
+  ],
+  [
+   0.3,
+   0.3,
+   0.45
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_Head",
+ "voxel": 0.05,
+ "triangles": 310
+}

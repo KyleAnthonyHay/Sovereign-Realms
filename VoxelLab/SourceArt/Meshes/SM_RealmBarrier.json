@@ -1,0 +1,18 @@
+{
+ "name": "SM_RealmBarrier",
+ "faces": 4210,
+ "collision": "complex",
+ "bounds": [
+  [
+   -200.5,
+   -200.0,
+   -8.5
+  ],
+  [
+   207.5,
+   207.5,
+   37.0
+  ]
+ ],
+ "lights": []
+}

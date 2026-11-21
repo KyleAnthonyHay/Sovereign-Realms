@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_Sword_L1",
+ "faces": 366,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.068,
+   -0.5711,
+   -0.1484
+  ],
+  [
+   0.057,
+   0.2039,
+   0.4016
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_Sword",
+ "voxel": 0.025,
+ "triangles": 732
+}

@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_LegR_L1",
+ "faces": 372,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.225,
+   -0.225,
+   -0.425
+  ],
+  [
+   0.15,
+   0.225,
+   0.125
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_LegR",
+ "voxel": 0.025,
+ "triangles": 744
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_ForeR",
+ "faces": 438,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1176,
+   -0.2141,
+   -0.2888
+  ],
+  [
+   0.0907,
+   0.0779,
+   0.0802
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.34386,
+  0.0,
+  0.95164
+ ],
+ "part": "ForeR",
+ "triangles": 877,
+ "blocks": 57
+}

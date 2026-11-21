@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_ShinL",
+ "faces": 692,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1213,
+   -0.2225,
+   -0.35
+  ],
+  [
+   0.1488,
+   0.1225,
+   0.0775
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.15,
+  0.0,
+  0.35
+ ],
+ "part": "ShinL",
+ "triangles": 1385,
+ "blocks": 82
+}

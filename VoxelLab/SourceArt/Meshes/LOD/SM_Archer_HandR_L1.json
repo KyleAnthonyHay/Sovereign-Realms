@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_HandR_L1",
+ "faces": 111,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0977,
+   -0.1633,
+   -0.143
+  ],
+  [
+   0.0773,
+   0.0367,
+   0.032
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_HandR",
+ "voxel": 0.025,
+ "triangles": 222
+}

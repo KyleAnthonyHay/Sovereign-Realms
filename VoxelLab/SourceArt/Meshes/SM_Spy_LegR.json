@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_LegR",
+ "faces": 929,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1238,
+   -0.1363,
+   -0.3789
+  ],
+  [
+   0.0914,
+   0.1167,
+   0.1277
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegR",
+ "triangles": 1859,
+ "blocks": 105
+}

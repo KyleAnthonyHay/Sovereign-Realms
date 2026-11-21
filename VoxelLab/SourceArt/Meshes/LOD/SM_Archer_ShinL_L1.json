@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_ShinL_L1",
+ "faces": 58,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1,
+   -0.15,
+   -0.35
+  ],
+  [
+   0.1,
+   0.1,
+   0.05
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_ShinL",
+ "voxel": 0.025,
+ "triangles": 116
+}

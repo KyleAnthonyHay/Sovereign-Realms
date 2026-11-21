@@ -3,6 +3,7 @@
 #include "VLCommand.h"
 #include "VLGrid.h"
 #include "VLKing.h"
+#include "VLBattle.h"
 #include "Algo/Sort.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -188,7 +189,7 @@ UVLSwordsmanCombat::UVLSwordsmanCombat()
 
 bool UVLSwordsmanCombat::CanFight(const AVLKing* Unit)
 {
-	return Unit && Unit->IsTroop() && Unit->GetKind() == TEXT("Swordsman");
+	return Unit && Unit->IsAlive() && (Unit->KindId() == EVLUnitKind::Swordsman || !Unit->IsTroop());
 }
 
 UVLSwordsmanCombat* UVLSwordsmanCombat::For(AVLKing* Unit, bool bCreate)
@@ -197,11 +198,19 @@ UVLSwordsmanCombat* UVLSwordsmanCombat::For(AVLKing* Unit, bool bCreate)
 	{
 		return nullptr;
 	}
-	UVLSwordsmanCombat* Combat = Unit->FindComponentByClass<UVLSwordsmanCombat>();
+	// (B: the unit remembers its component, and that it has been looked for: no component search per call)
+	UVLSwordsmanCombat* Combat = Unit->SwordCombat;
+	if (!Combat && !(Unit->CompLooked & 1))
+	{
+		Combat = Unit->FindComponentByClass<UVLSwordsmanCombat>();
+		Unit->SwordCombat = Combat;
+		Unit->CompLooked |= 1;
+	}
 	if (!Combat && bCreate && CanFight(Unit))
 	{
 		Combat = NewObject<UVLSwordsmanCombat>(Unit, TEXT("SwordsmanCombat"));
 		Combat->RegisterComponent();
+		Unit->SwordCombat = Combat;
 	}
 	return Combat;
 }
@@ -212,8 +221,9 @@ int32 UVLSwordsmanCombat::OrderAttack(const TArray<AVLKing*>& InUnits, AActor* T
 	{
 		return 0;
 	}
-	const FVector Centre = Target->GetActorLocation();
-	const FVector2D C2(Centre);
+	FVector Centre = Target->GetActorLocation();
+	UVLBattle* Battle = UVLBattle::Get(Target);
+	const AVLKing* Foe = Cast<AVLKing>(Target);
 	TArray<AVLKing*> Units;
 	FVector2D Mid = FVector2D::ZeroVector;
 	for (AVLKing* U : InUnits)
@@ -230,6 +240,27 @@ int32 UVLSwordsmanCombat::OrderAttack(const TArray<AVLKing*>& InUnits, AActor* T
 		return 0;
 	}
 	Mid /= float(N);
+	if (Foe)
+	{
+		// a foe that moves: each runs it down by its own route, and fights where they meet
+		for (AVLKing* U : Units)
+		{
+			UVLSwordsmanCombat* Combat = For(U);
+			Combat->Begin(Target);
+			Combat->Chase(U, Foe);
+		}
+		UE_LOG(LogVoxelLab, Log, TEXT("attack: %d swordsman(men) on %s"), N, *Foe->GetDisplayName());
+		return N;
+	}
+	if (Battle && Battle->FindBuilding(Target))
+	{
+		// a building: the rings go round the point of its walls nearest the group, a step out from them
+		FVector Wall;
+		Battle->DistanceTo(Target, FVector(Mid.X, Mid.Y, Centre.Z), &Wall);
+		const FVector Out = (FVector(Mid.X, Mid.Y, Wall.Z) - Wall).GetSafeNormal2D();
+		Centre = Wall + Out * 80.f;
+	}
+	const FVector2D C2(Centre);
 	const UVLSwordsmanCombat* Tune = GetDefault<UVLSwordsmanCombat>();
 	// Places on rings round the dummy, each ring filled from the side the group comes from (a few stand before it,
 	// a company surrounds it). The nearest take the inner ring; along a ring they keep the order they are in round
@@ -304,6 +335,9 @@ void UVLSwordsmanCombat::Begin(AActor* InTarget)
 	Closing = 0.f;
 	Waiting = 0.f;
 	Swings = 0;
+	bChasing = false;
+	Chases = 0;
+	BestDist = 1e9f;
 	SetComponentTickEnabled(Target.IsValid());
 }
 
@@ -323,35 +357,89 @@ void UVLSwordsmanCombat::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	AVLKing* Unit = Cast<AVLKing>(GetOwner());
 	AActor* Dummy = Target.Get();
-	if (!Unit || !Dummy || InPlayersHands(Unit) || Unit->IsGarrisoned())
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (!Unit || !Dummy || InPlayersHands(Unit) || Unit->IsGarrisoned() || Unit->IsDead() || (Battle && !Battle->IsAlive(Dummy)))
 	{
-		Stop();                     // the dummy is gone, or the player has taken this one over
+		Stop();                     // the target is gone (fallen, destroyed), or the player has taken this one over
 		return;
 	}
-	if (Unit->HasOrder())
+	const AVLKing* Foe = Cast<AVLKing>(Dummy);
+	const float Dist = DistanceTo(Unit, Dummy);
+	if (Foe)
+	{
+		// running it down: a fresh route while it keeps moving; within reach the chase stops and the fight starts
+		if (Unit->HasOrder())
+		{
+			if (!bChasing)
+			{
+				return;
+			}
+			if (Dist <= Reach)
+			{
+				Unit->StopOrder();
+				bChasing = false;
+			}
+			else
+			{
+				RepathIn -= DeltaTime;
+				if (RepathIn <= 0.f && FVector::Dist2D(Foe->GetFeet(), Unit->GetWaypoints().Num() ? Unit->GetWaypoints().Last() : Unit->GetFeet()) > 150.f)
+				{
+					Chase(Unit, Foe);
+				}
+				return;
+			}
+		}
+		else if (Dist > Reach * 1.35f)
+		{
+			// bounded: a chase that has not come any closer for a dozen fresh routes is given up
+			if (Dist < BestDist - 50.f)
+			{
+				BestDist = Dist;
+				Chases = 0;
+			}
+			if (++Chases > 12)
+			{
+				UE_LOG(LogVoxelLab, Log, TEXT("%s cannot get at %s: gives up the chase"), *Unit->GetDisplayName(), *Foe->GetDisplayName());
+				Stop();
+				return;
+			}
+			Chase(Unit, Foe);
+			return;
+		}
+	}
+	else if (Unit->HasOrder())
 	{
 		return;                     // still on the way to its place
 	}
 	FVector To = Dummy->GetActorLocation() - Unit->GetActorLocation();
 	To.Z = 0.f;
-	const float Dist = To.Size();
+	if (Battle && Battle->FindBuilding(Dummy))
+	{
+		FVector Wall;
+		Battle->DistanceTo(Dummy, Unit->GetFeet(), &Wall);
+		To = Wall - Unit->GetActorLocation();
+		To.Z = 0.f;
+	}
 	if (!bEngaged)
 	{
 		bEngaged = true;
 		NextSwing = FMath::FRandRange(0.05f, FMath::Max(SwingInterval, 0.1f));      // each on its own beat
-		if (Dist > GiveUpBeyond)
+		if (Dist > GiveUpBeyond && !Foe)
 		{
 			UE_LOG(LogVoxelLab, Log, TEXT("%s could not get to %s (%.0f cm away): no attack"), *Unit->GetDisplayName(), *Dummy->GetName(), Dist);
 			Stop();
 			return;
 		}
-		UE_LOG(LogVoxelLab, Log, TEXT("%s engages %s from %.0f cm"), *Unit->GetDisplayName(), *Dummy->GetName(), Dist);
+		if (!Foe || CombatLog())
+		{
+			UE_LOG(LogVoxelLab, Log, TEXT("%s engages %s from %.0f cm"), *Unit->GetDisplayName(), *Dummy->GetName(), Dist);
+		}
 	}
-	if (Dist < 1.f || Unit->GetCharacterMovement()->IsFalling())
+	if (To.Size() < 1.f || Unit->GetCharacterMovement()->IsFalling())
 	{
 		return;
 	}
-	const FVector Dir = To / Dist;
+	const FVector Dir = To.GetSafeNormal();
 	const FRotator Now = Unit->GetActorRotation();
 	const float WantYaw = Dir.Rotation().Yaw;
 	Unit->SetActorRotation(FRotator(0.f, FMath::FixedTurn(Now.Yaw, WantYaw, TurnRate * DeltaTime), 0.f));
@@ -388,6 +476,33 @@ void UVLSwordsmanCombat::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 			UE_LOG(LogVoxelLab, Log, TEXT("%s swings at %s (%d), %.0f cm"), *Unit->GetDisplayName(), *Dummy->GetName(), Swings, Dist);
 		}
 	}
+}
+
+float UVLSwordsmanCombat::DistanceTo(const AVLKing* Unit, const AActor* To) const
+{
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (Battle && Battle->FindBuilding(To))
+	{
+		return FMath::Max(0.f, Battle->DistanceTo(To, Unit->GetFeet()) - VLRules::BuildingHitPad) + 100.f;     // to its hit box
+	}
+	return FVector::Dist2D(To->GetActorLocation(), Unit->GetActorLocation());
+}
+
+void UVLSwordsmanCombat::Chase(AVLKing* Unit, const AVLKing* Foe)
+{
+	// to a point just short of it on the line from here (others come at it from their own sides)
+	const FVector Me = Unit->GetFeet(), There = Foe->GetFeet();
+	const FVector Goal = There + (Me - There).GetSafeNormal2D() * 110.f;
+	TArray<FVector> Path;
+	UVLGrid* Grid = UVLGrid::Get(this);
+	if (!(Grid && Grid->EnsureBuilt() && Grid->FindPath(Me, Goal, Path) && Path.Num() > 0))
+	{
+		Path = { Goal };
+	}
+	Unit->FollowPath(Path, FVector::Dist2D(Me, There) > 700.f);
+	bChasing = true;
+	bEngaged = false;
+	RepathIn = RepathSeconds * FMath::FRandRange(0.8f, 1.2f);
 }
 
 // ------------------------------------------------------------------------------------------------ console

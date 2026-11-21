@@ -22,7 +22,10 @@ UVLFootDust::UVLFootDust()
 void UVLFootDust::BeginPlay()
 {
 	Super::BeginPlay();
-	Setup(DustMaterial);
+	if (DustMaterial)
+	{
+		Setup(DustMaterial);        // (with no material nothing is made here: the owner sets it up if it raises dust at all)
+	}
 }
 
 void UVLFootDust::Setup(UMaterialInterface* Material)
@@ -39,11 +42,15 @@ void UVLFootDust::Setup(UMaterialInterface* Material)
 	{
 		PoolSize = FMath::Clamp(PoolSize, 4, 256);
 		Puffs.SetNum(PoolSize);
-		const FTransform Hidden(FRotator::ZeroRotator, FVector(0.f, 0.f, -100000.f), FVector(0.001f));
+		// Unused cubes wait, too small to see, where the dust was last raised (they were parked a kilometre under the
+		// world, which made the component's bounds a kilometre tall: never culled, and in every shadow cascade).
+		ParkAt = GetOwner() ? GetOwner()->GetActorLocation() : FVector::ZeroVector;
+		const FTransform Hidden(FRotator::ZeroRotator, ParkAt, FVector(0.0005f));
 		for (int32 i = 0; i < PoolSize; ++i)
 		{
 			AddInstance(Hidden, true);
 		}
+		SetVisibility(false);       // until the first puff
 	}
 }
 
@@ -55,6 +62,18 @@ float UVLFootDust::Rand()
 
 void UVLFootDust::Emit(const FVector& At, const FVector& Back, int32 Count, float Scale)
 {
+	if (Alive <= 0 && Count > 0 && Puffs.Num() > 0)
+	{
+		// the first puff after a while: the cubes that wait come here, so the bounds stay about the dust itself
+		ParkAt = At;
+		const FTransform Hidden(FRotator::ZeroRotator, ParkAt, FVector(0.0005f));
+		for (int32 i = 0; i < Puffs.Num(); ++i)
+		{
+			Puffs[i].Pos = ParkAt;
+			UpdateInstanceTransform(i, Hidden, true, i + 1 == Puffs.Num(), false);
+		}
+		SetVisibility(true);
+	}
 	for (int32 i = 0; i < Count && Puffs.Num() > 0; ++i)
 	{
 		FPuff& P = Puffs[Next];
@@ -79,6 +98,11 @@ void UVLFootDust::Advance(float DeltaSeconds)
 	{
 		return;
 	}
+	int32 Last = INDEX_NONE;
+	for (int32 i = Puffs.Num() - 1; i >= 0 && Last == INDEX_NONE; --i)
+	{
+		Last = Puffs[i].Life > 0.f ? i : INDEX_NONE;
+	}
 	for (int32 i = 0; i < Puffs.Num(); ++i)
 	{
 		FPuff& P = Puffs[i];
@@ -92,7 +116,7 @@ void UVLFootDust::Advance(float DeltaSeconds)
 		{
 			P.Life = 0.f;
 			--Alive;
-			P.Pos = FVector(0.f, 0.f, -100000.f);
+			P.Pos = ParkAt;
 		}
 		else
 		{
@@ -102,7 +126,11 @@ void UVLFootDust::Advance(float DeltaSeconds)
 			// swells out of the ground, then thins away
 			Edge = P.Size * FMath::Lerp(1.f, Growth, FMath::Sqrt(T)) * FMath::Clamp(T * 10.f, 0.f, 1.f) * FMath::Clamp((1.f - T) * 2.2f, 0.f, 1.f) / 100.f;
 		}
-		UpdateInstanceTransform(i, FTransform(FRotator(0.f, P.Yaw, 0.f), P.Pos, FVector(FMath::Max(Edge, 0.0005f))), true, false, false);
+		// (the instances are marked dirty once, with the last of them: not the whole render state every frame)
+		UpdateInstanceTransform(i, FTransform(FRotator(0.f, P.Yaw, 0.f), P.Pos, FVector(FMath::Max(Edge, 0.0005f))), true, i == Last, false);
 	}
-	MarkRenderStateDirty();
+	if (Alive <= 0)
+	{
+		SetVisibility(false);       // nothing in the air: nothing to draw
+	}
 }

@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_Body_L2",
+ "faces": 229,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.3,
+   -0.3375,
+   -0.25
+  ],
+  [
+   0.3,
+   0.1625,
+   0.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_Body",
+ "voxel": 0.05,
+ "triangles": 458
+}

@@ -1,0 +1,21 @@
+{
+ "name": "SM_Swordsman_HandR_L2",
+ "faces": 39,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1,
+   -0.1328,
+   -0.1422
+  ],
+  [
+   0.1,
+   0.0672,
+   0.0578
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Swordsman_HandR",
+ "voxel": 0.05,
+ "triangles": 78
+}

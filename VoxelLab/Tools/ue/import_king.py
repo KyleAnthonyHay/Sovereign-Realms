@@ -61,16 +61,36 @@ def king_material(slot):
     path = MAT_DIR + "/" + name
     mi = eal.load_asset(path) if eal.does_asset_exist(path) else tools.create_asset(
         name, MAT_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
-    mel.set_material_instance_parent(mi, eal.load_asset(MAT_DIR + "/M_Voxel"))
+    # "sway": loose cloth that moves in the wind (the spy's hood): M_VoxSway, the vertex alpha is how far it moves
+    sway = key == "sway" and eal.does_asset_exist(MAT_DIR + "/M_VoxSway")
+    # the rest: M_VoxUnit (M_Voxel plus the side's colour, Tools/ue/build_special_materials.py) where it has been built
+    plain = "/M_VoxUnit" if eal.does_asset_exist(MAT_DIR + "/M_VoxUnit") else "/M_Voxel"
+    mel.set_material_instance_parent(mi, eal.load_asset(MAT_DIR + ("/M_VoxSway" if sway else plain)))
+    if sway:
+        mel.set_material_instance_scalar_parameter_value(mi, "UseAlpha", 1.0)
+        mel.set_material_instance_scalar_parameter_value(mi, "Height", 60.0)
+        mel.set_material_instance_scalar_parameter_value(mi, "Amp", 5.0)
+        mel.set_material_instance_scalar_parameter_value(mi, "TeamMix", 0.0)
     mel.set_material_instance_texture_parameter_value(mi, "Tex", eal.load_asset("/Game/Voxel/Textures/T_Vox_paint"))
     metal, rough, tint = {"gold": (0.55, 0.38, (1.25, 1.15, 1.0)), "metal": (0.35, 0.42, (1.45, 1.45, 1.5)),
                           "wool": (0.0, 0.95, (1.0, 1.0, 1.0))}.get(key, (0.0, 0.85, (1.0, 1.0, 1.0)))
     mel.set_material_instance_scalar_parameter_value(mi, "Metallic", metal)
     mel.set_material_instance_scalar_parameter_value(mi, "Roughness", rough)
-    mel.set_material_instance_scalar_parameter_value(mi, "Emissive", 0.0)
+    mel.set_material_instance_scalar_parameter_value(mi, "Emissive", 6.0 if key == "glow" else 0.0)     # "glow": a lantern's light
     mel.set_material_instance_vector_parameter_value(mi, "Tint", unreal.LinearColor(tint[0], tint[1], tint[2], 1.0))
     mel.update_material_instance(mi)
     eal.save_loaded_asset(mi, False)
+    # The enemy's twin of the slots with cloth: TeamMix 1 turns the green cloth red (TEAM_SWAP in
+    # build_special_materials.py). A child instance, so it follows everything else; AVLKing swaps it in by its name.
+    if key in ("paint", "sway"):
+        twin = eal.load_asset(path + "_Enemy") if eal.does_asset_exist(path + "_Enemy") else tools.create_asset(
+            name + "_Enemy", MAT_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+        mel.set_material_instance_parent(twin, mi)
+        mel.set_material_instance_scalar_parameter_value(twin, "TeamMix", 1.0)
+        if sway:
+            mel.set_material_instance_scalar_parameter_value(twin, "TeamHue", 1.0)
+        mel.update_material_instance(twin)
+        eal.save_loaded_asset(twin, False)
     return mi
 
 
@@ -194,7 +214,7 @@ da.set_editor_property("dust_material", dust)
 # The sword: modelled in his fist; "sword.delta" (Blender axes) turns it about the grip into the scabbard. Blender
 # (x, y, z) facing -Y is character space (-y, -x, z): that swap is a reflection, so the turn becomes M D M^T there.
 sw = info.get("sword")
-if sw and "Sword" in info["parts"]:
+if sw and sw.get("part", "Sword") in info["parts"]:           # ("part": the Builder's "Hammer", held as a sword is)
     import math
     M = [[0.0, -1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
     D = sw["delta"]
@@ -231,3 +251,9 @@ else:
     da.set_editor_property("has_sheath", False)
 eal.save_loaded_asset(da, False)
 print("%s: %d parts, height %.0f" % (DA, len(parts), da.get_editor_property("height")))
+
+# The parts' far levels of detail (an import drops them): Tools/ue/voxel_lods.py gives them back from
+# SourceArt/Meshes/LOD (Tools/blender/assets/voxel_lods.py; run that first where the figure itself changed).
+if os.path.exists(os.path.join(SRC, "LOD", "lods.json")) and not globals().get("NO_LODS"):
+    ONLY = [d["mesh"] for d in info["parts"].values()]
+    exec(open(os.path.join(ROOT, "Tools", "ue", "voxel_lods.py")).read())

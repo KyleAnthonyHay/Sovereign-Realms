@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_ArmL",
+ "faces": 1213,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0864,
+   -0.1363,
+   -0.3811
+  ],
+  [
+   0.1413,
+   0.1306,
+   0.0902
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.3125,
+  0.0,
+  1.25
+ ],
+ "part": "ArmL",
+ "triangles": 2427,
+ "blocks": 118
+}

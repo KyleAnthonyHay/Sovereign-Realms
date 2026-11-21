@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_Cape31_L1",
+ "faces": 79,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1461,
+   -0.0664,
+   -0.2141
+  ],
+  [
+   0.1289,
+   0.0836,
+   -0.0141
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_Cape31",
+ "voxel": 0.025,
+ "triangles": 158
+}

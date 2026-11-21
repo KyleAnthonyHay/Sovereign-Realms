@@ -1,0 +1,21 @@
+{
+ "name": "SM_Swordsman_Chest_L1",
+ "faces": 938,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.275,
+   -0.225,
+   -0.025
+  ],
+  [
+   0.275,
+   0.3,
+   0.5
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Swordsman_Chest",
+ "voxel": 0.025,
+ "triangles": 1876
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_ArmR",
+ "faces": 848,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1619,
+   -0.1293,
+   -0.3854
+  ],
+  [
+   0.0843,
+   0.1274,
+   0.0821
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.3125,
+  0.0,
+  1.25
+ ],
+ "part": "ArmR",
+ "triangles": 1696,
+ "blocks": 99
+}

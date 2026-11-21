@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_Chest_L2",
+ "faces": 977,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.5984,
+   -0.3,
+   -0.0391
+  ],
+  [
+   0.6016,
+   0.35,
+   0.5109
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_Chest",
+ "voxel": 0.05,
+ "triangles": 1954
+}

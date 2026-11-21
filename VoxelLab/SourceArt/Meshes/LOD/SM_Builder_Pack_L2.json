@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_Pack_L2",
+ "faces": 564,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.4,
+   -0.2,
+   -0.5
+  ],
+  [
+   0.4,
+   0.2,
+   0.7
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_Pack",
+ "voxel": 0.05,
+ "triangles": 1128
+}

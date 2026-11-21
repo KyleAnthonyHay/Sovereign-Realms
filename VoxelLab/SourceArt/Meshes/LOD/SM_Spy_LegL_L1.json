@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_LegL_L1",
+ "faces": 239,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1,
+   -0.125,
+   -0.375
+  ],
+  [
+   0.125,
+   0.125,
+   0.125
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_LegL",
+ "voxel": 0.025,
+ "triangles": 478
+}

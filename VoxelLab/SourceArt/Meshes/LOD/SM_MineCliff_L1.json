@@ -1,0 +1,21 @@
+{
+ "name": "SM_MineCliff_L1",
+ "faces": 9335,
+ "collision": "none",
+ "bounds": [
+  [
+   -8.0,
+   -5.5,
+   0.0
+  ],
+  [
+   8.0,
+   5.5,
+   8.5
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_MineCliff",
+ "voxel": 0.25,
+ "triangles": 18670
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_Cape",
+ "faces": 228,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.3034,
+   -0.0534,
+   -0.15
+  ],
+  [
+   0.3025,
+   0.0534,
+   0.0034
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.2,
+  1.3
+ ],
+ "part": "Cape",
+ "triangles": 456,
+ "blocks": 24
+}

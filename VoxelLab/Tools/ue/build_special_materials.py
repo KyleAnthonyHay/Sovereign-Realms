@@ -202,6 +202,83 @@ return float3(Dir.x, Dir.y, 0.0) * push * w * Amp + float3(0.0, 0.0, -abs(push) 
 """
 
 
+# A side's colour on a unit: with Mix 1 the GREEN cloth (hue about 50..170 degrees: the capes, cowls, hoods and tunic
+# panels, olive to leaf green) turns to a rich red of like brightness, keeping its shading and its lighter and darker
+# pieces. Everything else (skin, hair, leather, cream, the builder's navy and yellow, greys) is left as it is: gold
+# and cream stop at hue 47. Expects `C` (float3) and `Mix`; leaves the result in `Sw`.
+TEAM_SWAP = """
+float3 Sw = C;
+float mx = max(C.r, max(C.g, C.b)), mn = min(C.r, min(C.g, C.b)), dl = mx - mn;
+if (Mix > 0.0 && dl > 1.0e-4)
+{
+    float h = (mx == C.g) ? 2.0 + (C.b - C.r) / dl : ((mx == C.r) ? (C.g - C.b) / dl : 4.0 + (C.r - C.g) / dl);
+    h = frac(h / 6.0 + 1.0) * 360.0;
+    float s = dl / mx;
+    float w = smoothstep(48.0, 53.0, h) * (1.0 - smoothstep(160.0, 175.0, h)) * smoothstep(0.18, 0.32, s) * Mix;
+    float h2 = frac((4.0 - (h - 80.0) * 0.15) / 360.0 + 1.0);          // the olive a touch warmer than the greens
+    float3 k = saturate(abs(frac(h2 + float3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0);
+    float3 red = min(mx * TEAM_GAIN, 1.0) * lerp(float3(1.0, 1.0, 1.0), k, saturate(s * 1.1 + 0.08));
+    Sw = lerp(C, red, w);
+}
+""".replace("TEAM_GAIN", "1.5")
+
+
+def unit():
+    """M_VoxUnit: M_Voxel for the units (the MI_King_<slot> instances, Tools/ue/import_king.py) plus the side's colour:
+    "TeamMix" 1 turns the green cloth red (TEAM_SWAP). The enemy's units wear the twins MI_King_paint_Enemy and
+    MI_King_sway_Enemy (AVLKing swaps them in by name). A parent of its own, so the world's M_Voxel pays nothing."""
+    mat = get_material("M_VoxUnit")
+    g = G(mat)
+    tex = g.node(unreal.MaterialExpressionTextureSampleParameter2D, parameter_name="Tex", texture=eal.load_asset(TEX_DIR + "/T_Vox_paint"))
+    vc = g.node(unreal.MaterialExpressionVertexColor)
+    vrgb = g.node(unreal.MaterialExpressionComponentMask, r=True, g=True, b=True, a=False)
+    g.link(vc, vrgb, "")
+    team = g.custom(TEAM_SWAP + "return Sw;", CT.CMOT_FLOAT3, [("C", vrgb), ("Mix", g.scalar("TeamMix", 0.0))], "team colour")
+    m1 = g.node(unreal.MaterialExpressionMultiply)
+    g.link(tex, m1, "A", "RGB")
+    g.link(team, m1, "B")
+    m2 = g.node(unreal.MaterialExpressionMultiply)
+    g.link(m1, m2, "A")
+    g.link(g.node(unreal.MaterialExpressionVectorParameter, parameter_name="Tint", default_value=unreal.LinearColor(1, 1, 1, 1)), m2, "B")
+    g.out(m2, MP.MP_BASE_COLOR)
+    g.out(g.scalar("Roughness", 0.9), MP.MP_ROUGHNESS)
+    g.out(g.scalar("Metallic", 0.0), MP.MP_METALLIC)
+    g.out(g.scalar("Specular", 0.25), MP.MP_SPECULAR)
+    em = g.node(unreal.MaterialExpressionMultiply)
+    g.link(m2, em, "A")
+    g.link(g.scalar("Emissive", 0.0), em, "B")
+    g.out(em, MP.MP_EMISSIVE_COLOR)
+    g.finish()
+    # the units' instances that exist already move over to it (import_king.py parents new ones to it), and the two
+    # with cloth get their enemy twin: a child instance, so it follows every other setting of its parent
+    voxel = eal.load_asset(MAT_DIR + "/M_Voxel")
+    n = 0
+    for path in eal.list_assets(MAT_DIR, recursive=False):
+        name = path.split("/")[-1].split(".")[0]
+        if not name.startswith("MI_King_") or name.endswith("_Enemy") or name == "MI_KingDust":
+            continue
+        mi = eal.load_asset(MAT_DIR + "/" + name)
+        if isinstance(mi, unreal.MaterialInstanceConstant) and mi.get_editor_property("parent") == voxel:
+            mel.set_material_instance_parent(mi, mat)
+            mel.update_material_instance(mi)
+            eal.save_loaded_asset(mi, False)
+            n += 1
+    for key in ("paint", "sway"):
+        base = eal.load_asset(MAT_DIR + "/MI_King_" + key) if eal.does_asset_exist(MAT_DIR + "/MI_King_" + key) else None
+        if not base:
+            continue
+        name = "MI_King_" + key + "_Enemy"
+        twin = eal.load_asset(MAT_DIR + "/" + name) if eal.does_asset_exist(MAT_DIR + "/" + name) else tools.create_asset(
+            name, MAT_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+        mel.set_material_instance_parent(twin, base)
+        mel.set_material_instance_scalar_parameter_value(twin, "TeamMix", 1.0)
+        if key == "sway":
+            mel.set_material_instance_scalar_parameter_value(twin, "TeamHue", 1.0)
+        mel.update_material_instance(twin)
+        eal.save_loaded_asset(twin, False)
+    print("M_VoxUnit built (%d unit instance(s) moved to it)" % n)
+
+
 def sway():
     """M_VoxSway: M_Voxel plus wind. MI_Vox_cloth (banners, flags) uses the vertex alpha; the plant instances
     MI_Sway_<slot> (grass, flowers, wheat: Tools/ue/import_assets.py assigns them) use height above the root."""
@@ -218,6 +295,13 @@ def sway():
     m2 = g.node(unreal.MaterialExpressionMultiply)
     g.link(m1, m2, "A")
     g.link(tint, m2, "B")
+    # a side's colour: TeamMix 1 repaints the cloth in TeamTint, keeping its light and dark (MI_Vox_cloth_Enemy: red)
+    base = m2
+    # (TeamHue 1, the units' cloth, MI_King_sway_Enemy: only the green turns red, as in M_VoxUnit; the gold trim stays)
+    m2 = g.custom("float3 C = Base;\n" + TEAM_SWAP + "if (Hue > 0.5) return Sw;\n"
+                  "float l = saturate(dot(Base, float3(0.3, 0.59, 0.11)) * 3.0 + 0.12);\nreturn lerp(Base, l * Team.rgb, Mix);", CT.CMOT_FLOAT3,
+                  [("Base", base), ("Team", g.node(unreal.MaterialExpressionVectorParameter, parameter_name="TeamTint", default_value=unreal.LinearColor(0.8, 0.06, 0.05, 1))),
+                   ("Mix", g.scalar("TeamMix", 0.0)), ("Hue", g.scalar("TeamHue", 0.0))], "team colour")
     g.out(m2, MP.MP_BASE_COLOR)
     g.out(g.scalar("Roughness", 0.9), MP.MP_ROUGHNESS)
     g.out(g.scalar("Specular", 0.2), MP.MP_SPECULAR)
@@ -236,7 +320,7 @@ def sway():
     mat.set_editor_property("two_sided", True)
     g.finish()
 
-    def instance(name, tex_name, use_alpha, height, amp):
+    def instance(name, tex_name, use_alpha, height, amp, team=0.0, one_sided=False):
         path = MAT_DIR + "/" + name
         mi = eal.load_asset(path) if eal.does_asset_exist(path) else tools.create_asset(
             name, MAT_DIR, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
@@ -247,23 +331,35 @@ def sway():
         mel.set_material_instance_scalar_parameter_value(mi, "UseAlpha", use_alpha)
         mel.set_material_instance_scalar_parameter_value(mi, "Height", height)
         mel.set_material_instance_scalar_parameter_value(mi, "Amp", amp)
+        mel.set_material_instance_scalar_parameter_value(mi, "TeamMix", team)
+        # M_VoxSway is two-sided for the cloth (banners, flags, capes: thin sheets seen from both sides). The plants are
+        # closed voxel blocks whose back faces are never seen: their instances draw one side only.
+        bpo = mi.get_editor_property("base_property_overrides")
+        bpo.set_editor_property("override_two_sided", one_sided)
+        bpo.set_editor_property("two_sided", not one_sided)
+        mi.set_editor_property("base_property_overrides", bpo)
         mel.update_material_instance(mi)
         eal.save_loaded_asset(mi, False)
 
     instance("MI_Vox_cloth", "T_Vox_cloth", 1.0, 60.0, 9.0)
+    instance("MI_Vox_cloth_Enemy", "T_Vox_cloth", 1.0, 60.0, 9.0, team=1.0)        # the enemy's banners and flags (build_realm.py)
     # (height over which the sway builds up, amplitude in cm). Wheat leans well over in the gusts: it is tall and
     # thin and stands in fields, where the wind should be seen.
     WIND = {"wheat": (95.0, 17.0), "wheat_top": (95.0, 17.0)}
     for slot in ("leaves", "paint", "wheat", "wheat_top", "moss", "dirt", "grass"):
         height, amp = WIND.get(slot, (70.0, 5.0))
-        instance("MI_Sway_" + slot, "T_Vox_" + slot, 0.0, height, amp)
+        instance("MI_Sway_" + slot, "T_Vox_" + slot, 0.0, height, amp, one_sided=True)
     print("M_VoxSway built")
 
 
 SILHOUETTE = """
 float3 c = Scene.rgb;
 float cd = CD.r, sd = SD.r;
-if (cd > 1.0e6 || cd < sd + 30.0) return c;               // the hero is not here, or nothing stands in front of him
+// Every unit writes custom depth, its side in the stencil (1 the player's, 2 the enemy's: AVLKing, VLTeamLook). The
+// custom depth keeps the NEAREST unit, so: no unit here, or the nearest one is the enemy's (never shown through
+// walls), or the nearest one is what is seen (nothing in front of it; a unit behind ANOTHER UNIT is behind this
+// one, so troops do not bring the silhouette out, only trees, buildings and the ground do)
+if (cd > 1.0e6 || abs(ST.r - 1.0) > 0.5 || cd < sd + 30.0) return c;
 float2 p = floor(Pix.xy / 2.0);                             // a 2x2-pixel checker: reads as 'behind', not painted on
 float chk = fmod(p.x + p.y, 2.0);
 return lerp(c, Col.rgb * (0.72 + 0.4 * chk), A);
@@ -271,8 +367,9 @@ return lerp(c, Col.rgb * (0.72 + 0.4 * chk), A);
 
 
 def silhouette():
-    """M_Silhouette (post-process): where the hero (custom depth) is hidden behind a tree or a building, his shape shows
-    through as a dithered gold silhouette. Tools/ue/build_level.py adds it to the level's post-process volume."""
+    """M_Silhouette (post-process): where one of the player's units (custom depth, stencil 1) is hidden behind a tree or
+    a building, its shape shows through as a dithered gold silhouette; not behind another unit, and never the enemy's
+    (stencil 2). Tools/ue/build_level.py adds it to the level's post-process volume."""
     mat = get_material("M_Silhouette")
     mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
     mat.set_editor_property("blendable_location", unreal.BlendableLocation.BL_SCENE_COLOR_AFTER_TONEMAPPING)
@@ -282,6 +379,7 @@ def silhouette():
                  [("Scene", g.node(unreal.MaterialExpressionSceneTexture, scene_texture_id=ST.PPI_POST_PROCESS_INPUT0)),
                   ("SD", g.node(unreal.MaterialExpressionSceneTexture, scene_texture_id=ST.PPI_SCENE_DEPTH)),
                   ("CD", g.node(unreal.MaterialExpressionSceneTexture, scene_texture_id=ST.PPI_CUSTOM_DEPTH)),
+                  ("ST", g.node(unreal.MaterialExpressionSceneTexture, scene_texture_id=ST.PPI_CUSTOM_STENCIL)),
                   ("Pix", g.node(unreal.MaterialExpressionScreenPosition), "PixelPosition"),
                   ("Col", g.node(unreal.MaterialExpressionVectorParameter, parameter_name="Color", default_value=unreal.LinearColor(1.0, 0.78, 0.30, 1.0)), "RGBA"),
                   ("A", g.scalar("Amount", 0.62))], "hero silhouette")
@@ -292,12 +390,14 @@ def silhouette():
 
 # The leaf wind is built but NOT switched on by default: moving every crown makes the shadow maps redraw all the trees
 # each frame (about 4 ms). PARTS=["water", "leaves"] turns it on.
-PARTS = globals().get("PARTS") or ["water", "sway", "silhouette"]
+PARTS = globals().get("PARTS") or ["water", "sway", "unit", "silhouette"]
 if "water" in PARTS:
     water()
 if "leaves" in PARTS:
     leaves()
 if "sway" in PARTS:
     sway()
+if "unit" in PARTS:
+    unit()                              # (after the sway: MI_King_sway_Enemy needs M_VoxSway's TeamHue)
 if "silhouette" in PARTS:
     silhouette()

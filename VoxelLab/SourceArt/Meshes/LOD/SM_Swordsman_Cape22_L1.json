@@ -1,0 +1,21 @@
+{
+ "name": "SM_Swordsman_Cape22_L1",
+ "faces": 85,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.15,
+   -0.0734,
+   -0.25
+  ],
+  [
+   0.15,
+   0.1016,
+   0.0
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Swordsman_Cape22",
+ "voxel": 0.025,
+ "triangles": 170
+}

@@ -1,0 +1,21 @@
+{
+ "name": "SM_Farmstead_C_L1",
+ "faces": 14897,
+ "collision": "none",
+ "bounds": [
+  [
+   -11.5,
+   -10.0,
+   0.0
+  ],
+  [
+   11.5,
+   9.0,
+   7.0
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Farmstead_C",
+ "voxel": 0.25,
+ "triangles": 29794
+}

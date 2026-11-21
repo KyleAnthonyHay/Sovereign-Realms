@@ -57,12 +57,16 @@ public:
 	/** Looses an arrow: its point at Tip, flying at Velocity (cm/s), pulled down by Gravity (cm/s2). Ignore: an actor
 	 *  it passes through for its first moments (the tower the archer stands on). The bow's twang and the whoosh. */
 	void Fire(AVLKing* Shooter, const FVector& Tip, const FVector& Velocity, float Gravity, AActor* Ignore = nullptr, float Damage = 10.f);
+	/** An arrow loosed by a building (a watch tower, the castle's walls) of a team: it passes through its own side. */
+	void FireFrom(AActor* Source, int32 Team, const FVector& Tip, const FVector& Velocity, float Gravity, float Damage);
 
 	/** A blow with the bow itself on a training dummy: it rocks a little (Degrees at most; a sword or an arrow rocks
 	 *  it 24), a dull knock, and Damage for when dummies have health. */
 	void BashDummy(AActor* Dummy, const FVector& Away, float Degrees, float Damage, AVLKing* By);
 	/** The swish of the bow swung as a club. */
 	void PlaySwish(const FVector& At);
+	/** The bow's creak as an archer starts to draw it (S_BowDraw; vl.Arrow.DrawVolume, at most one every vl.Arrow.DrawGap). */
+	void PlayDraw(const FVector& At);
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 
 	/** The direction to loose an arrow in at Speed so that it comes down on To (the low arc). False: To is out of
@@ -95,7 +99,11 @@ private:
 		float Shown = -1.f;         // the fade last given to its component
 		TWeakObjectPtr<AActor> Ignore;
 		TWeakObjectPtr<AVLKing> Shooter;
+		TWeakObjectPtr<AActor> Source;     // who loosed it (the shooter, or a building)
+		int32 Team = -1;                   // it hits foes of this team (-1: anyone, as before)
 	};
+	/** The first foe of the arrow's team whose body (its capsule) the stretch From..To passes through, and how far along. */
+	class AVLKing* UnitOnPath(const FArrow& A, const FVector& From, const FVector& To, float& OutT) const;
 	TArray<FArrow> Arrows;
 
 	struct FKnock
@@ -135,13 +143,16 @@ private:
 	TArray<TObjectPtr<USoundBase>> GroundSounds;
 
 	UPROPERTY(Transient)
+	TArray<TObjectPtr<USoundBase>> DrawSounds;
+
+	UPROPERTY(Transient)
 	TObjectPtr<USoundAttenuation> Pan;
 
 	bool bLoaded = false;
 	int32 Fired = 0;
 	int32 DummyHits = 0;
-	int32 LastClip[4] = { -1, -1, -1, -1 };
-	double LastTime[4] = { -1.0, -1.0, -1.0, -1.0 };
+	int32 LastClip[5] = { -1, -1, -1, -1, -1 };
+	double LastTime[5] = { -1.0, -1.0, -1.0, -1.0, -1.0 };
 
 	void Load();
 	int32 Take();

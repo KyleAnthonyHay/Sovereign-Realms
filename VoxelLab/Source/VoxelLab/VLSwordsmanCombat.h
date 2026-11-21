@@ -86,7 +86,7 @@ public:
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** Can this unit fight with a sword on orders (a swordsman troop)? */
+	/** Can this unit fight with a sword on orders (a swordsman troop, or King David)? */
 	static bool CanFight(const AVLKing* Unit);
 	/** The unit's component; made if it has none yet (and it is a swordsman). */
 	static UVLSwordsmanCombat* For(AVLKing* Unit, bool bCreate = true);
@@ -153,4 +153,17 @@ private:
 	float Closing = 0.f;        // seconds spent stepping closer
 	float Waiting = 0.f;        // seconds stood out of reach since
 	int32 Swings = 0;
+	// a foe that moves (a unit): it is run down by a fresh route every RepathSeconds while out of reach
+	bool bChasing = false;
+	float RepathIn = 0.f;
+	int32 Chases = 0;
+	float BestDist = 1e9f;
+	void Chase(AVLKing* Unit, const AVLKing* Foe);
+	/** How far it is from the target, as the reach is measured: centre to centre for a unit or a dummy, the walls for a
+	 *  building (plus 100, so the same reach numbers serve). */
+	float DistanceTo(const AVLKing* Unit, const AActor* To) const;
+
+public:
+	UPROPERTY(EditAnywhere, Category = "Voxel|Combat")
+	float RepathSeconds = 0.6f;
 };

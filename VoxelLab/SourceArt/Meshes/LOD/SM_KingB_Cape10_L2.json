@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_Cape10_L2",
+ "faces": 65,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1344,
+   -0.0406,
+   -0.2766
+  ],
+  [
+   0.1156,
+   0.1094,
+   0.0234
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_Cape10",
+ "voxel": 0.05,
+ "triangles": 130
+}

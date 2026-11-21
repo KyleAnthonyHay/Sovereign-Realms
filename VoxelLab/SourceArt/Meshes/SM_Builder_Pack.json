@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_Pack",
+ "faces": 6641,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.4,
+   -0.2,
+   -0.515
+  ],
+  [
+   0.4062,
+   0.2062,
+   0.722
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.325,
+  1.125
+ ],
+ "part": "Pack",
+ "triangles": 13283,
+ "blocks": 541
+}

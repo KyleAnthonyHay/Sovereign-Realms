@@ -4,3 +4,5 @@ SourceArt/Meshes/*.bin
 SourceArt/Previews/
 SourceArt/Audio/Raw/
 Builds/
+SourceArt/Meshes/LOD/*.gltf
+SourceArt/Meshes/LOD/*.bin

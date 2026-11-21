@@ -1,0 +1,32 @@
+diff --git a/Source/VoxelLab.Target.cs b/Source/VoxelLab.Target.cs
+index 1145092..9408f03 100644
+--- a/Source/VoxelLab.Target.cs
++++ b/Source/VoxelLab.Target.cs
+@@ -8,5 +8,14 @@ public class VoxelLabTarget : TargetRules
+ 		DefaultBuildSettings = BuildSettingsVersion.Latest;
+ 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
+ 		ExtraModuleNames.Add("VoxelLab");
++
++		// Enable ThinLTO (bPreferThinLTO defaults to true in UE 5.8) for Mac Shipping builds.
++		// On an Installed Engine the precompiled Engine .o files remain native arm64 Mach-O, while VoxelLab's own
++		// translation units get cross-TU inlining and dead-code elimination at modest link-time cost.
++		if (Target.Platform == UnrealTargetPlatform.Mac && Target.Configuration == UnrealTargetConfiguration.Shipping)
++		{
++			bAllowLTCG = true;
++			bOverrideBuildEnvironment = true;
++		}
+ 	}
+ }
+diff --git a/Tools/package.sh b/Tools/package.sh
+index 8d9ba3c..9bcb109 100755
+--- a/Tools/package.sh
++++ b/Tools/package.sh
+@@ -16,7 +16,7 @@ case "$CONFIG" in
+     *) echo "usage: sh Tools/package.sh [Shipping|Development]"; exit 2 ;;
+ esac
+ "$UE/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun -project="$ROOT/VoxelLab.uproject" -platform=Mac \
+-    -clientconfig="$CONFIG" -build -cook -stage -pak -noP4 -utf8output $EXTRA > "$ROOT/Saved/package.log" 2>&1 \
++    -clientconfig="$CONFIG" -specifiedarchitecture=arm64 -build -cook -stage -pak -noP4 -utf8output $EXTRA > "$ROOT/Saved/package.log" 2>&1 \
+     || { echo "packaging failed: see Saved/package.log"; exit 1; }
+ # (a Shipping build stages as VoxelLab-Mac-Shipping.app on some setups: take whichever app was staged last)
+ STAGED="$ROOT/Saved/StagedBuilds/Mac/VoxelLab.app"

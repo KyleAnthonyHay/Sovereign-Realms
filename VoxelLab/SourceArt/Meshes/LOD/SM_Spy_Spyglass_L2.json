@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_Spyglass_L2",
+ "faces": 68,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.05,
+   -0.3266,
+   -0.0938
+  ],
+  [
+   0.05,
+   0.1234,
+   0.2062
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_Spyglass",
+ "voxel": 0.05,
+ "triangles": 136
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_Chest",
+ "faces": 2486,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2294,
+   -0.1887,
+   -0.0167
+  ],
+  [
+   0.2293,
+   0.1575,
+   0.4909
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.9125
+ ],
+ "part": "Chest",
+ "triangles": 4972,
+ "blocks": 225
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_HandR",
+ "faces": 150,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0879,
+   -0.1616,
+   -0.1373
+  ],
+  [
+   0.0875,
+   0.0474,
+   0.0485
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.3698,
+  -0.16863,
+  0.70481
+ ],
+ "part": "HandR",
+ "triangles": 300,
+ "blocks": 7
+}

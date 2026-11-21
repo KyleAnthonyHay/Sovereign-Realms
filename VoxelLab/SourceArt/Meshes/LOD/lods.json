@@ -1,0 +1,4158 @@
+{
+ "SM_Swordsman_Sword": {
+  "set": "units",
+  "triangles": 860,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Sword_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 268,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Head": {
+  "set": "units",
+  "triangles": 20059,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Head_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 4402,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Head_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 1142,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_HandR": {
+  "set": "units",
+  "triangles": 300,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_HandR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 222,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_HandR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 86,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape21": {
+  "set": "units",
+  "triangles": 354,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape21_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 126,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape21_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 82,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_BowStringU": {
+  "set": "units",
+  "triangles": 220,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_BowStringU_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 156,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_BowStringU_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 82,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Castle": {
+  "set": "buildings",
+  "triangles": 116060,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Castle_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 24850,
+    "slots": [
+     "stone",
+     "brick",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "leaves",
+     "wool",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "moss",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Body": {
+  "set": "units",
+  "triangles": 2885,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Body_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 484,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Body_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 262,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Chest": {
+  "set": "units",
+  "triangles": 14475,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Chest_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 6682,
+    "slots": [
+     "paint",
+     "gold",
+     "metal",
+     "wool"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Chest_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 1954,
+    "slots": [
+     "paint",
+     "gold",
+     "metal",
+     "wool"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Head": {
+  "set": "units",
+  "triangles": 6300,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Head_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 1556,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Head_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 460,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_ArmL": {
+  "set": "units",
+  "triangles": 895,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_ArmL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 530,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_ArmL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 246,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_ForeL": {
+  "set": "units",
+  "triangles": 981,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_KingB_ForeL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 236,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_ArmR": {
+  "set": "units",
+  "triangles": 800,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_ArmR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 450,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_ArmR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 188,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_ForeR": {
+  "set": "units",
+  "triangles": 836,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_KingB_ForeR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 244,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_HandR": {
+  "set": "units",
+  "triangles": 300,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_KingB_HandR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 78,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_LegL": {
+  "set": "units",
+  "triangles": 1447,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_LegL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 542,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_LegL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 206,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_ShinL": {
+  "set": "units",
+  "triangles": 1201,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_ShinL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 412,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_ShinL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 154,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_LegR": {
+  "set": "units",
+  "triangles": 1454,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_LegR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 546,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_LegR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 262,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_ShinR": {
+  "set": "units",
+  "triangles": 1101,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_ShinR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 352,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_ShinR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 164,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape": {
+  "set": "units",
+  "triangles": 2074,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 412,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape00": {
+  "set": "units",
+  "triangles": 1032,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape00_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 264,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape00_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 142,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape01": {
+  "set": "units",
+  "triangles": 834,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape01_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 184,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape01_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 134,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape02": {
+  "set": "units",
+  "triangles": 970,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape02_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 330,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape02_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 162,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape03": {
+  "set": "units",
+  "triangles": 1204,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape03_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 420,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape03_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 194,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape10": {
+  "set": "units",
+  "triangles": 592,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape10_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 256,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape10_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 130,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape11": {
+  "set": "units",
+  "triangles": 754,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape11_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 244,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape11_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 112,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape12": {
+  "set": "units",
+  "triangles": 804,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape12_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 182,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape12_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 136,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape13": {
+  "set": "units",
+  "triangles": 1086,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape13_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 412,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape13_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 200,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape20": {
+  "set": "units",
+  "triangles": 624,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape20_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 138,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape21": {
+  "set": "units",
+  "triangles": 690,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape21_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 190,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape21_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 116,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape22": {
+  "set": "units",
+  "triangles": 842,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape22_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 198,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape22_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 124,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape23": {
+  "set": "units",
+  "triangles": 758,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape23_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 280,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape23_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 160,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape30": {
+  "set": "units",
+  "triangles": 594,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape30_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 156,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape30_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 106,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape31": {
+  "set": "units",
+  "triangles": 760,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape31_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 168,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape31_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 124,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape32": {
+  "set": "units",
+  "triangles": 812,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape32_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 294,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape32_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 136,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape33": {
+  "set": "units",
+  "triangles": 983,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape33_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 422,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape33_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 166,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape40": {
+  "set": "units",
+  "triangles": 935,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape40_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 332,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape40_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 176,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape41": {
+  "set": "units",
+  "triangles": 896,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape41_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 228,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape41_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 156,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape42": {
+  "set": "units",
+  "triangles": 1088,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape42_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 284,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape42_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 174,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Cape43": {
+  "set": "units",
+  "triangles": 1175,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Cape43_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 358,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Cape43_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 226,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Sword": {
+  "set": "units",
+  "triangles": 984,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_KingB_Sword_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 732,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_KingB_Sword_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 282,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_KingB_Sheath": {
+  "set": "units",
+  "triangles": 584,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_KingB_Sheath_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 288,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Body": {
+  "set": "units",
+  "triangles": 3473,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Body_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 682,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Body_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 332,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Chest": {
+  "set": "units",
+  "triangles": 10432,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Chest_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 1876,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Chest_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 834,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Head": {
+  "set": "units",
+  "triangles": 18757,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Head_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 2010,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Head_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 544,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_ArmL": {
+  "set": "units",
+  "triangles": 2552,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_ArmL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 550,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_ArmL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 204,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_ForeL": {
+  "set": "units",
+  "triangles": 1047,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_ForeL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 744,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_ForeL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 208,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_ArmR": {
+  "set": "units",
+  "triangles": 2073,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_ArmR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 550,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_ArmR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 198,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_ForeR": {
+  "set": "units",
+  "triangles": 791,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_ForeR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 578,
+    "slots": [
+     "paint",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_ForeR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 172,
+    "slots": [
+     "paint",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_HandR": {
+  "set": "units",
+  "triangles": 300,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Swordsman_HandR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 78,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_LegL": {
+  "set": "units",
+  "triangles": 1977,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_LegL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 518,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_LegL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 194,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_ShinL": {
+  "set": "units",
+  "triangles": 1357,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_ShinL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 320,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_ShinL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 162,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_LegR": {
+  "set": "units",
+  "triangles": 2058,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_LegR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 512,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_LegR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 282,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_ShinR": {
+  "set": "units",
+  "triangles": 1228,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_ShinR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 344,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_ShinR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 166,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape": {
+  "set": "units",
+  "triangles": 2096,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 470,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape00": {
+  "set": "units",
+  "triangles": 724,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape00_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 144,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape01": {
+  "set": "units",
+  "triangles": 720,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape01_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 176,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape02": {
+  "set": "units",
+  "triangles": 814,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape02_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 174,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape03": {
+  "set": "units",
+  "triangles": 836,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape03_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 612,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape03_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 208,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape10": {
+  "set": "units",
+  "triangles": 592,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape10_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 256,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape10_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 130,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape11": {
+  "set": "units",
+  "triangles": 754,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape11_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 238,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape11_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 112,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape12": {
+  "set": "units",
+  "triangles": 742,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape12_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 172,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape13": {
+  "set": "units",
+  "triangles": 466,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape13_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 326,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape13_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 122,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape20": {
+  "set": "units",
+  "triangles": 624,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape20_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 160,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape20_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 118,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape21": {
+  "set": "units",
+  "triangles": 690,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape21_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 192,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape21_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 116,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape22": {
+  "set": "units",
+  "triangles": 704,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape22_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 170,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape22_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 116,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape23": {
+  "set": "units",
+  "triangles": 588,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape23_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 318,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape23_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 132,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape30": {
+  "set": "units",
+  "triangles": 594,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape30_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 158,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape30_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 106,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape31": {
+  "set": "units",
+  "triangles": 760,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape31_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 168,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape31_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 124,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape32": {
+  "set": "units",
+  "triangles": 823,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape32_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 312,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape32_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 150,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape33": {
+  "set": "units",
+  "triangles": 514,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape33_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 226,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape33_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 98,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape40": {
+  "set": "units",
+  "triangles": 726,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape40_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 300,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape40_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 144,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape41": {
+  "set": "units",
+  "triangles": 778,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape41_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 226,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape41_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 136,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape42": {
+  "set": "units",
+  "triangles": 878,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape42_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 236,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape42_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 148,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Swordsman_Cape43": {
+  "set": "units",
+  "triangles": 934,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Swordsman_Cape43_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 434,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Swordsman_Cape43_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 136,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Body": {
+  "set": "units",
+  "triangles": 2035,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Body_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 416,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Body_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 268,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Chest": {
+  "set": "units",
+  "triangles": 5823,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Chest_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 694,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Chest_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 328,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_ArmL": {
+  "set": "units",
+  "triangles": 1830,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_ArmL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 442,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_ArmL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 184,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_ForeL": {
+  "set": "units",
+  "triangles": 920,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Archer_ForeL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 248,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_ArmR": {
+  "set": "units",
+  "triangles": 1664,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_ArmR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 422,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_ArmR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 172,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_ForeR": {
+  "set": "units",
+  "triangles": 562,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Archer_ForeR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 198,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_LegL": {
+  "set": "units",
+  "triangles": 1088,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_LegL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 182,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_LegL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 116,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_ShinL": {
+  "set": "units",
+  "triangles": 889,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_ShinL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 116,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_LegR": {
+  "set": "units",
+  "triangles": 1208,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_LegR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 154,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_ShinR": {
+  "set": "units",
+  "triangles": 779,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_ShinR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 118,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape": {
+  "set": "units",
+  "triangles": 1308,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 284,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 202,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape00": {
+  "set": "units",
+  "triangles": 442,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape00_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 108,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape01": {
+  "set": "units",
+  "triangles": 390,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape01_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 190,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape01_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 104,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape02": {
+  "set": "units",
+  "triangles": 440,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape02_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 134,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape02_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 90,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape03": {
+  "set": "units",
+  "triangles": 548,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape03_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 296,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape03_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 104,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape10": {
+  "set": "units",
+  "triangles": 652,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape10_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 270,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape10_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 112,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape11": {
+  "set": "units",
+  "triangles": 576,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape11_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 122,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape12": {
+  "set": "units",
+  "triangles": 508,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape12_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 162,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape12_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 78,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape13": {
+  "set": "units",
+  "triangles": 608,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape13_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 326,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape13_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 116,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape20": {
+  "set": "units",
+  "triangles": 418,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape20_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 96,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape20_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 66,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape22": {
+  "set": "units",
+  "triangles": 511,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape22_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 190,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape22_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 80,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape23": {
+  "set": "units",
+  "triangles": 910,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape23_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 312,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape23_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 180,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape30": {
+  "set": "units",
+  "triangles": 668,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape30_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 150,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape31": {
+  "set": "units",
+  "triangles": 604,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape31_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 158,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape31_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 118,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape32": {
+  "set": "units",
+  "triangles": 488,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape32_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 160,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape32_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 90,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape33": {
+  "set": "units",
+  "triangles": 508,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape33_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 266,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape33_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 108,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape40": {
+  "set": "units",
+  "triangles": 476,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape40_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 198,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape40_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 94,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape41": {
+  "set": "units",
+  "triangles": 424,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape41_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 90,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape42": {
+  "set": "units",
+  "triangles": 479,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Cape42_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 226,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape42_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 88,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Cape43": {
+  "set": "units",
+  "triangles": 510,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Archer_Cape43_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 94,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Bow": {
+  "set": "units",
+  "triangles": 2124,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Archer_Bow_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 500,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_BowStringL": {
+  "set": "units",
+  "triangles": 220,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_BowStringL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 160,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_BowStringL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 90,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Quiver": {
+  "set": "units",
+  "triangles": 2986,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Archer_Quiver_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 2182,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Archer_Quiver_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 520,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Archer_Arrow": {
+  "set": "units",
+  "triangles": 440,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Archer_Arrow_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 170,
+    "slots": [
+     "paint",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Body": {
+  "set": "units",
+  "triangles": 3501,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Body_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 882,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Body_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 458,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Chest": {
+  "set": "units",
+  "triangles": 13970,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Chest_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 2708,
+    "slots": [
+     "paint",
+     "gold",
+     "metal",
+     "wool",
+     "glow"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Chest_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 1150,
+    "slots": [
+     "paint",
+     "gold",
+     "metal",
+     "wool",
+     "glow"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Head": {
+  "set": "units",
+  "triangles": 5070,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Head_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 602,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Head_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 310,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_HoodA": {
+  "set": "units",
+  "triangles": 258,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Spy_HoodA_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 158,
+    "slots": [
+     "sway"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_HoodB": {
+  "set": "units",
+  "triangles": 172,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Spy_HoodB_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 116,
+    "slots": [
+     "sway"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_ArmL": {
+  "set": "units",
+  "triangles": 2427,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_ArmL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 512,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_ArmL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 208,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_ForeL": {
+  "set": "units",
+  "triangles": 1054,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_ForeL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 638,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_ForeL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 194,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_ArmR": {
+  "set": "units",
+  "triangles": 2073,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_ArmR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 548,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_ArmR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 202,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_ForeR": {
+  "set": "units",
+  "triangles": 877,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_ForeR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 542,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_ForeR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 178,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_HandR": {
+  "set": "units",
+  "triangles": 300,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Spy_HandR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 78,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_LegL": {
+  "set": "units",
+  "triangles": 1871,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_LegL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 478,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_LegL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 224,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_ShinL": {
+  "set": "units",
+  "triangles": 1385,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_ShinL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 332,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_ShinL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 162,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_LegR": {
+  "set": "units",
+  "triangles": 1859,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_LegR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 454,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_LegR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 290,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_ShinR": {
+  "set": "units",
+  "triangles": 1300,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_ShinR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 366,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_ShinR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 138,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape": {
+  "set": "units",
+  "triangles": 456,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 106,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 78,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape00": {
+  "set": "units",
+  "triangles": 222,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape00_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 48,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape00_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 30,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape01": {
+  "set": "units",
+  "triangles": 166,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape01_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 90,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape01_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 32,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape02": {
+  "set": "units",
+  "triangles": 278,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape02_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 60,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape03": {
+  "set": "units",
+  "triangles": 306,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape03_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 144,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape03_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 58,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape10": {
+  "set": "units",
+  "triangles": 220,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape10_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 42,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape11": {
+  "set": "units",
+  "triangles": 222,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape11_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 102,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape11_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 30,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape12": {
+  "set": "units",
+  "triangles": 196,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape12_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 122,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape12_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 26,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape13": {
+  "set": "units",
+  "triangles": 533,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape13_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 376,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape13_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 112,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape20": {
+  "set": "units",
+  "triangles": 386,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape20_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 72,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape21": {
+  "set": "units",
+  "triangles": 168,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape21_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 22,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape22": {
+  "set": "units",
+  "triangles": 236,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape22_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 76,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape22_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 44,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape23": {
+  "set": "units",
+  "triangles": 222,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape23_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 134,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape23_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 54,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape30": {
+  "set": "units",
+  "triangles": 220,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape30_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 44,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape31": {
+  "set": "units",
+  "triangles": 222,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape31_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 110,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape31_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 64,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape32": {
+  "set": "units",
+  "triangles": 146,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape32_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 78,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape32_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 36,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape33": {
+  "set": "units",
+  "triangles": 495,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape33_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 154,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape33_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 100,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape40": {
+  "set": "units",
+  "triangles": 228,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape40_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 48,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape40_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 32,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape41": {
+  "set": "units",
+  "triangles": 168,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape41_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 46,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape41_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 34,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape42": {
+  "set": "units",
+  "triangles": 297,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape42_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 60,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape42_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 40,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Cape43": {
+  "set": "units",
+  "triangles": 340,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Spy_Cape43_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 90,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Spy_Cape43_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 56,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Spy_Spyglass": {
+  "set": "units",
+  "triangles": 506,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Spy_Spyglass_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 136,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_Body": {
+  "set": "units",
+  "triangles": 2861,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_Body_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 530,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_Body_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 296,
+    "slots": [
+     "paint",
+     "gold",
+     "metal"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_Chest": {
+  "set": "units",
+  "triangles": 4972,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_Chest_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 878,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_Chest_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 370,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_Head": {
+  "set": "units",
+  "triangles": 17441,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_Head_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 1782,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_Head_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 484,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_ArmL": {
+  "set": "units",
+  "triangles": 1584,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_ArmL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 430,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_ArmL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 198,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_ForeL": {
+  "set": "units",
+  "triangles": 993,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_ForeL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 508,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_ForeL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 196,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_ArmR": {
+  "set": "units",
+  "triangles": 1696,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_ArmR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 408,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_ArmR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 204,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_ForeR": {
+  "set": "units",
+  "triangles": 556,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Builder_ForeR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 162,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_HandR": {
+  "set": "units",
+  "triangles": 300,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Builder_HandR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 82,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_LegL": {
+  "set": "units",
+  "triangles": 6549,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_LegL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 858,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_LegL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 384,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_ShinL": {
+  "set": "units",
+  "triangles": 1821,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_ShinL_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 392,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_ShinL_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 164,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_LegR": {
+  "set": "units",
+  "triangles": 6320,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_LegR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 744,
+    "slots": [
+     "paint"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_LegR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 358,
+    "slots": [
+     "paint"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_ShinR": {
+  "set": "units",
+  "triangles": 1565,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_ShinR_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 318,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_ShinR_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 158,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_Pack": {
+  "set": "units",
+  "triangles": 13283,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Builder_Pack_L1.gltf",
+    "voxel": 0.025,
+    "triangles": 3852,
+    "slots": [
+     "paint",
+     "gold",
+     "metal",
+     "glow"
+    ]
+   },
+   {
+    "level": 2,
+    "file": "SM_Builder_Pack_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 1128,
+    "slots": [
+     "paint",
+     "gold",
+     "metal",
+     "glow"
+    ]
+   }
+  ]
+ },
+ "SM_Builder_Hammer": {
+  "set": "units",
+  "triangles": 1068,
+  "levels": [
+   {
+    "level": 2,
+    "file": "SM_Builder_Hammer_L2.gltf",
+    "voxel": 0.05,
+    "triangles": 306,
+    "slots": [
+     "paint",
+     "gold"
+    ]
+   }
+  ]
+ },
+ "SM_TownHall": {
+  "set": "buildings",
+  "triangles": 97060,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_TownHall_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 10494,
+    "slots": [
+     "stone",
+     "grass",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "plaster",
+     "leaves",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_Barracks": {
+  "set": "buildings",
+  "triangles": 85340,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Barracks_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 7836,
+    "slots": [
+     "stone",
+     "brick",
+     "cobble",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "leaves",
+     "hay",
+     "wool",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_BarracksYard": {
+  "set": "buildings",
+  "triangles": 138676,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_BarracksYard_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 23986,
+    "slots": [
+     "stone",
+     "brick",
+     "cobble",
+     "dirt",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "leaves",
+     "hay",
+     "wool",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "gravel",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_ArcheryHall": {
+  "set": "buildings",
+  "triangles": 136432,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_ArcheryHall_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 23658,
+    "slots": [
+     "stone",
+     "brick",
+     "cobble",
+     "grass",
+     "grass_side",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "leaves",
+     "hay",
+     "paint",
+     "glow",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_ArcheryRange": {
+  "set": "buildings",
+  "triangles": 56124,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_ArcheryRange_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 5974,
+    "slots": [
+     "stone",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "leaves",
+     "hay",
+     "paint",
+     "glow",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_WatchTower": {
+  "set": "buildings",
+  "triangles": 116450,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_WatchTower_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 29282,
+    "slots": [
+     "stone",
+     "brick",
+     "cobble",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "leaves",
+     "hay",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_MineCliff": {
+  "set": "buildings",
+  "triangles": 99108,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_MineCliff_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 18670,
+    "slots": [
+     "stone",
+     "cobble",
+     "grass",
+     "grass_side",
+     "dirt",
+     "plank",
+     "beam",
+     "beam_v",
+     "leaves",
+     "paint",
+     "glow",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "ore",
+     "gravel"
+    ]
+   }
+  ]
+ },
+ "SM_Farmstead": {
+  "set": "buildings",
+  "triangles": 111012,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Farmstead_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 26424,
+    "slots": [
+     "stone",
+     "cobble",
+     "dirt",
+     "plank",
+     "beam",
+     "beam_v",
+     "log_end",
+     "bark",
+     "roof",
+     "plaster",
+     "leaves",
+     "hay",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "water"
+    ]
+   }
+  ]
+ },
+ "SM_Farmstead_A": {
+  "set": "buildings",
+  "triangles": 111012,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Farmstead_A_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 26424,
+    "slots": [
+     "stone",
+     "cobble",
+     "dirt",
+     "plank",
+     "beam",
+     "beam_v",
+     "log_end",
+     "bark",
+     "roof",
+     "plaster",
+     "leaves",
+     "hay",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "water"
+    ]
+   }
+  ]
+ },
+ "SM_Farmstead_B": {
+  "set": "buildings",
+  "triangles": 125110,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Farmstead_B_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 28350,
+    "slots": [
+     "stone",
+     "brick",
+     "cobble",
+     "dirt",
+     "plank",
+     "beam",
+     "beam_v",
+     "plaster",
+     "leaves",
+     "hay",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "water"
+    ]
+   }
+  ]
+ },
+ "SM_Farmstead_C": {
+  "set": "buildings",
+  "triangles": 125818,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Farmstead_C_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 29794,
+    "slots": [
+     "stone",
+     "brick",
+     "cobble",
+     "dirt",
+     "plank",
+     "beam",
+     "beam_v",
+     "log_end",
+     "bark",
+     "plaster",
+     "leaves",
+     "hay",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "water"
+    ]
+   }
+  ]
+ },
+ "SM_FarmCottage_A": {
+  "set": "buildings",
+  "triangles": 22148,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_FarmCottage_A_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 2342,
+    "slots": [
+     "stone",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "plaster",
+     "leaves",
+     "paint",
+     "window",
+     "metal",
+     "moss"
+    ]
+   }
+  ]
+ },
+ "SM_FarmCottage_B": {
+  "set": "buildings",
+  "triangles": 22032,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_FarmCottage_B_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 2828,
+    "slots": [
+     "stone",
+     "plank",
+     "beam",
+     "beam_v",
+     "log_end",
+     "bark",
+     "roof",
+     "plaster",
+     "leaves",
+     "paint",
+     "window",
+     "moss"
+    ]
+   }
+  ]
+ },
+ "SM_Dock": {
+  "set": "buildings",
+  "triangles": 45276,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Dock_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 4396,
+    "slots": [
+     "stone",
+     "plank",
+     "beam",
+     "beam_v",
+     "log_end",
+     "bark",
+     "paint",
+     "glow",
+     "metal",
+     "moss"
+    ]
+   }
+  ]
+ },
+ "SM_Windmill": {
+  "set": "buildings",
+  "triangles": 38724,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Windmill_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 5848,
+    "slots": [
+     "stone",
+     "brick",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "plaster",
+     "leaves",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy"
+    ]
+   }
+  ]
+ },
+ "SM_Bridge": {
+  "set": "buildings",
+  "triangles": 37532,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Bridge_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 2518,
+    "slots": [
+     "stone",
+     "plank",
+     "beam",
+     "beam_v",
+     "glow",
+     "moss",
+     "stone_mossy"
+    ]
+   }
+  ]
+ }
+}

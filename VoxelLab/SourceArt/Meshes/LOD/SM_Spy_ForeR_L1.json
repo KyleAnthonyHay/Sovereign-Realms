@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_ForeR_L1",
+ "faces": 271,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1133,
+   -0.225,
+   -0.275
+  ],
+  [
+   0.0867,
+   0.075,
+   0.075
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_ForeR",
+ "voxel": 0.025,
+ "triangles": 542
+}

@@ -1,0 +1,21 @@
+{
+ "name": "SM_Archer_Arrow_L2",
+ "faces": 85,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0484,
+   -0.4812,
+   -0.1313
+  ],
+  [
+   0.0516,
+   0.2688,
+   0.2188
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Archer_Arrow",
+ "voxel": 0.05,
+ "triangles": 170
+}

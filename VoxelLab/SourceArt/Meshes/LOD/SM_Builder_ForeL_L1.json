@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_ForeL_L1",
+ "faces": 254,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0687,
+   -0.1906,
+   -0.425
+  ],
+  [
+   0.1312,
+   0.0594,
+   0.075
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_ForeL",
+ "voxel": 0.025,
+ "triangles": 508
+}

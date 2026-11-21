@@ -1,0 +1,21 @@
+{
+ "name": "SM_Swordsman_ArmL_L2",
+ "faces": 102,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0828,
+   -0.1484,
+   -0.3844
+  ],
+  [
+   0.1172,
+   0.1516,
+   0.0656
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Swordsman_ArmL",
+ "voxel": 0.05,
+ "triangles": 204
+}

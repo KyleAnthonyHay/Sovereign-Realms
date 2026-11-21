@@ -1,0 +1,21 @@
+{
+ "name": "SM_ArcheryRange_L1",
+ "faces": 2987,
+ "collision": "none",
+ "bounds": [
+  [
+   -4.5,
+   -2.5,
+   0.0
+  ],
+  [
+   4.5,
+   2.5,
+   5.0
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_ArcheryRange",
+ "voxel": 0.25,
+ "triangles": 5974
+}

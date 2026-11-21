@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_Body_L1",
+ "faces": 242,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.275,
+   -0.2,
+   -0.3
+  ],
+  [
+   0.275,
+   0.15,
+   0.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_Body",
+ "voxel": 0.025,
+ "triangles": 484
+}

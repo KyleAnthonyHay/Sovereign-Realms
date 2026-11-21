@@ -78,6 +78,7 @@ private:
 	TArray<FPuff> Puffs;
 	int32 Next = 0;
 	int32 Alive = 0;
+	FVector ParkAt = FVector::ZeroVector;      // where the unused cubes wait (the last place dust was raised)
 	uint32 Seed = 1;
 	float Rand();
 };

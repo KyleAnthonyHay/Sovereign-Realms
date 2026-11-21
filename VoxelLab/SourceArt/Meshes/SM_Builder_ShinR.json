@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_ShinR",
+ "faces": 782,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1462,
+   -0.2225,
+   -0.35
+  ],
+  [
+   0.1213,
+   0.1225,
+   0.0782
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.35
+ ],
+ "part": "ShinR",
+ "triangles": 1565,
+ "blocks": 85
+}

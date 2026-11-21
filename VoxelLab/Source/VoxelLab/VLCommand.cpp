@@ -4,11 +4,15 @@
 #include "VLKing.h"
 #include "VLSwordsmanCombat.h"
 #include "VLArcherCombat.h"
+#include "VLBattle.h"
+#include "VLConstruction.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Components/StaticMeshComponent.h"
+#include "HAL/IConsoleManager.h"
 
 namespace
 {
@@ -73,7 +77,7 @@ void UVLCommand::GetSelection(TArray<AVLKing*>& Out) const
 	Out.Reset();
 	for (const TWeakObjectPtr<AVLKing>& U : Selection)
 	{
-		if (U.IsValid())
+		if (U.IsValid() && U->IsAlive())
 		{
 			Out.Add(U.Get());
 		}
@@ -85,7 +89,7 @@ int32 UVLCommand::NumSelected() const
 	int32 N = 0;
 	for (const TWeakObjectPtr<AVLKing>& U : Selection)
 	{
-		N += U.IsValid() ? 1 : 0;
+		N += (U.IsValid() && U->IsAlive()) ? 1 : 0;
 	}
 	return N;
 }
@@ -103,7 +107,7 @@ void UVLCommand::Select(const TArray<AVLKing*>& Units, bool bAdd)
 	}
 	for (AVLKing* U : Units)
 	{
-		if (U)
+		if (U && U->IsAlive() && U->Team == UVLBattle::Player)        // the player commands only their own
 		{
 			Selection.AddUnique(U);
 		}
@@ -112,7 +116,7 @@ void UVLCommand::Select(const TArray<AVLKing*>& Units, bool bAdd)
 
 void UVLCommand::Toggle(AVLKing* Unit)
 {
-	if (!Unit)
+	if (!Unit || Unit->IsDead() || Unit->Team != UVLBattle::Player)
 	{
 		return;
 	}
@@ -303,7 +307,7 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 	TArray<AVLKing*> Units;
 	for (AVLKing* U : InUnits)
 	{
-		if (U)
+		if (U && U->IsAlive())
 		{
 			Units.AddUnique(U);
 		}
@@ -312,8 +316,26 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 	{
 		return;
 	}
+	if (!bInnerOrder)
+	{
+		ClearStanding(Units);       // a new order ends a patrol, a guard, a hold, a roam
+	}
+	// march together: nobody faster than the slowest of them (a single unit: its own pace)
+	{
+		const bool bTogether = MarchTogether(Units, Shape);
+		float Slowest = TNumericLimits<float>::Max();
+		for (const AVLKing* U : Units)
+		{
+			Slowest = FMath::Min(Slowest, bRun ? U->RunSpeed : U->WalkSpeed);
+		}
+		for (AVLKing* U : Units)
+		{
+			U->PaceCap = (bTogether && Slowest < (bRun ? U->RunSpeed : U->WalkSpeed) - 1.f) ? Slowest : 0.f;
+		}
+	}
 	for (AVLKing* U : Units)
 	{
+		U->bAttackMove = false;     // a plain move (UVLBattle::AttackMove sets it again for the commander's)
 		if (bQueue && U->IsOnOrder())
 		{
 			continue;               // it finishes what it is doing first
@@ -337,7 +359,10 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 				U->FollowPath({ P }, bRun);       // no grid in this level: straight there
 			}
 		}
-		AddMarker(Ground);
+		if (Units[0]->Team == UVLBattle::Player && !bQuietMove)
+		{
+			AddMarker(Ground);
+		}
 		return;
 	}
 	// A click on a roof, a cliff or the water means "go there": beside it, on ground the group can walk to (the
@@ -363,6 +388,11 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 		Dest.Y = Ground.Y;
 	}
 
+	if (Units[0]->Team == UVLBattle::Player && !bQuietMove)
+	{
+		UE_LOG(LogVoxelLab, Log, TEXT("move: ground %s lead %s (node %d region %d, main %d) dest node %d region %d at %s"), *Ground.ToCompactString(), *Units[0]->GetFeet().ToCompactString(),
+			Lead, Grid->RegionOf(Lead), Grid->MainRegion(), DestNode, Grid->RegionOf(DestNode), *Dest.ToCompactString());
+	}
 	TArray<FVector2D> Slots2D;
 	VLFormation::ComputeSlots(Units, FVector2D(Dest), Slots2D, Shape);
 	TArray<FVector> Slots;
@@ -393,7 +423,10 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 		Path.Add(Slot);
 		Units[i]->FollowPath(Path, bRun);
 	}
-	AddMarker(Dest);
+	if (Units[0]->Team == UVLBattle::Player && !bQuietMove)
+	{
+		AddMarker(Dest);
+	}
 }
 
 // ------------------------------------------------------------------------------------------------ attacks
@@ -401,11 +434,25 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 void UVLCommand::GetDummies(TArray<AActor*>& Out) const
 {
 	Out.Reset();
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	// (B: from the battle's cached list of the level's dummies, not a walk over every actor)
+	if (const UVLBattle* Battle = UVLBattle::Get(this); Battle && UVLBattle::UseRegistry())
 	{
-		if (It->ActorHasTag(TEXT("Dummy")))
+		for (const TWeakObjectPtr<AActor>& D : Battle->Dummies())
 		{
-			Out.Add(*It);
+			if (AActor* A = D.Get())
+			{
+				Out.Add(A);
+			}
+		}
+	}
+	else
+	{
+		for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+		{
+			if (It->ActorHasTag(TEXT("Dummy")))
+			{
+				Out.Add(*It);
+			}
 		}
 	}
 	Out.Sort([](const AActor& A, const AActor& B) { return A.GetName() < B.GetName(); });
@@ -452,20 +499,100 @@ bool UVLCommand::CanAttack(const AVLKing* Unit)
 	return UVLSwordsmanCombat::CanFight(Unit) || UVLArcherCombat::CanFight(Unit);
 }
 
-int32 UVLCommand::OrderAttack(const TArray<AVLKing*>& Units, AActor* Target, bool bRun)
+int32 UVLCommand::OrderAttack(const TArray<AVLKing*>& InUnits, AActor* Target, bool bRun, bool bMarker)
 {
 	if (!Target)
 	{
 		return 0;
 	}
+	// never at a friend: only those of Units for whom the target is a foe (a dummy is anybody's)
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	const bool bDummy = Target->ActorHasTag(TEXT("Dummy"));
+	TArray<AVLKing*> Units;
+	for (AVLKing* U : InUnits)
+	{
+		if (U && U->IsAlive() && (bDummy || !Battle || Battle->IsHostile(Target, U->Team)))
+		{
+			U->bAutoAttack = false;
+			U->PaceCap = 0.f;       // a fight is fought at full speed
+			Units.Add(U);
+		}
+	}
+	if (!bInnerOrder)
+	{
+		TArray<AVLKing*> Fighters = Units.FilterByPredicate([](const AVLKing* U) { return CanAttack(U); });
+		ClearStanding(Fighters);    // an attack ordered ends a patrol or a guard (a fight of their own on one does not)
+	}
 	int32 Ordered = 0;
 	Ordered += UVLSwordsmanCombat::OrderAttack(Units, Target, bRun);        // the swordsmen among them
 	Ordered += UVLArcherCombat::OrderAttack(Units, Target, bRun);           // the archers (those on the tower shoot from it)
-	if (Ordered > 0)
+	if (Ordered > 0 && bMarker && Units[0]->Team == UVLBattle::Player)
 	{
 		AddMarker(Target->GetActorLocation());
 	}
 	return Ordered;
+}
+
+void UVLCommand::OnUnitDied(AVLKing* Unit)
+{
+	if (!Unit)
+	{
+		return;
+	}
+	Selection.Remove(Unit);
+	for (int32 i = 0; i < MaxPlatoons; ++i)
+	{
+		FPlatoon& P = Platoons[i];
+		const bool bWas = P.Members.Contains(Unit);
+		P.Members.Remove(Unit);     // (a platoon whose last troop falls is struck off by itself: its slot is empty)
+		P.Members.RemoveAll([](const TWeakObjectPtr<AVLKing>& M) { return !M.IsValid() || M->IsDead(); });
+		if (bWas && P.Members.Num() == 0 && Unit->Team == UVLBattle::Player && Unit->GetHealth() <= 0.f)
+		{
+			if (UVLBattle* Battle = UVLBattle::Get(this))
+			{
+				const FVector At = Unit->GetActorLocation();
+				Battle->PushAlert(FString::Printf(TEXT("Platoon %d has fallen"), i + 1), EVLAlert::Lost, &At);    // (the main game's alert)
+			}
+		}
+	}
+	StopAttack(Unit);
+	Detach(Unit);
+	ClearStanding({ Unit });
+}
+
+const TCHAR* UVLCommand::StanceName(EVLStance Stance)
+{
+	return Stance == EVLStance::Defensive ? TEXT("Defensive") : (Stance == EVLStance::Hold ? TEXT("Hold ground") : TEXT("Aggressive"));
+}
+
+EVLStance UVLCommand::SelectionStance() const
+{
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	const int32 P = PlatoonOf(Units);
+	return P != INDEX_NONE ? Platoons[P].Stance : (Units.Num() > 0 ? Units[0]->Stance : EVLStance::Aggressive);
+}
+
+void UVLCommand::CycleStance()
+{
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	if (Units.Num() == 0)
+	{
+		return;
+	}
+	const EVLStance Next = EVLStance((int32(SelectionStance()) + 1) % 3);
+	const int32 P = PlatoonOf(Units);
+	if (P != INDEX_NONE)
+	{
+		Platoons[P].Stance = Next;
+	}
+	for (AVLKing* U : Units)
+	{
+		U->Stance = Next;
+		U->Post = U->GetFeet();
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("stance: %d unit(s) %s"), Units.Num(), StanceName(Next));
 }
 
 void UVLCommand::StopAttack(AVLKing* Unit)
@@ -478,25 +605,27 @@ void UVLCommand::StopAttack(AVLKing* Unit)
 	{
 		Bow->Stop();
 	}
+	if (UVLBuilderWork* Work = UVLBuilderWork::For(Unit, false))
+	{
+		Work->Stop();           // a Builder's job (VLConstruction.*): any other order ends it
+	}
 }
 
 void UVLCommand::ArmAttackGround(bool bArm)
 {
-	AttackGroundArmedAt = -1.0;
 	if (bArm)
 	{
-		TArray<AVLKing*> Units;
-		GetSelection(Units);
-		if (Units.ContainsByPredicate([](const AVLKing* U) { return UVLArcherCombat::CanFight(U); }))
-		{
-			AttackGroundArmedAt = GetWorld()->GetRealTimeSeconds();
-		}
+		Arm(EVLArm::AttackGround);
+	}
+	else if (Armed == EVLArm::AttackGround)
+	{
+		Arm(EVLArm::None);
 	}
 }
 
 bool UVLCommand::IsAttackGroundArmed() const
 {
-	return AttackGroundArmedAt >= 0.0 && GetWorld() && GetWorld()->GetRealTimeSeconds() - AttackGroundArmedAt < AttackGroundSeconds;
+	return GetArmed() == EVLArm::AttackGround;
 }
 
 int32 UVLCommand::OrderAttackGround(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun)
@@ -506,6 +635,7 @@ int32 UVLCommand::OrderAttackGround(const TArray<AVLKing*>& Units, const FVector
 		if (UVLArcherCombat::CanFight(U))
 		{
 			StopAttack(U);          // whatever they were shooting at
+			ClearStanding({ U });
 		}
 	}
 	const int32 Ordered = UVLArcherCombat::OrderAttackGround(Units, Ground, bRun);
@@ -558,7 +688,7 @@ void UVLCommand::AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 	}
 	for (AVLKing* U : Units)
 	{
-		if (!U)
+		if (!U || U->IsDead() || U->Team != UVLBattle::Player)
 		{
 			continue;
 		}
@@ -567,6 +697,43 @@ void UVLCommand::AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 			P.Members.Remove(U);
 		}
 		Platoons[Index].Members.Add(U);
+		U->Stance = Platoons[Index].Stance;     // the platoon's stance is pushed to its members
+	}
+}
+
+void UVLCommand::CyclePlatoonFormation(int32 Index)
+{
+	if (Index >= 0 && Index < MaxPlatoons)
+	{
+		Platoons[Index].Formation = EVLFormation((int32(Platoons[Index].Formation) + 1) % 5);
+	}
+}
+
+void UVLCommand::CyclePlatoonStance(int32 Index)
+{
+	if (Index < 0 || Index >= MaxPlatoons)
+	{
+		return;
+	}
+	FPlatoon& P = Platoons[Index];
+	P.Stance = EVLStance((int32(P.Stance) + 1) % 3);
+	for (const TWeakObjectPtr<AVLKing>& U : P.Members)
+	{
+		if (U.IsValid() && U->IsAlive())
+		{
+			U->Stance = P.Stance;
+			U->Post = U->GetFeet();
+		}
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("stance: platoon %d %s"), Index + 1, StanceName(P.Stance));
+}
+
+void UVLCommand::DisbandPlatoon(int32 Index)
+{
+	if (Index >= 0 && Index < MaxPlatoons)
+	{
+		Platoons[Index].Members.Reset();
+		UE_LOG(LogVoxelLab, Log, TEXT("platoon %d disbanded"), Index + 1);
 	}
 }
 
@@ -579,9 +746,53 @@ void UVLCommand::GetPlatoon(int32 Index, TArray<AVLKing*>& Out) const
 	}
 	for (const TWeakObjectPtr<AVLKing>& U : Platoons[Index].Members)
 	{
-		if (U.IsValid())
+		if (U.IsValid() && U->IsAlive())
 		{
 			Out.Add(U.Get());
+		}
+	}
+}
+
+int32 UVLCommand::PlatoonIndexOf(const AVLKing* Unit) const
+{
+	// (the first platoon the unit is a living member of, as a search of GetPlatoon(0..) finds it)
+	if (Unit && Unit->IsAlive())
+	{
+		for (int32 i = 0; i < MaxPlatoons; ++i)
+		{
+			if (Platoons[i].Members.Contains(Unit))
+			{
+				return i;
+			}
+		}
+	}
+	return INDEX_NONE;
+}
+
+void UVLCommand::GetPlatoonMap(TMap<const AVLKing*, int32>& Out) const
+{
+	Out.Reset();
+	for (int32 i = 0; i < MaxPlatoons; ++i)
+	{
+		for (const TWeakObjectPtr<AVLKing>& U : Platoons[i].Members)
+		{
+			if (const AVLKing* Unit = U.Get(); Unit && Unit->IsAlive() && !Out.Contains(Unit))
+			{
+				Out.Add(Unit, i);
+			}
+		}
+	}
+}
+
+void UVLCommand::GetSelectionSet(TSet<const AVLKing*>& Out) const
+{
+	// (as IsSelected has it: whoever is in the selection, alive or not)
+	Out.Reset();
+	for (const TWeakObjectPtr<AVLKing>& U : Selection)
+	{
+		if (const AVLKing* Unit = U.Get())
+		{
+			Out.Add(Unit);
 		}
 	}
 }
@@ -763,9 +974,13 @@ void UVLCommand::OrderGarrison(const TArray<AVLKing*>& InUnits, AActor* Tower, b
 	TArray<AVLKing*> Going, Others;
 	for (AVLKing* U : InUnits)
 	{
-		if (!U || U->GarrisonIn.Get() == Tower)
+		if (!U || U->IsDead() || U->GarrisonIn.Get() == Tower)
 		{
 			continue;
+		}
+		if (const UVLBattle* Battle = UVLBattle::Get(this); Battle && Battle->TeamOf(Tower) != UVLBattle::Neutral && Battle->TeamOf(Tower) != U->Team)
+		{
+			continue;           // a lookout of the other side's is no place for it
 		}
 		if (!U->IsRanged())
 		{
@@ -850,9 +1065,12 @@ void UVLCommand::Leave(AVLKing* Unit)
 	FVector Door = DoorPoint(Tower);
 	// beside whoever stands there already
 	int32 Down = 0;
-	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+	if (const UVLBattle* Battle = UVLBattle::Get(this))
 	{
-		Down += (*It != Unit && !It->GarrisonIn.IsValid() && FVector::Dist2D(It->GetFeet(), Door) < 420.f) ? 1 : 0;
+		for (const AVLKing* Other : Battle->AllUnits())
+		{
+			Down += (Other != Unit && !Other->GarrisonIn.IsValid() && FVector::Dist2D(Other->GetFeet(), Door) < 420.f) ? 1 : 0;
+		}
 	}
 	if (UVLGrid* Grid = UVLGrid::Get(this))
 	{
@@ -906,4 +1124,1096 @@ void UVLCommand::EmptyTower(AActor* Tower)
 	}
 	const FVector Front = Tower->GetActorRotation().RotateVector(FVector(0.f, 1.f, 0.f));
 	OrderMove(In, DoorPoint(Tower) + Front * 300.f, false, EVLFormation::Line);
+}
+
+// ------------------------------------------------------------------------------------------------ standing orders
+// The main game's Stop, Hold, Patrol, Guard, Roam, attack-move, March together and Dismiss (SRPlayerController,
+// USRBattleSubsystem::CommandPatrol / ExtendPatrol / ExtendPath / StepPatrols, ASRUnit::OrderGuard / OrderRoam).
+
+namespace
+{
+	bool IsFightingNow(const AVLKing* U)
+	{
+		const UVLSwordsmanCombat* S = UVLSwordsmanCombat::For(const_cast<AVLKing*>(U), false);
+		const UVLArcherCombat* B = UVLArcherCombat::For(const_cast<AVLKing*>(U), false);
+		return (S && S->IsAttacking()) || (B && B->IsAttacking());
+	}
+
+	AActor* FightTarget(const AVLKing* U)
+	{
+		if (const UVLSwordsmanCombat* S = UVLSwordsmanCombat::For(const_cast<AVLKing*>(U), false); S && S->IsAttacking())
+		{
+			return S->GetTarget();
+		}
+		const UVLArcherCombat* B = UVLArcherCombat::For(const_cast<AVLKing*>(U), false);
+		return B && B->IsAttacking() ? B->GetTarget() : nullptr;
+	}
+
+	/** The player plays it (the hero view): standing orders let go of it. */
+	bool PlayedByHand(const AVLKing* U)
+	{
+		return U && Cast<APlayerController>(U->GetController()) && U->IsHeroMode();
+	}
+
+	FVector Centroid(const TArray<AVLKing*>& Units)
+	{
+		FVector C = FVector::ZeroVector;
+		for (const AVLKing* U : Units)
+		{
+			C += U->GetFeet();
+		}
+		return Units.Num() > 0 ? C / Units.Num() : C;
+	}
+
+	TArray<AVLKing*> Living(const TArray<AVLKing*>& Units)
+	{
+		TArray<AVLKing*> Out;
+		for (AVLKing* U : Units)
+		{
+			if (U && U->IsAlive())
+			{
+				Out.AddUnique(U);
+			}
+		}
+		return Out;
+	}
+}
+
+void UVLCommand::ClearStanding(const TArray<AVLKing*>& Units)
+{
+	for (AVLKing* U : Units)
+	{
+		if (!U)
+		{
+			continue;
+		}
+		U->bHoldOrder = false;
+		GuardPosts.RemoveAll([U](const FGuardPost& G) { return G.Unit.Get() == U; });
+		Roamers.RemoveAll([U](const FRoamer& R) { return R.Unit.Get() == U; });
+	}
+	for (int32 i = Routes.Num() - 1; i >= 0; --i)
+	{
+		Routes[i].Members.RemoveAll([&Units](const TWeakObjectPtr<AVLKing>& M) { return !M.IsValid() || Units.Contains(M.Get()); });
+		if (Routes[i].Members.Num() == 0)
+		{
+			Routes.RemoveAt(i);
+		}
+	}
+}
+
+void UVLCommand::OrderStop(const TArray<AVLKing*>& InUnits)
+{
+	const TArray<AVLKing*> Units = Living(InUnits);
+	ClearStanding(Units);
+	for (AVLKing* U : Units)
+	{
+		StopAttack(U);
+		if (U->PendingGarrison.IsValid() && !U->IsGarrisoned())
+		{
+			Detach(U);              // on its way to the tower: it stays down (one on the lookout stays up there)
+		}
+		U->StopOrder();
+		U->ClearQueue();
+		U->bAttackMove = false;
+		U->bAutoAttack = false;
+		U->PaceCap = 0.f;
+		U->Post = U->GetFeet();
+	}
+	if (Units.Num() > 0)
+	{
+		UE_LOG(LogVoxelLab, Log, TEXT("stop: %d unit(s)"), Units.Num());
+	}
+}
+
+void UVLCommand::OrderHold(const TArray<AVLKing*>& InUnits)
+{
+	const TArray<AVLKing*> Units = Living(InUnits);
+	OrderStop(Units);
+	for (AVLKing* U : Units)
+	{
+		U->bHoldOrder = true;
+	}
+	if (Units.Num() > 0)
+	{
+		UE_LOG(LogVoxelLab, Log, TEXT("hold: %d unit(s) hold their ground"), Units.Num());
+	}
+}
+
+int32 UVLCommand::FindRoute(const TArray<AVLKing*>& Units, bool bLoop) const
+{
+	for (int32 i = 0; i < Routes.Num(); ++i)
+	{
+		const FRoute& R = Routes[i];
+		if (R.bLoop != bLoop)
+		{
+			continue;
+		}
+		int32 Live = 0;
+		for (const TWeakObjectPtr<AVLKing>& M : R.Members)
+		{
+			Live += (M.IsValid() && M->IsAlive()) ? 1 : 0;
+		}
+		if (Live == Units.Num() && !Units.ContainsByPredicate([&R](AVLKing* U) { return !R.Members.Contains(U); }))
+		{
+			return i;
+		}
+	}
+	return INDEX_NONE;
+}
+
+void UVLCommand::IssueLeg(FRoute& R)
+{
+	TArray<AVLKing*> Live;
+	for (const TWeakObjectPtr<AVLKing>& M : R.Members)
+	{
+		if (M.IsValid() && M->IsAlive())
+		{
+			Live.Add(M.Get());
+		}
+	}
+	if (Live.Num() == 0 || !R.Points.IsValidIndex(R.Next))
+	{
+		return;
+	}
+	{
+		TGuardValue<bool> Inner(bInnerOrder, true);
+		TGuardValue<bool> Quiet(bQuietMove, true);
+		OrderMove(Live, R.Points[R.Next], R.bRun, R.Shape);
+	}
+	for (AVLKing* U : Live)
+	{
+		U->bAttackMove = true;      // a patrol and an attack-move fight what they meet
+	}
+}
+
+void UVLCommand::OrderPatrol(const TArray<AVLKing*>& InUnits, const TArray<FVector>& Points, bool bRun, EVLFormation Shape)
+{
+	const TArray<AVLKing*> Units = Living(InUnits);
+	if (Units.Num() == 0 || Points.Num() == 0)
+	{
+		return;
+	}
+	ClearStanding(Units);
+	FRoute R;
+	for (AVLKing* U : Units)
+	{
+		R.Members.Add(U);
+	}
+	R.Points.Add(Centroid(Units));      // from where they stand ...
+	R.Points.Append(Points);            // ... through the points, and back
+	R.Next = 1;
+	R.bLoop = true;
+	R.bRun = bRun;
+	R.Shape = Shape;
+	R.Settle = 1.5f;
+	R.Id = NextRouteId++;
+	FRoute& Added = Routes.Add_GetRef(R);
+	IssueLeg(Added);
+	if (Units[0]->Team == UVLBattle::Player)
+	{
+		AddMarker(Points[0]);
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("patrol: %d unit(s), %d point(s) from %s"), Units.Num(), Points.Num(), *R.Points[0].ToCompactString());
+}
+
+void UVLCommand::ExtendPatrol(const TArray<AVLKing*>& InUnits, const FVector& Point, EVLFormation Shape)
+{
+	const TArray<AVLKing*> Units = Living(InUnits);
+	const int32 Existing = FindRoute(Units, true);
+	if (Existing == INDEX_NONE)
+	{
+		OrderPatrol(Units, { Point }, false, Shape);
+		return;
+	}
+	Routes[Existing].Points.Add(Point);     // they carry on where they are; the loop now runs through it too
+	if (Units.Num() > 0 && Units[0]->Team == UVLBattle::Player)
+	{
+		AddMarker(Point);
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("patrol: point %d at %s"), Routes[Existing].Points.Num(), *Point.ToCompactString());
+}
+
+void UVLCommand::OrderAttackMove(const TArray<AVLKing*>& InUnits, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue)
+{
+	const TArray<AVLKing*> Units = Living(InUnits);
+	if (Units.Num() == 0)
+	{
+		return;
+	}
+	if (bQueue)
+	{
+		const int32 Existing = FindRoute(Units, false);
+		if (Existing != INDEX_NONE)
+		{
+			Routes[Existing].Points.Add(Ground);
+			if (Units[0]->Team == UVLBattle::Player)
+			{
+				AddMarker(Ground);
+			}
+			return;
+		}
+	}
+	ClearStanding(Units);
+	FRoute R;
+	for (AVLKing* U : Units)
+	{
+		R.Members.Add(U);
+	}
+	R.Points.Add(Ground);
+	R.Next = 0;
+	R.bLoop = false;
+	R.bRun = bRun;
+	R.Shape = Shape;
+	R.Settle = 0.8f;
+	R.Id = NextRouteId++;
+	FRoute& Added = Routes.Add_GetRef(R);
+	IssueLeg(Added);
+	if (Units[0]->Team == UVLBattle::Player)
+	{
+		AddMarker(Ground);
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("attack-move: %d unit(s) to %s"), Units.Num(), *Ground.ToCompactString());
+}
+
+bool UVLCommand::CanBeGuarded(const AActor* Ward, int32 Team) const
+{
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (!Ward || !Battle)
+	{
+		return false;
+	}
+	if (const AVLKing* U = Cast<AVLKing>(Ward))
+	{
+		// Builders (as in the main game) and King David; not troops
+		return U->IsAlive() && U->Team == Team && (!U->IsTroop() || U->KindId() == EVLUnitKind::Builder);
+	}
+	const FVLBuildingState* B = Battle->FindBuilding(Ward);
+	return B && B->IsAlive() && B->Team == Team;
+}
+
+bool UVLCommand::WardPos(const AActor* Ward, FVector& Out) const
+{
+	if (const AVLKing* U = Cast<AVLKing>(Ward))
+	{
+		if (!U->IsAlive())
+		{
+			return false;
+		}
+		Out = U->GetFeet();
+		return true;
+	}
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	const FVLBuildingState* B = Battle ? Battle->FindBuilding(Ward) : nullptr;
+	if (!B || !B->IsAlive())
+	{
+		return false;
+	}
+	FVector Origin, Extent;
+	Ward->GetActorBounds(true, Origin, Extent);
+	Out = FVector(Origin.X, Origin.Y, Ward->GetActorLocation().Z);
+	return true;
+}
+
+void UVLCommand::GuardPostWorld(const FGuardPost& G, FVector2D& Out) const
+{
+	FVector W;
+	if (Cast<AVLKing>(G.Ward.Get()) && WardPos(G.Ward.Get(), W))
+	{
+		Out = FVector2D(W) + G.Offset;      // round a unit: the post moves with it
+	}
+	else
+	{
+		Out = G.Offset;                     // round a building: a fixed spot just outside its walls
+	}
+}
+
+int32 UVLCommand::OrderGuard(const TArray<AVLKing*>& InUnits, AActor* Ward)
+{
+	TArray<AVLKing*> Guards;
+	for (AVLKing* U : Living(InUnits))
+	{
+		if (U != Ward && U->KindId() != EVLUnitKind::Builder && CanBeGuarded(Ward, U->Team))
+		{
+			Guards.Add(U);
+		}
+	}
+	FVector Centre;
+	if (Guards.Num() == 0 || !WardPos(Ward, Centre))
+	{
+		return 0;
+	}
+	ClearStanding(Guards);
+	// posts in rings round the ward, the nearest guard first so that paths cross little: close round a unit, just
+	// outside the walls of a building (its box grown by the ring's margin, corners rounded)
+	const bool bUnitWard = Cast<AVLKing>(Ward) != nullptr;
+	const UStaticMeshComponent* SMC = bUnitWard ? nullptr : Ward->FindComponentByClass<UStaticMeshComponent>();
+	const bool bBox = SMC && SMC->GetStaticMesh();
+	const FTransform T = bBox ? SMC->GetComponentTransform() : FTransform::Identity;
+	const FBox Box = bBox ? SMC->GetStaticMesh()->GetBoundingBox() : FBox(FVector::ZeroVector, FVector::ZeroVector);
+	const FVector2D C2(Centre);
+	Guards.Sort([&C2](const AVLKing& A, const AVLKing& B) { return FVector2D::DistSquared(FVector2D(A.GetFeet()), C2) < FVector2D::DistSquared(FVector2D(B.GetFeet()), C2); });
+	auto PostAt = [&](float Angle, float Margin) -> FVector2D
+	{
+		const FVector Dir(FMath::Cos(Angle), FMath::Sin(Angle), 0.f);
+		if (!bBox)
+		{
+			return C2 + FVector2D(Dir) * Margin;
+		}
+		// where a ray from the box's middle that way leaves the box, then Margin further out
+		const FVector Local = T.InverseTransformVectorNoScale(Dir);
+		const FVector Half = Box.GetExtent() * T.GetScale3D().GetAbs();
+		const float Out = FMath::Min(FMath::Abs(Local.X) > 1e-3f ? float(Half.X / FMath::Abs(Local.X)) : 1e9f, FMath::Abs(Local.Y) > 1e-3f ? float(Half.Y / FMath::Abs(Local.Y)) : 1e9f);
+		return FVector2D(T.TransformPosition(Box.GetCenter())) + FVector2D(Dir) * (Out + Margin);
+	};
+	float Perimeter0 = 2.f * PI * 230.f;
+	if (bBox)
+	{
+		const FVector S = Box.GetSize() * T.GetScale3D();
+		Perimeter0 = 2.f * float(S.X + S.Y);
+	}
+	int32 Placed = 0, Ring = 0;
+	TArray<FVector2D> Posts;
+	while (Placed < Guards.Num())
+	{
+		const float Margin = (bUnitWard ? 230.f : 170.f) + Ring * 120.f;
+		const float Perimeter = bUnitWard ? 2.f * PI * Margin : Perimeter0 + 2.f * PI * Margin;
+		const int32 Cap = FMath::Max(4, FMath::FloorToInt(Perimeter / 130.f));
+		const int32 InRing = FMath::Min(Cap, Guards.Num() - Placed);
+		const FVector2D First = FVector2D(Guards[Placed]->GetFeet()) - C2;
+		const float Start = FMath::Atan2(First.Y, First.X);
+		for (int32 k = 0; k < InRing; ++k)
+		{
+			Posts.Add(PostAt(Start + 2.f * PI * k / InRing + Ring * 0.4f, Margin));
+		}
+		Placed += InRing;
+		++Ring;
+	}
+	for (int32 i = 0; i < Guards.Num(); ++i)
+	{
+		AVLKing* U = Guards[i];
+		FGuardPost& G = GuardPosts.AddDefaulted_GetRef();
+		G.Unit = U;
+		G.Ward = Ward;
+		G.Offset = bUnitWard ? Posts[i] - C2 : Posts[i];
+		// off it goes (the order is given here so that whatever it was doing ends now; it is a leg of the guard)
+		{
+			TGuardValue<bool> Inner(bInnerOrder, true);
+			TGuardValue<bool> Quiet(bQuietMove, true);
+			OrderMove({ U }, FVector(Posts[i].X, Posts[i].Y, Centre.Z), false, EVLFormation::Line);
+		}
+		G.bSent = true;
+		G.SentFor = C2;
+	}
+	if (Guards[0]->Team == UVLBattle::Player)
+	{
+		AddMarker(Centre);
+	}
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	const FVLBuildingState* B = Battle ? Battle->FindBuilding(Ward) : nullptr;
+	UE_LOG(LogVoxelLab, Log, TEXT("guard: %d unit(s) guard %s"), Guards.Num(), B ? *B->Name : (bUnitWard ? *Cast<AVLKing>(Ward)->GetDisplayName() : *Ward->GetName()));
+	return Guards.Num();
+}
+
+AActor* UVLCommand::GuardWardOf(const AVLKing* Unit, float* OutLeash) const
+{
+	for (const FGuardPost& G : GuardPosts)
+	{
+		if (G.Unit.Get() == Unit && G.Ward.IsValid())
+		{
+			if (OutLeash)
+			{
+				// an archer keeps her reach: she shoots what comes at the ward from as far as she can
+				const UVLArcherCombat* Bow = UVLArcherCombat::For(const_cast<AVLKing*>(Unit), false);
+				*OutLeash = Bow ? FMath::Max(GuardLeash, Bow->Range) : GuardLeash;
+			}
+			return G.Ward.Get();
+		}
+	}
+	return nullptr;
+}
+
+void UVLCommand::GetGuards(const AActor* Ward, TArray<AVLKing*>& Out) const
+{
+	Out.Reset();
+	for (const FGuardPost& G : GuardPosts)
+	{
+		if (G.Ward.Get() == Ward && G.Unit.IsValid() && G.Unit->IsAlive())
+		{
+			Out.Add(G.Unit.Get());
+		}
+	}
+}
+
+int32 UVLCommand::OrderRoam(const TArray<AVLKing*>& InUnits)
+{
+	TArray<AVLKing*> Spies = Living(InUnits).FilterByPredicate([](const AVLKing* U) { return U->KindId() == EVLUnitKind::Spy; });
+	if (Spies.Num() == 0)
+	{
+		return 0;
+	}
+	OrderStop(Spies);
+	for (AVLKing* U : Spies)
+	{
+		FRoamer& R = Roamers.AddDefaulted_GetRef();
+		R.Unit = U;
+		R.Visited.Add(FVector2D(U->GetFeet()));
+		PickRoamPoint(R);
+		UE_LOG(LogVoxelLab, Log, TEXT("roam: %s sets out"), *U->GetDisplayName());
+	}
+	return Spies.Num();
+}
+
+bool UVLCommand::IsRoaming(const AVLKing* Unit) const
+{
+	return Roamers.ContainsByPredicate([Unit](const FRoamer& R) { return R.Unit.Get() == Unit; });
+}
+
+bool UVLCommand::PickRoamPoint(FRoamer& R)
+{
+	AVLKing* U = R.Unit.Get();
+	UVLGrid* Grid = UVLGrid::Get(this);
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (!U || !Grid || !Grid->EnsureBuilt())
+	{
+		return false;
+	}
+	// a few spots 20-70 m off; ground it has not been to lately is worth most (there is no fog of war here to
+	// explore), then distance; never inside the reach of a foe's tower or castle
+	const FVector Me = U->GetFeet();
+	const int32 MyNode = Grid->NodeAt(Me) != INDEX_NONE ? Grid->NodeAt(Me) : Grid->NearestNode(Me, 8);
+	const int32 Region = MyNode != INDEX_NONE ? Grid->RegionOf(MyNode) : 0;
+	FBox2D Bounds = Grid->GetBounds();
+	Bounds = Bounds.ExpandBy(-FMath::Min(1500.f, float(Bounds.GetSize().GetMin()) * 0.05f));
+	FVector Best = Me;
+	float BestScore = -1e9f;
+	for (int32 i = 0; i < 12; ++i)
+	{
+		const float A = FMath::FRandRange(0.f, 2.f * PI), Dist = FMath::FRandRange(2000.f, 7000.f);
+		FVector P(FMath::Clamp(Me.X + FMath::Cos(A) * Dist, Bounds.Min.X, Bounds.Max.X), FMath::Clamp(Me.Y + FMath::Sin(A) * Dist, Bounds.Min.Y, Bounds.Max.Y), Me.Z);
+		const int32 Node = Grid->NearestNode(P, 20, Region);
+		if (Node == INDEX_NONE)
+		{
+			continue;
+		}
+		P = Grid->NodePos(Node);
+		float Score = FVector::Dist2D(P, Me) * 0.2f + FMath::FRandRange(0.f, 600.f);
+		if (!R.Visited.ContainsByPredicate([&P](const FVector2D& V) { return FVector2D::DistSquared(V, FVector2D(P)) < FMath::Square(2500.f); }))
+		{
+			Score += 4000.f;
+		}
+		if (Battle)
+		{
+			for (const FVLBuildingState& B : Battle->GetBuildings())
+			{
+				if (B.IsAlive() && B.Team >= 0 && B.Team != U->Team && (B.Kind == EVLBuilding::Tower || B.Kind == EVLBuilding::Castle)
+					&& Battle->DistanceTo(B.Actor.Get(), P) < VLRules::Level(B.Kind, B.Level).Range + 600.f)
+				{
+					Score -= 6000.f;
+				}
+			}
+		}
+		if (Score > BestScore)
+		{
+			BestScore = Score;
+			Best = P;
+		}
+	}
+	if (BestScore < -1e8f)
+	{
+		return false;
+	}
+	{
+		TGuardValue<bool> Inner(bInnerOrder, true);
+		TGuardValue<bool> Quiet(bQuietMove, true);
+		OrderMove({ U }, Best, false, EVLFormation::Line);
+	}
+	R.LegTime = 0.f;
+	R.Visited.Add(FVector2D(Best));
+	if (R.Visited.Num() > 24)
+	{
+		R.Visited.RemoveAt(0);
+	}
+	return true;
+}
+
+void UVLCommand::OnStruck(AVLKing* Victim, AActor* By)
+{
+	const int32 Index = Roamers.IndexOfByPredicate([Victim](const FRoamer& R) { return R.Unit.Get() == Victim; });
+	UVLBattle* Battle = UVLBattle::Get(this);
+	if (Index == INDEX_NONE || !Victim || Victim->IsDead() || !Battle || (By && Battle->TeamOf(By) == Victim->Team))
+	{
+		return;
+	}
+	// struck while roaming (a tower's arrow too): it drops the roam and runs home to its castle's door
+	Roamers.RemoveAt(Index);
+	if (AActor* Castle = Battle->GetCastle(Victim->Team))
+	{
+		FVector Door, Rally, Front;
+		Battle->FrontOf(Castle, Door, Rally, Front);
+		TGuardValue<bool> Quiet(bQuietMove, true);
+		OrderMove({ Victim }, Rally, true, EVLFormation::Line);
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("roam: %s struck, runs home"), *Victim->GetDisplayName());
+	if (Victim->Team == UVLBattle::Player)
+	{
+		const FVector At = Victim->GetActorLocation();
+		Battle->PushAlert(FString::Printf(TEXT("Your %s was attacked: running home"), *Victim->GetDisplayName()), EVLAlert::Attack, &At);
+	}
+}
+
+int32 UVLCommand::Dismiss(const TArray<AVLKing*>& InUnits)
+{
+	int32 N = 0;
+	for (AVLKing* U : Living(InUnits))
+	{
+		if (!U->IsTroop())
+		{
+			continue;               // King David is not sent away
+		}
+		ClearStanding({ U });
+		OnUnitDied(U);
+		UE_LOG(LogVoxelLab, Log, TEXT("dismiss: %s at %s"), *U->GetDisplayName(), *U->GetFeet().ToCompactString());
+		U->Die();                   // quietly: no cry, not counted as lost
+		++N;
+	}
+	return N;
+}
+
+bool UVLCommand::IsDismissAsked() const
+{
+	return GetWorld() && GetWorld()->GetRealTimeSeconds() - DismissAskedAt < DismissAskSeconds;
+}
+
+void UVLCommand::DismissCommand()
+{
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	const int32 Troops = Units.FilterByPredicate([](const AVLKing* U) { return U->IsTroop(); }).Num();
+	UVLBattle* Battle = UVLBattle::Get(this);
+	if (Units.Num() == 0 || !Battle)
+	{
+		return;
+	}
+	if (Troops == 0)
+	{
+		Battle->PushAlert(TEXT("King David cannot be dismissed"));
+		Battle->Play2D(TEXT("S_UIError"), 0.4f);
+		return;
+	}
+	if (!IsDismissAsked())
+	{
+		DismissAskedAt = GetWorld()->GetRealTimeSeconds();       // the first press only asks
+		Battle->PushAlert(FString::Printf(TEXT("Press K again to dismiss %d %s (no refund)"), Troops, Troops == 1 ? TEXT("troop") : TEXT("troops")));
+		return;
+	}
+	DismissAskedAt = -100.0;
+	const int32 N = Dismiss(Units);
+	Battle->PushAlert(FString::Printf(TEXT("%d %s dismissed"), N, N == 1 ? TEXT("troop") : TEXT("troops")));
+}
+
+bool UVLCommand::MarchTogether(const TArray<AVLKing*>& Units, EVLFormation Shape) const
+{
+	if (Units.Num() < 2)
+	{
+		return false;
+	}
+	if (Shape != EVLFormation::Loose)
+	{
+		return true;                // a formation holds together on the march: the slowest sets the pace
+	}
+	const int32 P = PlatoonOf(Units);
+	return P != INDEX_NONE ? Platoons[P].bMarchTogether : bLooseMarchTogether;
+}
+
+bool UVLCommand::SelectionMarchTogether() const
+{
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	const int32 P = PlatoonOf(Units);
+	return SelectionFormation() != EVLFormation::Loose || (P != INDEX_NONE ? Platoons[P].bMarchTogether : bLooseMarchTogether);
+}
+
+void UVLCommand::ToggleMarchTogether()
+{
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	if (Units.Num() == 0)
+	{
+		return;
+	}
+	const int32 P = PlatoonOf(Units);
+	bool& bSetting = P != INDEX_NONE ? Platoons[P].bMarchTogether : bLooseMarchTogether;
+	bSetting = !bSetting;
+	const bool bNow = MarchTogether(Units, SelectionFormation());
+	// a march under way follows the change at once
+	float Slowest = TNumericLimits<float>::Max();
+	for (const AVLKing* U : Units)
+	{
+		Slowest = FMath::Min(Slowest, U->WalkSpeed);
+	}
+	for (AVLKing* U : Units)
+	{
+		U->PaceCap = (bNow && U->HasOrder() && Slowest < U->WalkSpeed - 1.f) ? Slowest : 0.f;
+	}
+	if (UVLBattle* Battle = UVLBattle::Get(this))
+	{
+		Battle->PushAlert(SelectionFormation() != EVLFormation::Loose ? FString(TEXT("In formation they always keep the slowest one's pace (march freely: Loose, F)"))
+			: (bSetting ? FString(TEXT("March together: the slowest sets the pace")) : FString(TEXT("March freely: each at its own speed"))));
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("march together: %s"), bSetting ? TEXT("on") : TEXT("off"));
+}
+
+void UVLCommand::Arm(EVLArm Mode)
+{
+	Armed = EVLArm::None;
+	ArmedAt = -1.0;
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	bool bOk = false;
+	switch (Mode)
+	{
+	case EVLArm::AttackGround: bOk = Units.ContainsByPredicate([](const AVLKing* U) { return UVLArcherCombat::CanFight(U); }); break;
+	case EVLArm::AttackMove: bOk = Units.ContainsByPredicate([](const AVLKing* U) { return CanAttack(U); }); break;
+	case EVLArm::Patrol: bOk = Units.Num() > 0; break;
+	case EVLArm::Guard: bOk = SelectionCanGuard(); break;
+	default: break;
+	}
+	if (bOk)
+	{
+		Armed = Mode;
+		ArmedAt = GetWorld()->GetRealTimeSeconds();
+	}
+}
+
+EVLArm UVLCommand::GetArmed() const
+{
+	if (Armed == EVLArm::None || !GetWorld())
+	{
+		return EVLArm::None;
+	}
+	const float Lapse = Armed == EVLArm::AttackGround ? AttackGroundSeconds : ArmSeconds;
+	return GetWorld()->GetRealTimeSeconds() - ArmedAt < Lapse ? Armed : EVLArm::None;
+}
+
+void UVLCommand::CycleAttackArm()
+{
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	const bool bArchers = Units.ContainsByPredicate([](const AVLKing* U) { return UVLArcherCombat::CanFight(U); });
+	const bool bOthers = Units.ContainsByPredicate([](const AVLKing* U) { return CanAttack(U) && !UVLArcherCombat::CanFight(U); });
+	const EVLArm Now = GetArmed();
+	if (Now == EVLArm::AttackMove && bArchers)
+	{
+		Arm(EVLArm::AttackGround);
+	}
+	else if (Now == EVLArm::AttackGround)
+	{
+		Arm(EVLArm::AttackMove);
+	}
+	else
+	{
+		Arm(bArchers && !bOthers ? EVLArm::AttackGround : EVLArm::AttackMove);
+	}
+}
+
+bool UVLCommand::SelectionCanGuard() const
+{
+	TArray<AVLKing*> Units;
+	GetSelection(Units);
+	return Units.ContainsByPredicate([](const AVLKing* U) { return U->KindId() != EVLUnitKind::Builder; });
+}
+
+bool UVLCommand::GetRoute(const AVLKing* Unit, TArray<FVector>& OutPoints, bool& bOutLoop, int32& OutNext, int32* OutId) const
+{
+	for (const FRoute& R : Routes)
+	{
+		if (R.Members.Contains(const_cast<AVLKing*>(Unit)))
+		{
+			OutPoints = R.Points;
+			bOutLoop = R.bLoop;
+			OutNext = R.Next;
+			if (OutId)
+			{
+				*OutId = R.Id;
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+FString UVLCommand::DescribeOrders(const TArray<AVLKing*>& Units) const
+{
+	if (Units.Num() == 0)
+	{
+		return FString();
+	}
+	const AVLKing* U = Units[0];
+	TArray<FVector> Points;
+	bool bLoop = false;
+	int32 Next = 0;
+	if (GetRoute(U, Points, bLoop, Next))
+	{
+		return bLoop ? FString::Printf(TEXT("Patrolling (%d points)"), Points.Num()) : FString(TEXT("Attack-move"));
+	}
+	if (const AActor* Ward = GuardWardOf(U))
+	{
+		const UVLBattle* Battle = UVLBattle::Get(this);
+		const FVLBuildingState* B = Battle ? Battle->FindBuilding(Ward) : nullptr;
+		return FString::Printf(TEXT("Guarding %s"), B ? *(TEXT("the ") + B->Name) : (Cast<AVLKing>(Ward) ? *Cast<AVLKing>(Ward)->GetDisplayName() : TEXT("")));
+	}
+	if (IsRoaming(U))
+	{
+		return TEXT("Roaming");
+	}
+	if (U->bHoldOrder)
+	{
+		return TEXT("Holding its ground");
+	}
+	return FString();
+}
+
+void UVLCommand::TickOrders(float Dt)
+{
+	// ---- patrols and attack-moves: the next leg once nobody is walking or fighting; a leg cut short by a fight is
+	// walked again (the main game's units kept their destination through a fight)
+	for (int32 i = Routes.Num() - 1; i >= 0; --i)
+	{
+		FRoute& R = Routes[i];
+		R.Members.RemoveAll([](const TWeakObjectPtr<AVLKing>& M) { return !M.IsValid() || M->IsDead() || PlayedByHand(M.Get()); });
+		if (R.Members.Num() == 0 || R.Points.Num() == 0)
+		{
+			Routes.RemoveAt(i);
+			continue;
+		}
+		R.Settle -= Dt;
+		if (R.Settle > 0.f)
+		{
+			continue;
+		}
+		TArray<AVLKing*> Live;
+		bool bBusy = false;
+		for (const TWeakObjectPtr<AVLKing>& M : R.Members)
+		{
+			Live.Add(M.Get());
+			bBusy |= M->IsOnOrder() || IsFightingNow(M.Get());
+		}
+		if (bBusy)
+		{
+			continue;
+		}
+		const float Reach = 280.f + 90.f * FMath::Sqrt(float(Live.Num()));
+		const bool bThere = FVector::Dist2D(Centroid(Live), R.Points[R.Next]) < Reach;
+		if (!bThere && R.Tries < 3)
+		{
+			++R.Tries;
+			R.Settle = 1.f;
+			IssueLeg(R);
+			continue;
+		}
+		if (!R.bLoop && R.Next >= R.Points.Num() - 1)
+		{
+			UE_LOG(LogVoxelLab, Log, TEXT("attack-move: %d unit(s) at the end of their way"), Live.Num());
+			for (AVLKing* U : Live)
+			{
+				U->bAttackMove = false;
+			}
+			Routes.RemoveAt(i);
+			continue;
+		}
+		R.Next = (R.Next + 1) % R.Points.Num();
+		R.Tries = 0;
+		R.Settle = R.bLoop ? 1.5f : 0.6f;
+		IssueLeg(R);
+	}
+
+	OrdersClock -= Dt;
+	if (OrdersClock > 0.f)
+	{
+		return;
+	}
+	const float Step = 0.25f - OrdersClock;
+	OrdersClock = 0.25f;
+	const UWorld* World = GetWorld();
+	const double Now = World ? World->GetTimeSeconds() : 0.0;
+
+	// ---- guards: at their posts (which move with a unit they guard); a chase that takes one too far from its ward
+	// is let go (one that struck the ward or the guard is run down further)
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	for (int32 i = GuardPosts.Num() - 1; i >= 0; --i)
+	{
+		FGuardPost& G = GuardPosts[i];
+		AVLKing* U = G.Unit.Get();
+		FVector Ward;
+		if (!U || U->IsDead() || PlayedByHand(U) || !WardPos(G.Ward.Get(), Ward))
+		{
+			if (U && U->IsAlive() && !G.Ward.IsValid())
+			{
+				U->Post = U->GetFeet();
+			}
+			GuardPosts.RemoveAt(i);     // the ward fell: the guard stands where it is
+			continue;
+		}
+		float Leash = GuardLeash;
+		GuardWardOf(U, &Leash);
+		if (AActor* Foe = FightTarget(U))
+		{
+			G.bSent = false;
+			// (one that struck the guard or its ward lately is run down further)
+			bool bStruck = Now - U->LastStruckTime < 4.0;
+			if (const AVLKing* WardUnit = Cast<AVLKing>(G.Ward.Get()))
+			{
+				bStruck |= Now - WardUnit->LastStruckTime < 4.0;
+			}
+			else if (const FVLBuildingState* WB = Battle ? Battle->FindBuilding(G.Ward.Get()) : nullptr)
+			{
+				bStruck |= Now - WB->LastHit < 4.0;
+			}
+			const float Far = Leash * (bStruck ? 1.8f : 1.f);
+			const float FoeFromWard = Battle ? Battle->DistanceTo(Foe, Ward) : FVector::Dist2D(Foe->GetActorLocation(), Ward);
+			if (FoeFromWard > Far || FVector::Dist2D(U->GetFeet(), Ward) > Far * 1.3f)
+			{
+				StopAttack(U);
+				U->bAutoAttack = false;
+				UE_LOG(LogVoxelLab, Log, TEXT("guard: %s lets %s go (%.0f cm from its ward)"), *U->GetDisplayName(), *Foe->GetName(), FoeFromWard);
+			}
+			continue;
+		}
+		if (IsFightingNow(U))
+		{
+			continue;                   // (at the ground, or a dummy)
+		}
+		FVector2D Post;
+		GuardPostWorld(G, Post);
+		const bool bWardMoved = FVector2D::Distance(FVector2D(Ward), G.SentFor) > 180.f;
+		if ((!G.bSent && !U->HasOrder() && FVector2D::Distance(FVector2D(U->GetFeet()), Post) > 120.f) || (bWardMoved && Cast<AVLKing>(G.Ward.Get())))
+		{
+			TGuardValue<bool> Inner(bInnerOrder, true);
+			TGuardValue<bool> Quiet(bQuietMove, true);
+			OrderMove({ U }, FVector(Post.X, Post.Y, Ward.Z), FVector2D::Distance(FVector2D(U->GetFeet()), Post) > 900.f, EVLFormation::Line);
+			G.bSent = true;
+			G.SentFor = FVector2D(Ward);
+		}
+		U->Post = FVector(Post.X, Post.Y, Ward.Z);  // (a defensive guard comes back here)
+	}
+
+	// ---- roamers: on to a new spot when one is reached (or after 40 s on the way to it)
+	for (int32 i = Roamers.Num() - 1; i >= 0; --i)
+	{
+		FRoamer& R = Roamers[i];
+		AVLKing* U = R.Unit.Get();
+		if (!U || U->IsDead() || PlayedByHand(U))
+		{
+			Roamers.RemoveAt(i);
+			continue;
+		}
+		R.LegTime += Step;
+		if (!U->IsOnOrder() || R.LegTime > 40.f)
+		{
+			PickRoamPoint(R);
+		}
+	}
+}
+
+// ------------------------------------------------------------------------------------------------ console (tests)
+
+namespace
+{
+	/** selection | all | troops | king | archers | swordsmen | spies | builders | enemy | a name (Swordsman_2). */
+	void WhoOf(UWorld* World, const FString& Who, TArray<AVLKing*>& Out)
+	{
+		Out.Reset();
+		if (Who.Equals(TEXT("selection"), ESearchCase::IgnoreCase) || Who.Equals(TEXT("sel"), ESearchCase::IgnoreCase))
+		{
+			if (UVLCommand* Command = UVLCommand::Get(World))
+			{
+				Command->GetSelection(Out);
+			}
+			return;
+		}
+		const FString Name = Who.Replace(TEXT("_"), TEXT(" "));
+		const bool bEnemy = Who.Equals(TEXT("enemy"), ESearchCase::IgnoreCase);
+		for (TActorIterator<AVLKing> It(World); It; ++It)
+		{
+			if (It->IsDead())
+			{
+				continue;
+			}
+			if (It->GetDisplayName().Equals(Name, ESearchCase::IgnoreCase) || (bEnemy && It->Team != UVLBattle::Player))
+			{
+				Out.Add(*It);
+				continue;
+			}
+			if (It->Team != UVLBattle::Player)
+			{
+				continue;
+			}
+			const FString& K = It->GetKind();
+			if (Who.Equals(TEXT("all"), ESearchCase::IgnoreCase) || (Who.Equals(TEXT("troops"), ESearchCase::IgnoreCase) && It->IsTroop())
+				|| (Who.Equals(TEXT("king"), ESearchCase::IgnoreCase) && !It->IsTroop()) || (Who.Equals(TEXT("archers"), ESearchCase::IgnoreCase) && K == TEXT("Archer"))
+				|| (Who.Equals(TEXT("swordsmen"), ESearchCase::IgnoreCase) && K == TEXT("Swordsman")) || (Who.Equals(TEXT("spies"), ESearchCase::IgnoreCase) && K == TEXT("Spy"))
+				|| (Who.Equals(TEXT("builders"), ESearchCase::IgnoreCase) && K == TEXT("Builder")))
+			{
+				Out.Add(*It);
+			}
+		}
+		Out.Sort([](const AVLKing& A, const AVLKing& B) { return A.GetDisplayName() < B.GetDisplayName(); });
+	}
+
+	FVector GroundAt(UWorld* World, float X, float Y)
+	{
+		FVector P(X, Y, 0.f);
+		FHitResult Hit;
+		FCollisionQueryParams Params(TEXT("OrderGround"), false);
+		for (TActorIterator<APawn> It(World); It; ++It)
+		{
+			Params.AddIgnoredActor(*It);
+		}
+		if (World->LineTraceSingleByChannel(Hit, P + FVector(0.f, 0.f, 6000.f), P - FVector(0.f, 0.f, 3000.f), ECC_Visibility, Params))
+		{
+			P = Hit.ImpactPoint;
+		}
+		return P;
+	}
+
+	void Simple(const TArray<FString>& Args, UWorld* World, TFunctionRef<void(UVLCommand&, const TArray<AVLKing*>&)> Do)
+	{
+		UVLCommand* Command = UVLCommand::Get(World);
+		if (!Command)
+		{
+			return;
+		}
+		TArray<AVLKing*> Units;
+		WhoOf(World, Args.Num() > 0 ? Args[0] : TEXT("selection"), Units);
+		Do(*Command, Units);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs CmdStop(TEXT("vl.Stop"), TEXT("vl.Stop [who]: drop every order (default: the selection)"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			Simple(Args, World, [](UVLCommand& C, const TArray<AVLKing*>& U) { C.OrderStop(U); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdHold(TEXT("vl.Hold"), TEXT("vl.Hold [who]: hold ground until the next order"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			Simple(Args, World, [](UVLCommand& C, const TArray<AVLKing*>& U) { C.OrderHold(U); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdRoam(TEXT("vl.Roam"), TEXT("vl.Roam [who]: the Spies among them roam"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			Simple(Args, World, [](UVLCommand& C, const TArray<AVLKing*>& U) { UE_LOG(LogVoxelLab, Log, TEXT("roam: %d"), C.OrderRoam(U)); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdDismiss(TEXT("vl.Dismiss"), TEXT("vl.Dismiss [who]: remove those troops for good"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			Simple(Args, World, [](UVLCommand& C, const TArray<AVLKing*>& U) { UE_LOG(LogVoxelLab, Log, TEXT("dismissed %d"), C.Dismiss(U)); });
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdMarch(TEXT("vl.March"), TEXT("vl.March: march together on / off for the selection (as M)"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (UVLCommand* C = UVLCommand::Get(World))
+			{
+				C->ToggleMarchTogether();
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPatrol(TEXT("vl.Patrol"), TEXT("vl.Patrol <who> X Y [X Y ...] [run]: patrol from where they stand through the points and back"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UVLCommand* C = UVLCommand::Get(World);
+			if (!C || Args.Num() < 3)
+			{
+				return;
+			}
+			TArray<AVLKing*> Units;
+			WhoOf(World, Args[0], Units);
+			TArray<FVector> Points;
+			for (int32 i = 1; i + 1 < Args.Num() && Args[i].IsNumeric() && Args[i + 1].IsNumeric(); i += 2)
+			{
+				Points.Add(GroundAt(World, FCString::Atof(*Args[i]), FCString::Atof(*Args[i + 1])));
+			}
+			C->OrderPatrol(Units, Points, Args.Last().Equals(TEXT("run"), ESearchCase::IgnoreCase), Units.Num() > 1 ? C->SelectionFormation() : EVLFormation::Line);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdAttackMove(TEXT("vl.AttackMove"), TEXT("vl.AttackMove <who> X Y [queue] [run]: march there fighting what they meet"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UVLCommand* C = UVLCommand::Get(World);
+			if (!C || Args.Num() < 3)
+			{
+				return;
+			}
+			TArray<AVLKing*> Units;
+			WhoOf(World, Args[0], Units);
+			const bool bQueue = Args.ContainsByPredicate([](const FString& A) { return A.Equals(TEXT("queue"), ESearchCase::IgnoreCase); });
+			const bool bRun = Args.ContainsByPredicate([](const FString& A) { return A.Equals(TEXT("run"), ESearchCase::IgnoreCase); });
+			C->OrderAttackMove(Units, GroundAt(World, FCString::Atof(*Args[1]), FCString::Atof(*Args[2])), bRun, Units.Num() > 1 ? C->SelectionFormation() : EVLFormation::Line, bQueue);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdGuard(TEXT("vl.Guard"), TEXT("vl.Guard <who> <building name | unit name | king>: guard it"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UVLCommand* C = UVLCommand::Get(World);
+			if (!C || Args.Num() < 2)
+			{
+				return;
+			}
+			TArray<AVLKing*> Units;
+			WhoOf(World, Args[0], Units);
+			FString Name = Args[1];
+			for (int32 i = 2; i < Args.Num(); ++i)
+			{
+				Name += TEXT(" ") + Args[i];
+			}
+			Name.ReplaceInline(TEXT("_"), TEXT(" "));
+			AActor* Ward = nullptr;
+			const FName Tag(*(TEXT("Name:") + Name));
+			for (TActorIterator<AActor> It(World); It && !Ward; ++It)
+			{
+				if (It->ActorHasTag(Tag))
+				{
+					Ward = *It;
+				}
+			}
+			if (!Ward)
+			{
+				TArray<AVLKing*> Who;
+				WhoOf(World, Name, Who);
+				Ward = Who.Num() > 0 ? Who[0] : nullptr;
+			}
+			UE_LOG(LogVoxelLab, Log, TEXT("guard: %d of %d unit(s) guard %s"), Ward ? C->OrderGuard(Units, Ward) : 0, Units.Num(), *GetNameSafe(Ward));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdOrders(TEXT("vl.Orders"), TEXT("log every unit's standing order (patrol, attack-move, guard, hold, roam) and pace"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			UVLCommand* C = UVLCommand::Get(World);
+			if (!C)
+			{
+				return;
+			}
+			for (TActorIterator<AVLKing> It(World); It; ++It)
+			{
+				if (It->IsDead())
+				{
+					continue;
+				}
+				TArray<FVector> Points;
+				bool bLoop = false;
+				int32 Next = 0;
+				FString What = C->DescribeOrders({ *It });
+				if (C->GetRoute(*It, Points, bLoop, Next))
+				{
+					What += FString::Printf(TEXT(" -> point %d %s"), Next, *Points[Next].ToCompactString());
+				}
+				const FVector F = It->GetFeet();
+				UE_LOG(LogVoxelLab, Log, TEXT("orders %-14s team %d at %6.0f %6.0f  %s%s  speed %.0f (walk %.0f run %.0f pace %.0f) stance %s%s"), *It->GetDisplayName(), It->Team, F.X, F.Y,
+					What.IsEmpty() ? TEXT("-") : *What, It->HasOrder() ? TEXT(" [walking]") : TEXT(""), It->GetVelocity().Size2D(), It->WalkSpeed, It->RunSpeed, It->PaceCap,
+					UVLCommand::StanceName(It->Stance), It->bAttackMove ? TEXT(" attack-move") : TEXT(""));
+			}
+		}));
 }

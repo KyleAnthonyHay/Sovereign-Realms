@@ -1,0 +1,21 @@
+{
+ "name": "SM_KingB_ForeR_L2",
+ "faces": 122,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1391,
+   -0.2484,
+   -0.2859
+  ],
+  [
+   0.1109,
+   0.1016,
+   0.0641
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_KingB_ForeR",
+ "voxel": 0.05,
+ "triangles": 244
+}

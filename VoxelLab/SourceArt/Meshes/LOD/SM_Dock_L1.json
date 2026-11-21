@@ -1,0 +1,21 @@
+{
+ "name": "SM_Dock_L1",
+ "faces": 2198,
+ "collision": "none",
+ "bounds": [
+  [
+   -4.25,
+   -12.75,
+   -4.0
+  ],
+  [
+   4.25,
+   0.25,
+   2.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Dock",
+ "voxel": 0.25,
+ "triangles": 4396
+}

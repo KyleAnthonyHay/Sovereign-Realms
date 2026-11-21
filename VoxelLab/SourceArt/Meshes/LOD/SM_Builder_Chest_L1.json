@@ -1,0 +1,21 @@
+{
+ "name": "SM_Builder_Chest_L1",
+ "faces": 439,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.225,
+   -0.175,
+   -0.025
+  ],
+  [
+   0.225,
+   0.15,
+   0.5
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Builder_Chest",
+ "voxel": 0.025,
+ "triangles": 878
+}

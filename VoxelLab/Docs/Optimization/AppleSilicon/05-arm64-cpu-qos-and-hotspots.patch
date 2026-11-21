@@ -1,0 +1,170 @@
+diff --git a/Source/VoxelLab/VLKing.cpp b/Source/VoxelLab/VLKing.cpp
+index 637df24..b149400 100644
+--- a/Source/VoxelLab/VLKing.cpp
++++ b/Source/VoxelLab/VLKing.cpp
+@@ -2931,12 +2931,13 @@ void AVLKing::PoseFigure(float AnimDt)
+ 	// (a longer stride, StrideScale: the feet reach further, so the pelvis drops further for the legs to reach them;
+ 	// the reach stays Stride / 2 pi, which keeps a planted foot still on the ground)
+ 	P[P_Drop] = W * ((0.5f + 1.5f * R) + (3.4f + 1.6f * R) * StrideScale * StrideScale * StrideScale * Sw * Sw);     // (~ what a 67 cm leg needs at that reach)
++	const float LiftCos = FMath::Cos(Phase + 0.3f);
+ 	{
+ 		const float Reach = W * (23.f + 7.f * R) * StrideScale, Lift = W * (6.f + 10.f * R) * FMath::Sqrt(StrideScale);
+ 		P[P_FootLX] = Reach * Sw;
+-		P[P_FootLZ] = Lift * FMath::Pow(FMath::Max(0.f, FMath::Cos(Phase + 0.3f)), 1.2f);
++		P[P_FootLZ] = (Lift > 0.f && LiftCos > 0.f) ? Lift * FMath::Pow(LiftCos, 1.2f) : 0.f;
+ 		P[P_FootRX] = -Reach * Sw;
+-		P[P_FootRZ] = Lift * FMath::Pow(FMath::Max(0.f, -FMath::Cos(Phase + 0.3f)), 1.2f);
++		P[P_FootRZ] = (Lift > 0.f && LiftCos < 0.f) ? Lift * FMath::Pow(-LiftCos, 1.2f) : 0.f;
+ 	}
+ 	P[P_PelvLean] = W * (2.f + 4.f * R);
+ 	P[P_PelvTwist] = Sw * (5.f + 3.f * R) * W;                 // the hip goes forward with its leg ..
+@@ -3121,7 +3122,6 @@ void AVLKing::PoseFigure(float AnimDt)
+ 	// lifts the feet). Two steps a cycle: one every Stride / (2 Speed) seconds.
+ 	if (((bFootDust && Dust) || bFootsteps) && AnimDt > 0.f)
+ 	{
+-		const float LiftCos = FMath::Cos(Phase + 0.3f);
+ 		const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+ 		const FVector Back = Speed > 1.f ? -FVector(Velocity.X, Velocity.Y, 0.f).GetSafeNormal() : -GetActorForwardVector();
+ 		for (int32 Side = 0; Side < 2; ++Side)
+@@ -3292,6 +3292,9 @@ void AVLKing::UpdateCape(float AnimDt)
+ 		CapeBackLower = Lower < CapeBackLower ? Lower : FMath::Min(Lower, CapeBackLower + 90.f * AnimDt);
+ 	}
+ 	const float SpeedShare = FMath::Clamp(GetVelocity().Size() / FMath::Max(RunSpeed, 1.f), 0.f, 1.2f);
++	const float InvDt = bStep ? (1.f / AnimDt) : 0.f;
++	const float VelAlpha = bStep ? (1.f - FMath::Exp(-AnimDt * 18.f)) : 0.f;
++	const float AccAlpha = bStep ? (1.f - FMath::Exp(-AnimDt * 10.f)) : 0.f;
+ 	for (int32 C = 0; C < CapeCols; ++C)
+ 	{
+ 		float YawAbove = ChestYaw;
+@@ -3306,10 +3309,10 @@ void AVLKing::UpdateCape(float AnimDt)
+ 			if (bStep)
+ 			{
+ 				const float Deep = float(Row + 1) / float(CapeRows);
+-				const FVector V = (Hinge - N.Prev) / AnimDt;
++				const FVector V = (Hinge - N.Prev) * InvDt;
+ 				const FVector Was = N.Vel;
+-				N.Vel = FMath::Lerp(N.Vel, V, 1.f - FMath::Exp(-AnimDt * 18.f));
+-				N.Acc = FMath::Lerp(N.Acc, (N.Vel - Was) / AnimDt, 1.f - FMath::Exp(-AnimDt * 10.f));
++				N.Vel = FMath::Lerp(N.Vel, V, VelAlpha);
++				N.Acc = FMath::Lerp(N.Acc, (N.Vel - Was) * InvDt, AccAlpha);
+ 				const float Vf = FVector::DotProduct(N.Vel, Fwd), Vr = FVector::DotProduct(N.Vel, Right), Vz = N.Vel.Z;
+ 				const float Af = FVector::DotProduct(N.Acc, Fwd), Ar = FVector::DotProduct(N.Acc, Right);
+ 				// where it wants to hang: streamed back by his speed, thrown by his acceleration, lifted by a fall,
+diff --git a/Source/VoxelLab/VoxelLab.cpp b/Source/VoxelLab/VoxelLab.cpp
+index 176c3d1..c1fb318 100644
+--- a/Source/VoxelLab/VoxelLab.cpp
++++ b/Source/VoxelLab/VoxelLab.cpp
+@@ -1,6 +1,112 @@
+ #include "VoxelLab.h"
+ #include "Modules/ModuleManager.h"
++#if PLATFORM_MAC
++#include "Async/Fundamental/Scheduler.h"
++#include "Engine/World.h"
++#include "HAL/IConsoleManager.h"
++#include "HAL/PlatformMisc.h"
++#include "Misc/App.h"
++#include "RenderingThread.h"
++#include "RHICommandList.h"
++#include <pthread/qos.h>
++#include <sys/sysctl.h>
++#endif
+ 
+ DEFINE_LOG_CATEGORY(LogVoxelLab);
+ 
+-IMPLEMENT_PRIMARY_GAME_MODULE(FDefaultGameModuleImpl, VoxelLab, "VoxelLab");
++namespace
++{
++#if PLATFORM_MAC
++	TAutoConsoleVariable<int32> CVarMacWorkers(TEXT("vl.Opt.MacWorkers"), 1,
++		TEXT("1: lift UE's 4-worker game cap on Apple Silicon by sizing foreground workers to P-cores and background workers to E-cores. 0: engine default."));
++	TAutoConsoleVariable<int32> CVarMacQoS(TEXT("vl.Opt.MacQoS"), 1,
++		TEXT("1: set QOS_CLASS_USER_INTERACTIVE on Game, Render and RHI threads so macOS XNU keeps frame-critical threads on P-cores. 0: engine default."));
++
++	int32 ReadSysctlInt(const char* Name)
++	{
++		int32 Value = 0;
++		size_t Size = sizeof(Value);
++		return sysctlbyname(Name, &Value, &Size, nullptr, 0) == 0 ? Value : 0;
++	}
++
++	void ApplyAppleSiliconThreading()
++	{
++		static bool bApplied = false;
++		if (bApplied)
++		{
++			return;
++		}
++		bApplied = true;
++
++		if (CVarMacQoS.GetValueOnGameThread() != 0)
++		{
++			pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
++			ENQUEUE_RENDER_COMMAND(VLMacRenderThreadQoS)([](FRHICommandListImmediate& RHICmdList)
++			{
++				pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
++				RHICmdList.EnqueueLambda([](FRHICommandListImmediate&)
++				{
++					pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
++				});
++			});
++			UE_LOG(LogVoxelLab, Log, TEXT("apple-silicon: promoted Game/Render/RHI threads to QOS_CLASS_USER_INTERACTIVE"));
++		}
++
++		// Only resize workers in standalone Game/Shipping runs (never mutate Editor/PIE scheduler pools).
++		if (!GIsEditor && IsRunningGame() && CVarMacWorkers.GetValueOnGameThread() != 0)
++		{
++			const int32 PCores = ReadSysctlInt("hw.perflevel0.physicalcpu");
++			const int32 ECores = ReadSysctlInt("hw.perflevel1.physicalcpu");
++			if (PCores > 0)
++			{
++				// Reserve ~2 P-cores for GameThread + RenderThread/RHIThread; scale remaining P-cores to foreground
++				// workers and E-cores to background workers (UE's FGenericPlatformMisc caps Shipping at 4 total).
++				const uint32 Foreground = static_cast<uint32>(FMath::Clamp(PCores - 2, 2, 6));
++				const uint32 Background = static_cast<uint32>(FMath::Clamp(ECores > 0 ? ECores : 2, 2, 8));
++				const uint32 Current = LowLevelTasks::FScheduler::Get().GetNumWorkers();
++				if (Foreground + Background > Current)
++				{
++					LowLevelTasks::FScheduler::Get().RestartWorkers(Foreground, Background);
++					UE_LOG(LogVoxelLab, Log, TEXT("apple-silicon: workers %u -> %u (%u FG on %d P-cores, %u BG on %d E-cores)"),
++						Current, Foreground + Background, Foreground, PCores, Background, ECores);
++				}
++			}
++		}
++	}
++#endif
++}
++
++class FVoxelLabModule : public FDefaultGameModuleImpl
++{
++public:
++	virtual void StartupModule() override
++	{
++#if PLATFORM_MAC
++		PostWorldInitHandle = FWorldDelegates::OnPostWorldInitialization.AddLambda([](UWorld* World, const UWorld::InitializationValues)
++		{
++			if (World && (World->WorldType == EWorldType::Game || World->WorldType == EWorldType::PIE))
++			{
++				ApplyAppleSiliconThreading();
++			}
++		});
++#endif
++	}
++
++	virtual void ShutdownModule() override
++	{
++#if PLATFORM_MAC
++		if (PostWorldInitHandle.IsValid())
++		{
++			FWorldDelegates::OnPostWorldInitialization.Remove(PostWorldInitHandle);
++			PostWorldInitHandle.Reset();
++		}
++#endif
++	}
++
++private:
++#if PLATFORM_MAC
++	FDelegateHandle PostWorldInitHandle;
++#endif
++};
++
++IMPLEMENT_PRIMARY_GAME_MODULE(FVoxelLabModule, VoxelLab, "VoxelLab");

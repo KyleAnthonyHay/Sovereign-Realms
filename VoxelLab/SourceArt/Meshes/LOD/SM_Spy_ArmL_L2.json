@@ -1,0 +1,21 @@
+{
+ "name": "SM_Spy_ArmL_L2",
+ "faces": 104,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0859,
+   -0.1484,
+   -0.3828
+  ],
+  [
+   0.1641,
+   0.1516,
+   0.1172
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Spy_ArmL",
+ "voxel": 0.05,
+ "triangles": 208
+}

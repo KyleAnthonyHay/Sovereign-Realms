@@ -1,0 +1,21 @@
+{
+ "name": "SM_WatchTower_L1",
+ "faces": 14641,
+ "collision": "none",
+ "bounds": [
+  [
+   -5.5,
+   -7.25,
+   0.0
+  ],
+  [
+   5.5,
+   5.5,
+   20.5
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_WatchTower",
+ "voxel": 0.25,
+ "triangles": 29282
+}

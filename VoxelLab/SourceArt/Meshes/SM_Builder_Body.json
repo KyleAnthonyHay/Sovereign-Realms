@@ -1,0 +1,26 @@
+{
+ "name": "SM_Builder_Body",
+ "faces": 1430,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2791,
+   -0.2387,
+   -0.0541
+  ],
+  [
+   0.2769,
+   0.1655,
+   0.2575
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.7
+ ],
+ "part": "Body",
+ "triangles": 2861,
+ "blocks": 154
+}

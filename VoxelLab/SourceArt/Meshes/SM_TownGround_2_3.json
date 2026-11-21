@@ -1,6 +1,6 @@
 {
  "name": "SM_TownGround_2_3",
- "faces": 14604,
+ "faces": 15206,
  "collision": "complex",
  "bounds": [
   [
@@ -11,7 +11,7 @@
   [
    0.0,
    28.0,
-   3.0
+   4.0
   ]
  ],
  "lights": []
