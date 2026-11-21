@@ -1,0 +1,18 @@
+{
+ "name": "SM_Trough",
+ "faces": 1024,
+ "collision": "complex",
+ "bounds": [
+  [
+   -0.75,
+   -0.3125,
+   0.0
+  ],
+  [
+   0.75,
+   0.3125,
+   0.5
+  ]
+ ],
+ "lights": []
+}

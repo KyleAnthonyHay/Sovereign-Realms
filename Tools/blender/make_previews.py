@@ -1,6 +1,7 @@
 """Previews from the shipped sheets: line-up, contact sheets, animated GIFs, skirmish mock.
 
     Tools/.venv/bin/python Tools/blender/make_previews.py [--no-gif]
+    Tools/.venv/bin/python Tools/blender/make_previews.py [--no-gif] medic     only these characters' contact sheets and GIFs
 
 Everything is read back from SourceArt/Characters/<name>_color.png / _teammask.png / .json, so the previews show
 exactly what the game will sample, tinted with the in-game team formula.
@@ -273,6 +274,15 @@ def normal_check(sheets):
 
 def main():
     os.makedirs(PREV, exist_ok=True)
+    only = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if only:        # just these characters: their contact sheets and GIFs, nothing shared is rewritten
+        for s in [Sheet(n) for n in only]:
+            for an in s.meta["animations"]:
+                contact(s, an)
+                if "--no-gif" not in sys.argv:
+                    print(s.name, an, "gif frame ms", gif(s, an))
+        print("previews in", PREV)
+        return
     sheets = [Sheet(n) for n in NAMES]
     print("lineup", lineup(sheets))
     skirmish(sheets)

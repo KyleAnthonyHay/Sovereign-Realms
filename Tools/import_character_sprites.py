@@ -28,7 +28,8 @@ TC = unreal.TextureCompressionSettings
 
 # source file stem -> (asset name, kind)
 SHEETS = []
-for troop in ("shieldbearer", "archer", "arrow", "miner", "farmer", "horseman", "catapult", "stone", "builder", "scout"):
+ONLY_SHEETS = globals().get("ONLY_SHEETS")      # e.g. ONLY_SHEETS = ["deer", "doe"]: import just these (the rest are left untouched)
+for troop in ("shieldbearer", "archer", "arrow", "miner", "farmer", "horseman", "catapult", "stone", "builder", "scout", "medic", "deer", "doe"):
     cap = troop.capitalize()
     SHEETS.append((troop + "_color", "T_%s_Color" % cap, "color"))
     SHEETS.append((troop + "_teammask", "T_%s_TeamMask" % cap, "mask"))
@@ -37,6 +38,8 @@ for troop in ("shieldbearer", "archer", "arrow", "miner", "farmer", "horseman", 
 # battlefield effects (SourceArt/FX, Tools/blender/make_fx.py): one strip each
 for fx in ("fire", "smoke", "dust", "debris", "impact"):
     SHEETS.append(("../FX/fx_" + fx, "T_FX_" + fx.capitalize(), "color"))
+if ONLY_SHEETS:
+    SHEETS = [s for s in SHEETS if s[0].split("_")[0] in ONLY_SHEETS]
 
 
 def import_textures():
@@ -108,4 +111,5 @@ def import_cards():
 if not eal.does_directory_exist(DST):
     eal.make_directory(DST)
 import_textures()
-import_cards()
+if not ONLY_SHEETS:
+    import_cards()

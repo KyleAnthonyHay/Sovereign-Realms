@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_LegR",
+ "faces": 727,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1397,
+   -0.14,
+   -0.375
+  ],
+  [
+   0.0908,
+   0.1397,
+   0.1265
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegR",
+ "triangles": 1454,
+ "blocks": 93
+}

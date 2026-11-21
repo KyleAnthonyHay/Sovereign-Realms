@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_Body",
+ "faces": 1017,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2,
+   -0.1825,
+   -0.25
+  ],
+  [
+   0.2,
+   0.1375,
+   0.195
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.725
+ ],
+ "part": "Body",
+ "parent": "",
+ "triangles": 2035,
+ "blocks": 100
+}

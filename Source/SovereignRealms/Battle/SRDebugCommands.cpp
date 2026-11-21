@@ -11,6 +11,7 @@
 #include "Battle/SRGridSubsystem.h"
 #include "Battle/SRPlatoonSubsystem.h"
 #include "Battle/SRGameFlowSubsystem.h"
+#include "Battle/SRMapInfo.h"
 #include "Kismet/GameplayStatics.h"
 #include "Containers/Ticker.h"
 #include "RenderCore.h"
@@ -20,15 +21,23 @@
 #include "Player/SRCameraPawn.h"
 #include "Units/SRUnit.h"
 #include "FX/SRBirds.h"
+#include "FX/SRLeaves.h"
 #include "EngineUtils.h"
 #include "Common/SRFeelSettings.h"
 #include "SovereignRealms.h"
 #include "Engine/World.h"
+#include "GenericPlatform/GenericApplication.h"
 #include "HAL/IConsoleManager.h"
 #include "UnrealClient.h"
 #include "InputKeyEventArgs.h"
 #include "TimerManager.h"
 #include "Misc/Paths.h"
+#include "Misc/FileHelper.h"
+#include "ImageUtils.h"
+#include "HAL/FileManager.h"
+#include "Engine/Engine.h"
+#include "Misc/App.h"
+#include "GameFramework/HUD.h"
 #include "Engine/GameViewportClient.h"
 #include "Widgets/SWindow.h"
 
@@ -51,6 +60,8 @@ namespace
 		if (N == TEXT("castle")) { return ESRBuildingType::Castle; }
 		if (N == TEXT("granary")) { return ESRBuildingType::Granary; }
 		if (N == TEXT("treasury")) { return ESRBuildingType::Treasury; }
+		if (N == TEXT("relic")) { return ESRBuildingType::RelicTower; }
+		if (N == TEXT("siege")) { return ESRBuildingType::SiegeTower; }
 		return ESRBuildingType::Farm;
 	}
 
@@ -58,6 +69,7 @@ namespace
 	{
 		const FString W = Name.ToLower();
 		if (W.StartsWith(TEXT("sc"))) { return ESRUnitType::Scout; }
+		if (W.StartsWith(TEXT("med"))) { return ESRUnitType::Medic; }
 		if (W.StartsWith(TEXT("a"))) { return ESRUnitType::Archer; }
 		if (W.StartsWith(TEXT("h")) || W.StartsWith(TEXT("r"))) { return ESRUnitType::Horseman; }
 		if (W.StartsWith(TEXT("c"))) { return ESRUnitType::Catapult; }
@@ -105,7 +117,7 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdSelectType(TEXT("sr.SelectType"), TEXT("sr.SelectType <0=Shieldbearer|1=Archer|2=Rider|3=Catapult|4=Builder|5=Scout>: select all player units of a type."),
+	FAutoConsoleCommandWithWorldAndArgs CmdSelectType(TEXT("sr.SelectType"), TEXT("sr.SelectType <0=Shieldbearer|1=Archer|2=Rider|3=Catapult|4=Builder|5=Scout|6=Medic>: select all player units of a type."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			ASRPlayerController* PC = GetSRController(World);
@@ -364,6 +376,25 @@ namespace
 			if (USRAISubsystem* AI = USRAISubsystem::Get(World)) { AI->SetPlayerAI(Args.Num() == 0 || Args[0] != TEXT("0")); }
 		}));
 
+	FAutoConsoleCommandWithWorldAndArgs CmdSandbox(TEXT("sr.Sandbox"), TEXT("sr.Sandbox [map]: start a sandbox match (both kingdoms built up, armies of every kind, the enemy never attacks)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->StartMatch(-1, Args.Num() > 0 ? FName(*Args[0]) : NAME_None, true); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdWatch(TEXT("sr.Watch"), TEXT("sr.Watch <type> [enemy]: log what every troop of that kind is doing."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!Battle || Args.Num() < 1) { return; }
+			const ESRUnitType Type = ParseUnitType(Args[0]);
+			const ESRTeam Team = Args.Num() > 1 && Args[1] == TEXT("enemy") ? ESRTeam::Enemy : ESRTeam::Player;
+			for (ASRUnit* U : Battle->GetUnits())
+			{
+				if (U && U->IsActive() && U->GetTeam() == Team && U->GetUnitType() == Type) { UE_LOG(LogSovereign, Log, TEXT("WATCH %s"), *U->DescribeState()); }
+			}
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs CmdAIStatus(TEXT("sr.AIStatus"), TEXT("Log each commander's economy, army and wave state."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
 		{
@@ -431,6 +462,36 @@ namespace
 				Castle->GetLevel(), Castle->GetPopProvided(), Castle->GetStoreCapacity(), Eco->GetStorage(Castle->Team, ESRResource::Gold), Eco->GetStorage(Castle->Team, ESRResource::Food));
 		}));
 
+	FAutoConsoleCommandWithWorldAndArgs CmdSetLevel(TEXT("sr.SetLevel"), TEXT("sr.SetLevel <castle|farm|mine|tower|barracks|range|stable|workshop|granary|treasury|all> <level> [enemy]: put every such building of a side at a level at once (free; testing the level looks)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
+			if (!Eco || Args.Num() < 2) { return; }
+			const ESRTeam Team = Args.Num() > 2 && Args[2] == TEXT("enemy") ? ESRTeam::Enemy : ESRTeam::Player;
+			const bool bAll = Args[0] == TEXT("all");
+			const ESRBuildingType Type = ParseBuildingType(Args[0]);
+			int32 Count = 0;
+			for (ASRBuilding* B : Eco->GetBuildings())
+			{
+				if (B && B->Team == Team && B->IsAlive() && B->IsUpgradable() && (bAll || B->BuildingType == Type)) { B->SetLevelNow(FCString::Atoi(*Args[1])); ++Count; }
+			}
+			UE_LOG(LogSovereign, Log, TEXT("sr.SetLevel %s %s: %d buildings"), *Args[0], *Args[1], Count);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPutBuilding(TEXT("sr.PutBuilding"), TEXT("sr.PutBuilding <castle|farm|mine|tower|barracks|range|stable|workshop|granary|treasury> X Y [level] [enemy]: stand a finished building there at once (free, ignores every rule; testing)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			FVector2D XY;
+			if (Args.Num() < 3) { return; }
+			TArray<FString> Rest(Args.GetData() + 1, 2);
+			if (!ParseXY(Rest, XY)) { return; }
+			const ESRTeam Team = Args.Last() == TEXT("enemy") ? ESRTeam::Enemy : ESRTeam::Player;
+			const FVector At = GroundAt(World, XY);
+			ASRBuilding* B = ASRBuilding::SpawnBuilding(World, ParseBuildingType(Args[0]), Team, At, false);
+			if (B && Args.Num() > 3 && Args[3] != TEXT("enemy")) { B->SetLevelNow(FCString::Atoi(*Args[3])); }
+			UE_LOG(LogSovereign, Log, TEXT("sr.PutBuilding %s at (%.0f, %.0f, %.0f): %s"), *Args[0], At.X, At.Y, At.Z, B ? *B->GetActorNameOrLabel() : TEXT("FAILED"));
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs CmdScoutCooldown(TEXT("sr.ScoutCooldown"), TEXT("sr.ScoutCooldown [seconds] [enemy]: log (or set) the wait before a kingdom may train its next Scout, and why it could not train one now."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
@@ -458,6 +519,573 @@ namespace
 			UE_LOG(LogSovereign, Log, TEXT("sr.Spawn: %s at (%.0f, %.0f)"), U ? *U->GetLabel() : TEXT("FAILED"), XY.X, XY.Y);
 		}));
 
+	FAutoConsoleCommandWithWorldAndArgs CmdOrderPath(TEXT("sr.OrderPath"), TEXT("sr.OrderPath X Y: add a point to the selection's pathway (like Option+right-click)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			FVector2D XY;
+			ASRPlayerController* PC = GetSRController(World);
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!PC || !Battle || !ParseXY(Args, XY)) { return; }
+			TArray<ASRUnit*> Units;
+			for (const TWeakObjectPtr<ASRUnit>& U : PC->GetSelection()) { if (U.IsValid() && U->IsActive() && U->GetTeam() == ESRTeam::Player) { Units.Add(U.Get()); } }
+			Battle->ExtendPath(Units, XY, false, PC->GetSelectionFormation());
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPatrolPoint(TEXT("sr.PatrolPoint"), TEXT("sr.PatrolPoint X Y: add a point to the selection's patrol (like P, then Option+click)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			FVector2D XY;
+			ASRPlayerController* PC = GetSRController(World);
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!PC || !Battle || !ParseXY(Args, XY)) { return; }
+			TArray<ASRUnit*> Units;
+			for (const TWeakObjectPtr<ASRUnit>& U : PC->GetSelection()) { if (U.IsValid() && U->IsActive() && U->GetTeam() == ESRTeam::Player) { Units.Add(U.Get()); } }
+			Battle->ExtendPatrol(Units, XY, PC->GetSelectionFormation());
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdHealWard(TEXT("sr.Heal"), TEXT("sr.Heal X Y: the selected Medics look after the player's troop nearest that spot (like right-clicking it)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			FVector2D XY;
+			ASRPlayerController* PC = GetSRController(World);
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!PC || !Battle || !ParseXY(Args, XY)) { return; }
+			ASRUnit* Best = nullptr;
+			float BestD = TNumericLimits<float>::Max();
+			for (ASRUnit* U : Battle->GetUnits())
+			{
+				if (!U || !U->IsActive() || U->GetTeam() != ESRTeam::Player || U->IsSelected()) { continue; }
+				const float D = FVector2D::DistSquared(U->GetPos2D(), XY);
+				if (D < BestD) { BestD = D; Best = U; }
+			}
+			const bool bOk = PC->IssueHeal(Best);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Heal: %s"), bOk ? *Best->GetLabel() : TEXT("no medics selected / no troop"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdHurt(TEXT("sr.Hurt"), TEXT("sr.Hurt <fraction>: set the selected troops' health to this fraction (testing heals)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ASRPlayerController* PC = GetSRController(World);
+			if (!PC || Args.Num() < 1) { return; }
+			const float Frac = FMath::Clamp(FCString::Atof(*Args[0]), 0.01f, 1.f);
+			for (const TWeakObjectPtr<ASRUnit>& U : PC->GetSelection()) { if (U.IsValid() && U->IsAlive()) { U->SetHealthForLoad(U->Stats().MaxHealth * Frac); } }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdHurtBuilding(TEXT("sr.HurtBuilding"), TEXT("sr.HurtBuilding <fraction> [X Y | all]: put a building's health at this fraction (the one nearest X Y; without, every standing building of the player; 'all': both sides). Testing the fire and the damaged looks; 0 brings it down."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
+			if (!Eco || Args.Num() < 1) { return; }
+			const float Frac = FMath::Clamp(FCString::Atof(*Args[0]), 0.f, 1.f);
+			const bool bAll = Args.Num() == 2 && Args[1].Equals(TEXT("all"), ESearchCase::IgnoreCase);
+			TArray<ASRBuilding*> Which;
+			if (Args.Num() >= 3)
+			{
+				const FVector2D XY(FCString::Atof(*Args[1]), FCString::Atof(*Args[2]));
+				ASRBuilding* Best = nullptr;
+				float BestD = TNumericLimits<float>::Max();
+				for (ASRBuilding* B : Eco->GetBuildings())
+				{
+					if (!B || !B->IsFinished()) { continue; }
+					const float D = B->DistanceToFootprint(XY);
+					if (D < BestD) { BestD = D; Best = B; }
+				}
+				if (Best) { Which.Add(Best); }
+			}
+			else
+			{
+				for (ASRBuilding* B : Eco->GetBuildings()) { if (B && B->IsFinished() && (bAll || B->Team == ESRTeam::Player)) { Which.Add(B); } }
+			}
+			for (ASRBuilding* B : Which)
+			{
+				if (Frac <= 0.f) { B->ReceiveDamage(1.0e9f, nullptr); }
+				else { B->DebugSetHealthFrac(Frac); }
+				UE_LOG(LogSovereign, Log, TEXT("sr.HurtBuilding: %s at (%.0f, %.0f) health %.0f%%, fire %.2f"), *B->GetDisplayName(), B->GetActorLocation().X, B->GetActorLocation().Y,
+					B->GetHealthFrac() * 100.f, B->GetFireStrength());
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdFires(TEXT("sr.Fires"), TEXT("Log every burning building: its health, the fire's strength and how many seats are alight."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
+			if (!Eco) { return; }
+			int32 N = 0;
+			for (ASRBuilding* B : Eco->GetBuildings())
+			{
+				if (!B || B->GetFireStrength() <= 0.f) { continue; }
+				++N;
+				UE_LOG(LogSovereign, Log, TEXT("FIRE %s at (%.0f, %.0f): health %.0f%%, strength %.2f, seats alight %d"), *B->GetDisplayName(), B->GetActorLocation().X, B->GetActorLocation().Y,
+					B->GetHealthFrac() * 100.f, B->GetFireStrength(), B->DebugFireSeats());
+			}
+			UE_LOG(LogSovereign, Log, TEXT("FIRES %d building(s) burning"), N);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdCameraAngle(TEXT("sr.CameraAngle"), TEXT("sr.CameraAngle <0|1|2>: the camera angle setting (Options > Camera angle), for this session (testing)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (Args.Num() < 1) { return; }
+			GetMutableDefault<USRFeelSettings>()->CameraAngle = FMath::Clamp(FCString::Atoi(*Args[0]), 0, 2);
+			UE_LOG(LogSovereign, Log, TEXT("sr.CameraAngle %d"), USRFeelSettings::Get().CameraAngle);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdLeaves(TEXT("sr.Leaves"), TEXT("Log the falling leaves: trees read from the level, trees round the camera, leaves alive."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			for (TActorIterator<ASRLeaves> It(World); It; ++It)
+			{
+				UE_LOG(LogSovereign, Log, TEXT("LEAVES trees %d, in view %d, leaves alive %d"), It->NumTrees(), It->NumNear(), It->NumFalling());
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdSelectBuildingAt(TEXT("sr.SelectBuildingAt"), TEXT("sr.SelectBuildingAt X Y: select the building nearest that spot (like clicking it)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			FVector2D XY;
+			ASRPlayerController* PC = GetSRController(World);
+			const USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
+			if (!PC || !Eco || !ParseXY(Args, XY)) { return; }
+			ASRBuilding* Best = nullptr;
+			float BestD = TNumericLimits<float>::Max();
+			for (ASRBuilding* B : Eco->GetBuildings())
+			{
+				if (!B || !B->IsAlive()) { continue; }
+				const float D = B->DistanceToFootprint(XY);
+				if (D < BestD) { BestD = D; Best = B; }
+			}
+			PC->ClearSelection();
+			PC->SelectBuilding(Best);
+			UE_LOG(LogSovereign, Log, TEXT("sr.SelectBuildingAt: %s"), Best ? *Best->GetDisplayName() : TEXT("nothing"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdTrackpad(TEXT("sr.Trackpad"), TEXT("sr.Trackpad scroll DX DY | pinch M: feed the controller a trackpad gesture, as the Mac reports one (testing)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			ASRPlayerController* PC = GetSRController(World);
+			if (!PC || Args.Num() < 2) { return; }
+			const bool bPinch = Args[0] == TEXT("pinch");
+			const FVector2D D(FCString::Atof(*Args[1]), Args.Num() > 2 ? FCString::Atof(*Args[2]) : 0.f);
+			const bool bHandled = PC->InputGesture(FInputDeviceId::CreateFromInternalId(0), bPinch ? EGestureEvent::Magnify : EGestureEvent::Scroll, EGesturePhase::Update, D, false, 0);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Trackpad %s (%.1f, %.1f): %s"), *Args[0], D.X, D.Y, bHandled ? TEXT("handled") : TEXT("ignored"));
+		}));
+
+	// ---- the demo battle: a big war for the loading screen's recording ----
+	struct FDemoState
+	{
+		FTSTicker::FDelegateHandle Handle;
+		TWeakObjectPtr<UWorld> World;
+		FVector2D From = FVector2D::ZeroVector, To = FVector2D::ZeroVector;
+		double Elapsed = 0.0, Length = 30.0;
+		FVector2D Focus = FVector2D::ZeroVector;
+		bool bRecording = false;
+	};
+	FDemoState GDemo;
+
+	FAutoConsoleCommandWithWorldAndArgs CmdDemo(TEXT("sr.Demo"), TEXT("sr.Demo [record seconds]: a big battle on the plain with no interface and a slow drifting camera (the loading screen's footage). With seconds: every frame is also saved (MovieFrameNNNNN.png under Saved/Screenshots) at a fixed 30 fps."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World);
+			ASRPlayerController* PC = GetSRController(World);
+			if (!Battle || !Flow || !PC) { return; }
+			Flow->StartMatch(1);
+			if (USRFogSubsystem* Fog = USRFogSubsystem::Get(World)) { Fog->SetEnabled(false); }
+			if (AHUD* HUD = PC->GetHUD()) { HUD->bShowHUD = false; }
+			PC->ClearSelection();
+			// Two hosts face each other across the open plain in front of the player's Overlook: shields in front,
+			// archers and catapults behind, riders on the wings, a few medics.
+			const FVector2D A(-6900.f, -4600.f), B(-3700.f, -3000.f);
+			const FVector2D Fwd = (B - A).GetSafeNormal(), Side(-Fwd.Y, Fwd.X);
+			auto Host = [&](const FVector2D& At, const FVector2D& Face, ESRTeam Team)
+			{
+				const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Face.Y, Face.X));
+				struct FRank { ESRUnitType Type; int32 N; float Back; float Spread; };
+				const FRank Ranks[] = { { ESRUnitType::Shieldbearer, 16, 0.f, 110.f }, { ESRUnitType::Shieldbearer, 14, 130.f, 115.f },
+					{ ESRUnitType::Archer, 14, 330.f, 110.f }, { ESRUnitType::Archer, 10, 450.f, 120.f }, { ESRUnitType::Catapult, 3, 700.f, 420.f },
+					{ ESRUnitType::Medic, 3, 560.f, 380.f } };
+				for (const FRank& R : Ranks)
+				{
+					for (int32 i = 0; i < R.N; ++i)
+					{
+						const FVector2D P = At - Face * R.Back + FVector2D(-Face.Y, Face.X) * (i - (R.N - 1) * 0.5f) * R.Spread;
+						Battle->SpawnUnit(R.Type, Team, P, Yaw, FMath::FRandRange(0.f, 0.6f));
+					}
+				}
+				for (int32 Wing = -1; Wing <= 1; Wing += 2)
+				{
+					for (int32 i = 0; i < 5; ++i)
+					{
+						const FVector2D P = At + FVector2D(-Face.Y, Face.X) * Wing * (1100.f + 150.f * (i % 3)) - Face * (100.f + 160.f * (i / 3));
+						Battle->SpawnUnit(ESRUnitType::Horseman, Team, P, Yaw, FMath::FRandRange(0.f, 0.6f));
+					}
+				}
+			};
+			Host(A, Fwd, ESRTeam::Player);
+			Host(B, -Fwd, ESRTeam::Enemy);
+			Battle->SetAutoBattle(true);
+			// the camera drifts slowly along the clash, a little out
+			const FVector2D Mid = (A + B) * 0.5f;
+			GDemo.World = World;
+			GDemo.From = Mid - Side * 900.f;
+			GDemo.To = Mid + Side * 900.f;
+			GDemo.Elapsed = 0.0;
+			GDemo.Length = Args.Num() > 0 ? FMath::Max(FCString::Atof(*Args[0]), 1.f) : 40.0;
+			GDemo.bRecording = Args.Num() > 0;
+			if (ASRCameraPawn* Camera = Cast<ASRCameraPawn>(PC->GetPawn())) { Camera->FocusOn(Mid, true); Camera->SetZoom(0.46f, true); }
+			if (GDemo.bRecording)
+			{
+				FApp::SetUseFixedTimeStep(true);
+				FApp::SetFixedDeltaTime(1.0 / 30.0);
+				GIsDumpingMovie = FMath::RoundToInt(GDemo.Length * 30.0);
+			}
+			if (GDemo.Handle.IsValid()) { FTSTicker::GetCoreTicker().RemoveTicker(GDemo.Handle); }
+			GDemo.Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float Dt)
+			{
+				UWorld* W = GDemo.World.Get();
+				ASRPlayerController* P = W ? GetSRController(W) : nullptr;
+				ASRCameraPawn* Camera = P ? Cast<ASRCameraPawn>(P->GetPawn()) : nullptr;
+				if (!Camera) { return false; }
+				const float Step = GDemo.bRecording ? 1.f / 30.f : Dt;
+				GDemo.Elapsed += Step;
+				// keep the thick of the fighting in frame: the middle of the troops near the clash, those at blows
+				// counting most, followed smoothly, with a slow sideways drift across it
+				const FVector2D Mid = (GDemo.From + GDemo.To) * 0.5f;
+				FVector2D Sum = FVector2D::ZeroVector;
+				float Weight = 0.f;
+				if (const USRBattleSubsystem* B = USRBattleSubsystem::Get(W))
+				{
+					for (const ASRUnit* U : B->GetUnits())
+					{
+						if (!U || !U->IsActive() || FVector2D::Distance(U->GetPos2D(), Mid) > 4500.f) { continue; }
+						const float Wt = U->IsEngaged() ? 3.f : 1.f;
+						Sum += U->GetPos2D() * Wt;
+						Weight += Wt;
+					}
+				}
+				const FVector2D Heart = Weight > 0.f ? Sum / Weight : Mid;
+				const FVector2D Drift = (GDemo.To - GDemo.From).GetSafeNormal() * 350.f * FMath::Sin(float(GDemo.Elapsed / GDemo.Length) * PI - PI * 0.5f);
+				GDemo.Focus = GDemo.Elapsed <= Step * 1.5 ? Heart : FMath::Lerp(GDemo.Focus, Heart, 1.f - FMath::Exp(-Step / 1.6f));
+				Camera->FocusOn(GDemo.Focus + Drift, true);
+				if (GDemo.Elapsed < GDemo.Length) { return true; }
+				if (GDemo.bRecording)
+				{
+					GIsDumpingMovie = 0;
+					FApp::SetUseFixedTimeStep(false);
+					UE_LOG(LogSovereign, Log, TEXT("sr.Demo: recording done (%.0f s)"), GDemo.Length);
+				}
+				GDemo.Handle.Reset();
+				return false;
+			}));
+			UE_LOG(LogSovereign, Log, TEXT("sr.Demo: %d troops on the field%s"), Battle->GetUnits().Num(), GDemo.bRecording ? TEXT(", recording") : TEXT(""));
+		}));
+
+	// ---- the film: staged shots for the loading screen's footage, read from a script so a take can be re-cut without a build ----
+	FAutoConsoleCommandWithWorldAndArgs CmdHost(TEXT("sr.Host"), TEXT("sr.Host X Y FaceX FaceY <player|enemy> [size 0.3..2]: draw up a host there facing that way (shields in front, archers and catapults behind, riders on the wings). Testing and the film."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!Battle || Args.Num() < 5) { return; }
+			const FVector2D At(FCString::Atof(*Args[0]), FCString::Atof(*Args[1]));
+			const FVector2D Face = FVector2D(FCString::Atof(*Args[2]), FCString::Atof(*Args[3])).GetSafeNormal();
+			const ESRTeam Team = Args[4].Equals(TEXT("enemy"), ESearchCase::IgnoreCase) ? ESRTeam::Enemy : ESRTeam::Player;
+			const float Size = Args.Num() > 5 ? FMath::Clamp(FCString::Atof(*Args[5]), 0.2f, 2.f) : 1.f;
+			const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Face.Y, Face.X));
+			const FVector2D Side(-Face.Y, Face.X);
+			struct FRank { ESRUnitType Type; int32 N; float Back; float Spread; };
+			const FRank Ranks[] = { { ESRUnitType::Shieldbearer, 16, 0.f, 110.f }, { ESRUnitType::Shieldbearer, 14, 130.f, 115.f },
+				{ ESRUnitType::Archer, 14, 330.f, 110.f }, { ESRUnitType::Archer, 10, 450.f, 120.f }, { ESRUnitType::Catapult, 3, 700.f, 420.f },
+				{ ESRUnitType::Medic, 3, 560.f, 380.f } };
+			int32 Count = 0;
+			for (const FRank& R : Ranks)
+			{
+				const int32 N = FMath::Max(1, FMath::RoundToInt32(R.N * Size));
+				for (int32 i = 0; i < N; ++i)
+				{
+					Count += Battle->SpawnUnit(R.Type, Team, At - Face * R.Back + Side * (i - (N - 1) * 0.5f) * R.Spread, Yaw, 0.f) ? 1 : 0;
+				}
+			}
+			const int32 Riders = FMath::Max(2, FMath::RoundToInt32(5 * Size));
+			for (int32 Wing = -1; Wing <= 1; Wing += 2)
+			{
+				for (int32 i = 0; i < Riders; ++i)
+				{
+					Count += Battle->SpawnUnit(ESRUnitType::Horseman, Team, At + Side * Wing * (16.f * Size * 55.f + 220.f + 150.f * (i % 3)) - Face * (100.f + 160.f * (i / 3)), Yaw, 0.f) ? 1 : 0;
+				}
+			}
+			UE_LOG(LogSovereign, Log, TEXT("sr.Host: %d troops at (%.0f, %.0f)"), Count, At.X, At.Y);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdMarch(TEXT("sr.March"), TEXT("sr.March <player|enemy> X Y [radius] [move]: every troop of a side within radius (default 4000) of where its host stands attack-moves (or just moves) by the offset from its host's middle to X Y, keeping its place in the ranks. Testing and the film."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRBattleSubsystem* Battle = USRBattleSubsystem::Get(World);
+			if (!Battle || Args.Num() < 3) { return; }
+			const ESRTeam Team = Args[0].Equals(TEXT("enemy"), ESearchCase::IgnoreCase) ? ESRTeam::Enemy : ESRTeam::Player;
+			const FVector2D To(FCString::Atof(*Args[1]), FCString::Atof(*Args[2]));
+			const float Radius = Args.Num() > 3 ? FCString::Atof(*Args[3]) : 4000.f;
+			const bool bMove = Args.Num() > 4 && Args[4].Equals(TEXT("move"), ESearchCase::IgnoreCase);
+			// the host: the side's troops nearest the goal (the kingdom's own garrison, far off, is left at home)
+			TArray<ASRUnit*> Mine;
+			FVector2D Sum = FVector2D::ZeroVector;
+			for (ASRUnit* U : Battle->GetUnits())
+			{
+				if (U && U->IsActive() && U->GetTeam() == Team && FVector2D::Distance(U->GetPos2D(), To) < Radius + 6000.f) { Mine.Add(U); Sum += U->GetPos2D(); }
+			}
+			if (Mine.Num() == 0) { return; }
+			const FVector2D Mid = Sum / float(Mine.Num());
+			for (ASRUnit* U : Mine)
+			{
+				const FVector2D Dest = To + (U->GetPos2D() - Mid) * 0.8f;
+				if (bMove) { U->OrderMove(Dest); } else { U->OrderAttackMove(Dest); }
+			}
+			UE_LOG(LogSovereign, Log, TEXT("sr.March: %d troops to (%.0f, %.0f)"), Mine.Num(), To.X, To.Y);
+		}));
+
+	struct FFilmShot
+	{
+		float Length = 5.f;                    // seconds seen, not counting the head and tail
+		FVector2D From = FVector2D::ZeroVector, To = FVector2D::ZeroVector;
+		float Zoom0 = 0.5f, Zoom1 = 0.5f, Pitch0 = -40.f, Pitch1 = -40.f, Yaw0 = 0.f, Yaw1 = 0.f;
+		float Follow = 0.f;                    // 0..1: how far the focus is drawn to the thick of the fighting near the path
+	};
+	struct FFilmEvent { float Time = 0.f; FString Command; bool bDone = false; };
+	struct FFilmState
+	{
+		FTSTicker::FDelegateHandle Handle;
+		TWeakObjectPtr<UWorld> World;
+		TArray<FFilmShot> Shots;
+		TArray<FFilmEvent> Events;
+		double Elapsed = 0.0;
+		int32 Shot = -1, Frame = 0;
+		float Head = 1.5f, Tail = 0.5f;        // recorded before and after each shot: the view settles, then the cross-fade
+		FVector2D Heart = FVector2D::ZeroVector;
+		bool bHeart = false, bRecording = false;
+		float OldYaw = 0.f;
+		// recording: a frame is asked for, and the film (and the game's clock) only moves on once it has been saved, so no
+		// frame is ever missed (the engine's own movie dump lost three in ten here: the window is not drawn every tick)
+		bool bWaiting = false, bGotFrame = false;
+		int32 Saved = 0;
+		FString FrameDir;
+		FDelegateHandle Captured;
+	};
+	FFilmState GFilm;
+
+	FAutoConsoleCommandWithWorldAndArgs CmdFilm(TEXT("sr.Film"), TEXT("sr.Film [record]: play the shots in Saved/Film.txt (no interface, fog of war off). Lines: 'shot <seconds> X0 Y0 X1 Y1 zoom0 zoom1 pitch0 pitch1 [yaw0 yaw1 [follow 0..1]]' (the camera moves evenly from the first to the second over the shot), 'at <seconds> <console command>' (from the film's start), 'head <seconds>', 'tail <seconds>'. Each shot is run for head + seconds + tail, moving throughout: the head lets the picture settle after the cut and both are for cross-fading. With record: every frame is saved (Saved/Film/Frames/FNNNNN.png, none missed) at a fixed 30 fps of game time and each shot's frames are logged (FILM shot ...); Tools/film.py cuts them together."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World);
+			ASRPlayerController* PC = GetSRController(World);
+			if (!Flow || !PC) { return; }
+			TArray<FString> Lines;
+			if (!FFileHelper::LoadFileToStringArray(Lines, *(FPaths::ProjectSavedDir() / TEXT("Film.txt")))) { UE_LOG(LogSovereign, Warning, TEXT("sr.Film: no Saved/Film.txt")); return; }
+			if (GFilm.Handle.IsValid()) { FTSTicker::GetCoreTicker().RemoveTicker(GFilm.Handle); }
+			GFilm = FFilmState();
+			for (const FString& Raw : Lines)
+			{
+				const FString Line = Raw.TrimStartAndEnd();
+				TArray<FString> T;
+				Line.ParseIntoArrayWS(T);
+				if (T.Num() == 0 || Line.StartsWith(TEXT("#"))) { continue; }
+				if (T[0] == TEXT("shot") && T.Num() >= 10)
+				{
+					FFilmShot S;
+					S.Length = FCString::Atof(*T[1]);
+					S.From = FVector2D(FCString::Atof(*T[2]), FCString::Atof(*T[3]));
+					S.To = FVector2D(FCString::Atof(*T[4]), FCString::Atof(*T[5]));
+					S.Zoom0 = FCString::Atof(*T[6]); S.Zoom1 = FCString::Atof(*T[7]);
+					S.Pitch0 = FCString::Atof(*T[8]); S.Pitch1 = FCString::Atof(*T[9]);
+					if (T.Num() >= 12) { S.Yaw0 = FCString::Atof(*T[10]); S.Yaw1 = FCString::Atof(*T[11]); }
+					if (T.Num() >= 13) { S.Follow = FMath::Clamp(FCString::Atof(*T[12]), 0.f, 1.f); }
+					GFilm.Shots.Add(S);
+				}
+				else if (T[0] == TEXT("at") && T.Num() >= 3)
+				{
+					FFilmEvent E;
+					E.Time = FCString::Atof(*T[1]);
+					E.Command = Line.Mid(Line.Find(T[1]) + T[1].Len()).TrimStart();
+					GFilm.Events.Add(E);
+				}
+				else if (T[0] == TEXT("head") && T.Num() >= 2) { GFilm.Head = FMath::Max(FCString::Atof(*T[1]), 0.f); }
+				else if (T[0] == TEXT("tail") && T.Num() >= 2) { GFilm.Tail = FMath::Max(FCString::Atof(*T[1]), 0.f); }
+			}
+			if (GFilm.Shots.Num() == 0) { UE_LOG(LogSovereign, Warning, TEXT("sr.Film: no shots in Saved/Film.txt")); return; }
+			Flow->StartMatch(1);
+			if (USRFogSubsystem* Fog = USRFogSubsystem::Get(World)) { Fog->SetEnabled(false); }
+			if (AHUD* HUD = PC->GetHUD()) { HUD->bShowHUD = false; }
+			PC->ClearSelection();
+			GFilm.World = World;
+			GFilm.bRecording = Args.Num() > 0 && Args[0].Equals(TEXT("record"), ESearchCase::IgnoreCase);
+			GFilm.OldYaw = USRFeelSettings::Get().CameraYaw;
+			float Total = 0.f;
+			for (const FFilmShot& S : GFilm.Shots) { Total += GFilm.Head + S.Length + GFilm.Tail; }
+			if (GFilm.bRecording)
+			{
+				FApp::SetUseFixedTimeStep(true);
+				FApp::SetFixedDeltaTime(1.0 / 30.0);
+				GFilm.FrameDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Film/Frames"));
+				IFileManager::Get().DeleteDirectory(*GFilm.FrameDir, false, true);
+				IFileManager::Get().MakeDirectory(*GFilm.FrameDir, true);
+				GFilm.Captured = UGameViewportClient::OnScreenshotCaptured().AddLambda([](int32 Width, int32 Height, const TArray<FColor>& Colors)
+				{
+					if (!GFilm.bWaiting || GFilm.bGotFrame) { return; }
+					TArray<FColor> Opaque = Colors;
+					for (FColor& C : Opaque) { C.A = 255; }
+					TArray64<uint8> Png;
+					FImageUtils::PNGCompressImageArray(Width, Height, TArrayView64<const FColor>(Opaque.GetData(), Opaque.Num()), Png);
+					FFileHelper::SaveArrayToFile(Png, *(GFilm.FrameDir / FString::Printf(TEXT("F%05d.png"), GFilm.Frame)));
+					GFilm.bGotFrame = true;
+					++GFilm.Saved;
+				});
+			}
+			UE_LOG(LogSovereign, Log, TEXT("FILM start: %d shots, %d events, %.1f s run%s"), GFilm.Shots.Num(), GFilm.Events.Num(), Total, GFilm.bRecording ? TEXT(", recording") : TEXT(""));
+			GFilm.Handle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float Dt)
+			{
+				UWorld* W = GFilm.World.Get();
+				ASRPlayerController* P = W ? GetSRController(W) : nullptr;
+				ASRCameraPawn* Camera = P ? Cast<ASRCameraPawn>(P->GetPawn()) : nullptr;
+				auto End = [&]()
+				{
+					if (GFilm.bRecording)
+					{
+						FApp::SetFixedDeltaTime(1.0 / 30.0);
+						FApp::SetUseFixedTimeStep(false);
+						UGameViewportClient::OnScreenshotCaptured().Remove(GFilm.Captured);
+					}
+					GetMutableDefault<USRFeelSettings>()->CameraYaw = GFilm.OldYaw;
+					if (Camera) { Camera->EndFilm(); }
+					UE_LOG(LogSovereign, Log, TEXT("FILM done: %d frames, %d saved to %s"), GFilm.Frame, GFilm.Saved, *GFilm.FrameDir);
+					GFilm.Handle.Reset();
+					return false;
+				};
+				if (!Camera) { return End(); }
+				const float Step = GFilm.bRecording ? 1.f / 30.f : FMath::Min(Dt, 0.1f);
+				if (GFilm.bRecording && GFilm.bWaiting)
+				{
+					if (!GFilm.bGotFrame)
+					{
+						// the frame asked for has not been drawn yet: hold the game's clock still and keep asking
+						FApp::SetFixedDeltaTime(1.0e-6);
+						if (!FScreenshotRequest::IsScreenshotRequested()) { FScreenshotRequest::RequestScreenshot(false); }
+						return true;
+					}
+					GFilm.bWaiting = false;
+					GFilm.Elapsed += Step;
+					++GFilm.Frame;
+				}
+				for (FFilmEvent& E : GFilm.Events)
+				{
+					if (!E.bDone && GFilm.Elapsed >= E.Time)
+					{
+						E.bDone = true;
+						UE_LOG(LogSovereign, Log, TEXT("FILM %.2f > %s"), GFilm.Elapsed, *E.Command);
+						if (GEngine) { GEngine->Exec(W, *E.Command); }
+					}
+				}
+				// which shot, and how far through it (head and tail included: the camera never stands still at a cut)
+				float T0 = 0.f;
+				int32 Index = INDEX_NONE;
+				for (int32 i = 0; i < GFilm.Shots.Num(); ++i)
+				{
+					const float Run = GFilm.Head + GFilm.Shots[i].Length + GFilm.Tail;
+					if (GFilm.Elapsed < T0 + Run) { Index = i; break; }
+					T0 += Run;
+				}
+				if (Index == INDEX_NONE) { return End(); }
+				const FFilmShot& S = GFilm.Shots[Index];
+				const bool bCut = Index != GFilm.Shot;
+				if (bCut)
+				{
+					GFilm.Shot = Index;
+					GFilm.bHeart = false;
+					const int32 Frames = FMath::RoundToInt((GFilm.Head + S.Length + GFilm.Tail) * 30.f);
+					UE_LOG(LogSovereign, Log, TEXT("FILM shot %d frame %d count %d head %d tail %d"), Index, GFilm.Frame, Frames, FMath::RoundToInt(GFilm.Head * 30.f), FMath::RoundToInt(GFilm.Tail * 30.f));
+				}
+				const float Run = GFilm.Head + S.Length + GFilm.Tail;
+				const float U = FMath::Clamp(float(GFilm.Elapsed - T0) / Run, 0.f, 1.f);
+				FVector2D Focus = FMath::Lerp(S.From, S.To, U);
+				if (S.Follow > 0.f)
+				{
+					FVector2D Sum = FVector2D::ZeroVector;
+					float Weight = 0.f;
+					if (const USRBattleSubsystem* B = USRBattleSubsystem::Get(W))
+					{
+						for (const ASRUnit* Unit : B->GetUnits())
+						{
+							if (!Unit || !Unit->IsActive() || FVector2D::Distance(Unit->GetPos2D(), Focus) > 3500.f) { continue; }
+							const float Wt = Unit->IsEngaged() ? 3.f : 1.f;
+							Sum += Unit->GetPos2D() * Wt;
+							Weight += Wt;
+						}
+					}
+					if (Weight > 0.f)
+					{
+						const FVector2D Heart = Sum / Weight - Focus;      // where the fighting is, from the path
+						GFilm.Heart = GFilm.bHeart ? FMath::Lerp(GFilm.Heart, Heart, 1.f - FMath::Exp(-Step / 2.2f)) : Heart;
+						GFilm.bHeart = true;
+						Focus += GFilm.Heart * S.Follow;
+					}
+				}
+				GetMutableDefault<USRFeelSettings>()->CameraYaw = FMath::Lerp(S.Yaw0, S.Yaw1, U);
+				Camera->FilmView(Focus, FMath::Lerp(S.Zoom0, S.Zoom1, U), FMath::Lerp(S.Pitch0, S.Pitch1, U), bCut, Step);
+				if (GFilm.bRecording)
+				{
+					// this pose is drawn, with the game one step on, in the next tick: that frame is the one saved
+					FApp::SetFixedDeltaTime(1.0 / 30.0);
+					GFilm.bWaiting = true;
+					GFilm.bGotFrame = false;
+					FScreenshotRequest::RequestScreenshot(false);
+					return true;
+				}
+				GFilm.Elapsed += Step;
+				++GFilm.Frame;
+				return true;
+			}));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdGridCheck(TEXT("sr.GridCheck"), TEXT("Log how the field is connected: the separate pieces of walkable ground, how much is deep water and steep ground, and whether each castle gate, gold vein, relic and old tower can be walked to."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (const USRGridSubsystem* Grid = USRGridSubsystem::Get(World)) { Grid->LogSelfCheck(); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdPathTest(TEXT("sr.PathTest"), TEXT("sr.PathTest X0 Y0 X1 Y1: plan a route between two points and log its corners and length (no troop moves)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			USRGridSubsystem* Grid = USRGridSubsystem::Get(World);
+			if (!Grid || Args.Num() < 4) { return; }
+			const FVector2D From(FCString::Atof(*Args[0]), FCString::Atof(*Args[1])), To(FCString::Atof(*Args[2]), FCString::Atof(*Args[3]));
+			TArray<FVector2D> Path;
+			const double T0 = FPlatformTime::Seconds();
+			const bool bOk = Grid->FindPath(From, To, Path);
+			const double Ms = (FPlatformTime::Seconds() - T0) * 1000.0;
+			float Length = 0.f;
+			FString Corners;
+			FVector2D Prev = From;
+			for (const FVector2D& P : Path) { Length += FVector2D::Distance(Prev, P); Prev = P; Corners += FString::Printf(TEXT(" (%.0f,%.0f)"), P.X, P.Y); }
+			UE_LOG(LogSovereign, Log, TEXT("sr.PathTest (%.0f,%.0f) -> (%.0f,%.0f): %s, %s, %d point(s), %.0f m, %.2f ms:%s"), From.X, From.Y, To.X, To.Y, bOk ? TEXT("route") : TEXT("NO ROUTE"),
+				Grid->CanReach(From, To) ? TEXT("same ground") : TEXT("cut off"), Path.Num(), Length / 100.f, Ms, *Corners);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdOrderBuild(TEXT("sr.OrderBuild"), TEXT("sr.OrderBuild X Y: the selected Builders go and work on the player's building nearest that spot (like right-clicking it)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			FVector2D XY;
+			ASRPlayerController* PC = GetSRController(World);
+			const USREconomySubsystem* Eco = USREconomySubsystem::Get(World);
+			if (!PC || !Eco || !ParseXY(Args, XY)) { return; }
+			ASRBuilding* Best = nullptr;
+			float BestD = TNumericLimits<float>::Max();
+			for (ASRBuilding* B : Eco->GetBuildings())
+			{
+				if (!B || B->Team != ESRTeam::Player || !B->IsAlive()) { continue; }
+				const float D = B->DistanceToFootprint(XY);
+				if (D < BestD) { BestD = D; Best = B; }
+			}
+			int32 Sent = 0;
+			for (const TWeakObjectPtr<ASRUnit>& U : PC->GetSelection()) { if (U.IsValid() && U->IsBuilder() && Best) { U->OrderBuild(Best); ++Sent; } }
+			UE_LOG(LogSovereign, Log, TEXT("sr.OrderBuild: %d builder(s) to %s"), Sent, Best ? *Best->GetDisplayName() : TEXT("nothing"));
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs CmdPlace(TEXT("sr.Place"), TEXT("sr.Place <farm|mine|tower|barracks|range|stable|workshop|granary|treasury|off>: enter placement mode as if the build hotkey was pressed."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
@@ -468,10 +1096,27 @@ namespace
 		}));
 
 	// ---- game flow: the menus, for scripted tests ----
-	FAutoConsoleCommandWithWorldAndArgs CmdStartMatch(TEXT("sr.StartMatch"), TEXT("sr.StartMatch [0=easy|1=normal|2=hard]: start a match now, skipping the menus (keeps the difficulty if none is given)."),
+	FAutoConsoleCommandWithWorldAndArgs CmdStartMatch(TEXT("sr.StartMatch"), TEXT("sr.StartMatch [0=easy|1=normal|2=hard|-1=keep] [map id]: start a match now, skipping the menus (keeps the difficulty if none is given). With a map id (Sovereign Feel > Maps: two, four) other than the map being played, it opens that map's level and starts there."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
-			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->StartMatch(Args.Num() > 0 ? FCString::Atoi(*Args[0]) : -1); }
+			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->StartMatch(Args.Num() > 0 ? FCString::Atoi(*Args[0]) : -1, Args.Num() > 1 ? FName(*Args[1]) : FName()); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("sr.Map"), TEXT("Log the map being played (its id, half extent and starts) and the maps in the list."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			const USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World);
+			if (!Flow) { return; }
+			const USRFeelSettings& F = USRFeelSettings::Get();
+			const ASRMapInfo* Info = ASRMapInfo::Get(World);
+			UE_LOG(LogSovereign, Log, TEXT("sr.Map: %s (%s), half extent (%.0f, %.0f), player start (%.0f, %.0f), enemy start (%.0f, %.0f), focus up to %.0f, %s"),
+				*Flow->GetCurrentMapId().ToString(), *USRGameFlowSubsystem::MapTitle(Flow->GetCurrentMapId()), F.MapHalfExtent.X, F.MapHalfExtent.Y, F.PlayerStart.X, F.PlayerStart.Y,
+				F.EnemyStart.X, F.EnemyStart.Y, F.FocusHeightMax,
+				Info ? *FString::Printf(TEXT("ground traces %.0f to %.0f"), Info->GroundTraceTop, Info->GroundTraceBottom) : TEXT("no ASRMapInfo in the level (the settings' own values)"));
+			for (const FSRMapEntry& M : F.Maps)
+			{
+				UE_LOG(LogSovereign, Log, TEXT("sr.Map:   %-6s %s  %s%s"), *M.Id.ToString(), *M.Level, *M.Name, Flow->IsMapAvailable(M.Id) ? TEXT("") : TEXT("  (LEVEL MISSING)"));
+			}
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdMenu(TEXT("sr.Menu"), TEXT("sr.Menu <main|play>: go to the main menu, or start a match."),
@@ -503,7 +1148,7 @@ namespace
 			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->SaveMatch(Args.Num() > 0 ? Args[0] : FString(USRGameFlowSubsystem::QuickSlot())); }
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdLoad(TEXT("sr.Load"), TEXT("sr.Load [slot]: load a saved match (default: the latest)."),
+	FAutoConsoleCommandWithWorldAndArgs CmdLoad(TEXT("sr.Load"), TEXT("sr.Load [slot]: load a saved match (default: the latest). One saved on another map opens that map's level and is loaded there."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(World)) { Flow->LoadMatch(Args.Num() > 0 ? Args[0] : Flow->LatestSlot()); }

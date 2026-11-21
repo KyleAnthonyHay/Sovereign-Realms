@@ -41,9 +41,12 @@ bool USRFogSubsystem::IsEnabled() const
 void USRFogSubsystem::Reset()
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
-	CellSize = FMath::Max(F.FogCellSize, 25.f);
 	const float Extent = FMath::Max(F.MapHalfExtent.X, F.MapHalfExtent.Y) + 1500.f;
-	N = FMath::Clamp(FMath::CeilToInt(2.f * Extent / CellSize), 16, 512);
+	// The texture is at most MaxCells across. A map too big for that at FogCellSize gets bigger cells instead (the
+	// 720 m map: 147 cm), so the fog always covers the whole field. Everything below works in CellSize, not the setting.
+	constexpr int32 MaxCells = 512;
+	CellSize = FMath::Max3(F.FogCellSize, 25.f, 2.f * Extent / float(MaxCells));
+	N = FMath::Clamp(FMath::CeilToInt(2.f * Extent / CellSize), 16, MaxCells);
 	Origin = FVector2D(-Extent, -Extent);
 	Explored.Init(0, N * N);
 	Visible.Init(0, N * N);
@@ -53,6 +56,8 @@ void USRFogSubsystem::Reset()
 	Clock = 0.f;
 	bDirty = true;
 	if (FogTexture && (FogTexture->GetSizeX() != N)) { FogTexture = nullptr; FogMaterial = nullptr; bHadView = false; }
+	// (the same texture over a field of another size: the material must know)
+	if (FogMaterial) { FogMaterial->SetVectorParameterValue(TEXT("MapRect"), FLinearColor(Origin.X, Origin.Y, N * CellSize, N * CellSize)); }
 	Recompute();
 	for (int32 i = 0; i < N * N; ++i) { Shown[i] = Visible[i] ? 1.f : 0.f; }   // no fade-in at the start
 	PushTexture(0.f);
@@ -118,7 +123,10 @@ bool USRFogSubsystem::IsBuildingKnown(const ASRBuilding* Building) const
 
 void USRFogSubsystem::SetExplored(const TArray<uint8>& In)
 {
+	// A save made with a fog grid of another size (another cell size, or map extent) is not laid over this one: the
+	// match loads with nothing explored but what its troops and buildings see now.
 	if (In.Num() == Explored.Num()) { Explored = In; bDirty = true; }
+	else if (In.Num() > 0) { UE_LOG(LogSovereign, Log, TEXT("FOG: the saved game's explored ground (%d cells) does not fit this map's (%d): ignored"), In.Num(), Explored.Num()); }
 }
 
 void USRFogSubsystem::Stamp(const FVector2D& Centre, float Radius)

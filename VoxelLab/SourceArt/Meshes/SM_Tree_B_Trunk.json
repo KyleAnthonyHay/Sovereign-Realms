@@ -1,0 +1,18 @@
+{
+ "name": "SM_Tree_B_Trunk",
+ "faces": 9092,
+ "collision": "complex",
+ "bounds": [
+  [
+   -2.125,
+   -2.375,
+   -0.25
+  ],
+  [
+   3.125,
+   2.375,
+   11.375
+  ]
+ ],
+ "lights": []
+}

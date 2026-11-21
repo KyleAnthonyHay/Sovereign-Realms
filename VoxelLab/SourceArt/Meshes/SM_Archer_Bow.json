@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_Bow",
+ "faces": 1062,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0613,
+   -0.2093,
+   -0.6822
+  ],
+  [
+   0.3643,
+   0.2496,
+   0.724
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.32824,
+  -0.27769,
+  0.76351
+ ],
+ "part": "Bow",
+ "parent": "ForeL",
+ "triangles": 2124,
+ "blocks": 84
+}

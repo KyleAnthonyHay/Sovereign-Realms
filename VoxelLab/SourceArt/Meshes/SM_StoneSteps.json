@@ -1,0 +1,18 @@
+{
+ "name": "SM_StoneSteps",
+ "faces": 4050,
+ "collision": "complex",
+ "bounds": [
+  [
+   -1.0,
+   0.0,
+   0.0
+  ],
+  [
+   1.0,
+   2.0,
+   1.0
+  ]
+ ],
+ "lights": []
+}

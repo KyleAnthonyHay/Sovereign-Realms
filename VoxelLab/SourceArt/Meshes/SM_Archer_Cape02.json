@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_Cape02",
+ "faces": 220,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1189,
+   -0.0898,
+   -0.2064
+  ],
+  [
+   0.085,
+   0.0724,
+   0.0074
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.435,
+  0.235,
+  0.6
+ ],
+ "part": "Cape02",
+ "parent": "Cape01",
+ "triangles": 440,
+ "blocks": 21
+}

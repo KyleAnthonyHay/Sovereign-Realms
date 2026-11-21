@@ -32,6 +32,12 @@ namespace SRStyle
 	const FLinearColor TeamRed(0.95f, 0.22f, 0.15f, 1.f);
 
 	inline FLinearColor A(FLinearColor C, float Alpha) { C.A *= Alpha; return C; }
+	/** A count-down as a clock face: 75.2 s -> "1:16" (rounded up, so it reads 0:01 until the moment it is done). */
+	inline FString Countdown(float Seconds)
+	{
+		const int32 S = FMath::Max(FMath::CeilToInt(Seconds), 0);
+		return S >= 3600 ? FString::Printf(TEXT("%d:%02d:%02d"), S / 3600, (S / 60) % 60, S % 60) : FString::Printf(TEXT("%d:%02d"), S / 60, S % 60);
+	}
 	/** Green -> amber -> red as a health fraction drops. */
 	inline FLinearColor Health(float Frac)
 	{
@@ -46,7 +52,8 @@ namespace SRId
 {
 	enum : uint32
 	{
-		Pause = 1, Help, Minimap, PlatoonHeader, CancelBuild, LegendClose, Builders, Upgrade,
+		Pause = 1, Help, Minimap, PlatoonHeader, CancelBuild, LegendClose, Builders, Upgrade, CastleCard,
+		Scouts = 290, Demolish = 291,   // (clear of the ranges below: the build menu starts at 10)
 		Build = 10,       // + 0 toggle, 1..3 tabs, 4..9 entries
 		Command = 20,     // + 0..19
 		Recruit = 40,     // + unit type

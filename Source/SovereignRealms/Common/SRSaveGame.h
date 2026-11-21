@@ -71,9 +71,16 @@ class SOVEREIGNREALMS_API USRSaveGame : public USaveGame
 	GENERATED_BODY()
 
 public:
-	static constexpr int32 CurrentVersion = 1;
+	/** 2: the heightfield maps, and the map's id in the save. A save older than that is from the terraced map: its
+	 * positions lie inside the new hills, so it is listed (and can be deleted) but never loaded. It is known by
+	 * having no map: every save since records one, and the version alone cannot tell (a property that equals the
+	 * class's default is not written to the file, so an old save's Version reads back as today's). */
+	static constexpr int32 CurrentVersion = 2;
+	bool IsFromOldMap() const { return Version < 2 || Map.IsNone(); }
 
 	UPROPERTY() int32 Version = CurrentVersion;
+	/** The map it was played on (ASRMapInfo::MapId; USRGameFlowSubsystem::GetCurrentMapId). */
+	UPROPERTY() FName Map;
 	UPROPERTY() FDateTime SavedAt;
 	UPROPERTY() int32 Difficulty = 1;
 	UPROPERTY() float BattleClock = 0.f;

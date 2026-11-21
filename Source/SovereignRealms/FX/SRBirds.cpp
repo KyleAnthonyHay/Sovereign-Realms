@@ -121,6 +121,7 @@ float ASRBirds::GroundAt(const FVector2D& XY) const
 {
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SRBirdsGround), false);
+	// (the water sheets are not WorldStatic: over a lake this finds its bed, a little under the surface)
 	if (GetWorld() && GetWorld()->LineTraceSingleByObjectType(Hit, FVector(XY, 30000.f), FVector(XY, -5000.f), FCollisionObjectQueryParams(ECC_WorldStatic), Params))
 	{
 		return Hit.ImpactPoint.Z;

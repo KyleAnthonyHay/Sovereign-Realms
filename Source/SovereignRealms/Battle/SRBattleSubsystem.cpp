@@ -1,6 +1,7 @@
 // Copyright Sovereign Realms.
 
 #include "Battle/SRBattleSubsystem.h"
+#include "Battle/SRGameFlowSubsystem.h"
 #include "Battle/SRGridSubsystem.h"
 #include "Battle/SRFogSubsystem.h"
 #include "FX/SRFXSprite.h"
@@ -95,15 +96,15 @@ void USRBattleSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	UnitCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_UnitCard.SM_UnitCard"));
 	ArrowCardMesh = LoadSpriteAsset<UStaticMesh>(TEXT("/Game/SR/Characters/SM_ArrowCard.SM_ArrowCard"));
 	static_assert(SRSpriteTypes == SRNumUnitTypes, "one sprite material per troop type");
-	static const TCHAR* Troops[SRSpriteTypes] = { TEXT("Shieldbearer"), TEXT("Archer"), TEXT("Horseman"), TEXT("Catapult"), TEXT("Builder"), TEXT("Scout") };
+	static const TCHAR* Troops[SRSpriteTypes] = { TEXT("Shieldbearer"), TEXT("Archer"), TEXT("Horseman"), TEXT("Catapult"), TEXT("Builder"), TEXT("Scout"), TEXT("Medic") };
 	for (int32 i = 0; i < SRSpriteTypes; ++i)
 	{
 		const FString Path = FString::Printf(TEXT("/Game/SR/Materials/MI_UnitSprite_%s.MI_UnitSprite_%s"), Troops[i], Troops[i]);
 		const FString ShadowPath = FString::Printf(TEXT("/Game/SR/Materials/MI_UnitSpriteShadow_%s.MI_UnitSpriteShadow_%s"), Troops[i], Troops[i]);
 		UMaterialInterface* Base = i < 2 ? LoadSpriteAsset<UMaterialInterface>(*Path) : LoadObject<UMaterialInterface>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
 		UMaterialInterface* Shadow = i < 2 ? LoadSpriteAsset<UMaterialInterface>(*ShadowPath) : LoadObject<UMaterialInterface>(nullptr, *ShadowPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
-		// not imported yet: the Shieldbearer's (the Scout: the Builder's, whose sheet layout it shares)
-		const int32 Borrow = i == int32(ESRUnitType::Scout) ? int32(ESRUnitType::Builder) : 0;
+		// not imported yet: the Shieldbearer's (the Scout and the Medic: the Builder's, whose sheet layout they share)
+		const int32 Borrow = (i == int32(ESRUnitType::Scout) || i == int32(ESRUnitType::Medic)) ? int32(ESRUnitType::Builder) : 0;
 		if (!Base && i >= 2) { SpriteMaterials[i] = SpriteMaterials[Borrow]; SpriteShadowMaterials[i] = SpriteShadowMaterials[Borrow]; continue; }
 		SpriteMaterials[i] = UMaterialInstanceDynamic::Create(OrDefault(Base), this);
 		SpriteShadowMaterials[i] = OrDefault(Shadow);
@@ -145,7 +146,7 @@ void USRBattleSubsystem::UpdateSpriteView()
 
 	// The camera pawn has already ticked this frame (it ticks with the actors, this subsystem after them),
 	// so its rotation is the one the frame will be rendered with.
-	FRotator ViewRot(FMath::Lerp(F.PitchZoomedIn, F.PitchZoomedOut, F.ZoomDefault), F.CameraYaw, 0.f);
+	FRotator ViewRot(F.PitchAtDistance(F.ZoomDistance(F.ZoomDefault)), F.CameraYaw, 0.f);
 	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
 	if (const ASRCameraPawn* Camera = PC ? Cast<ASRCameraPawn>(PC->GetPawn()) : nullptr)
 	{
@@ -270,6 +271,12 @@ void USRBattleSubsystem::StepFrame(float Dt)
 	if (USRAISubsystem* AI = USRAISubsystem::Get(this)) { AI->Step(Dt); }
 	if (USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this)) { Platoons->Step(Dt); }
 	StepPatrols(Dt);
+	StepMarches(Dt);
+	for (int32 i = HealPopups.Num() - 1; i >= 0; --i)
+	{
+		HealPopups[i].Age += Dt;
+		if (HealPopups[i].Age > 1.1f) { HealPopups.RemoveAt(i); }
+	}
 	StepMarchSounds(Dt);
 	StepBattleRoar(Dt);
 
@@ -578,12 +585,19 @@ void USRBattleSubsystem::ResetBattle()
 ASRUnit* USRBattleSubsystem::SpawnUnit(ESRUnitType Type, ESRTeam Team, const FVector2D& Location, float Yaw, float SpawnDelay)
 {
 	UWorld* World = GetWorld();
+	// nobody is ever put down in deep water (a rally point, a test spawn, a scenario start laid over a lake): the
+	// nearest ground that can be walked instead
+	FVector2D At = Location;
+	if (IsDeepWater(At))
+	{
+		if (const USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { At = Grid->NearestWalkable(At, 40); }
+	}
 	float GroundZ = 0.f;
-	SampleGround(Location, 20000.f, GroundZ);
+	SampleGround(At, 20000.f, GroundZ);
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	ASRUnit* Unit = World->SpawnActor<ASRUnit>(FVector(Location.X, Location.Y, GroundZ), FRotator(0.f, Yaw, 0.f), Params);
+	ASRUnit* Unit = World->SpawnActor<ASRUnit>(FVector(At.X, At.Y, GroundZ), FRotator(0.f, Yaw, 0.f), Params);
 	if (Unit)
 	{
 		const FSRUnitStats& Stats = USRFeelSettings::Get().StatsFor(Type);
@@ -686,16 +700,18 @@ void USRBattleSubsystem::SetAutoBattle(bool bEnabled)
 
 // ---------------------------------------------------------------- queries
 
-ASRUnit* USRBattleSubsystem::FindNearestEnemy(const ASRUnit* For, float Range) const
+ASRUnit* USRBattleSubsystem::FindNearestEnemy(const ASRUnit* For, float Range, float MinRange) const
 {
 	ASRUnit* Best = nullptr;
 	float BestDistSq = Range * Range;
+	const float MinSq = MinRange * MinRange;
 	const FVector2D Pos = For->GetPos2D();
 	auto Consider = [&](ASRUnit* Other)
 	{
 		if (!Other || !Other->IsActive() || Other->GetTeam() == For->GetTeam()) { return; }
 		const float DistSq = FVector2D::DistSquared(Pos, Other->GetPos2D());
 		// reduced visibility: a Scout is only noticed from close by (auto-battle, which sees the whole map, ignores it)
+		if (DistSq < MinSq) { return; }
 		if (DistSq < BestDistSq && (bAutoBattle || Other->IsNoticedAt(DistSq, Range))) { BestDistSq = DistSq; Best = Other; }
 	};
 	if (Range > 4000.f)
@@ -939,6 +955,8 @@ void USRBattleSubsystem::PollCommandInbox(float DeltaTime)
 	InboxTimer -= DeltaTime;
 	if (InboxTimer > 0.f) { return; }
 	InboxTimer = 0.15f;
+	const USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
+	if (Flow && Flow->IsTravelling()) { return; }   // on its way to another map: the file waits for the level it opens
 
 	const FString Path = FPaths::ProjectSavedDir() / TEXT("SRCommands.txt");
 	if (!IFileManager::Get().FileExists(*Path)) { return; }
@@ -946,13 +964,26 @@ void USRBattleSubsystem::PollCommandInbox(float DeltaTime)
 	TArray<FString> Lines;
 	FFileHelper::LoadFileToStringArray(Lines, *Path);
 	IFileManager::Get().Delete(*Path);
-	for (const FString& Line : Lines)
+	for (int32 i = 0; i < Lines.Num(); ++i)
 	{
-		const FString Command = Line.TrimStartAndEnd();
+		const FString Command = Lines[i].TrimStartAndEnd();
 		if (!Command.IsEmpty() && GEngine)
 		{
 			UE_LOG(LogSovereign, Log, TEXT("INBOX > %s"), *Command);
 			GEngine->Exec(GetWorld(), *Command);
+		}
+		// A command that opens another map (sr.StartMatch with a map, sr.Load of a game saved on one): this world is
+		// gone at the end of the frame, and what it was told after that would go with it. The rest of the file is put
+		// back for the new level's inbox (this subsystem is made afresh with each world, and polls from its first tick).
+		if (Flow && Flow->IsTravelling())
+		{
+			if (i + 1 < Lines.Num())
+			{
+				Lines.RemoveAt(0, i + 1);
+				FFileHelper::SaveStringArrayToFile(Lines, *Path);
+				UE_LOG(LogSovereign, Log, TEXT("INBOX: travelling; %d line(s) kept for the next map"), Lines.Num());
+			}
+			break;
 		}
 	}
 #endif
@@ -983,6 +1014,13 @@ bool USRBattleSubsystem::IsDeepWater(const FVector2D& Point) const
 	return Grid && Grid->ToCell(Point, C) && Grid->IsWater(C);
 }
 
+bool USRBattleSubsystem::IsSteep(const FVector2D& Point) const
+{
+	const USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	FIntPoint C;
+	return Grid && Grid->ToCell(Point, C) && Grid->IsEdge(C);
+}
+
 void USRBattleSubsystem::CommandMove(const TArray<ASRUnit*>& Group, const FVector2D& Goal, bool bAttackMove, ESRFormationShape Shape, bool bAcknowledge,
 	const FVector2D* Facing, bool bKeepPace)
 {
@@ -993,19 +1031,26 @@ void USRBattleSubsystem::CommandMove(const TArray<ASRUnit*>& Group, const FVecto
 
 	FVector2D Dest(FMath::Clamp(Goal.X, -F.MapHalfExtent.X, F.MapHalfExtent.X), FMath::Clamp(Goal.Y, -F.MapHalfExtent.Y, F.MapHalfExtent.Y));
 	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
-	if (Grid) { Dest = Grid->NearestWalkable(Dest); } // a click on a building, a rock or water means "go there", beside it
+	// A click on a building, a rock, a crag or water means "go there": beside it, on ground the group can walk to
+	// (the group's ground is taken from its first member; one cut off from the rest is sorted out per walker below).
+	const FVector2D Lead = Units2[0]->GetPos2D();
+	if (Grid) { Dest = Grid->NearestWalkable(Dest, 40, &Lead); }
 
 	TArray<FVector2D> Slots;
 	SRFormation::ComputeSlots(Units2, Dest, Slots, Shape, Facing);
+	if (Grid) { Grid->FitSlots(Dest, Slots); }   // no slot over a cliff's edge, in the water or inside a wall
 
 	TArray<FVector2D> Starts;
 	for (ASRUnit* U : Units2) { Starts.Add(U->GetPos2D()); }
 	TArray<TArray<FVector2D>> Paths;
-	if (Grid) { Grid->FindGroupPaths(Starts, Dest, Paths); }
+	TArray<FVector2D> Ends;
+	if (Grid) { Grid->FindGroupPaths(Starts, Dest, Paths, &Ends); }
 	for (int32 i = 0; i < Units2.Num(); ++i)
 	{
 		TArray<FVector2D> Path = Paths.IsValidIndex(i) ? Paths[i] : TArray<FVector2D>();
-		FVector2D Slot = Grid ? Grid->NearestWalkable(Slots[i], 4) : Slots[i];
+		FVector2D Slot = Slots[i];
+		// a walker cut off from the goal (the far bank, a ledge) goes as near as its own ground comes, not to its slot
+		if (Ends.IsValidIndex(i) && FVector2D::DistSquared(Ends[i], Dest) > 1.f) { Slot = Ends[i]; }
 		Path.Add(Slot);
 		Units2[i]->OrderMovePath(Path, bAttackMove);
 		Units2[i]->SetHome(Slot);
@@ -1013,11 +1058,153 @@ void USRBattleSubsystem::CommandMove(const TArray<ASRUnit*>& Group, const FVecto
 	}
 	// March together: the column keeps to its slowest member's pace (riders do not leave the shields behind). Only
 	// the march: a fight met on the way is fought at full speed.
+	float Slowest = TNumericLimits<float>::Max();
+	for (const ASRUnit* U : Units2) { Slowest = FMath::Min(Slowest, U->Stats().MaxSpeed); }
 	if (bKeepPace && Units2.Num() > 1)
 	{
-		float Slowest = TNumericLimits<float>::Max();
-		for (const ASRUnit* U : Units2) { Slowest = FMath::Min(Slowest, U->Stats().MaxSpeed); }
 		for (ASRUnit* U : Units2) { U->SetPace(Slowest < U->Stats().MaxSpeed - 1.f ? Slowest : 0.f); }
+	}
+
+	// In formation (any shape but Loose), a group of the player's that has some way to go marches in its shape: see
+	// FMarch. (The orders given above stand for the end of the march, and for any member the march lets go of.)
+	EndMarchesOf(Units2);
+	FVector2D Centre = FVector2D::ZeroVector;
+	for (const ASRUnit* U : Units2) { Centre += U->GetPos2D(); }
+	Centre /= Units2.Num();
+	if (Shape == ESRFormationShape::Loose || Units2.Num() < 2 || Units2[0]->GetTeam() != ESRTeam::Player || !Grid || FVector2D::Distance(Centre, Dest) < 900.f) { return; }
+	FMarch& M = Marches.AddDefaulted_GetRef();
+	M.bAttackMove = bAttackMove;
+	M.Pace = Slowest * 0.92f;   // a little under the slowest, so the slowest can keep its place
+	// the shape's frame at the goal: forward = the way the slots face (ComputeSlots), right = its right hand
+	FVector2D Fwd = Facing && !Facing->IsNearlyZero() ? *Facing : Dest - Centre;
+	Fwd = Fwd.GetSafeNormal();
+	const FVector2D Right(-Fwd.Y, Fwd.X);
+	M.Route.Add(Grid->NearestWalkable(Centre, 8));
+	TArray<FVector2D> Way;
+	Grid->FindPath(M.Route[0], Dest, Way);
+	M.Route.Append(Way);
+	M.RouteS.Add(0.f);
+	for (int32 k = 1; k < M.Route.Num(); ++k) { M.RouteS.Add(M.RouteS.Last() + FVector2D::Distance(M.Route[k - 1], M.Route[k])); }
+	for (int32 i = 0; i < Units2.Num(); ++i)
+	{
+		const FVector2D Off = Slots[i] - Dest;
+		M.Members.Add(Units2[i]);
+		M.Offsets.Add(FVector2D(FVector2D::DotProduct(Off, Fwd), FVector2D::DotProduct(Off, Right)));
+		M.FinalSlots.Add(Slots[i]);
+		M.RouteTimer.Add(0.f);
+	}
+}
+
+FVector2D USRBattleSubsystem::RouteAt(const FMarch& M, float S) const
+{
+	if (M.Route.Num() == 0) { return FVector2D::ZeroVector; }
+	if (S <= 0.f) { return M.Route[0]; }
+	for (int32 k = 1; k < M.Route.Num(); ++k)
+	{
+		if (S <= M.RouteS[k]) { const float Len = FMath::Max(M.RouteS[k] - M.RouteS[k - 1], 1.f); return FMath::Lerp(M.Route[k - 1], M.Route[k], (S - M.RouteS[k - 1]) / Len); }
+	}
+	return M.Route.Last();
+}
+
+void USRBattleSubsystem::EndMarchesOf(const TArray<ASRUnit*>& Group)
+{
+	for (int32 i = Marches.Num() - 1; i >= 0; --i)
+	{
+		FMarch& M = Marches[i];
+		for (int32 k = M.Members.Num() - 1; k >= 0; --k)
+		{
+			if (!M.Members[k].IsValid() || Group.Contains(M.Members[k].Get()))
+			{
+				M.Members.RemoveAt(k); M.Offsets.RemoveAt(k); M.FinalSlots.RemoveAt(k); M.RouteTimer.RemoveAt(k);
+			}
+		}
+		if (M.Members.Num() == 0) { Marches.RemoveAt(i); }
+	}
+}
+
+void USRBattleSubsystem::StepMarches(float Dt)
+{
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	for (int32 i = Marches.Num() - 1; i >= 0; --i)
+	{
+		FMarch& M = Marches[i];
+		// members that died, or were given another order (or are fighting: they rejoin when it is over), drop out
+		for (int32 k = M.Members.Num() - 1; k >= 0; --k)
+		{
+			const ASRUnit* U = M.Members[k].Get();
+			const bool bOrder = U && (U->GetOrder() == ESROrder::Move || U->GetOrder() == ESROrder::AttackMove || U->GetOrder() == ESROrder::Idle);
+			if (!U || !U->IsAlive() || !bOrder)
+			{
+				M.Members.RemoveAt(k); M.Offsets.RemoveAt(k); M.FinalSlots.RemoveAt(k); M.RouteTimer.RemoveAt(k);
+			}
+		}
+		if (M.Members.Num() == 0 || M.RouteS.Num() == 0) { Marches.RemoveAt(i); continue; }
+		const float Length = M.RouteS.Last();
+
+		// the centre's heading: along the route, looking a little ahead (so the shape turns smoothly round a corner)
+		const FVector2D P = RouteAt(M, M.S);
+		FVector2D Fwd = (RouteAt(M, M.S + 300.f) - RouteAt(M, M.S - 120.f)).GetSafeNormal();
+		if (Fwd.IsNearlyZero()) { Fwd = (M.Route.Last() - M.Route[0]).GetSafeNormal(); }
+		const FVector2D Right(-Fwd.Y, Fwd.X);
+
+		// each member to its place in the shape; where the ground does not allow it, along the route at its rank
+		TArray<float> Lags;
+		for (int32 k = 0; k < M.Members.Num(); ++k)
+		{
+			ASRUnit* U = M.Members[k].Get();
+			const FVector2D Off = M.Offsets[k];
+			const FVector2D Place = P + Fwd * Off.X + Right * Off.Y;
+			FIntPoint Cell;
+			const bool bPlaceOpen = Grid && Grid->ToCell(Place, Cell) && Grid->IsWalkable(Cell) && Grid->CanWalkStraight(U->GetPos2D(), Place);
+			FVector2D Target = Place;
+			if (!bPlaceOpen)
+			{
+				// file along the route, at its rank's distance behind the centre (a front rank just behind it)
+				const FVector2D OnRoute = RouteAt(M, FMath::Max(M.S + FMath::Min(Off.X, -40.f) - FMath::Abs(Off.Y) * 0.6f, 0.f));
+				if (!Grid || Grid->CanWalkStraight(U->GetPos2D(), OnRoute)) { Target = OnRoute; }
+				else
+				{
+					// cut off from both (round a rock, a building): its own way to the route, re-planned now and then
+					M.RouteTimer[k] -= Dt;
+					if (M.RouteTimer[k] <= 0.f)
+					{
+						M.RouteTimer[k] = 1.5f;
+						TArray<FVector2D> Way;
+						Grid->FindPath(U->GetPos2D(), OnRoute, Way);
+						U->OrderMovePath(Way, M.bAttackMove);
+						U->SetPace(M.Pace);
+					}
+					Lags.Add(FVector2D::Distance(U->GetPos2D(), OnRoute));
+					continue;
+				}
+			}
+			M.RouteTimer[k] = 0.f;
+			U->MarchTo(Target, U->IsEngaged() ? 0.f : M.Pace * 1.25f, M.bAttackMove);   // (a little quicker than the centre, to catch up)
+			Lags.Add(FVector2D::Distance(U->GetPos2D(), Target));
+		}
+
+		// the centre walks on at the group's pace, slowing while members are behind (most of them: one held up far
+		// back does not hold the march for long)
+		Lags.Sort();
+		const float Lag = Lags.Num() > 0 ? Lags[FMath::Clamp(FMath::FloorToInt(Lags.Num() * 0.8f), 0, Lags.Num() - 1)] : 0.f;
+		const float Scale = FMath::Clamp(1.f - (Lag - 250.f) / 500.f, 0.f, 1.f);
+		M.Stalled = Scale < 0.05f ? M.Stalled + Dt : 0.f;
+		M.S = FMath::Min(Length, M.S + M.Pace * (M.Stalled > 3.f ? 0.4f : Scale) * Dt);
+
+		// arrived: each to its own slot, as an ordinary move would
+		if (M.S >= Length - 1.f)
+		{
+			for (int32 k = 0; k < M.Members.Num(); ++k)
+			{
+				ASRUnit* U = M.Members[k].Get();
+				TArray<FVector2D> Way;
+				if (Grid) { Grid->FindPath(U->GetPos2D(), M.FinalSlots[k], Way); } else { Way.Add(M.FinalSlots[k]); }
+				U->OrderMovePath(Way, M.bAttackMove);
+				U->SetPace(M.Pace);
+				U->SetHome(M.FinalSlots[k]);
+			}
+			Marches.RemoveAt(i);
+		}
 	}
 }
 
@@ -1054,25 +1241,93 @@ void USRBattleSubsystem::CommandAttackBuilding(const TArray<ASRUnit*>& Group, AS
 void USRBattleSubsystem::CommandPatrol(const TArray<ASRUnit*>& Group, const FVector2D& To, ESRFormationShape Shape)
 {
 	TArray<ASRUnit*> Live;
+	for (ASRUnit* U : Group) { if (U && U->IsActive()) { Live.Add(U); } }
+	if (Live.Num() == 0) { return; }
+	ClearPatrol(Live);
+	ExtendPatrol(Live, To, Shape);
+}
+
+int32 USRBattleSubsystem::FindRouteOf(const TArray<ASRUnit*>& Group) const
+{
+	for (int32 i = 0; i < Patrols.Num(); ++i)
+	{
+		const FPatrol& P = Patrols[i];
+		int32 Live = 0;
+		for (const TWeakObjectPtr<ASRUnit>& M : P.Members) { Live += (M.IsValid() && M->IsAlive()) ? 1 : 0; }
+		if (Live != Group.Num()) { continue; }
+		bool bAll = true;
+		for (const ASRUnit* U : Group) { bAll &= P.Members.Contains(TWeakObjectPtr<ASRUnit>(const_cast<ASRUnit*>(U))); }
+		if (bAll) { return i; }
+	}
+	return INDEX_NONE;
+}
+
+void USRBattleSubsystem::ExtendPatrol(const TArray<ASRUnit*>& Group, const FVector2D& Point, ESRFormationShape Shape)
+{
+	TArray<ASRUnit*> Live;
 	FVector2D Centre = FVector2D::ZeroVector;
 	for (ASRUnit* U : Group) { if (U && U->IsActive()) { Live.Add(U); Centre += U->GetPos2D(); } }
 	if (Live.Num() == 0) { return; }
 	Centre /= Live.Num();
+	const USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	const FVector2D To = Grid ? Grid->NearestWalkable(Point, 40, &Centre) : Point;
+
+	// already patrolling together: the new point goes on the end of the loop (they carry on where they are)
+	const int32 Existing = FindRouteOf(Live);
+	if (Existing != INDEX_NONE && Patrols[Existing].bLoop)
+	{
+		FPatrol& P = Patrols[Existing];
+		P.Points.Add(To);
+		UE_LOG(LogSovereign, Log, TEXT("PATROL %d troops: point %d at (%.0f, %.0f)"), Live.Num(), P.Points.Num(), To.X, To.Y);
+		return;
+	}
 	ClearPatrol(Live);
 	FPatrol& P = Patrols.AddDefaulted_GetRef();
 	for (ASRUnit* U : Live) { P.Members.Add(U); }
-	P.A = Centre;
-	P.B = To;
-	if (const USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { P.A = Grid->NearestWalkable(P.A); P.B = Grid->NearestWalkable(P.B); }
-	P.bTowardB = true;
+	P.Points = { Grid ? Grid->NearestWalkable(Centre) : Centre, To };
+	P.Next = 1;
+	P.bLoop = true;
+	P.bAttackMove = true;
 	P.Shape = Shape;
 	P.Settle = 1.5f;
-	CommandMove(Live, P.B, true, Shape, true);
-	UE_LOG(LogSovereign, Log, TEXT("PATROL %d troops (%.0f, %.0f) <-> (%.0f, %.0f)"), Live.Num(), P.A.X, P.A.Y, P.B.X, P.B.Y);
+	CommandMove(Live, To, true, Shape, true);
+	UE_LOG(LogSovereign, Log, TEXT("PATROL %d troops (%.0f, %.0f) <-> (%.0f, %.0f)"), Live.Num(), P.Points[0].X, P.Points[0].Y, To.X, To.Y);
+}
+
+void USRBattleSubsystem::ExtendPath(const TArray<ASRUnit*>& Group, const FVector2D& Point, bool bAttackMove, ESRFormationShape Shape)
+{
+	TArray<ASRUnit*> Live;
+	for (ASRUnit* U : Group) { if (U && U->IsActive()) { Live.Add(U); } }
+	if (Live.Num() == 0) { return; }
+	const FVector2D Lead = Live[0]->GetPos2D();
+	const USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	const FVector2D To = Grid ? Grid->NearestWalkable(Point, 40, &Lead) : Point;
+
+	const int32 Existing = FindRouteOf(Live);
+	if (Existing != INDEX_NONE && !Patrols[Existing].bLoop)
+	{
+		FPatrol& P = Patrols[Existing];
+		P.Points.Add(To);
+		P.bAttackMove |= bAttackMove;
+		UE_LOG(LogSovereign, Log, TEXT("PATH %d troops: point %d at (%.0f, %.0f)"), Live.Num(), P.Points.Num(), To.X, To.Y);
+		return;
+	}
+	ClearPatrol(Live);
+	FPatrol& P = Patrols.AddDefaulted_GetRef();
+	for (ASRUnit* U : Live) { P.Members.Add(U); }
+	P.Points = { To };
+	P.Next = 0;
+	P.bLoop = false;
+	P.bAttackMove = bAttackMove;
+	P.Shape = Shape;
+	P.Settle = 0.6f;
+	CommandMove(Live, To, bAttackMove, Shape, true);
+	UE_LOG(LogSovereign, Log, TEXT("PATH %d troops: point 1 at (%.0f, %.0f)"), Live.Num(), To.X, To.Y);
 }
 
 void USRBattleSubsystem::ClearPatrol(const TArray<ASRUnit*>& Group)
 {
+	EndMarchesOf(Group);
 	for (int32 i = Patrols.Num() - 1; i >= 0; --i)
 	{
 		FPatrol& P = Patrols[i];
@@ -1081,16 +1336,25 @@ void USRBattleSubsystem::ClearPatrol(const TArray<ASRUnit*>& Group)
 	}
 }
 
-bool USRBattleSubsystem::GetPatrolRoute(const ASRUnit* Unit, FVector2D& OutA, FVector2D& OutB) const
+bool USRBattleSubsystem::GetRoute(const ASRUnit* Unit, TArray<FVector2D>& OutPoints, bool& bOutLoop, int32& OutNext) const
 {
 	for (const FPatrol& P : Patrols)
 	{
 		for (const TWeakObjectPtr<ASRUnit>& M : P.Members)
 		{
-			if (M.Get() == Unit) { OutA = P.A; OutB = P.B; return true; }
+			if (M.Get() == Unit) { OutPoints = P.Points; bOutLoop = P.bLoop; OutNext = P.Next; return true; }
 		}
 	}
 	return false;
+}
+
+void USRBattleSubsystem::AddHealPopup(const FVector& Origin, int32 Amount)
+{
+	if (Amount <= 0) { return; }
+	FHealPopup& H = HealPopups.AddDefaulted_GetRef();
+	H.Origin = Origin;
+	H.Amount = Amount;
+	while (HealPopups.Num() > 60) { HealPopups.RemoveAt(0); }
 }
 
 void USRBattleSubsystem::StepPatrols(float Dt)
@@ -1099,11 +1363,11 @@ void USRBattleSubsystem::StepPatrols(float Dt)
 	{
 		FPatrol& P = Patrols[i];
 		P.Members.RemoveAll([](const TWeakObjectPtr<ASRUnit>& M) { return !M.IsValid() || !M->IsAlive(); });
-		if (P.Members.Num() == 0) { Patrols.RemoveAt(i); continue; }
+		if (P.Members.Num() == 0 || P.Points.Num() == 0) { Patrols.RemoveAt(i); continue; }
 		P.Settle -= Dt;
 		if (P.Settle > 0.f) { continue; }
 
-		// Turn round once nobody is fighting and everyone has arrived (or given up on) the far end.
+		// On to the next point once nobody is fighting and everyone has arrived at (or given up on) this one.
 		TArray<ASRUnit*> Live;
 		bool bBusy = false;
 		for (const TWeakObjectPtr<ASRUnit>& M : P.Members)
@@ -1112,9 +1376,14 @@ void USRBattleSubsystem::StepPatrols(float Dt)
 			if (M->IsEngaged() || (M->GetOrder() != ESROrder::Idle && M->GetOrder() != ESROrder::Hold)) { bBusy = true; }
 		}
 		if (bBusy) { continue; }
-		P.bTowardB = !P.bTowardB;
-		P.Settle = 1.5f;
-		CommandMove(Live, P.bTowardB ? P.B : P.A, true, P.Shape, false);
+		if (P.Next >= P.Points.Num() - 1 && !P.bLoop)
+		{
+			Patrols.RemoveAt(i);   // a pathway walked to its end
+			continue;
+		}
+		P.Next = (P.Next + 1) % P.Points.Num();
+		P.Settle = P.bLoop ? 1.5f : 0.6f;
+		CommandMove(Live, P.Points[P.Next], P.bAttackMove, P.Shape, false);
 	}
 }
 
@@ -1127,6 +1396,7 @@ bool USRBattleSubsystem::IsVisibleToPlayer(const ASRUnit* Unit) const
 void USRBattleSubsystem::RemoveAllUnits()
 {
 	Patrols.Reset();
+	Marches.Reset();
 	for (ASRUnit* Unit : Units) { if (Unit) { Unit->Destroy(); } }
 	for (ASRUnit* Corpse : Corpses) { if (Corpse) { Corpse->Destroy(); } }
 	Units.Reset();

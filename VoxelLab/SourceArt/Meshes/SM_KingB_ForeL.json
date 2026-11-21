@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_ForeL",
+ "faces": 490,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0823,
+   -0.1941,
+   -0.4375
+  ],
+  [
+   0.1917,
+   0.0784,
+   0.0819
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.39519,
+  0.0,
+  0.96162
+ ],
+ "part": "ForeL",
+ "triangles": 981,
+ "blocks": 60
+}

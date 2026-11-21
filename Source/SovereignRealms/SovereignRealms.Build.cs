@@ -12,8 +12,8 @@ public class SovereignRealms : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
-			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"DeveloperSettings", "ProceduralMeshComponent", "Slate", "SlateCore", "RenderCore", "RHI"
+			"Core", "CoreUObject", "Engine", "InputCore", "ApplicationCore", "EnhancedInput",
+			"DeveloperSettings", "ProceduralMeshComponent", "Slate", "SlateCore", "RenderCore", "RHI", "MediaAssets"
 		});
 	}
 }

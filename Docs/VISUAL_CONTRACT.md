@@ -9,10 +9,10 @@ sheets, and can restyle everything below without touching C++.
 
 | Thing | Value |
 | --- | --- |
-| Map | `/Game/Maps/L_Battlefield` (editor startup map and game default map) |
+| Maps | `/Game/Maps/L_Battlefield` (THE RIVERLANDS, two kingdoms; editor startup map and game default map) and `/Game/Maps/L_Battlefield4` (THE FOUR MARCHES). Each carries an `ASRMapInfo` (folder `Map`) with its bounds, starts, camera height and minimap; see `Docs/GAMEPLAY.md` > The match. |
 | Game mode | `/Script/SovereignRealms.SRGameMode` (global default) |
-| Map contents | Dressed by the visual pass, see "Visual pass" at the end: outliner folders `Terrain`, `Props`, `Water`, `Lighting`. The open ground is at Z = 0; terraces step up from it. |
-| Playable bounds | +/-14000 cm in X and Y around the origin (`MapHalfExtent` in Sovereign Feel). Camera focus and move orders are clamped to it. |
+| Map contents | Dressed by the visual pass, see "Visual pass" at the end: outliner folders `Terrain`, `Props`, `Water`, `Buildings`, `Lighting`, `Atmosphere`, `Map`. The land is one smooth heightfield surface (chunk meshes `SM_T_Land_*`): rivers at Z = 0, the kingdoms' tables at 1750, mountains above. |
+| Playable bounds | Per map, from its `ASRMapInfo`: +/-24000 cm (the Riverlands), +/-36000 cm (the Four Marches). Camera focus and move orders are clamped to it (`MapHalfExtent` in Sovereign Feel is overwritten from the level when it starts). |
 | Spawned at runtime | Units, arrows, order markers, camera pawn. The three grey test blocks (tag `SRGreyboxObstacle`) are switched off in `Config/DefaultGame.ini`; boulders in the map stand in the same places. |
 
 The empty map was first made by `Tools/create_battlefield_map.py`; everything in it now comes from the
@@ -24,13 +24,17 @@ Spawn Greybox Obstacles** off: the map has its own obstacles.
 Units have **no collision components**. They find the world with line traces
 against the **WorldStatic** object type only:
 
+- **Water** is found by depth, not height: water sheets are static mesh actors tagged `SRWater` (no collision in
+  the level; the grid traces each sheet by itself). Ground more than 14 cm under a sheet is deep water, a wall.
+- **Steep ground**: the grid closes a 1 m cell whose corners differ by more than a step; troops are not pushed or
+  lured onto such cells. The terrain material draws them as rock (surface normal Z under 0.86).
 - **Ground**: a vertical trace per unit per frame. Anything that should be walked
   on must be WorldStatic with collision (a Landscape, or static meshes with the
   default `BlockAll` profile). Units follow uneven terrain.
 - **Walls**: a horizontal trace at knee height (`StepHeight` + 5 cm). Rocks,
   trunks and walls that should stop units need WorldStatic blocking collision.
   Ledges up to `StepHeight` (45 cm) are climbed, taller ones block, drops over
-  `MaxDropHeight` (140 cm) are refused. Ramps connect terraces.
+  `MaxDropHeight` (140 cm) are refused. (The land has no ledges now: slopes, which the grid judges.)
 - **Things units should ignore** (grass, canopies, decals, fog cards, banners):
   give them `NoCollision`, or any object type other than WorldStatic. A canopy
   with WorldStatic collision more than 4 m above a unit is ignored; lower than
@@ -146,10 +150,10 @@ haze with light shafts past the focus point, bloom, and a tilt-shift band of sha
 | 1. Textures | `Tools/.venv/bin/python Tools/textures/gen_world_textures.py` | `SourceArt/Textures/*.png`: drawn in code from small fixed palettes (placed blade marks, laid stone courses, set cobbles). Preview sheet in `Saved/TexturePreview/`. |
 | 1b. Mountain textures | `Tools/.venv/bin/python Tools/textures/gen_mountain_textures.py` | `T_MountainRock.png`, `T_Snow.png`: two CC0 Poly Haven photos (`SourceArt/Textures/Sources/PolyHaven`, with `CREDITS.md`) crushed to 128 px tiles in the game's palette. Only needed when the sources change. |
 | 1c. Mountain shapes | `Blender -b --python Tools/blender/build_mountains.py` | `SourceArt/World/Mountains/peak_<n>.npy`: height grids from Blender's A.N.T. Landscape extension (noise + its eroder), which step 2 turns into the sculpted peaks at the field's far edge. Only needed to change the peaks' shapes (`CREDITS.md` there has the install line). |
-| 2. World | `Tools/.venv/bin/python Tools/world/gen_battlefield.py` (`--plan`: previews only, 20 s) | `SourceArt/Meshes/battlefield.gltf` (every static mesh), `SourceArt/Textures/T_Splat.png` (ground blend map), `T_WaterMap.png` (water data map), `T_MinimapBase.png`, `SourceArt/World/layout.json` (placements, veins, river, lanes), `Saved/WorldPreview/map.png` (top-down preview), `Saved/MapPreview/layout.png` + `report.txt` (the plan as the walkability grid will read it, with the route, symmetry and building-spot checks). |
-| 3. Import | `Tools/ue_py.py Tools/import_world_assets.py` | `/Game/SR/Textures`, `/Game/SR/Meshes` (re-imports in place, deletes meshes the generator dropped). |
-| 4. Materials | `Tools/ue_py.py Tools/build_visual_materials.py` | `/Game/SR/Materials` (graphs cleared and rebuilt in place, references survive). |
-| 5. Level | `Tools/ue_py.py Tools/build_battlefield_visuals.py` | Rebuilds the outliner folders `Terrain`, `Props`, `Water`, `Lighting`, `Atmosphere`. Anything placed by hand belongs in another folder. |
+| 2. World | `Tools/.venv/bin/python Tools/world/gen_battlefield.py --map two` (or `four`, `all`; `--plan`: previews only) | Map `two`: `SourceArt/Meshes/battlefield.gltf` (every static mesh), `SourceArt/Textures/T_Splat.png` (ground blend map), `T_WaterMap.png` (water data map), `T_MinimapBase.png`, `SourceArt/World/layout.json` (placements, the map's own numbers, veins, ruins, roads), `Saved/WorldPreview/map.png`, `Saved/MapPreview/layout.png` + `report.txt` (the plan as the walkability grid will read it, with its checks; a map that fails one is not written). Map `four`: the same names with a `4` before the extension. Plans: `Tools/world/maps.py`. |
+| 3. Import | `Tools/ue_py.py Tools/import_world_assets.py` (`MAP='four'` or `'all'` for the other map's meshes) | `/Game/SR/Textures`, `/Game/SR/Meshes` (map `two`), `/Game/SR/Meshes4` (map `four`); re-imports in place, deletes meshes the generator dropped. |
+| 4. Materials | `Tools/ue_py.py Tools/build_visual_materials.py` | `/Game/SR/Materials` (graphs cleared and rebuilt in place, references survive), with the second map's instances `MI_Terrain4`, `MI_Water4`, `MI_Mist4` (its splat map, water map and their world squares). |
+| 5. Level | `Tools/ue_py.py Tools/build_battlefield_visuals.py` (`MAP='four'` for `/Game/Maps/L_Battlefield4`) | Opens (or makes) the map's level and rebuilds the outliner folders `Terrain`, `Props`, `Water`, `Buildings`, `Lighting`, `Atmosphere`, `Map` (the `ASRMapInfo`). Anything placed by hand belongs in another folder. |
 | 6. Troop sheets | `Tools/blender/build_all.sh` | `SourceArt/Characters/<name>_color / _teammask / _normal.png`, `<name>.json` (see `SPRITE_SPEC.md`). |
 | 7. Cards, arrow | `Tools/.venv/bin/python Tools/sprites/gen_sprite_cards.py` | `SourceArt/Characters/cards.gltf` (`SM_UnitCard`, `SM_ArrowCard`), `arrow_color.png`, `arrow_teammask.png`. |
 | 8. Sprite import | `Tools/ue_py.py Tools/import_character_sprites.py` | `/Game/SR/Characters` (textures and the two card meshes). Then step 4 again, or only its sprite part: `ONLY=['sprite']`. |
@@ -160,8 +164,10 @@ docstring). While a material is being rebuilt the log shows transient "Failed to
 warnings; they are the half-wired graph and stop once the script finishes. To retune only the lighting:
 edit `LOOK` in `Tools/build_battlefield_visuals.py` and run it with `PARTS=['lighting']`. Rebuild one material family
 with `ONLY=['terrain']` (or `water`, `atmosphere`, ...) in step 4: a full run re-saves every material, and
-`M_Terrain`, `M_Water` and `M_Mist` must be rebuilt whenever the generator's splat / water map rectangle changes
-(they read it from `layout.json`).
+`M_Terrain`, `M_Water` and `M_Mist` (and the second map's instances of them) must be rebuilt whenever the generator's
+splat / water map rectangle changes (they read it from `layout.json` / `layout4.json`). A data map re-imported in a
+running editor can stay an empty placeholder in memory (cobbles everywhere, pale water): the import script changes
+a property and saves again to make it build; if a level still looks like that, run the texture import once more.
 
 ### Texel density: 4 cm per texel, everywhere
 
@@ -190,7 +196,7 @@ does not crawl when the camera pans. `*_N` normal maps and `T_Splat` are linear 
 | `T_Wood`, `T_LogEnd`, `T_Banner` | 64 x 32, 16 x 16, 16 x 40 | Planks, sawn log end, cloth banner. |
 | `T_Water`, `T_Gravel` | 128 x 128 | Running water: broad pools of two close teals with sparse ripple streaks lying along the current (2 texels across per 3 down, `FLOW_TEXELS`; must agree with `FLOW_DIR` in the world generator). The pale pebble bed of a ford. |
 | `T_WaterMap` | 2048 x 2048, linear data | World-aligned over the splat map's square (`layout.json` `water.map`). R = distance in from the bank (0 .. 1 over 256 cm), G = ford, B = current (0 in the still lake). Sampled bilinear and clamped; `build_visual_materials.py` sets those texture properties itself (the importer brings new PNGs in as pixel art), so run it after every texture import. |
-| `T_Splat` | 4096 x 4096 | Ground blend map over the world square in `layout.json` `splat` (origin (-16000, -20480), size 40960 cm): R = road (0 turf, 0.5 bare earth, 1 set stones), G = moss, B = dry straw, A = shade baked at cliff feet. The regions are painted here: straw-gold on the centre plain, parched and stony on the highlands, moss under the fir belts and along the river, mud at the water's edge, gravel bars at the fords, set stone on the bridges and the shrine's dais. |
+| `T_Splat` | 4096 x 4096 | Ground blend map over the world square in `layout.json` `splat` (map 3: origin (-27400, -30720), size 61440 cm, 15 cm a texel): R = road (0 turf, 0.5 bare earth, 1 set stones), G = moss, B = dry straw, A = shade baked at cliff feet. The regions are painted here: straw-gold on the centre plain, parched and stony on the highlands, moss under the fir belts and along the river, mud at the water's edge, gravel bars at the fords, set stone on the bridges and the shrine's dais. |
 
 ### Materials (`/Game/SR/Materials`)
 
@@ -207,30 +213,94 @@ does not crawl when the camera pans. `*_N` normal maps and `T_Splat` are linear 
 | `M_Card` + `MI_Card_Banner` | Grass, fern and flower cards; the banner cloth | Masked, two-sided, normal forced to world up so a card is lit like the turf it stands in. UV0 is 0..1 into `Tex` (`Size` in texels). `RootShade`, `Tint`, sway. |
 | `M_Water` | The river sheet (`SM_Water`) | Per world texel, from `T_WaterMap` (`MapRect`): two layers of `T_Water` streaks carried downstream (`Flow`, `ScrollTexelsPerSecond` x / y) a whole texel at a time; `Deep` / `DeepMix`; **shallows** in three stepped, dithered bands within `ShallowWidth` (150 cm) of a bank (`Shallow`, A = strength); a broken **foam line** that laps in and out along every bank (`Foam`, `FoamWidth`, `FoamSpeed`, `FoamBreak`) with a fainter second line; **fords** drawn as `T_Gravel` wetted by `FordTint` under quick bright ripples (`ScrollTexelsPerSecond` z, `FordRippleLevel`); `Glint` on the brightest crests plus winking sun sparkles (`Sparkle`). Opaque, roughness 0.1 (0.7 on foam), so Lumen reflects the haze. |
 
+### Natural-world pass (2026-11-19; supersedes the `M_Terrain`, `M_Water`, mist and waterfall notes above)
+
+Why and how it was judged: `Docs/VISUAL_AUDIT.md`. Outside assets and licences: `Docs/ASSET_CREDITS.md`.
+
+**New inputs**
+
+| Asset | Made by | What it is |
+| --- | --- | --- |
+| `/Game/SR/Textures/Nature/T_N_<Name>_D` / `_N` | `import_world_assets.py` > `import_nature` from `SourceArt/Textures/PolyHaven/<id>/` | Photographic CC0 textures (Poly Haven): ordinary filtered, mipped, compressed textures; normal maps BC5 with green flipped. The materials lay them on the 4 cm texel grid themselves (`SRNat.Q` + `SRNat.T2` in `build_visual_materials.py`), so they show as crisp texels like the pixel art. |
+| `T_N_WaterWaves_N`, `T_N_WaterNoise` | `Tools/textures/gen_nature_textures.py` -> `SourceArt/Textures/Nature` | Tileable ripple normals; foam breakup (R), cloud (G), grain (B), streaks drawn out along +X (A). |
+| `T_WaterFlow`, `T_WaterFlow4` (2048, linear data) | `gen_battlefield.py` > `build_flow_map` | Over the splat map's square. RG = the current, world XY, 0.5 = still, **along each river's own bed** (`W.current_lines`), its length the strength (0 out in a lake); B = water depth / 200 cm; A = damp ground (1 at the water's edge, 0 three metres back). |
+| `T_WaterMap` / `T_WaterMap4` alpha | `gen_battlefield.py` > `build_water_map` | Where ground mist pools: hollows at two sizes, the water's margins; little on the kingdoms' tables, none on steep ground. |
+| `layout*.json` > `water.falls[].foot`, `.width` | `gen_battlefield.py` > `fall_mesh` | Where each fall meets its pool (spray sheets, the pool's churn). |
+| `layout*.json` > `instances` | `dressing.py` > `Dressing.rubble` | Loose stones along every crest where turf gives way to rock, pebbles on the banks. Its own random stream (seed + 4242): tuning it moves nothing else. |
+
+**Materials**
+
+| Asset | Used for | What it does / parameters worth knowing |
+| --- | --- | --- |
+| `M_Terrain` (+ `MI_Terrain4`: `Splat`, `FlowMap`, `SplatRect`, relief lines) | Every `SM_T_*` mesh | Turf: the pixel tile x a grass photograph (`GrassDetail`, `GrassTile`), an aerial photograph (`MacroStrength`, `MacroTile`) and three sizes of noise (`Variation`, `LushTint`, `ParchedTint`); clover drifts with flowers (`CloverTint`, `Flowers`, `FlowerBright`); a grass normal (`GrassNormal`). Roads: yellowed verge, pebble detail. Wet banks from `T_WaterFlow.a` (`WetDark`, `WetRough`, `MudTint`). Rock where normal Z < `RockSlope` or above `RockLine`: crags from above, strata from the side, grain, beds and ledges along the contours (`RockTile` X / Y / Z / W = cm each spans, `RockTopGain`, `SideTint`, `RockFaceTint`, `RockNormal`, `Strata`, `LedgeCm`, `LedgeDark`), lichen and moss on sky-facing rock (`MossSlope`, `LichenTint`). The broken lip above the rock's edge (`LipWidth`, `LipDark`, `ScreeTint`). Outputs normal, roughness and specular. Deck sides (bridges) are unchanged. |
+| `M_Rock` + `MI_Rock_Ruin` | `SM_Rock_*` (boulders, scree, rubble), `SM_Cairn`; standing stones and dolmens | The mountains' rock from three sides on the world's texels, lichen and moss on top (`Tile`, `Moss`, `MossSlope`, `Tint`). World-aligned: for static pieces only. `MI_Prop_Rock` (on `M_Prop`) still dresses relics, barrows and bones. |
+| `M_Water` (+ `MI_Water4`: `WaterMap`, `FlowMap`, `MapRect`, `Fall0..3`) | Every water sheet | Opaque, lit, world normal out. Depth colour from `T_WaterFlow.b`: the bed (`Bed`, `BedTint`; `Gravel` on a ford) clear to `ClearDepth`, `Shallow` turquoise, `Deep` by `DeepDepth`; `Refraction`, `Caustics`. Ripples: `Waves` carried by the flow map in two phases (`FlowSpeed` cm/s, `FlowRate`) under two wind layers (`WindScroll`, `WaveTile`), `NormalStrength`, `FordChop`. Foam on the texel grid: bank edge (`EdgeFoam`), lapping lines (`LapSpacing`, `LapSpeed`, `LapReach`), current streaks (`StreakTile`, `StreakSpeed`), churn and rings under the falls (`Fall0..3`: XY, Z = reach). `Sparkle`, `Glint`, `WaveShade` (the ripples' lit and shaded sides), `FordRoughness` (0.45: keeps fords out of Lumen's reflection traces). The old single `Flow` direction is gone. |
+| `M_Waterfall` | `SM_Waterfall_n` | Glassy lip, three speeds of streak, white foot, ragged sides (`Columns`, `CellCm`, `Speed`, `Bright`). |
+| `M_Mist` + `MI_Mist4`, `MI_Mist_Valley`, `MI_Mist_Ground` (+ `MI_Mist_Ground4`), `MI_Mist_Spray` | River mist, valley sheets, ground mist, fall spray | One material, three ways of being laid: `UseMap` 1 (over water, thins at the banks), `Ground` 1 (the land's meshes lifted `Lift` cm, shown where `T_WaterMap.a` says mist pools, none on slopes), neither (a level sheet fading to its rim). `Scale`, `Cover`, `Soft`, `Strength`, `Wind`, `FadeDistance`, `Colour`. |
+
+**Level** (`build_battlefield_visuals.py`, part `atmosphere`): folder `Atmosphere/Mist/Ground` (a `GroundMist_NNN` actor per
+land chunk, no collision, no shadow, out of Lumen's scene), `Atmosphere/Mist/Falls` (three `FallSpray` sheets per
+fall), `Atmosphere/Mist/Haze` (Local Fog Volumes `FallHaze_n`, `MereHaze_n`). **Lighting**: sun (255, 209, 154) at
+11 lux, saturation 0.98, contrast 1.05, highlight gain (1.1, 1.01, 0.87), vignette 0.42; the rest as in the table below.
+
+**Rules**: never write `smoothstep(hi, lo, x)` in a material (undefined on Metal: use `1.0 - smoothstep(lo, hi, x)`).
+Rebuild only the families you changed (`ONLY=['terrain','water','rock','atmosphere']`). After changing the generator's
+maps: `gen_battlefield.py --map all`, `import_world_assets.py` with `PARTS=['textures']`, then the materials, then the level.
+
+### Forests, leaves and fire (phase 2, 2026-11-19)
+
+Why and how it was judged: `Docs/VISUAL_AUDIT.md`, "Phase 2".
+
+**Pipeline additions.** `Tools/textures/gen_forest_textures.py` (the woods' pixel art) before step 2. Step 2 now also
+writes `T_Forest.png` / `T_Forest4.png`. After **any** mesh import (step 3) run step 5, or at least
+`PARTS=['materials']` of it, for each map: an import resets the meshes' materials to the default grey.
+`Tools/ue_py.py Tools/build_fx_materials.py` builds the fire's and the leaves' materials (`ONLY=['fire']` / `['leaves']`).
+`Tools/perf_front.sh` samples frame times at a list of views; `Tools/sheet.py` makes a contact sheet of screenshots.
+
+| Asset | Used for | What it does / parameters worth knowing |
+| --- | --- | --- |
+| `T_Forest`, `T_Forest4` (2048, linear data) | `M_Terrain` `ForestMap` | Over the splat map's square. R = how closed the canopy is, G = the same spread wider (shade). |
+| `M_Terrain` > Forest | the forest floor | `ForestTile`, `ForestTint`, `ForestShade` (0.8: the ground's brightness in a wood's shade). |
+| `M_Foliage` + `MI_Foliage_Oak`, `_Birch`, `_Maple` | `SM_Tree_*`, `SM_Bush_*` | The firs' material; `Needles` is the leaf clump (`T_Leaves*`, 64 x 48 like `T_Needles`), `Bark` the stem. New on the parent: `CameraFade` (X = cm from the camera at which leaves are gone, Y = at which they are whole: 900, 2300). |
+| `MI_Card_Under` | `SM_Under_*` | `M_Card` on `T_Undergrowth` (160 x 32: bracken 32, bramble 32, toadstools 16, bluebells 16, sapling 32, dead bracken 32). |
+| `MI_Prop_LogMossy` | `SM_Log_*` | `M_Prop` with moss on up-facing facets. |
+| `M_Water` | marsh pools, fords | New: `SiltWidth`, `MudTint`, `MudTile`, `MarshTint`. The ford's streak foam is lighter (in the code, not a parameter). |
+| `M_Building`, `M_BuildingCard` | every building | New: `Burn` (custom primitive data **4**, 0..1): soot from the wall heads down, glowing texels, singed cloth. Set by `ASRBuilding::StepFire`. |
+| `M_FX_Flame`, `M_FX_Smoke`, `M_FX_Embers` | `ASRBuildingFire` | Unlit, translucent, procedural. Quad data: UV1 = (seed, flame's share alight / smoke's age / spark count); colour R = strength or opacity, G = heat from below (smoke), B = 0 dust .. 1 smoke. `Glow`, `Cells`, `Speed`; smoke's colours are screen colours under the level's 11 lux sun, not albedos. |
+| `M_Leaves` | `ASRLeaves` | Lit, masked, two-sided; the leaf's colour is the vertex colour. |
+
+**Level.** Instanced families added: `Broadleaves` (`SM_Tree_*`), `Shrubs` (`SM_Bush_*`), `Undergrowth` (`SM_Under_*`: no
+shadow, out of Lumen's scene, culled at 130 m), and `SM_Log_*` under `Deadwood`. The `Conifers` and `Broadleaves` actors
+carry the tag **`SRTrees`**: `ASRLeaves` finds its trees by it. Trunk boxes are named `Fir_<wood>_NNNN` (the plan's) and
+`Fir_<wood>_gNNNN` (added by `groves()`), whatever the species.
+
+**Runtime contract.**
+- `ASRBuildingFire` needs the building meshes' vertex data at run time (`allow_cpu_access`, set by `import_buildings.py`).
+  Without it the flames fall back to spots over the footprint at roof height.
+- Custom primitive data on a building's mesh: 0..3 team colour, **4 burn**.
+- Without `M_FX_Flame`, `M_FX_Smoke` and `M_FX_Embers`, or with Sovereign Feel > Buildings > Fire off, buildings burn with
+  the old sprites (`ASRBuilding::UsesNewFire`). This fallback is permanent.
+- Translucency sort priorities: ground mist -1, river mist 0 / 1, spray 2..4, **smoke 6, flames 7, embers 8**.
+
 ### Level contents
+
+Both levels are built the same way from their layout (`layout.json`, `layout4.json`); what is in a map is listed in
+`Docs/GAMEPLAY.md` > The match.
 
 | Folder | Contents | Collision |
 | --- | --- | --- |
-| `Terrain/Ground` | Ground chunks (2500 cm squares) over the dressed world X -17500..23000, Y -20500..20500, with the river, its channels and the far lake cut out. | WorldStatic, blocks (render mesh used as collision) |
-| `Terrain/FieldTerraces` | About 26 irregular terraces a side (the enemy's half is the player's turned 180 degrees). Each starts with one or two **40 cm steps** units climb (`StepHeight` is 45); most outside the centre plain carry a taller bluff (90 to 170 cm tiers, with firs on top) that blocks. The centre plain has low single steps only. All clear of the aprons, the roads, the fords, the island and the belts' openings. | WorldStatic; aprons walkable, bluffs block |
-| `Terrain/Ridges` | The rock ridge between the centre lane and each kingdom's rocky flank lane: 39 m long, about 1.7 m at the foot, a crest on that and a broken line of teeth on the crest (about 5 m in all). Unbroken from the apron's edge to 13 m short of the river bank. | WorldStatic, blocks (too tall to climb) |
-| `Terrain/Heights` | **The heights**, one per kingdom beside its apron (player's at about (-11500, -2150), the enemy's its twin): a sheer-sided hill, 4.4 m, with a level top of about 1500 m2 (building ground: every building fits; the kingdom's safe gold vein is on it). Two earth ramps hug the cliff, 9 m wide, 22 m of climb at 1 in 5 and a level landing: the home ramp starts on the castle's side, the field ramp toward the stone lane and ford B. `Ramp_0/1` (+ `m`), `Heights`, and `HeightsRock_n` (buttresses at the back, two crown rocks on the rim). | WorldStatic; top and ramps walkable, cliff blocks |
-| `Terrain/Mountains` | Stepped mountains. `Massif_n` (+ `m`): five a side **inside the field** on its corners and edges, 7 to 26 m (the twin of a mountain on the camera's side keeps its plan but is squashed, `near_squash`, so nothing tall hides the troops). `Far_nn`, `Flank_nn`: the ranges just outside the bound, taller toward the far side. Every wall taller than a terrace step is living rock (`UV1.y = 1`); tops turn to bare rock above 9.5 m and snow above 27 m. | WorldStatic, blocks |
-| `Terrain/Peaks` | Seven sculpted mountains (A.N.T. Landscape height grids cut into ledges and risers, 14 to 68 m) standing on the far edge and the flanks, just outside the bound. The camera never sees a horizon, only some 35 m past the far edge, so nothing is built farther out. | WorldStatic (out of reach) |
-| `Terrain/Highland` | A stepped upland toward the far-left corner (player's bank) and the near-right (enemy's): two broad walkable 40 cm steps, two gold veins on the upper one, four or five blocking rock tors (3 to 7 m). | WorldStatic; steps walkable, tors block |
-| `Terrain/Shrine`, `Terrain/Bridges` | The shrine's round paved dais at the map centre (24 cm, walkable). Two bridge slabs, 7 m wide, carrying the king's road over the island's channels at ground level (underside just clear of the water). | WorldStatic, walkable |
-| `Terrain/Knolls` | About 18 blocking outcrops a side, each with a fir or two: knolls (95 to 140 cm) and, off the centre plain, rock crags (2.6 to 4.3 m). | WorldStatic, blocks |
-| `Terrain/Plateaus` | The first rank of steps framing the field, under the mountains' feet: many-tiered on the far side (+X) and the flanks, one low step on the camera side so nothing hides the field. Each starts with a walkable 34 to 40 cm apron that may lap into the field; every taller tier stays at least 95 cm outside the +/-14000 bound. | WorldStatic, blocks |
-| `Terrain/Shore` | The banks and bed of the river and the far lake (bed at Z = -170), and the two fords' beds (`Ford_0`, `Ford_1`, Z = -24). The walkability grid reads water from this: ground below -30 cm is water and blocked, so a ford (8 cm under the surface) is wet but walkable. | WorldStatic |
-| `Props/Rocks` | Blocking boulders (`Rock_NN`, and `Rock_NNm` for its twin on the other side), thickest on the highlands and the rocky flank. Each has one invisible convex box `<name>_Collision` (an instance in the `Blockers` actor, tag `SRBlocker`); the visible stone has no collision. Standing stones at the corners of each ford (dressing). Instanced actors `Stones` (scree, outcrops) and `Deadwood` (logs). | Only the `_Collision` boxes |
-| `Props/Ruin` | The landmark: the shrine on the river island at the map centre. Eight standing stones ring the dais (radius 7.8 m, open along the king's road and toward the two island veins), four pillars flank the road, fallen blocks and two banners. A pillar pair at each end of both bridges and a low parapet along the slabs (one run fallen). Three ruins a side (an arch, a run of wall, a broken pillar: beside the king's road, on the wooded lane, by ford B), three broken towers, and a fallen bridge upstream of the island (an abutment on each bank, a pier in the stream; nobody crosses). A ruined gate where the road leaves the field at about (6700, 10400) (dressing). Stones and pillars have `<name>_Collision` boxes. | Only the `_Collision` boxes |
-| `Props/Foliage` | Instanced actors `Conifers` (about 1100 firs, five sizes 4.3 to 12.5 m) and `Grass` (blade / fern / flower cards and the reeds along the river banks, no shadows). Inside the field every fir has a 46 x 46 cm trunk box (`Fir_NNN`, `Stand_NNNN`, tag `SRBlocker`), placed in pairs across the centre. The two **fir-wood belts** (between the centre lane and each kingdom's wooded flank lane, low firs, one 13 m opening part-way and 13 m left to the river bank) are blocked by a row of boxes `Wood_k_NN` along their middle line. | Only the `_Collision` boxes |
-| `Props/Structures` | Timber watch posts (7 m): at ford A's bank, the wood belt's opening, the king's road at the apron and the foot of the field ramp, each with its twin. | One `_Collision` box each |
-| `Props/Rocks` (more) | A stone circle round a dolmen on each highland and in the quiet ground right of each heights (stones block); cairns as waymarks at the ramps and along the spur (dressing). | Circle stones only |
-| `Props/Fences`, `Props/Logs` | Fence runs, stumps and logs along the road and behind the player's start. Dressing only. | none |
-| `Water` | `River`: one sheet at Z = -16 over the river, its channels and the far lake. | none (the grid's ground trace must reach the bed) |
+| `Terrain/Land` | The land: one smooth heightfield surface dealt out into 64 m chunks (`SM_T_Land_NNN`; about 194,000 triangles on the Riverlands, 395,000 on the Four Marches). An irregular triangle mesh cut from a 1 m raster: within 6 cm of it where troops walk, looser on mountainsides, under water and beyond the field. Smooth normals; UV0 = world (Y, -X) in cm, UV1 = (0, 2), which tells `M_Terrain` this is the land: turf / road by the splat map where it is gentle, living rock where the normal's Z falls under 0.86 (a slope of 0.6), bare rock and snow by height. It runs on under the water as the beds. | WorldStatic, blocks (render mesh used as collision) |
+| `Terrain/Bridges`, `Terrain/Shrine` | Bridge slabs on piers over the rivers and brooks (7 m and 6.4 m wide, 62 cm over the water; the banks are level with them), and the shrine's round paved dais on the Riverlands' island (24 cm). | WorldStatic, walkable |
+| `Water` | `River`: one sheet for the rivers and the lakes they run into (Z = -16). `Tarn_n`, `Mere_n`: a sheet each for the tarns on the hills and the Black Meres, at their own heights. All tagged `SRWater`. `Waterfall_n`: a ribbon from each tarn's lip down the rock face to its pool (`M_Waterfall`). | none in the level; the grid traces each `SRWater` sheet by itself to measure the water's depth |
+| `Props/Rocks` | Blocking boulders (`Rock_NN`, `Rock_NN_b` .. for the other kingdoms' copies), each with one invisible convex box `<name>_Collision` (an instance in the `Blockers` actor, tag `SRBlocker`) under a mesh of its own; standing stones, dolmens, cairns, barrow doors; gold veins (`Props/Veins`). | boxes only |
+| `Props/Ruin` | The old kingdom's masonry: arches, walls, pillars, obelisks, the colossus, the aqueducts (`SM_Aqueduct_n`, a mesh per aqueduct), the bridges' pillars and parapets, the fallen bridge, the fallen keeps. `Relic_NN` (tag `SRRelic`) and `RuinTower_NN` (tag `SRRuinTower`) are the ruins towers can be raised on. | One box per blocking piece |
+| `Props/Bones`, `Props/Relics`, `Props/Structures` | The wyrm's bones (`MI_Prop_Bone`); the field of swords (swords, spears, shields, a cart, banner poles); timber watch posts and jetties. | Boxes under the big pieces |
+| `Props/Foliage` | Instanced actors `Conifers` (firs, five sizes 4.3 to 12.5 m) and `Grass` (blade / fern / flower cards and the reeds along the banks, no shadows). In the woods every fir has a 46 x 46 cm trunk box (`Fir_<wood>_NNNN`); the firs on the mountainsides and beyond the field have none. | trunk boxes |
+| `Props/Fences`, `Props/Logs` | Fence runs, stumps and logs round the kingdoms. Dressing only. | none |
+| `Buildings` | The kingdoms' starting castle, farm and mine (`ASRBuilding`), on their tables. | their own |
 | `Lighting` | `Sun`, `SkyLight`, `SkyAtmosphere`, `HeightFog`, `PostProcess`. Values below. | n/a |
-| `Atmosphere` | `Mist`: the water mesh twice more, 52 and 96 cm above the surface, in `M_Mist` (soft drifting wisps that thin out at the banks by `T_WaterMap`), and level sheets of `MI_Mist_Valley` at the foot of the far mountain wall, the flanks and over the lake. Birds are not in the level: `ASRBirds` (spawned by the game mode) flies about 110 small birds in 10 flocks (gulls and rooks in loose clouds, geese in a V) on wide wobbly loops round the whole map, 12-32 m above the ground and rising over the hills; one procedural mesh rebuilt each frame (each bird beats its wings and glides in its own rhythm and banks into the turns), in `M_Birds` (unlit vertex colour). Sovereign Feel > World > Birds. Cloud shadows are the sun's light function `M_CloudShadow` (drifting world-aligned noise; `Cover`, `Strength`, `Scale`, `Wind`). | none |
+| `Atmosphere` | `Mist`: the river sheet twice more, 52 and 96 cm above the surface, in `M_Mist` (soft drifting wisps that thin out at the banks by `T_WaterMap`), and level sheets of `MI_Mist_Valley` over the lakes, the falls' pools, the water meadows, the Black Meres and the landmarks' hollows. | none |
+| `Map` | `MapInfo` (`ASRMapInfo`): the map's id, bounds, starts, camera height, trace range and minimap. | n/a |
 
 ### Lighting, haze, post (the `LOOK` table in `Tools/build_battlefield_visuals.py`)
 

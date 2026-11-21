@@ -1,0 +1,18 @@
+{
+ "name": "SM_Terrain_3_4",
+ "faces": 1480,
+ "collision": "complex",
+ "bounds": [
+  [
+   28.0,
+   56.0,
+   -3.0
+  ],
+  [
+   56.0,
+   56.0,
+   1.0
+  ]
+ ],
+ "lights": []
+}

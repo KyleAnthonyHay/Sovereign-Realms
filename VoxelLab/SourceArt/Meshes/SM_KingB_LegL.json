@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_LegL",
+ "faces": 723,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0913,
+   -0.14,
+   -0.375
+  ],
+  [
+   0.1375,
+   0.1375,
+   0.125
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegL",
+ "triangles": 1447,
+ "blocks": 94
+}

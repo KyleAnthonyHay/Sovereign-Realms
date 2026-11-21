@@ -19,6 +19,10 @@
 #include "Engine/World.h"
 #include "Misc/PackageName.h"
 #include "FX/SRFXSprite.h"
+#include "FX/SRFire.h"
+#include "Units/SRSprite.h"
+
+namespace { float SRYawOf(const FVector2D& V) { return FMath::RadiansToDegrees(FMath::Atan2(V.Y, V.X)); } }
 #include "Components/AudioComponent.h"
 
 ASRBuilding::ASRBuilding()
@@ -84,6 +88,7 @@ void ASRBuilding::BeginPlay()
 	Ring->BuildRoundedRect(Half, 70.f, F.BuildingRingWidth);
 	Ring->SetVisibility(false);
 
+	BaseLabelOffset = LabelOffset;
 	LoadStateMeshes();
 
 	if (IsRecruiter())
@@ -120,8 +125,11 @@ void ASRBuilding::EndPlay(const EEndPlayReason::Type Reason)
 {
 	StopFireSound(0.1f);
 	ClearStateFX(false);
+	if (ASRBuildingFire* Fire = FireFX.Get()) { Fire->Finish(); }
+	FireFX = nullptr;
 	if (Economy) { Economy->UnregisterBuilding(this); }
 	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this); Grid && !bDestroyed) { Grid->SetFootprint(this, false); }
+	if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this); Grid && (BuildingType == ESRBuildingType::RelicTower || BuildingType == ESRBuildingType::Tower)) { Grid->ReleaseRelic(this); }   // the ruin stands again
 	for (ASRWorker* W : Workers) { if (W) { W->Destroy(); } }
 	Workers.Reset();
 	Super::EndPlay(Reason);
@@ -141,7 +149,12 @@ void ASRBuilding::ResetRuntime()
 		if (USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { Grid->SetFootprint(this, true); }
 	}
 	CollapseClock = 0.f;
+	if (ASRBuildingFire* Fire = FireFX.Get()) { Fire->Destroy(); }
+	FireFX = nullptr;
+	FireSeated = 0;
+	Soot = 0.f;
 	DefenceCooldown = FMath::FRandRange(0.f, 1.f);
+	for (FPostArcher& P : Posts) { P.Clock = -1.f; P.bLoosed = true; P.Mark = nullptr; }
 	HitShake = 0.f;
 	LastDamagedTime = -100.0;
 	if (!bRuntimeBuilt) { BuildProgress = 1.f; }
@@ -172,6 +185,8 @@ void ASRBuilding::StepBuilding(float Dt)
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	TimeSincePayout += Dt;
 	HitShake = FMath::Max(0.f, HitShake - Dt * 5.f);
+	StepFire(Dt);
+	StepPosts(Dt);
 
 	if (bDestroyed) { StepCollapse(Dt); return; }
 	CountBuilders();
@@ -599,7 +614,9 @@ float ASRBuilding::GetHealthFrac() const
 int32 ASRBuilding::GetPopProvided() const
 {
 	if (!IsFinished()) { return 0; }
-	return IsCastle() ? USRFeelSettings::Get().CastleLevel(Level).Housing : Stats().PopProvided;
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (BuildingType == ESRBuildingType::Farm && F.FarmLevels.Num() > 0) { return F.FarmLevel(Level).Housing; }
+	return IsCastle() ? F.CastleLevel(Level).Housing : Stats().PopProvided;
 }
 
 float ASRBuilding::GetTrainSpeed() const
@@ -629,6 +646,7 @@ float ASRBuilding::GetMaxHealth() const
 	case ESRBuildingType::Castle: return F.CastleLevel(Level).Health;
 	case ESRBuildingType::Tower: return F.TowerLevels.Num() > 0 ? F.TowerLevel(Level).Health : Stats().MaxHealth;
 	case ESRBuildingType::Mine: return F.MineLevels.Num() > 0 ? F.MineLevel(Level).Health : Stats().MaxHealth;
+	case ESRBuildingType::Farm: return F.FarmLevels.Num() > 0 ? F.FarmLevel(Level).Health : Stats().MaxHealth;
 	default: return Stats().MaxHealth;
 	}
 }
@@ -644,6 +662,7 @@ int32 ASRBuilding::GetMaxLevel() const
 	case ESRBuildingType::Barracks: case ESRBuildingType::Range: case ESRBuildingType::Stable: case ESRBuildingType::Workshop: return FMath::Max(1, F.TrainerLevels.Num());
 	case ESRBuildingType::Granary: return FMath::Max(1, F.GranaryLevels.Num());
 	case ESRBuildingType::Treasury: return FMath::Max(1, F.TreasuryLevels.Num());
+	case ESRBuildingType::Farm: return FMath::Max(1, F.FarmLevels.Num());
 	default: return 1;
 	}
 }
@@ -657,7 +676,15 @@ float ASRBuilding::GetAttackRange() const
 float ASRBuilding::GetAttackDamage() const
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (BuildingType == ESRBuildingType::Castle && F.CastleLevels.Num() > 0) { return F.CastleLevel(Level).ArrowDamage; }
 	return BuildingType == ESRBuildingType::Tower && F.TowerLevels.Num() > 0 ? F.TowerLevel(Level).Damage : Stats().AttackDamage;
+}
+
+int32 ASRBuilding::GetArcherCount() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	if (BuildingType == ESRBuildingType::Castle && F.CastleLevels.Num() > 0) { return FMath::Clamp(F.CastleLevel(Level).Archers, 0, 4); }
+	return Stats().Archers;
 }
 
 float ASRBuilding::GetAttackInterval() const
@@ -669,7 +696,7 @@ float ASRBuilding::GetAttackInterval() const
 int32 ASRBuilding::GetPayoutAmount() const
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
-	if (BuildingType == ESRBuildingType::Farm) { return F.FarmFoodPerPayout; }
+	if (BuildingType == ESRBuildingType::Farm) { return F.FarmLevels.Num() > 0 ? F.FarmLevel(Level).FoodPerPayout : F.FarmFoodPerPayout; }
 	if (BuildingType == ESRBuildingType::Mine) { return F.MineLevels.Num() > 0 ? F.MineLevel(Level).GoldPerPayout : F.MineGoldPerPayout; }
 	return 0;
 }
@@ -685,6 +712,7 @@ float ASRBuilding::GetUpgradeTime() const
 	case ESRBuildingType::Barracks: case ESRBuildingType::Range: case ESRBuildingType::Stable: case ESRBuildingType::Workshop: return F.TrainerLevel(Level + 1).UpgradeTime;
 	case ESRBuildingType::Granary: return F.StoreLevel(true, Level + 1).UpgradeTime;
 	case ESRBuildingType::Treasury: return F.StoreLevel(false, Level + 1).UpgradeTime;
+	case ESRBuildingType::Farm: return F.FarmLevel(Level + 1).UpgradeTime;
 	default: return 30.f;
 	}
 }
@@ -696,26 +724,88 @@ float ASRBuilding::GetBuildZoneRadius() const
 
 bool ASRBuilding::CanUpgrade() const
 {
-	return IsUpgradable() && IsFinished() && !IsUpgrading() && Level < GetMaxLevel();
+	if (!IsUpgradable() || !IsFinished() || IsUpgrading() || Level >= GetMaxLevel()) { return false; }
+	// some levels wait for the Citadel (a storehouse's)
+	const int32 Need = GetUpgradeRequiredCastleLevel();
+	return Need <= 0 || !Economy || Economy->GetCastleLevel(Team) >= Need;
+}
+
+int32 ASRBuilding::GetUpgradeRequiredCastleLevel() const
+{
+	if (!IsStore() || Level >= GetMaxLevel()) { return 0; }
+	return USRFeelSettings::Get().StoreLevel(BuildingType == ESRBuildingType::Granary, Level + 1).RequiredCastleLevel;
 }
 
 FSRCost ASRBuilding::GetUpgradeCost() const
 {
+	return GetUpgradeCostTo(Level + 1);
+}
+
+FSRCost ASRBuilding::GetUpgradeCostTo(int32 ToLevel) const
+{
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	switch (BuildingType)
 	{
-	case ESRBuildingType::Castle: return F.CastleLevel(Level + 1).UpgradeCost;
-	case ESRBuildingType::Tower: return F.TowerLevel(Level + 1).UpgradeCost;
-	case ESRBuildingType::Mine: return F.MineLevel(Level + 1).UpgradeCost;
-	case ESRBuildingType::Barracks: case ESRBuildingType::Range: case ESRBuildingType::Stable: case ESRBuildingType::Workshop: return F.TrainerLevel(Level + 1).UpgradeCost;
-	case ESRBuildingType::Granary: return F.StoreLevel(true, Level + 1).UpgradeCost;
-	case ESRBuildingType::Treasury: return F.StoreLevel(false, Level + 1).UpgradeCost;
+	case ESRBuildingType::Castle: return F.CastleLevel(ToLevel).UpgradeCost;
+	case ESRBuildingType::Tower: return F.TowerLevel(ToLevel).UpgradeCost;
+	case ESRBuildingType::Mine: return F.MineLevel(ToLevel).UpgradeCost;
+	case ESRBuildingType::Barracks: case ESRBuildingType::Range: case ESRBuildingType::Stable: case ESRBuildingType::Workshop: return F.TrainerLevel(ToLevel).UpgradeCost;
+	case ESRBuildingType::Granary: return F.StoreLevel(true, ToLevel).UpgradeCost;
+	case ESRBuildingType::Treasury: return F.StoreLevel(false, ToLevel).UpgradeCost;
+	case ESRBuildingType::Farm: return F.FarmLevel(ToLevel).UpgradeCost;
 	default: return FSRCost(0, 0);
 	}
 }
 
+FSRCost ASRBuilding::GetDemolishRefund() const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	// everything paid for it: its price, each level it was raised to, and the level being raised now
+	FSRCost Paid = Stats().Cost;
+	const int32 Top = IsUpgrading() ? Level + 1 : Level;
+	for (int32 L = 2; L <= Top; ++L) { const FSRCost C = GetUpgradeCostTo(L); Paid.Gold += C.Gold; Paid.Food += C.Food; }
+	FSRCost Back(FMath::RoundToInt(Paid.Gold * F.DemolishRefund), FMath::RoundToInt(Paid.Food * F.DemolishRefund));
+	// recruits paid for and not yet trained: all of it
+	for (ESRUnitType T : Queue) { const FSRCost& C = F.CostFor(T); Back.Gold += C.Gold; Back.Food += C.Food; }
+	return Back;
+}
+
+void ASRBuilding::Demolish()
+{
+	if (!CanDemolish()) { return; }
+	const FSRCost Back = GetDemolishRefund();
+	UE_LOG(LogSovereign, Log, TEXT("DEMOLISH %s %s (level %d): %d gold, %d food back"), Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"),
+		*GetDisplayName(), Level, Back.Gold, Back.Food);
+	Collapse(nullptr, true);
+	if (Economy)
+	{
+		// (after the fall: a storehouse's own capacity is gone by now, so what no longer fits is lost, as when one falls)
+		Economy->AddResource(Team, ESRResource::Gold, Back.Gold);
+		Economy->AddResource(Team, ESRResource::Food, Back.Food);
+		if (Team == ESRTeam::Player)
+		{
+			const FVector2D At = GetFootprintCentre();
+			Economy->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRBuilding", "Demolished", "{0} demolished: {1} gold and {2} food back"),
+				FText::FromString(GetDisplayName()), FText::AsNumber(Back.Gold), FText::AsNumber(Back.Food)), &At);
+			if (Back.Gold > 0) { Economy->AddPopup(GetLabelPoint(), Back.Gold, ESRResource::Gold); }
+			else if (Back.Food > 0) { Economy->AddPopup(GetLabelPoint(), Back.Food, ESRResource::Food); }
+		}
+	}
+	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->SpawnFX(ESRFX::Dust, GetActorLocation() + FVector(0.f, 0.f, 60.f), 3.f); }
+}
+
 bool ASRBuilding::StartUpgrade()
 {
+	if (Economy && IsFinished() && !IsUpgrading() && Level < GetMaxLevel() && GetUpgradeRequiredCastleLevel() > Economy->GetCastleLevel(Team))
+	{
+		UE_LOG(LogSovereign, Log, TEXT("UPGRADE refused: %s level %d needs the Citadel at level %d"), *GetDisplayName(), Level + 1, GetUpgradeRequiredCastleLevel());
+		if (Team == ESRTeam::Player)
+		{
+			Economy->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRBuilding", "NeedCastle", "Raise the Citadel to level {0} first"), FText::AsNumber(GetUpgradeRequiredCastleLevel())));
+			Economy->NotifyRefused();
+		}
+		return false;
+	}
 	if (!CanUpgrade() || !Economy) { return false; }
 	if (!Economy->TrySpend(Team, GetUpgradeCost()))
 	{
@@ -747,6 +837,7 @@ void ASRBuilding::StepUpgrade(float Dt)
 	++Level;
 	Health += GetMaxHealth() - Before;   // the new walls come up whole
 	NeedsBuilderState = -1;
+	ApplyLevelLook(true);                // the new look goes up as the level is reached (any team: the enemy's too)
 	UE_LOG(LogSovereign, Log, TEXT("UPGRADE %s reached level %d (houses %d, holds %d)"), *GetDisplayName(), Level, GetPopProvided(), GetStoreCapacity());
 	if (Team == ESRTeam::Player && Economy)
 	{
@@ -764,6 +855,19 @@ void ASRBuilding::SetLevelForLoad(int32 InLevel, float InUpgradeProgress)
 {
 	Level = FMath::Clamp(InLevel, 1, GetMaxLevel());
 	UpgradeProgress = InUpgradeProgress;
+	ApplyLevelLook(false);
+}
+
+void ASRBuilding::SetLevelNow(int32 InLevel)
+{
+	const float Before = GetMaxHealth();
+	Level = FMath::Clamp(InLevel, 1, GetMaxLevel());
+	UpgradeProgress = -1.f;
+	if (!bDestroyed) { Health = FMath::Clamp(Health + GetMaxHealth() - Before, 1.f, GetMaxHealth()); }
+	NeedsBuilderState = -1;
+	ApplyLevelLook(true);
+	UE_LOG(LogSovereign, Log, TEXT("LEVEL %s %s set to %d (mesh %s, label z %.0f)"), Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), *GetDisplayName(), Level,
+		Mesh && Mesh->GetStaticMesh() ? *Mesh->GetStaticMesh()->GetName() : TEXT("none"), LabelOffset.Z);
 }
 
 bool ASRBuilding::NeedsBuilder() const
@@ -841,7 +945,8 @@ void ASRBuilding::StepFireSound(float Dt)
 {
 	USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this);
 	if (!Audio) { return; }
-	if (State != ESRBuildingState::Damaged || bDestroyed) { StopFireSound(1.2f); return; }
+	// (the sprite fire burns while the building shows its damaged model; the new one from the first flames' taking hold)
+	if (bDestroyed || (UsesNewFire() ? GetFireStrength() < 0.3f : State != ESRBuildingState::Damaged)) { StopFireSound(1.2f); return; }
 	const FVector Flames = GetLabelPoint() * FVector(1, 1, 0) + FVector(0, 0, GetActorLocation().Z + FMath::Min(BlockHeight * 0.7f, 450.f));
 	UAudioComponent* F = FireSound.Get();
 	if (!F)
@@ -888,14 +993,41 @@ void ASRBuilding::StepRepair(float Dt)
 	// (the builders' own mallet blows are the sound of the repair)
 }
 
+float ASRBuilding::GetConstructionRate() const
+{
+	// Inside the castle's zone it rises by itself and builders speed it up; outside, only while a builder works on it.
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return NeedsBuilder()
+		? (BuildersWorking > 0 ? 1.f + F.BuilderExtraSpeed * (BuildersWorking - 1) : 0.f)
+		: 1.f + F.BuilderExtraSpeed * BuildersWorking;
+}
+
+float ASRBuilding::GetBuildSecondsLeft(bool* bOutWaiting) const
+{
+	if (bOutWaiting) { *bOutWaiting = false; }
+	if (!IsUnderConstruction()) { return 0.f; }
+	const float Work = (1.f - BuildProgress) * FMath::Max(Stats().BuildTime, 0.5f);
+	const float Rate = GetConstructionRate();
+	if (Rate <= 0.f)
+	{
+		if (bOutWaiting) { *bOutWaiting = true; }
+		return Work;
+	}
+	return Work / Rate;
+}
+
+float ASRBuilding::GetUpgradeSecondsLeft() const
+{
+	if (!IsUpgrading()) { return 0.f; }
+	const float Rate = 1.f + USRFeelSettings::Get().BuilderExtraSpeed * BuildersWorking;
+	return (1.f - FMath::Clamp(UpgradeProgress, 0.f, 1.f)) * FMath::Max(GetUpgradeTime(), 1.f) / Rate;
+}
+
 void ASRBuilding::StepConstruction(float Dt)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const FSRBuildingStats& S = Stats();
-	// Inside the castle's zone it rises by itself and builders speed it up; outside, only while a builder works on it.
-	const float Rate = NeedsBuilder()
-		? (BuildersWorking > 0 ? 1.f + F.BuilderExtraSpeed * (BuildersWorking - 1) : 0.f)
-		: 1.f + F.BuilderExtraSpeed * BuildersWorking;
+	const float Rate = GetConstructionRate();
 	if (Rate <= 0.f) { return; }   // waiting for a builder
 	const float Before = BuildProgress;
 	BuildProgress = FMath::Min(1.f, BuildProgress + Rate * Dt / FMath::Max(S.BuildTime, 0.5f));
@@ -943,7 +1075,8 @@ void ASRBuilding::ApplyBuildVisual()
 void ASRBuilding::StepDefence(float Dt)
 {
 	const FSRBuildingStats& S = Stats();
-	if (GetAttackRange() <= 0.f || GetAttackDamage() <= 0.f) { return; }
+	const int32 Archers = GetArcherCount();
+	if (GetAttackRange() <= 0.f || GetAttackDamage() <= 0.f || Archers <= 0) { return; }
 	DefenceCooldown -= Dt;
 	if (DefenceCooldown > 0.f) { return; }
 
@@ -956,14 +1089,71 @@ void ASRBuilding::StepDefence(float Dt)
 	{
 		if (!U || !U->IsActive() || U->GetTeam() == Team) { continue; }
 		const float D = FVector2D::DistSquared(U->GetPos2D(), C);
+		if (S.MinRange > 0.f && D < FMath::Square(S.MinRange)) { continue; }   // (a stone-thrower cannot reach right under it)
 		// the archers on the walls notice a Scout only at a fraction of their reach
 		if (D < BestD && U->IsNoticedAt(D, GetAttackRange())) { BestD = D; Best = U; }
 	}
 	if (!Best) { DefenceCooldown = 0.25f; return; }
 
 	DefenceCooldown = GetAttackInterval() * FMath::FRandRange(0.9f, 1.1f);
-	const FVector Muzzle = FVector(C.X, C.Y, GetActorLocation().Z + S.MuzzleHeight) + FVector((Best->GetPos2D() - C).GetSafeNormal() * 120.f, 0.f);
-	ASRProjectile::LaunchArrow(GetWorld(), Team, nullptr, Best, nullptr, Muzzle, GetAttackDamage(), 60.f, 2200.f, 0.1f);
+	// each archer on top looses one: the first at the nearest foe, the next at the next nearest in reach (or the same)
+	TArray<ASRUnit*> Marks = { Best };
+	if (Archers > 1)
+	{
+		TArray<TPair<float, ASRUnit*>> Rest;
+		for (ASRUnit* U : Battle->GetUnits())
+		{
+			if (!U || U == Best || !U->IsActive() || U->GetTeam() == Team) { continue; }
+			const float D = FVector2D::DistSquared(U->GetPos2D(), C);
+			if (D < FMath::Square(GetAttackRange()) && U->IsNoticedAt(D, GetAttackRange())) { Rest.Add({ D, U }); }
+		}
+		Rest.Sort([](const TPair<float, ASRUnit*>& A, const TPair<float, ASRUnit*>& B) { return A.Key < B.Key; });
+		for (int32 k = 1; k < Archers; ++k) { Marks.Add(Rest.IsValidIndex(k - 1) ? Rest[k - 1].Value : Best); }
+	}
+	// archers seen on top: each shot goes to a post, which draws and looses on its release frame (StepPosts)
+	EnsurePosts();
+	if (Posts.Num() > 0)
+	{
+		const bool bPillars = BuildingType == ESRBuildingType::Castle;
+		const int32 Manned = FMath::Min(Archers, Posts.Num());
+		TArray<int32> Used;
+		for (int32 k = 0; k < Marks.Num(); ++k)
+		{
+			int32 Pick = -1;
+			if (bPillars)
+			{
+				// the castle: the manned pillar nearest its mark
+				float PickD = TNumericLimits<float>::Max();
+				for (int32 p = 0; p < Manned; ++p)
+				{
+					if (Used.Contains(p)) { continue; }
+					const float D = FVector2D::DistSquared(PostXY(p), Marks[k]->GetPos2D());
+					if (D < PickD) { PickD = D; Pick = p; }
+				}
+			}
+			if (Pick < 0) { Pick = k % Manned; }
+			Used.Add(Pick);
+			FPostArcher& P = Posts[Pick];
+			P.Mark = Marks[k];
+			P.Clock = 0.f;
+			P.bLoosed = false;
+			P.Yaw = SRYawOf(Marks[k]->GetPos2D() - PostXY(Pick));
+		}
+		return;
+	}
+	for (int32 k = 0; k < Marks.Num(); ++k)
+	{
+		const FVector2D Side = FVector2D(-(Marks[k]->GetPos2D() - C).GetSafeNormal().Y, (Marks[k]->GetPos2D() - C).GetSafeNormal().X) * (k == 0 ? -60.f : 60.f) * (Marks.Num() > 1 ? 1.f : 0.f);
+		const float MuzzleZ = (k == 1 && S.SecondMuzzleHeight > 0.f) ? S.SecondMuzzleHeight : S.MuzzleHeight;
+		const FVector Muzzle = FVector(C.X + Side.X, C.Y + Side.Y, GetActorLocation().Z + MuzzleZ) + FVector((Marks[k]->GetPos2D() - C).GetSafeNormal() * 120.f, 0.f);
+		if (S.SplashRadius > 0.f)
+		{
+			// a stone: high and slow, it lands on the spot and hurts every foe round it
+			ASRProjectile::LaunchArrow(GetWorld(), Team, nullptr, Marks[k], nullptr, Muzzle, GetAttackDamage(), 220.f, 1500.f, 0.35f, S.SplashRadius, true, 1.f);
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::Creak, Muzzle, 1.f, 0.6f); }
+		}
+		else { ASRProjectile::LaunchArrow(GetWorld(), Team, nullptr, Marks[k], nullptr, Muzzle, GetAttackDamage(), 60.f, 2200.f, 0.1f); }
+	}
 }
 
 void ASRBuilding::ReceiveDamage(float Amount, ASRUnit* From)
@@ -999,7 +1189,7 @@ void ASRBuilding::ReceiveDamage(float Amount, ASRUnit* From)
 	if (State == ESRBuildingState::Complete && IsFinished() && GetHealthFrac() < F.DamagedStateFraction) { SetState(ESRBuildingState::Damaged); }
 }
 
-void ASRBuilding::Collapse(ASRUnit* Killer)
+void ASRBuilding::Collapse(ASRUnit* Killer, bool bDemolished)
 {
 	if (bDestroyed) { return; }
 	StopFireSound(0.8f);
@@ -1015,7 +1205,20 @@ void ASRBuilding::Collapse(ASRUnit* Killer)
 	if (Ring) { Ring->SetVisibility(false); bRingVisible = false; }
 	if (RallyFlag) { RallyFlag->SetVisibility(false); }
 
-	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildingCollapse, GetLabelPoint(), 1.f); }
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->PlayAt(ESRSound::BuildingCollapse, GetLabelPoint(), bDemolished ? 0.7f : 1.f); }
+	// the pall: dust rolling out along the ground, smoke and sparks thrown up
+	if (ASRBuildingFire* Fire = NeedFire(FireSeated ? FireSeated : 1))
+	{
+		const FVector2D C2 = GetFootprintCentre();
+		Fire->Burst(FVector(C2.X, C2.Y, GetActorLocation().Z), (FootprintMax - FootprintMin) * 0.5f, BlockHeight);
+	}
+	if (bDemolished)
+	{
+		// pulled down by its own side: no alarm, no shake, not a loss; a storehouse's stock over the kingdom's
+		// remaining capacity goes as when one falls
+		if (Economy && IsStore()) { Economy->ClampToStorage(Team); }
+		return;
+	}
 	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->AddCameraTrauma(GetActorLocation(), F.ShakeTraumaDeath * 1.6f); }
 	UE_LOG(LogSovereign, Log, TEXT("DESTROYED %s %s at (%.0f, %.0f) by %s"), Team == ESRTeam::Player ? TEXT("player") : TEXT("enemy"), *GetDisplayName(),
 		GetActorLocation().X, GetActorLocation().Y, Killer ? *Killer->GetLabel() : TEXT("?"));
@@ -1111,14 +1314,30 @@ void ASRBuilding::LoadStateMeshes()
 	if (!BuildingMesh) { return; }
 	const FString Pkg = BuildingMesh->GetOutermost()->GetName();
 	const FString Name = BuildingMesh->GetName();
-	auto Load = [&](const TCHAR* Suffix) -> UStaticMesh*
+	auto Load = [&](const FString& Suffix) -> UStaticMesh*
 	{
-		const FString Path = FString::Printf(TEXT("%s_%s.%s_%s"), *Pkg, Suffix, *Name, Suffix);
+		const FString Path = FString::Printf(TEXT("%s_%s.%s_%s"), *Pkg, *Suffix, *Name, *Suffix);
 		if (!FPackageName::DoesPackageExist(Pkg + TEXT("_") + Suffix)) { return nullptr; }
 		return LoadObject<UStaticMesh>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet);
 	};
 	DamagedMeshAsset = Load(TEXT("Damaged"));
 	RuinMeshAsset = Load(TEXT("Ruin"));
+	// each level above the first has its own finished and damaged meshes (SM_Bld_<Name>_L<n>, _L<n>_Damaged)
+	const int32 MaxLevel = GetMaxLevel();
+	LevelMeshes.Init(nullptr, MaxLevel);
+	LevelDamagedMeshes.Init(nullptr, MaxLevel);
+	int32 Found = 0;
+	for (int32 L = 2; L <= MaxLevel; ++L)
+	{
+		const FString Suffix = FString::Printf(TEXT("L%d"), L);
+		LevelMeshes[L - 1] = Load(Suffix);
+		LevelDamagedMeshes[L - 1] = Load(Suffix + TEXT("_Damaged"));
+		Found += LevelMeshes[L - 1] ? 1 : 0;
+	}
+	if (MaxLevel > 1 && Found < MaxLevel - 1)
+	{
+		UE_LOG(LogSovereign, Warning, TEXT("%s: %d of %d level meshes found (%s_L2..L%d): the missing levels keep the look below"), *GetActorNameOrLabel(), Found, MaxLevel - 1, *Name, MaxLevel);
+	}
 	if (UStaticMesh* Site = Load(TEXT("Site")))
 	{
 		SiteMesh = NewObject<UStaticMeshComponent>(this, TEXT("SiteMesh"));
@@ -1140,7 +1359,8 @@ void ASRBuilding::SetState(ESRBuildingState NewState)
 {
 	State = NewState;
 	UStaticMesh* Want = BuildingMesh;
-	if (NewState == ESRBuildingState::Damaged && DamagedMeshAsset) { Want = DamagedMeshAsset; }
+	if (NewState == ESRBuildingState::Complete) { Want = GetLevelMesh(false); }
+	if (NewState == ESRBuildingState::Damaged) { Want = GetLevelMesh(true); }
 	if (NewState == ESRBuildingState::Ruin && RuinMeshAsset)
 	{
 		Want = RuinMeshAsset;
@@ -1151,10 +1371,32 @@ void ASRBuilding::SetState(ESRBuildingState NewState)
 	}
 	if (Want && Mesh->GetStaticMesh() != Want) { Mesh->SetStaticMesh(Want); }
 	if (SiteMesh) { SiteMesh->SetVisibility(NewState == ESRBuildingState::Site); }
+	// the HUD's bars ride above the roof: a taller level lifts them by as much as it grew
+	LabelOffset = BaseLabelOffset;
+	// never far over the level-1 model (a level placed before the model was rebuilt smaller keeps an old, higher socket)
+	if (BuildingMesh) { LabelOffset.Z = FMath::Min(LabelOffset.Z, float(BuildingMesh->GetBoundingBox().Max.Z) + 120.f); }
+	if (BuildingMesh && Want && Want != BuildingMesh && NewState != ESRBuildingState::Ruin)
+	{
+		LabelOffset.Z += FMath::Max(0.f, float(Want->GetBoundingBox().Max.Z - BuildingMesh->GetBoundingBox().Max.Z));
+	}
 
 	// Effects: a damaged building burns in a couple of places and smokes; a ruin smokes for a while.
 	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
 	if (!Battle || !GetWorld() || !GetWorld()->IsGameWorld()) { return; }
+	if (UsesNewFire())
+	{
+		// the fire itself (flames, smoke, light) follows the building's health: StepFire
+		ClearStateFX(false);
+		if (NewState == ESRBuildingState::Damaged)
+		{
+			CrackleClock = 0.f;   // it catches with a flare-up
+			FireRetry = 0.f;
+		}
+		FireSeated = 0;           // the mesh changed: the flames find their places on the new one
+		return;
+	}
+	// The sprite fire (kept for a build without the new fire's materials, or with it switched off): a damaged
+	// building burns in a couple of places and smokes; a ruin smokes for a while.
 	if (NewState == ESRBuildingState::Damaged)
 	{
 		ClearStateFX(false);
@@ -1180,6 +1422,38 @@ void ASRBuilding::SetState(ESRBuildingState NewState)
 	{
 		ClearStateFX(false);
 	}
+}
+
+UStaticMesh* ASRBuilding::GetLevelMesh(bool bDamaged) const
+{
+	const TArray<TObjectPtr<UStaticMesh>>& Meshes = bDamaged ? LevelDamagedMeshes : LevelMeshes;
+	for (int32 L = FMath::Min(Level, Meshes.Num()); L >= 2; --L)
+	{
+		if (Meshes[L - 1]) { return Meshes[L - 1]; }
+		// a level whose damaged mesh is missing still shows its own finished one rather than an older damaged one
+		if (bDamaged && L == Level && LevelMeshes.IsValidIndex(L - 1) && LevelMeshes[L - 1]) { return LevelMeshes[L - 1]; }
+	}
+	return bDamaged && DamagedMeshAsset ? DamagedMeshAsset.Get() : BuildingMesh.Get();
+}
+
+void ASRBuilding::ApplyLevelLook(bool bFlourish)
+{
+	if (bDestroyed || BuildProgress < 1.f) { return; }
+	SetState(State == ESRBuildingState::Damaged ? ESRBuildingState::Damaged : ESRBuildingState::Complete);
+	if (!bFlourish) { return; }
+	// the scaffolding comes down: dust off the corners and the roof, a little debris
+	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || !GetWorld() || !GetWorld()->IsGameWorld()) { return; }
+	const FVector2D C = GetFootprintCentre();
+	const FVector2D H = (FootprintMax - FootprintMin) * 0.5f;
+	const float Z = GetActorLocation().Z;
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const FVector2D P = ToWorld2D((FootprintMin + FootprintMax) * 0.5f + FVector2D(i & 1 ? H.X : -H.X, i & 2 ? H.Y : -H.Y) * 0.85f);
+		Battle->SpawnFX(ESRFX::Dust, FVector(P.X, P.Y, Z + 40.f), 2.2f);
+	}
+	Battle->SpawnFX(ESRFX::Dust, FVector(C.X, C.Y, GetLabelPoint().Z - 180.f), 2.6f);
+	Battle->SpawnFX(ESRFX::Debris, FVector(C.X, C.Y, GetLabelPoint().Z - 260.f), 1.6f);
 }
 
 void ASRBuilding::ClearStateFX(bool bKeepSmoke)
@@ -1229,4 +1503,274 @@ void ASRBuilding::ApplySaved(float InHealth, float InProgress, bool bInDestroyed
 	SetState(BuildProgress < 1.f ? ESRBuildingState::Site : (GetHealthFrac() < F.DamagedStateFraction ? ESRBuildingState::Damaged : ESRBuildingState::Complete));
 	ApplyBuildVisual();
 	UpdateWorkers();
+}
+
+// ---------------------------------------------------------------------------------------------------- fire
+float ASRBuilding::GetFireStrength() const
+{
+	if (bDestroyed || BuildProgress < 1.f) { return 0.f; }
+	const float Start = USRFeelSettings::Get().FireStartFraction;
+	const float H = GetHealthFrac();
+	if (H >= Start) { return 0.f; }
+	return FMath::Pow(FMath::Clamp((Start - H) / FMath::Max(Start - 0.1f, 0.05f), 0.f, 1.f), 0.8f);
+}
+
+bool ASRBuilding::UsesNewFire() const
+{
+	return USRFeelSettings::Get().bBuildingFire && ASRBuildingFire::CanDraw();
+}
+
+ASRBuildingFire* ASRBuilding::NeedFire(uint8 SeatKind)
+{
+	UWorld* World = GetWorld();
+	if (!World || !World->IsGameWorld() || !UsesNewFire()) { return nullptr; }
+	ASRBuildingFire* Fire = FireFX.Get();
+	if (!Fire)
+	{
+		FActorSpawnParameters P;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Fire = World->SpawnActor<ASRBuildingFire>(GetActorLocation(), FRotator::ZeroRotator, P);
+		FireFX = Fire;
+		FireSeated = 0;
+	}
+	if (Fire && FireSeated != SeatKind)
+	{
+		const FVector2D C = GetFootprintCentre();
+		// (the footprint is in the building's own frame: a turned building's half extent, seen from the world, is the larger one both ways)
+		const FVector2D Half = (FootprintMax - FootprintMin) * 0.5f;
+		const float Yaw = FMath::Abs(FMath::Fmod(GetActorRotation().Yaw, 180.f));
+		const FVector2D HalfW = (Yaw > 1.f && FMath::Abs(Yaw - 180.f) > 1.f) ? FVector2D(Half.GetMax(), Half.GetMax()) : Half;
+		Fire->Seat(Mesh, FVector(C.X, C.Y, GetActorLocation().Z), HalfW, BlockHeight, SeatKind == 3);
+		FireSeated = SeatKind;
+	}
+	return Fire;
+}
+
+void ASRBuilding::StepFire(float Dt)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	// soot on the mesh itself: it blackens as the fire takes hold (quickly), clears as the building is made good (slowly);
+	// a ruin stays black
+	{
+		const float Want = !UsesNewFire() ? 0.f : (bDestroyed ? 0.85f : FMath::Clamp(GetFireStrength() * 1.15f, 0.f, 1.f));
+		Soot = FMath::FInterpConstantTo(Soot, Want, Dt, Want > Soot ? 0.35f : 0.12f);
+		if (FMath::Abs(Soot - SootShown) > 0.01f)
+		{
+			SootShown = Soot;
+			Mesh->SetCustomPrimitiveDataFloat(4, Soot);
+		}
+	}
+	if (!UsesNewFire())
+	{
+		// switched off while something burned: put it out (the sprite fire is SetState's)
+		if (ASRBuildingFire* Fire = FireFX.Get()) { Fire->Finish(); FireFX = nullptr; FireSeated = 0; }
+		return;
+	}
+	if (bDestroyed)
+	{
+		// the ruin smoulders for a while, dying down
+		if (State != ESRBuildingState::Ruin) { return; }
+		const float Left = 1.f - (CollapseClock - F.CollapseTime) / FMath::Max(F.RuinSmoulderTime, 1.f);
+		ASRBuildingFire* Fire = FireFX.Get();
+		if (Left <= 0.f) { if (Fire) { Fire->Finish(); FireFX = nullptr; } return; }
+		if (!Fire && CollapseClock > F.CollapseTime + 1.f) { return; }      // (a ruin loaded from a save: cold)
+		if ((Fire = NeedFire(3)) != nullptr)
+		{
+			Fire->SetSmoulder(true);
+			Fire->SetStrength(0.5f * Left);
+		}
+		return;
+	}
+	const float S = GetFireStrength();
+	if (S <= 0.f)
+	{
+		if (ASRBuildingFire* Fire = FireFX.Get()) { Fire->SetStrength(0.f); }
+		return;
+	}
+	if (ASRBuildingFire* Fire = NeedFire(State == ESRBuildingState::Damaged ? 2 : 1))
+	{
+		Fire->SetSmoulder(false);
+		Fire->SetStrength(S);
+	}
+}
+
+void ASRBuilding::DebugSetHealthFrac(float Frac)
+{
+	if (bDestroyed || BuildProgress < 1.f) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	Health = FMath::Clamp(GetMaxHealth() * Frac, 1.f, GetMaxHealth());
+	const ESRBuildingState Want = GetHealthFrac() < F.DamagedStateFraction ? ESRBuildingState::Damaged : ESRBuildingState::Complete;
+	if (Want != State) { SetState(Want); }
+}
+
+int32 ASRBuilding::DebugFireSeats() const
+{
+	return FireFX.IsValid() ? FireFX->NumLit() : 0;
+}
+
+// --- the archers on top -------------------------------------------------------------------------
+
+bool ASRBuilding::HasPostArchers() const
+{
+	return BuildingType == ESRBuildingType::Castle || BuildingType == ESRBuildingType::Tower || BuildingType == ESRBuildingType::RelicTower;
+}
+
+void ASRBuilding::EnsurePosts()
+{
+	if (!HasPostArchers() || (Posts.Num() > 0 && PostsLevel == Level)) { return; }
+	PostsLevel = Level;
+	// where they stand, in the mesh's own cm (front toward -X; Tools/blender/bld_*.py): roofs and wall walks, by level
+	TArray<FVector> Spots;
+	if (BuildingType == ESRBuildingType::Tower)
+	{
+		static const float Floor[3] = { 860.f, 980.f, 1232.f };     // the fighting top (H - 40); level 3: the upper stage's roof
+		Spots.Add(Level >= 3 ? FVector(-40.f, -30.f, Floor[2]) : FVector(0.f, 0.f, Floor[FMath::Clamp(Level, 1, 3) - 1]));
+	}
+	else if (BuildingType == ESRBuildingType::RelicTower)
+	{
+		Spots.Add(FVector(-92.f, 0.f, 1150.f));     // the fighting top, in front of the beacon pier
+		Spots.Add(FVector(-162.f, 0.f, 400.f));     // the gallery walk, in front of the shaft
+	}
+	else if (BuildingType == ESRBuildingType::Castle)
+	{
+		// manned in this order as the castle grows (Sovereign Feel > Castle levels > Archers)
+		if (Level <= 1) { Spots.Add(FVector(-371.f, -250.f, 190.f)); Spots.Add(FVector(-371.f, 250.f, 190.f)); }     // the yard wall
+		else if (Level <= 3) { Spots.Add(FVector(-464.f, -120.f, 392.f)); Spots.Add(FVector(-464.f, 120.f, 392.f)); } // the gatehouse roof
+		else
+		{
+			// the corner towers' roofs (h - 36); from level 5 the great keep stands in for the back-right one
+			const int32 L = FMath::Clamp(Level, 4, 7);
+			const float FrontH = L >= 7 ? 820.f : (L >= 6 ? 720.f : 596.f), BackH = L >= 7 ? 1040.f : (L >= 6 ? 900.f : 716.f);
+			const float KeepH = L >= 7 ? 1660.f : (L >= 6 ? 1480.f : 1300.f);
+			Spots.Add(FVector(-366.f, -512.f, FrontH - 36.f));
+			Spots.Add(FVector(-366.f, 512.f, FrontH - 36.f));
+			Spots.Add(FVector(360.f, -504.f, BackH - 36.f));
+			Spots.Add(L >= 5 ? FVector(330.f, 470.f, KeepH - 36.f) : FVector(360.f, 504.f, BackH - 36.f));
+		}
+	}
+	const int32 Old = Posts.Num();
+	Posts.SetNum(Spots.Num());
+	const FVector2D C = GetFootprintCentre();
+	for (int32 i = 0; i < Spots.Num(); ++i)
+	{
+		FPostArcher& P = Posts[i];
+		P.Offset = FVector2D(Spots[i].X, Spots[i].Y);
+		P.FeetZ = Spots[i].Z;
+		P.Applied = FVector4(-1.f, -1.f, -1.f, -1.f);
+		if (i >= Old)
+		{
+			// at rest they look out over the walls (a centred one, out of the front)
+			const FVector2D Out = P.Offset.IsNearlyZero(1.f) ? FVector2D(-100.f, 0.f) : P.Offset;
+			P.Yaw = SRYawOf(ToWorld2D((FootprintMin + FootprintMax) * 0.5f + Out) - C);
+			P.IdlePhase = FMath::FRandRange(0.f, 3.f);
+		}
+	}
+}
+
+FVector2D ASRBuilding::PostXY(int32 i) const
+{
+	return ToWorld2D((FootprintMin + FootprintMax) * 0.5f + Posts[i].Offset);
+}
+
+FVector ASRBuilding::PostFeet(int32 i) const
+{
+	const FVector2D P = PostXY(i);
+	return FVector(P.X, P.Y, GetActorLocation().Z + Posts[i].FeetZ + USRFeelSettings::Get().PostArcherFeetLift);
+}
+
+void ASRBuilding::StepPosts(float Dt)
+{
+	if (!HasPostArchers()) { return; }
+	EnsurePosts();
+	USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || !GetWorld() || !GetWorld()->IsGameWorld()) { return; }
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRUnitStats& AS = F.StatsFor(ESRUnitType::Archer);
+	const FSRSpriteSheet& Sheet = FSRSpriteSheet::For(ESRUnitType::Archer);
+	const FSRSpriteView& View = Battle->GetSpriteView();
+	const float Windup = FMath::Max(AS.WindupTime, 0.05f), Recovery = FMath::Max(AS.RecoveryTime, 0.05f);
+	const bool bWorking = IsFinished() && !bRepairing && State != ESRBuildingState::Ruin;
+	const int32 Manned = bWorking ? FMath::Min(GetArcherCount(), Posts.Num()) : 0;
+	const bool bOnScreen = FVector2D::DistSquared(GetFootprintCentre(), View.FocusXY) < FMath::Square(View.CullRadius + 1500.f);
+
+	// the cards, made the first time they are needed
+	if (F.bPostArchers && Battle->UnitCardMesh && PostCards.Num() < Posts.Num())
+	{
+		UMaterialInterface* Mat = Battle->GetSpriteMaterial(ESRUnitType::Archer);
+		const FLinearColor TeamCol = Battle->TeamColor(Team);
+		while (PostCards.Num() < Posts.Num())
+		{
+			UStaticMeshComponent* Card = NewObject<UStaticMeshComponent>(this);
+			Card->SetMobility(EComponentMobility::Movable);
+			Card->SetStaticMesh(Battle->UnitCardMesh);
+			Card->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Card->SetGenerateOverlapEvents(false);
+			Card->SetCanEverAffectNavigation(false);
+			Card->bReceivesDecals = false;
+			Card->bAffectDynamicIndirectLighting = false;
+			Card->bAffectDistanceFieldLighting = false;
+			Card->bVisibleInRayTracing = false;
+			Card->SetCastShadow(false);
+			Card->SetBoundsScale(2.f);
+			Card->SetUsingAbsoluteRotation(true);
+			Card->SetUsingAbsoluteScale(true);
+			Card->SetupAttachment(Root);
+			Card->RegisterComponent();
+			Card->SetMaterial(0, Mat);
+			Card->SetCustomPrimitiveDataVector4(SRSprite::DataTeamColor, FVector4(TeamCol.R, TeamCol.G, TeamCol.B, 1.f));
+			Card->SetVisibility(false);
+			PostCards.Add(Card);
+		}
+	}
+
+	for (int32 i = 0; i < Posts.Num(); ++i)
+	{
+		FPostArcher& P = Posts[i];
+		const bool bManned = i < Manned;
+		if (!bManned) { P.Clock = -1.f; P.bLoosed = true; P.Mark = nullptr; }
+		// the shot: the arrow leaves on the release frame, at the end of the draw
+		if (P.Clock >= 0.f)
+		{
+			P.Clock += Dt;
+			ASRUnit* Mark = P.Mark.Get();
+			if (Mark && Mark->IsActive()) { P.Yaw = SRYawOf(Mark->GetPos2D() - PostXY(i)); }
+			if (!P.bLoosed && P.Clock >= Windup)
+			{
+				P.bLoosed = true;
+				if (Mark && Mark->IsActive())
+				{
+					const FVector2D Dir = FVector2D(FMath::Cos(FMath::DegreesToRadians(P.Yaw)), FMath::Sin(FMath::DegreesToRadians(P.Yaw)));
+					const FVector Muzzle = PostFeet(i) + FVector(Dir * 60.f, 100.f);
+					ASRProjectile::LaunchArrow(GetWorld(), Team, nullptr, Mark, nullptr, Muzzle, GetAttackDamage(), 60.f, 2200.f, 0.1f);
+				}
+			}
+			if (P.Clock >= Windup + Recovery) { P.Clock = -1.f; P.Mark = nullptr; }
+		}
+		P.IdlePhase += Dt;
+
+		if (!PostCards.IsValidIndex(i) || !PostCards[i]) { continue; }
+		UStaticMeshComponent* Card = PostCards[i];
+		const bool bShow = F.bPostArchers && bManned && bOnScreen && Mesh && Mesh->IsVisible();
+		if (Card->IsVisible() != bShow) { Card->SetVisibility(bShow); P.Applied = FVector4(-1.f, -1.f, -1.f, -1.f); }
+		if (!bShow) { continue; }
+
+		ESRSpriteAnim Anim = ESRSpriteAnim::Idle;
+		int32 Frame = 0;
+		if (P.Clock >= 0.f)
+		{
+			Anim = ESRSpriteAnim::Attack;
+			Frame = P.Clock < Windup ? Sheet.AttackFrame(ESRAttackPhase::Windup, P.Clock / Windup)
+				: Sheet.AttackFrame(ESRAttackPhase::Recovery, FMath::Clamp((P.Clock - Windup) / Recovery, 0.f, 1.f));
+		}
+		else { Frame = FMath::FloorToInt(P.IdlePhase * F.IdleFps) % FMath::Max(1, Sheet.Anim(ESRSpriteAnim::Idle).Frames); }
+		const FSRSpriteSheet::FAnim& Block = Sheet.Anim(Anim);
+		Frame = FMath::Clamp(Frame, 0, Block.Frames - 1);
+		P.Facing = SRSprite::FacingIndexSticky(P.Facing, P.Yaw, View.ViewYaw, 8.f);
+		const FVector4 Data(float(Block.Col + Frame), float(Block.Row + P.Facing), 0.f, 1.f);
+		if (!Data.Equals(P.Applied, 0.001f)) { P.Applied = Data; Card->SetCustomPrimitiveDataVector4(SRSprite::DataFrame, Data); }
+		Card->SetWorldLocation(PostFeet(i));
+		Card->SetWorldRotation(View.CardRotation);
+		const float K = Sheet.CardScale * F.PostArcherScale;
+		Card->SetRelativeScale3D(FVector(1.f, K, K));
+	}
 }

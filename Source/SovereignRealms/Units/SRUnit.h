@@ -59,6 +59,18 @@ public:
 	 * comes near it (within GuardLeash), never chase far. Builders do not guard, and only Builders can be guarded. */
 	void OrderGuard(ASRUnit* Ward, ASRBuilding* WardBuilding, const FVector2D& Offset);
 	static bool CanBeGuarded(const ASRUnit* U) { return U && U->IsBuilder(); }
+	/** Wander the map on its own (unexplored and unseen ground first), picking a new spot on arrival; struck by a foe, it
+	 * drops the roam and runs home to its castle. Meant for the Scout. */
+	void OrderRoam();
+	bool IsRoaming() const { return Order == ESROrder::Roam; }
+	/** Medics: keep beside this troop of our own, following it, healing everyone round it. */
+	void OrderHeal(ASRUnit* Ward);
+	bool IsMedic() const { return UnitType == ESRUnitType::Medic; }
+	ASRUnit* GetHealWard() const { return Order == ESROrder::Heal ? HealWard.Get() : nullptr; }
+	/** A Passive Medic running from foes right now. */
+	bool IsFleeing() const { return bFleeing; }
+	/** Health back (capped at its maximum); returns how much it actually got. */
+	float Heal(float Amount);
 	ASRUnit* GetGuardedUnit() const { return Order == ESROrder::Guard ? GuardUnit.Get() : nullptr; }
 	ASRBuilding* GetGuardedBuilding() const { return Order == ESROrder::Guard ? GuardBuilding.Get() : nullptr; }
 	/** Move (or attack-move) through waypoints to the last point: how recruits and group moves get round buildings. */
@@ -67,6 +79,9 @@ public:
 	/** Marching in a group: travel no faster than this (cm/s; 0 = own top speed). Set by a group move, cleared by
 	 * any new order. */
 	void SetPace(float Speed) { PaceSpeed = Speed; }
+	/** Marching in formation: head for T (its place in the shape, which moves with the formation) at most at Pace.
+	 * Keeps the move / attack-move order going without starting it afresh each frame. */
+	void MarchTo(const FVector2D& T, float Pace, bool bAttackMove);
 
 	/** Little hop that says "order received". */
 	void Acknowledge(float Delay);
@@ -86,6 +101,10 @@ public:
 	ESRUnitType GetUnitType() const { return UnitType; }
 	ESRTeam GetTeam() const { return Team; }
 	const FString& GetLabel() const { return Label; }
+	/** One line of what it is doing (sr.Watch): order, target and distance, attack phase, speed. */
+	FString DescribeState() const;
+	/** A catapult: the nearest fighting foe inside its minimum range (it backs away from it), or none. */
+	const ASRUnit* TooCloseThreat(const FVector2D& Pos) const;
 	bool IsAlive() const { return !bDead; }
 	/** Alive and finished spawning: selectable, commandable, targetable. */
 	bool IsActive() const { return !bDead && bActive; }
@@ -138,7 +157,7 @@ public:
 	void SetPlatoon(int32 Index) { Platoon = Index; }
 	int32 GetPlatoon() const { return Platoon; }
 	/** Busy with a fight: has a target or is mid-swing. */
-	bool IsEngaged() const { return Target.IsValid() || TargetBuilding.IsValid() || AttackPhase != ESRAttackPhase::Ready; }
+	bool IsEngaged() const { return Target.IsValid() || TargetBuilding.IsValid() || (AttackPhase != ESRAttackPhase::Ready && UnitType != ESRUnitType::Medic); }
 
 	// ---- Selection feedback ----
 	void SetSelected(bool bInSelected);
@@ -160,11 +179,34 @@ private:
 	void StepHorseSounds(float Dt);
 	void Strike(ASRUnit* T);
 	void StrikeBuilding(ASRBuilding* B);
-	/** Steering toward a chase target: straight when the way is clear, otherwise along a grid path refreshed now and then. */
-	FVector2D ChaseDir(const FVector2D& Goal, float Dt);
+	/** Steering toward a chase target: straight when the way is clear, otherwise along a grid path refreshed now and
+	 * then. Toward (a building it is going to strike or work on): the path runs to whichever of its walls is nearest
+	 * on foot, and Goal is only used once the way to it is clear. */
+	FVector2D ChaseDir(const FVector2D& Goal, float Dt, const ASRBuilding* Toward = nullptr);
+	/** Stuck on the way somewhere: plan the rest of the march again from where it stands (false: no fresh route, or
+	 * it has asked too often on this order). */
+	bool Repath();
 	void CancelAttack();
 	void ResetProgress();
 	void Die(ASRUnit* Killer, const FVector2D& HitDir, bool bQuiet = false);
+	/** Medics: flee (Passive), heal what is in reach, follow the ward, go to the wounded (Assertive). True when it
+	 * has decided the medic's movement this step (the ordinary order handling is skipped). */
+	bool StepMedic(float Dt, FVector2D& Desired, FVector2D& FaceDir);
+	/** The bandaging lands: the patient gets MedicHealAmount back (if it is still within touch). */
+	void HealPulse();
+	/** The wounded troop of our side (not this one) within Radius of Centre that most needs it (worst hurt, then
+	 * nearest this Medic), or null. bAvoidFoes: none with a foe close to it (a Passive Medic does not go there). */
+	ASRUnit* FindWounded(const FVector2D& Centre, float Radius, bool bAvoidFoes) const;
+	/** Close enough to touch it? */
+	bool InContact(const ASRUnit* Other) const;
+	TWeakObjectPtr<ASRUnit> HealWard;
+	TWeakObjectPtr<ASRUnit> Patient;
+	bool bFleeing = false;
+	/** Roaming: head for a fresh spot (false: none found). */
+	bool PickRoamPoint();
+	/** Struck while roaming: run for the castle's gate. */
+	void FleeHome();
+	float RoamLegTime = 0.f;
 	/** Where the guarded thing is now (false: it is gone). */
 	bool GuardWardPos(FVector2D& Out) const;
 	TWeakObjectPtr<ASRUnit> GuardUnit;
@@ -229,7 +271,9 @@ private:
 	int32 Platoon = INDEX_NONE;
 	TArray<FVector2D> ChasePath;
 	FVector2D ChaseGoal = FVector2D::ZeroVector;
+	TWeakObjectPtr<const ASRBuilding> ChaseBuilding;
 	float ChaseRepath = 0.f;
+	int32 RepathsLeft = 0;        // fresh routes it may still ask for on this order
 	float RetargetTimer = 0.f;
 	float BestDist = 0.f;
 	float NoProgressTime = 0.f;
@@ -284,6 +328,9 @@ private:
 	bool bNextStepRight = false;
 	float WalkDistance = 0.f;     // cm travelled in the current run; drives the walk cycle
 	FVector2D LastVisualPos = FVector2D::ZeroVector;
+	// FollowGround: where the ground was last sampled, and whether the unit has come to rest on it (no trace while it stands there)
+	FVector2D GroundSampleXY = FVector2D::ZeroVector;
+	bool bGroundSettled = false;
 	bool bSpriteShown = true;
 	bool bCulled = false;      // off screen: presentation skipped (SpriteView.CullRadius)
 	bool bShadowCasting = true;

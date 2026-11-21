@@ -6,16 +6,24 @@ cart, an olive tree, a scarecrow in the team's colours and a little banner on th
 
 States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
 damage(); `site` and `ruin` are small meshes of their own on the same footprint.
+
+Levels 1-3 (k.level), each adding to the last (medieval, weathered: slate, iron, dark stone, no gold):
+  2  the cottage becomes a farmhouse: a stone footing, a jettied half-timbered upper storey under a pitched slate
+     roof, a striped awning for a porch; the granary is rebuilt in stone under a flat iron-bound lid
+  3  fortified: the granary is a tall round stone silo on dark stone with iron bands, a timber hoarding under a
+     glazed head and a flat top ringed with crow-stepped merlons (a chess rook, like the castle's towers); the farmhouse gets a stone chimney, banners and creeper; fires burn at the yard's entrance
+The level banner (kit.level_flag) stands at the front-left, at the corner where the field's fence meets the yard entrance.
 """
 import math
 
-from bldkit import NO_TOP, STATES, inset_ring, rect  # noqa: F401
+from bldkit import NO_TOP, STATES, inset_ring, ngon, rect  # noqa: F401
 
 NAME = "farm"
 MESH = "SM_Bld_Farm"
 SEED = 23
 FOOTPRINT = [-440.0, -480.0, 440.0, 480.0]
 RING_RADIUS = 620.0
+LEVELS = 3
 PREVIEW_FIGURES = [(-560, -60), (-600, 60)]
 
 FX0, FX1, FY0, FY1 = -400.0, 256.0, -110.0, 452.0        # the field
@@ -27,10 +35,12 @@ def cottage(k):
     hw = (y1 - y0) / 2
     cy = (y0 + y1) / 2
     with k.at((0, cy, 0)):
+        lv = k.level
+        base = "Bld_Mudbrick" if lv == 1 else "Bld_AshlarLarge"                    # level 2 on: a stone footing
         r0 = rect(x0, -hw, x1, hw)
         u0 = 44.0
-        r1 = k.wall("Bld_Mudbrick", r0, 0, 64, inset=8, u0=u0, bleach=False)       # the brick footing, left bare
-        k.cap("Bld_Mudbrick", r0, 0.5, down=True)
+        r1 = k.wall(base, r0, 0, 64, inset=8, u0=u0, bleach=False)                 # the brick footing, left bare
+        k.cap(base, r0, 0.5, down=True)
         side = 2 * (hw - 8)
         door = dict(a=side / 2 - 30, b=side / 2 + 50, z0=64, z1=186, depth=18, back="Bld_Planks", reveal="Bld_Mudbrick", shade=0.7,
                     back_shade=0.75, no_sill=True)
@@ -46,22 +56,26 @@ def cottage(k):
         k.beam_ends("Bld_Beam", (x0 + 30, -hw + 8), (x1 - 30, -hw + 8), top - 22, 5, size=(14, 14), out=20)
         r2 = inset_ring(r1, -3)
         k.cap("Bld_Plaster", r2, top, down=True, shade=0.6)
-        k.wall("Bld_Plaster", r2, top, top + 26, u0=u0, bleach=False)
-        k.parapet("Bld_Plaster", r2, top + 4, top + 26, thick=20, top="Bld_Plaster")
-        # on the roof: sheaves drying, jars, a short standard
-        for (x, y, yaw) in ((300, -60, 20), (332, 10, -30), (286, 44, 75)) if not k.damaged else ():
-            sheaf(k, (x, y, top + 4), lying=True, yaw=yaw)
-        if k.damaged:
-            k.burn_hole((262, -6, top + 4), (150, 120), yaw=25, soot="blot_m")
-        k.pot((170, 96, top + 4), 0.8)
-        k.pot((214, 110, top + 4), 0.6)
-        k.pole_banner((x1 - 44, -hw + 44, top + 4), height=210.0, cloth_w=64.0, cloth_h=192.0)
+        if lv == 1:
+            k.wall("Bld_Plaster", r2, top, top + 26, u0=u0, bleach=False)
+            k.parapet("Bld_Plaster", r2, top + 4, top + 26, thick=20, top="Bld_Plaster")
+            # on the roof: sheaves drying, jars, a short standard
+            for (x, y, yaw) in ((300, -60, 20), (332, 10, -30), (286, 44, 75)) if not k.damaged else ():
+                sheaf(k, (x, y, top + 4), lying=True, yaw=yaw)
+            if k.damaged:
+                k.burn_hole((262, -6, top + 4), (150, 120), yaw=25, soot="blot_m")
+            k.pot((170, 96, top + 4), 0.8)
+            k.pot((214, 110, top + 4), 0.6)
+            k.pole_banner((x1 - 44, -hw + 44, top + 4), height=210.0, cloth_w=64.0, cloth_h=192.0)
+        else:
+            upper_storey(k, r1, r2, top, u0)
         # reed porch over the door on two forked posts
         px = x0 - 118
-        k.cloth("Bld_Thatch", [(x0 + 2, 124, 214), (x0 + 2, -96, 214), (px, -96, 176), (px, 124, 176)],       # damaged: burnt to tatters
+        porch = "Bld_Thatch" if lv == 1 else "Bld_Awning"                          # level 2 on: a striped awning
+        k.cloth(porch, [(x0 + 2, 124, 214), (x0 + 2, -96, 214), (px, -96, 176), (px, 124, 176)],       # damaged: burnt to tatters
                 [(220, 0), (0, 0), (0, 126), (220, 126)], w=NO_TOP)
         if not k.damaged:
-            k.poly("Bld_Thatch", [(x0 + 2, -96, 208), (x0 + 2, 124, 208), (px, 124, 170), (px, -96, 170)],
+            k.poly(porch, [(x0 + 2, -96, 208), (x0 + 2, 124, 208), (px, 124, 170), (px, -96, 170)],
                    [(0, 0), (220, 0), (220, 126), (0, 126)], shade=0.55)
         for y in (-88, 116):
             k.cyl("Bld_Beam", (px + 10, y, 0), (px + 10, y, 176), 5.0, 4.0, sides=5)
@@ -74,6 +88,62 @@ def cottage(k):
         k.basket((x0 - 40, -66, 0), 24, 26, fill="Bld_Gold" if False else "Bld_Thatch")
         k.basket((x0 - 86, -78, 0), 20, 22, fill="Bld_Thatch")
         k.ladder((x1 - 150, hw + 46, 0), (x1 - 150, hw + 2, top + 30), width=34, rungs=7)
+
+
+def upper_storey(k, r1, r2, top, u0):
+    """Level 2 on (inside the cottage's frame): a half-timbered upper storey jettied out on beam ends under a pitched
+    slate roof, its ridge across the view. Level 3: a stone chimney, banners, creeper on the old wall."""
+    lv = k.level
+    rj = inset_ring(r2, -14)
+    xs, ys = [p[0] for p in rj], [p[1] for p in rj]
+    xa, xb, ya, yb = min(xs), max(xs), min(ys), max(ys)
+    k.band("Bld_Beam", r2, top, top + 12, out=14, u0=u0)                           # the jetty's bressummer
+    z1, z2, rise = top + 12, top + 140, 130.0
+    k.wall("Bld_Timber", rj, z1, z2, v0=0.0, bleach=False, u0=0.0)
+    for y in (-96, 0, 96):                                   # shuttered windows in the panels
+        k.obox("Bld_Shutter", (xa - 2, y, z1 + 64), (8, 40, 52), grain="z")
+        k.obox("Bld_Beam", (xa - 4, y, z1 + 34), (12, 52, 7), grain="y")
+    k.gable_end("Bld_Timber", xa, xb, ya, z2, rise, facing=-1)
+    k.gable_end("Bld_Timber", xa, xb, yb, z2, rise, facing=1)
+    zr = k.gable_roof("Bld_Slate", xa, xb, ya, yb, z2, rise, over=28.0, verge=20.0, holes=((-1, 44.0, 96.0, 64.0),))
+    if lv >= 3:
+        cx, cyy = (xa + xb) / 2 + 40, yb - 46                # a stone chimney through the back slope
+        k.box("Bld_StoneDark", (cx - 26, cyy - 30, z2 + 40), (cx + 26, cyy + 30, zr + 52), u0=10.0, top="Bld_Dark")
+        k.band("Bld_Trim", rect(cx - 26, cyy - 30, cx + 26, cyy + 30), zr + 40, zr + 52, out=5)
+        for y in (-48, 48):                                  # banners between the upper windows
+            k.cyl("Bld_Iron", (xa - 6, y - 22, z2 - 14), (xa - 6, y + 22, z2 - 14), 2.4, sides=4)
+            k.hang_cloth((xa - 6, y - 17, z2 - 16), (xa - 6, y + 17, z2 - 16), 104.0)
+        k.patch("Bld_Leaves", (xa + 20, ya - 2, 0), (1, 0, 0), (0, 0, 1), 180, 230, cells=12, fill=0.55, out=14)
+        k.patch("Bld_Leaves", (xa + 12, ya + 40, 0), (0, -1, 0), (0, 0, 1), 70, 200, cells=12, fill=0.5, out=14)
+        return zr + 52
+    return zr
+
+
+def silo(k, pos):
+    """Level 3: the granary rebuilt as a tall round stone silo: dark stone below, iron bands, a timber hoarding under
+    an oversailing glazed head, a flat top ringed with crow-stepped merlons. Returns its top."""
+    with k.at(pos):
+        k.lathe("Bld_StoneDark", (0, 0, 0), [(112, 0), (104, 128)], sides=12, rot=15, top=False)
+        k.lathe("Bld_Iron", (0, 0, 0), [(106, 124), (106, 136)], sides=12, rot=15, top=False)
+        k.lathe("Bld_Ashlar", (0, 0, 0), [(102, 132), (94, 470)], sides=12, rot=15, top=False)
+        k.lathe("Bld_Iron", (0, 0, 0), [(100, 290), (100, 300)], sides=12, rot=15, top=False)
+        k.lathe("Bld_Beam", (0, 0, 0), [(94, 452), (114, 472)], sides=12, rot=15, top=False)      # the hoarding's brackets
+        k.lathe("Bld_Timber", (0, 0, 0), [(114, 472), (114, 536)], sides=12, rot=15, top=False)
+        k.lathe("Bld_Trim", (0, 0, 0), [(120, 536), (120, 548)], sides=12, rot=15, top=False)
+        ring = ngon(0, 0, 118.0 / math.cos(math.pi / 12), 12, rot=15)
+        k.cap("Bld_AshlarLarge", ring, 536, down=True, shade=0.55)
+        k.wall("Bld_Frieze", ring, 548, 596, v0=0.0, bleach=False)
+        k.parapet("Bld_Ashlar", ring, 574, 596, thick=18, top="Bld_Trim")
+        k.stepped_merlons("Bld_Ashlar", ring, 596, width=30, gap=18, thick=18, h1=20, h2=16, cap="Bld_Trim")
+        top = 632.0
+        # the filling hatch and a ledge under it, a loading door high up, facing the camera
+        k.obox("Bld_Planks", (-102, 0, 150), (10, 46, 56), grain="z")
+        k.obox("Bld_Beam", (-104, 0, 118), (18, 60, 8), grain="y")
+        k.obox("Bld_Dark", (-93, 0, 340), (10, 30, 56))
+        if k.damaged:
+            k.scorch("plume_s", (-98, 0, 190), out=5)
+            k.rubble((-130, -40, 0), (90, 120), 20, blocks=5, beams=0)
+        return top
 
 
 def sheaf(k, pos, lying=False, yaw=0.0):
@@ -108,10 +178,14 @@ def haystack(k, pos, r=92.0, h=176.0):
 
 def granary(k, pos):
     """Beehive granary: a mudbrick drum drawing in to a plastered shoulder, under a reed cap."""
+    stone = k.level >= 2                                     # level 2: built in stone under a bronze cap
     with k.at(pos):
-        k.lathe("Bld_Mudbrick", (0, 0, 0), [(104, 0), (110, 40), (106, 150), (92, 196)], sides=10, rot=18)
+        k.lathe("Bld_Ashlar" if stone else "Bld_Mudbrick", (0, 0, 0), [(104, 0), (110, 40), (106, 150), (92, 196)], sides=10, rot=18)
         k.lathe("Bld_Plaster", (0, 0, 196), [(92, 0), (70, 34), (58, 44)], sides=10, rot=18, top="Bld_Dark")
-        if not k.damaged:                                    # damaged: the reed cap has burnt off the open throat
+        if not k.damaged and stone:
+            k.lathe("Bld_Planks", (0, 0, 236), [(70, 0), (64, 14)], sides=10, rot=18)             # a flat boarded lid, iron-bound
+            k.lathe("Bld_Iron", (0, 0, 232), [(72, 0), (72, 8)], sides=10, rot=18, top=False)
+        elif not k.damaged:                                  # damaged: the reed cap has burnt off the open throat
             k.lathe("Bld_Thatch", (0, 0, 228), [(84, 0), (56, 40), (10, 84)], sides=10, rot=18)
             k.cyl("Bld_Thatch", (0, 0, 306), (0, 0, 326), 9.0, 5.0, sides=6)
         else:
@@ -211,9 +285,16 @@ def build(k, state="complete"):
 
 
 def complete(k):
+    lv = k.level
     cottage(k)
     field(k)
-    granary(k, (336, 44, 0))
+    label = 470.0
+    if lv >= 3:
+        label = silo(k, (336, 44, 0)) + 150.0
+    else:
+        granary(k, (336, 44, 0))
+        if lv == 2:
+            label = 236.0 + 140.0 + 130.0 + 150.0            # over the farmhouse ridge
     haystack(k, (-96, -214, 0))
     cart(k, (-250, -300, 0), yaw=-28)
     k.tree((338, 352, 0), height=370, spread=190, blobs=6)
@@ -229,8 +310,12 @@ def complete(k):
     fence(k, [(x1 - 150, y0), (x0, y0), (x0, y1), (FX1 + 20, y1)],
           gaps=((1, 150, 300),) + (((0, 180, 420), (1, 560, 760), (2, 330, 520)) if k.damaged else ()))
     fence(k, [(FX0 - 6, FY0 - 16), (FX1 - 40, FY0 - 16)], post_h=72)
+    if lv >= 3:                                              # fires either side of the yard's entrance
+        for y in (-330, -196):
+            k.brazier((-408, y, 0), h=84)
+    k.level_flag((-436, -98, 0), height=280.0)
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 300))
-    k.sockets["label"] = (60.0, 0.0, 470.0)
+    k.sockets["label"] = (60.0, 0.0, label)
     k.sockets["popup"] = (-80.0, 170.0, 190.0)
 
 
@@ -246,7 +331,8 @@ def damage(k):
     k.scorch("plume_s", (104, -214, 66), flip=True)
     k.rubble((56, -400, 0), (120, 130), 26, slot="Bld_Mudbrick", blocks=7, beams=1, block=(30, 18, 12))
     k.scorch("blot_m", (-110, -230, 0), "up", out=2.0)       # round the burnt haystack
-    k.charred((250, 60, 200), (410, 30, 226), size=9)
+    if k.level < 3:                                          # across the granary's open throat
+        k.charred((250, 60, 200), (410, 30, 226), size=9)
     k.rubble((-250, 420, 0), (90, 60), 0, slot="Bld_Mudbrick", blocks=0, beams=2, mound=False)
 
 

@@ -1,0 +1,18 @@
+{
+ "name": "SM_Tree_D_Leaves",
+ "faces": 6577,
+ "collision": "none",
+ "bounds": [
+  [
+   -1.75,
+   -2.25,
+   1.75
+  ],
+  [
+   2.0,
+   2.25,
+   6.0
+  ]
+ ],
+ "lights": []
+}

@@ -69,12 +69,19 @@ MATERIALS = {
     "Bld_Char": ("T_Bld_Char", "opaque"),             # charred timber, burnt thatch (damaged, ruin)
     "Bld_Scorch": ("T_Bld_Scorch", "card"),           # soot marks: cut-out decals a few cm proud of a surface
     "Bld_Water": ("T_Bld_Water", "opaque"),           # still water in a trough or bucket (stable)
+    "Bld_LevelFlag": ("T_Bld_LevelFlag", "card team"),
+    # level upgrades, medieval: slate roofs, wrought iron, dark rubble stone, half-timbered upper storeys
+    "Bld_Slate": ("T_Bld_Slate", "opaque"),
+    "Bld_Iron": ("T_Bld_Iron", "opaque"),
+    "Bld_StoneDark": ("T_Bld_StoneDark", "opaque"),
+    "Bld_Timber": ("T_Bld_Timber", "opaque"),  # the level banner: one 32 x 64 texel cell per numeral (Kit.level_flag)
 }
 
 # A building comes in four meshes with one origin and footprint: the finished one, its construction site (shown
 # round the finished mesh while that rises out of the ground), the battle-damaged one, and the ruin left behind.
 STATES = ("complete", "site", "damaged", "ruin")
 STATE_SUFFIX = {"complete": "", "site": "_Site", "damaged": "_Damaged", "ruin": "_Ruin"}
+LEVEL_STATES = ("complete", "damaged")          # what each level above the first has of its own (SM_Bld_<Name>_L<n>[_Damaged])
 
 # Soot marks in T_Bld_Scorch: name -> (u, v, width, height) in cm (gen_building_textures.py SCORCH_CELLS x 4).
 # Plumes, licks, the streak and the smear stand on their bottom edge; blots are round.
@@ -156,10 +163,11 @@ def inset_ring(ring, d):
 
 
 class Kit:
-    def __init__(self, name, seed=1, state="complete"):
+    def __init__(self, name, seed=1, state="complete", level=1):
         self.name = name
         self.state = state         # one of STATES; the modules and some parts below read it
         self.damaged = state == "damaged"
+        self.level = level         # the building's level (1 = as built); a module with LEVELS > 1 builds each one
         self.faces = []            # (slot, [Vector], [(u, v)], [w], shade)
         self.rng = random.Random(seed)
         self.drng = random.Random(seed * 7919 + 17)      # decides the damage, so the finished mesh's dice are untouched
@@ -540,6 +548,24 @@ class Kit:
             self.obox("Bld_Beam", (0, 0, height - 20), (6, cloth_w + 16, 6), grain="y")
             self.hang_cloth((-4, -cloth_w / 2, height - 24), (-4, cloth_w / 2, height - 24), cloth_h, slot)
 
+    def level_flag(self, pos, height=240.0, level=None, yaw=0.0):
+        """The level banner: a pole with a cross arm and a team-coloured cloth showing the level's numeral (T_Bld_LevelFlag
+        cell `level`), facing the camera (-X). It is never torn, so the level still reads on the damaged mesh. The cloth is
+        92 x 192 cm and hangs from `height` - 18; put it where the game camera always sees it (the front, left of centre)
+        and below the label socket, where the HUD draws its bars."""
+        level = self.level if level is None else level
+        cw, drop = 92.0, 192.0
+        with self.at(pos, yaw):
+            self.cyl("Bld_Beam", (0, 0, -4), (0, 0, height), 5.5, 4.5, sides=6)
+            self.cyl("Bld_Bronze", (0, 0, height), (0, 0, height + 16), 7.0, 0.6, sides=6)
+            self.obox("Bld_Beam", (0, 0, height - 14), (6, cw + 14, 6), grain="y")
+            for s in (-1, 1):
+                self.obox("Bld_Bronze", (0, s * (cw / 2 + 8), height - 14), (8, 6, 8))
+            a, b = V3((-5, -cw / 2, height - 18)), V3((-5, cw / 2, height - 18))
+            u0 = level * 128.0 + 16.0                                   # cell * 32 texels * 4 cm, cloth from texel x 4
+            pts = [b - Vector((0, 0, drop)), a - Vector((0, 0, drop)), a, b]
+            self.poly("Bld_LevelFlag", pts, [(u0 + cw, drop), (u0, drop), (u0, 0.0), (u0 + cw, 0.0)], w=[0.6, 0.6, 0.0, 0.0])
+
     def hang_cloth(self, a, b, drop, slot="Bld_Banner", u0=0.0):
         """Cloth hanging from the line a -> b (left to right as seen from the front), `drop` cm long."""
         a, b = V3(a), V3(b)
@@ -792,6 +818,40 @@ class Kit:
         if holes and ceiling:
             self.poly("Bld_Dark", [(x0, y0, z + 2), (x1, y0, z + 2), (x1, y1, z + 2), (x0, y1, z + 2)])
         return zr
+
+    # ------------------------------------------------------------------ level upgrades (shared vocabulary)
+    # Levels read the same on every building: level 2 builds up in stone and bronze, level 3 is crowned in gold.
+    def pyramid_roof(self, slot, x0, y0, x1, y1, z, rise, over=12.0, finial="Bld_Bronze", eave="Bld_Beam"):
+        """A hipped / pyramid roof over the rectangle x0..x1, y0..y1 from z (eaves `over` proud), apex `rise` above,
+        with an eave board and a finial (slot or None)."""
+        xa, ya, xb, yb = x0 - over, y0 - over, x1 + over, y1 + over
+        apex = ((x0 + x1) / 2, (y0 + y1) / 2, z + rise)
+        ring = [(xb, ya), (xb, yb), (xa, yb), (xa, ya)]
+        for i in range(4):
+            a, b = ring[i], ring[(i + 1) % 4]
+            self.poly(slot, [(a[0], a[1], z), (b[0], b[1], z), apex])
+        if eave:
+            self.wall(eave, ring, z - 10, z, v0=0.0, bleach=False)
+            self.cap(eave, ring, z - 10, down=True, shade=0.6)
+        if finial:
+            self.finial((apex[0], apex[1], apex[2] - 6), slot=finial)
+        return apex[2]
+
+    def finial(self, pos, slot="Bld_Gold", h=64.0, r=13.0):
+        """A knob and spike on a roof's apex (gold on a top-level building: it glints)."""
+        self.lathe(slot, pos, [(r * 0.45, 0), (r, h * 0.3), (r * 0.9, h * 0.5), (r * 0.3, h * 0.62), (r * 0.25, h * 0.9), (0.0, h)], sides=8)
+
+    def dome(self, centre, r, h, slot="Bld_Gold", drum=None, drum_h=0.0, finial=True):
+        """An onion-less mud-brick dome (a bulb) on an optional drum; gold on the top level."""
+        cx, cy, cz = centre
+        if drum:
+            self.lathe(drum, (cx, cy, cz), [(r, 0.0), (r, drum_h)], sides=12, top=False)
+            cz += drum_h
+        prof = [(r * 1.04, 0.0), (r * 1.06, h * 0.18), (r * 0.98, h * 0.42), (r * 0.78, h * 0.66), (r * 0.46, h * 0.86), (r * 0.12, h * 0.98), (0.0, h)]
+        self.lathe(slot, (cx, cy, cz), prof, sides=12)
+        if finial:
+            self.finial((cx, cy, cz + h - 4), slot="Bld_Gold" if slot != "Bld_Gold" else "Bld_Bronze", h=h * 0.45, r=max(h * 0.08, 8.0))
+        return cz + h
 
     def gable_end(self, slot, x0, x1, y, z, rise, facing=-1):
         """The triangle of wall under a gable_roof at y (facing -1: toward -Y)."""

@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_BowStringL",
+ "faces": 110,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0679,
+   -0.1569,
+   -0.0013
+  ],
+  [
+   0.0058,
+   0.0053,
+   0.5498
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.64823,
+  -0.09421,
+  0.25322
+ ],
+ "part": "BowStringL",
+ "parent": "Bow",
+ "triangles": 220,
+ "blocks": 5
+}

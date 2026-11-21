@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_LegR",
+ "faces": 604,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1,
+   -0.1033,
+   -0.4
+  ],
+  [
+   0.0793,
+   0.1042,
+   0.1043
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.1125,
+  0.0,
+  0.7
+ ],
+ "part": "LegR",
+ "parent": "",
+ "triangles": 1208,
+ "blocks": 64
+}

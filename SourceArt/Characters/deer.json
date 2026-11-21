@@ -1,0 +1,684 @@
+{
+  "name": "deer",
+  "display_name": "Stag",
+  "generator": "Tools/blender (Blender 5.3 scripted build -> EEVEE passes -> make_sheets.py)",
+  "sheet": {
+    "color": "deer_color.png",
+    "teammask": "deer_teammask.png",
+    "normal": "deer_normal.png",
+    "width": 3840,
+    "height": 2560,
+    "cell": [
+      160,
+      160
+    ],
+    "columns": 24,
+    "rows": 16,
+    "block": [
+      8,
+      8
+    ],
+    "layout": "six animation blocks of 8 columns x 8 rows, laid out 3 across and 2 down; column = animations[a].origin_cell[0] + frame, row = animations[a].origin_cell[1] + facing_index"
+  },
+  "pivot_px": [
+    80,
+    118
+  ],
+  "pivot_uv_in_cell": [
+    0.5,
+    0.7375
+  ],
+  "pivot_notes": "The unit's ground position (actor origin, between the feet). Same pixel in every cell.",
+  "cm_per_px": 1.75,
+  "quad_size_cm": [
+    280.0,
+    280.0
+  ],
+  "scale_notes": "cm_per_px is measured in the camera plane. The figure is rendered at its true height from render_elevation_deg, so a camera-facing quad of quad_size_cm with its pivot on the ground shows it at world scale.",
+  "render_elevation_deg": 30.0,
+  "supersample": 4,
+  "figure_height_px": 76,
+  "figure_top_row": 55,
+  "figure_bottom_row": 130,
+  "figure_notes": "standing body in idle S frame 0 including the outline, weapons excluded",
+  "body_height_cm": 128.0,
+  "facings": {
+    "order": [
+      "S",
+      "SW",
+      "W",
+      "NW",
+      "N",
+      "NE",
+      "E",
+      "SE"
+    ],
+    "meaning": "direction the unit faces as seen on screen: S = toward the camera (down-screen), N = away (up-screen), E = screen right, W = screen left",
+    "camera_yaw_assumed_deg": 0,
+    "selection": "rel = FacingYaw - CameraYaw (deg); index = round(((rel + 180) mod 360) / 45) mod 8 into [S, SW, W, NW, N, NE, E, SE]; i.e. rel 0 -> N, 90 -> E, 180 -> S, -90 -> W",
+    "hysteresis_deg": 8,
+    "mirrored": false
+  },
+  "animations": {
+    "spawn": {
+      "frames": 6,
+      "loop": true,
+      "drive": "time",
+      "origin_cell": [
+        0,
+        0
+      ],
+      "fps": 4.0,
+      "rows": {
+        "S": 0,
+        "SW": 1,
+        "W": 2,
+        "NW": 3,
+        "N": 4,
+        "NE": 5,
+        "E": 6,
+        "SE": 7
+      }
+    },
+    "idle": {
+      "frames": 8,
+      "loop": true,
+      "drive": "time",
+      "origin_cell": [
+        8,
+        0
+      ],
+      "fps": 5.0,
+      "rows": {
+        "S": 0,
+        "SW": 1,
+        "W": 2,
+        "NW": 3,
+        "N": 4,
+        "NE": 5,
+        "E": 6,
+        "SE": 7
+      }
+    },
+    "walk": {
+      "frames": 8,
+      "loop": true,
+      "drive": "distance",
+      "origin_cell": [
+        16,
+        0
+      ],
+      "contact_frames": [
+        0,
+        2,
+        4,
+        6
+      ],
+      "roles": [
+        "hind L down",
+        "",
+        "fore L down",
+        "",
+        "hind R down",
+        "",
+        "fore R down",
+        ""
+      ],
+      "cycle_distance_cm": 96.0,
+      "fps_at_max_speed": 51.67,
+      "frame_rule": "frame = floor(frac(distance_walked_cm / cycle_distance_cm) * frames)",
+      "rows": {
+        "S": 0,
+        "SW": 1,
+        "W": 2,
+        "NW": 3,
+        "N": 4,
+        "NE": 5,
+        "E": 6,
+        "SE": 7
+      }
+    },
+    "attack": {
+      "frames": 8,
+      "loop": true,
+      "drive": "distance",
+      "origin_cell": [
+        0,
+        8
+      ],
+      "contact_frames": [
+        0,
+        1,
+        3,
+        4
+      ],
+      "roles": [
+        "hind L down",
+        "hind R down",
+        "hinds drive",
+        "fore L down",
+        "fore R down",
+        "fores drive",
+        "lift off",
+        "leap"
+      ],
+      "cycle_distance_cm": 200.0,
+      "fps_at_max_speed": 24.8,
+      "frame_rule": "frame = floor(frac(distance_walked_cm / cycle_distance_cm) * frames)",
+      "rows": {
+        "S": 8,
+        "SW": 9,
+        "W": 10,
+        "NW": 11,
+        "N": 12,
+        "NE": 13,
+        "E": 14,
+        "SE": 15
+      }
+    },
+    "hit": {
+      "frames": 3,
+      "loop": false,
+      "drive": "time",
+      "origin_cell": [
+        8,
+        8
+      ],
+      "fps": 8.0,
+      "rows": {
+        "S": 8,
+        "SW": 9,
+        "W": 10,
+        "NW": 11,
+        "N": 12,
+        "NE": 13,
+        "E": 14,
+        "SE": 15
+      }
+    },
+    "death": {
+      "frames": 8,
+      "loop": true,
+      "drive": "time",
+      "origin_cell": [
+        16,
+        8
+      ],
+      "fps": 3.0,
+      "rows": {
+        "S": 8,
+        "SW": 9,
+        "W": 10,
+        "NW": 11,
+        "N": 12,
+        "NE": 13,
+        "E": 14,
+        "SE": 15
+      }
+    }
+  },
+  "rows": [
+    {
+      "row": 0,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "S",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 1,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "SW",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 2,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "W",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 3,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "NW",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 4,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "N",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 5,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "NE",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 6,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "E",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 7,
+      "first_column": 0,
+      "animation": "spawn",
+      "facing": "SE",
+      "frames": 6,
+      "loop": true
+    },
+    {
+      "row": 0,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "S",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 1,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "SW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 2,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "W",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 3,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "NW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 4,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "N",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 5,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "NE",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 6,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "E",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 7,
+      "first_column": 8,
+      "animation": "idle",
+      "facing": "SE",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 0,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "S",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 1,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "SW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 2,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "W",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 3,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "NW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 4,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "N",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 5,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "NE",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 6,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "E",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 7,
+      "first_column": 16,
+      "animation": "walk",
+      "facing": "SE",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 8,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "S",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 9,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "SW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 10,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "W",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 11,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "NW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 12,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "N",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 13,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "NE",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 14,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "E",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 15,
+      "first_column": 0,
+      "animation": "attack",
+      "facing": "SE",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 8,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "S",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 9,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "SW",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 10,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "W",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 11,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "NW",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 12,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "N",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 13,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "NE",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 14,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "E",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 15,
+      "first_column": 8,
+      "animation": "hit",
+      "facing": "SE",
+      "frames": 3,
+      "loop": false
+    },
+    {
+      "row": 8,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "S",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 9,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "SW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 10,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "W",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 11,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "NW",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 12,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "N",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 13,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "NE",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 14,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "E",
+      "frames": 8,
+      "loop": true
+    },
+    {
+      "row": 15,
+      "first_column": 16,
+      "animation": "death",
+      "facing": "SE",
+      "frames": 8,
+      "loop": true
+    }
+  ],
+  "team": {
+    "mask": "deer_teammask.png",
+    "boost": 2.0,
+    "formula": "rgb = lerp(color.rgb, color.rgb * TeamColor * 2, mask), in linear space"
+  },
+  "normal": {
+    "file": "deer_normal.png",
+    "space": "tangent space of the camera-facing quad",
+    "convention": "R = +X screen right, G = +Y screen DOWN (Unreal / DirectX, no green flip needed), B = toward the camera; empty pixels are (128, 128, 255)"
+  },
+  "lighting_baked": "warm key from the top-left and toward the camera, cool fill from the right, rim from behind-right",
+  "key_light_dir_tangent": [
+    -0.5014,
+    -0.2102,
+    0.8393
+  ],
+  "gameplay_reference": {
+    "display_name": "Stag",
+    "windup": 0.0,
+    "recovery": 0.0,
+    "attack_interval": 0.0,
+    "max_speed": 620.0,
+    "body_height_cm": 128.0,
+    "radius_cm": 50.0,
+    "stride_length_cm": 62.0,
+    "spawn_pop_time": 0.38,
+    "hit_flash_time": 0.16,
+    "death_topple_time": 0.42,
+    "corpse_linger_time": 2.2,
+    "hit_stop_time": 0.045,
+    "melee_lunge_cm": 30.0
+  },
+  "palette": {
+    "hair": [
+      "#1a1218",
+      "#2b1d1f",
+      "#412d28",
+      "#594032"
+    ],
+    "eye": [
+      "#1b1220"
+    ],
+    "linen": [
+      "#453d50",
+      "#6a606c",
+      "#928884",
+      "#b8ad9a",
+      "#d9cfb2"
+    ],
+    "leather_dark": [
+      "#1a1218",
+      "#2b1d1f",
+      "#412d28",
+      "#594032",
+      "#755642"
+    ],
+    "feather": [
+      "#7d7370",
+      "#b3a994",
+      "#e4dabc"
+    ],
+    "iron": [
+      "#1d1a20"
+    ],
+    "horse": [
+      "#24141a",
+      "#42241f",
+      "#633524",
+      "#84492b",
+      "#a26236",
+      "#bf8248"
+    ],
+    "outline": [
+      "#1b1220",
+      "#3c3c3c"
+    ]
+  },
+  "palette_size": 21
+}

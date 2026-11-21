@@ -1,0 +1,18 @@
+{
+ "name": "SM_TownGround_0_3",
+ "faces": 11943,
+ "collision": "complex",
+ "bounds": [
+  [
+   -67.25,
+   0.0,
+   -7.0
+  ],
+  [
+   -56.0,
+   28.0,
+   2.25
+  ]
+ ],
+ "lights": []
+}

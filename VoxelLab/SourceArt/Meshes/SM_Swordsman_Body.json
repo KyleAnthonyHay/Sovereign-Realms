@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_Body",
+ "faces": 1736,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.275,
+   -0.205,
+   -0.325
+  ],
+  [
+   0.275,
+   0.1525,
+   0.2463
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.7
+ ],
+ "part": "Body",
+ "triangles": 3473,
+ "blocks": 169
+}

@@ -101,6 +101,7 @@ const FSRSpriteSheet& FSRSpriteSheet::For(ESRUnitType Type)
 	case ESRUnitType::Catapult: return Catapult;
 	case ESRUnitType::Builder: return Builder;
 	case ESRUnitType::Scout: return Builder;   // scout.json: the same worker body and layout (hood, cloak, a light spear)
+	case ESRUnitType::Medic: return Builder;   // medic.json: the same worker body and layout ("attack" is the heal)
 	default: return Shieldbearer;
 	}
 }

@@ -573,6 +573,21 @@ yyo.yyyo.yo."""),
 .tTtttttTTt.
 tTTttuttTTTt
 tTTtttttTTTt"""),
+    # the Medic: bare-headed under a team headband, a linen tunic with team armbands, the strap of his bag across
+    # the chest and a roll of bandage
+    ("PortraitMedic", """
+...nnnnnn...
+..nnnnnnnn..
+..tttttttt..
+..nsssssn...
+..sksssks...
+..sssSsss...
+...sSSSs....
+.ppnppppppp.
+ttpppnpppptt
+.pppppnppwp.
+.ppppppnwwp.
+.pppbbbbnww."""),
 ]
 
 

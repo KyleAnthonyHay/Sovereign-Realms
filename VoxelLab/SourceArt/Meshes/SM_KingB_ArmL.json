@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_ArmL",
+ "faces": 447,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0919,
+   -0.1325,
+   -0.3801
+  ],
+  [
+   0.1744,
+   0.1027,
+   0.0919
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.3125,
+  0.0,
+  1.25
+ ],
+ "part": "ArmL",
+ "triangles": 895,
+ "blocks": 63
+}

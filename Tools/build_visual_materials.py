@@ -17,25 +17,30 @@ import os
 import unreal
 
 
-def _splat_rect():
-    """World origin and size of the ground splat map, from the generator's layout (falls back to the old small map)."""
+MAP_SFX = {"two": "", "four": "4"}       # the maps (Tools/world/gen_battlefield.py --map): suffix of their layout, textures, mesh folder
+
+
+def _layout(sfx=""):
     import json as _json
+    with open(os.path.join(os.path.abspath(unreal.Paths.project_dir()), "SourceArt", "World", "layout%s.json" % sfx)) as f:
+        return _json.load(f)
+
+
+def _splat_rect(sfx=""):
+    """World origin and size of a map's ground splat map, from the generator's layout (falls back to the old small map)."""
     try:
-        with open(os.path.join(os.path.abspath(unreal.Paths.project_dir()), "SourceArt", "World", "layout.json")) as f:
-            sp = _json.load(f)["splat"]
+        sp = _layout(sfx)["splat"]
         return (float(sp["origin"][0]), float(sp["origin"][1]), float(sp["size"]), 0.0)
     except Exception:
         return (-5600.0, -6144.0, 12288.0, 0.0)
 
-def _relief():
+def _relief(sfx=""):
     """(rock line, snow line) in cm, from the generator's layout: where M_Terrain's bare rock and snow start."""
-    import json as _json
     try:
-        with open(os.path.join(os.path.abspath(unreal.Paths.project_dir()), "SourceArt", "World", "layout.json")) as f:
-            r = _json.load(f)["relief"]
+        r = _layout(sfx)["relief"]
         return float(r["rock_line"]), float(r["snow_line"])
     except Exception:
-        return 950.0, 2700.0
+        return 3300.0, 6200.0
 
 
 DIR = "/Game/SR/Materials"
@@ -255,54 +260,197 @@ def build_ring():
 
 
 # ----------------------------------------------------------------------------- terrain
-TERRAIN_CODE = PIX + r"""
+# Shared HLSL for the natural-world materials: value noise, and sampling a photographic texture on the world's texel
+# grid. Q() is SRPix.S's seam without the sample: texel coordinates that stay constant inside a texel and blend across
+# its edge over one screen pixel, so a texture of any scale laid through it comes out in the same crisp 4 cm texels
+# as the pixel art, and does not crawl.
+NAT = r"""
+struct SRNat
+{
+	float h(float2 p) { float3 p3 = frac(float3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return frac((p3.x + p3.y) * p3.z); }
+	float v(float2 p)
+	{
+		float2 i = floor(p), f = frac(p);
+		f = f * f * (3.0 - 2.0 * f);
+		return lerp(lerp(h(i), h(i + float2(1, 0)), f.x), lerp(h(i + float2(0, 1)), h(i + float2(1, 1)), f.x), f.y);
+	}
+	float fbm(float2 p) { return v(p) * 0.55 + v(p * 2.13 + 17.0) * 0.3 + v(p * 4.7 + 41.0) * 0.15; }
+	float2 Q(float2 uv) { float2 fw = max(fwidth(uv), 1e-5); float2 seam = floor(uv + 0.5); return seam + clamp((uv - seam) / fw, -0.5, 0.5); }
+	float Q1(float u) { float fw = max(fwidth(u), 1e-5); float seam = floor(u + 0.5); return seam + clamp((u - seam) / fw, -0.5, 0.5); }
+	float4 T2(Texture2D T, float2 uv, float2 dx, float2 dy) { return T.SampleGrad(View.SharedTrilinearWrappedSampler, uv, dx, dy); }
+	float3 nrm(float4 s) { float2 xy = s.xy * 2.0 - 1.0; return float3(xy, sqrt(saturate(1.0 - dot(xy, xy)))); }
+	float lum(float3 c) { return dot(c, float3(0.3, 0.59, 0.11)); }
+};
+SRNat nt;
+"""
+
+TERRAIN_CODE = PIX + NAT + r"""
 float T = max(Texel, 0.5);
 float3 col;
-float3 nrm = float3(0, 0, 1);
+float land = step(1.5, UV1.y);                                   // the smooth land (gen_battlefield.py's heightfield): UV1.y = 2
+float3 up = lerp(float3(0, 0, 1), normalize(N), land);           // the surface's own normal: straight up on a deck's top, the slope's on the land
+float3 nrm = up;
 float rough = 0.95;
-if (N.z > 0.5)
+float spec = 0.25;
+if (N.z > 0.5 || land > 0.5)
 {
 	// ---- top: world-aligned. Texture 'up' is world +X (up the screen), so blades stand toward the horizon.
 	float2 uv = float2(P.y, -P.x) / T;
 	float2 tc = floor(uv) + 0.5;                                   // this texel
 	float2 wc = float2(-tc.y, tc.x) * T;                            // its world XY
-	float4 sp = Splat.SampleLevel(View.SharedBilinearClampedSampler, (wc - SplatRect.xy) / SplatRect.z, 0);
+	float2 q = nt.Q(uv);                                           // the texel grid, for the photographic layers
+	float2 gx = ddx(uv), gy = ddy(uv);
+	float2 muv = (wc - SplatRect.xy) / SplatRect.z;
+	float4 sp = Splat.SampleLevel(View.SharedBilinearClampedSampler, muv, 0);
+	float damp = FlowMap.SampleLevel(View.SharedBilinearClampedSampler, muv, 0).a;      // 1 at the water's edge .. 0 three metres back
 	float hx = px.h(tc);
+	// three sizes of drifting difference in the turf: whole meadows, patches, tussocks
+	float n1 = nt.fbm(wc / 5200.0), n2 = nt.fbm(wc / 1300.0 + 7.3), n3 = nt.v(wc / 230.0 + 3.1);
+	float highflat = saturate((P.z - 500.0) / 900.0) * saturate((up.z - 0.975) / 0.02);
 	float3 g0 = px.S(Grass, uv, 128).rgb;
 	float tip = saturate((px.lum(px.Texel(Grass, uv, 128).rgb) - 0.06) / 0.12);      // 0 thatch .. 1 blade tip, per texel (T_Grass spans 0.062 .. 0.185)
 	col = g0;
-	// moss and straw take over tuft by tuft (blade tips hold out longest), never as a soft blend
-	if (sp.g > 0.5 + (hx - 0.5) * 0.35 + (tip - 0.5) * 0.2) col = px.S(GrassMoss, uv, 128).rgb;
-	if (sp.b > 0.5 + (hx - 0.5) * 0.35 - (tip - 0.5) * 0.2) col = px.S(GrassDry, uv, 128).rgb;
-	// road: bare earth first, with grass tips poking into its edge; then stones, joints dissolving first
-	float r = sp.r;
-	if (r > 0.2 + tip * 0.22 + (hx - 0.5) * 0.1)
+	// moss and straw take over tuft by tuft (blade tips hold out longest), never as a soft blend. Moss also creeps
+	// over level high ground and damp banks; straw into the parched patches.
+	if (sp.g + highflat * (n2 - 0.25) * 0.9 + damp * 0.3 > 0.5 + (hx - 0.5) * 0.35 + (tip - 0.5) * 0.2) col = px.S(GrassMoss, uv, 128).rgb;
+	if (sp.b + saturate(0.34 - n1) * 1.6 * (1.0 - damp) > 0.5 + (hx - 0.5) * 0.35 - (tip - 0.5) * 0.2) col = px.S(GrassDry, uv, 128).rgb;
+	// photographic layers on the same texels: real turf's light and dark, an aerial photograph's wide blotches
+	float kg = T / GrassTile, km = T / MacroTile;
+	float3 gd = nt.T2(GrassD, q * kg, gx * kg, gy * kg).rgb;
+	col *= lerp(1.0, clamp(nt.lum(gd) / 0.235, 0.55, 1.6), GrassDetail);
+	float3 mg = nt.T2(MacroD, q * km, gx * km, gy * km).rgb / float3(0.168, 0.119, 0.03);
+	col *= lerp(float3(1, 1, 1), clamp(mg, 0.55, 1.7), MacroStrength * float3(1.0, 1.0, 0.35));
+	col *= 1.0 + ((n2 - 0.5) * 0.34 + (n3 - 0.5) * 0.14) * Variation;
+	col = lerp(col, col * LushTint.rgb, saturate((n1 - 0.5) * 3.2) * Variation);
+	col = lerp(col, col * ParchedTint.rgb, saturate((0.46 - n1) * 3.2 + (n2 - 0.62) * 1.5) * Variation);
+	// clover in drifts (deeper, bluer green), and flowers scattered through it: white, butter yellow, violet
+	float pm = smoothstep(0.56, 0.72, nt.fbm(wc / 900.0 + 31.0)) * (1.0 - saturate(sp.r * 5.0)) * (1.0 - sp.b);
+	col = lerp(col, col * CloverTint.rgb, pm * 0.55);
+	float2 fc = floor(tc / 2.0);
+	if (px.h(fc + 91.0) > 1.0 - Flowers * (0.12 + pm) && tip > 0.25)
 	{
-		col = px.S(Dirt, uv, 128).rgb;
+		float k = px.h(fc + 13.0);
+		col = (k < 0.45 ? float3(0.62, 0.6, 0.5) : (k < 0.8 ? float3(0.7, 0.5, 0.09) : float3(0.3, 0.2, 0.52))) * FlowerBright;
+	}
+	float3 gn = nt.nrm(nt.T2(GrassN, q * kg, gx * kg, gy * kg));
+	nrm = normalize(up + float3(-gn.y, gn.x, 0.0) * GrassNormal);
+	// the forest floor: under a closed canopy leaf litter takes the turf over texel by texel (blade tips hold out
+	// longest, so the wood's edge is ragged grass, never a line); the ground under and round a wood lies in its shade
+	float4 fo = ForestMap.SampleLevel(View.SharedBilinearClampedSampler, muv, 0);
+	if (fo.r * 1.3 + (n3 - 0.5) * 0.4 > 0.46 + (hx - 0.5) * 0.42 + tip * 0.2)
+	{
+		float kf = T / ForestTile;
+		col = nt.T2(ForestD, q * kf, gx * kf, gy * kf).rgb * ForestTint.rgb * (1.0 + (n2 - 0.5) * 0.36 + (hx - 0.5) * 0.12);
+		float3 fn = nt.nrm(nt.T2(ForestN, q * kf, gx * kf, gy * kf));
+		nrm = normalize(up + float3(-fn.y, fn.x, 0.0) * 0.8);
+		rough = 0.92;
+	}
+	col *= lerp(1.0, ForestShade, fo.g);
+	// road: the verge yellows and thins; then bare earth, with grass tips poking into its edge; then stones, joints dissolving first
+	float r = sp.r;
+	float rt = 0.2 + tip * 0.22 + (hx - 0.5) * 0.1;
+	col = lerp(col, col * float3(1.16, 1.0, 0.7), saturate(r / 0.22) * 0.45);
+	float kp = T / PebbleTile;
+	float3 pb = nt.T2(PebblesD, q * kp, gx * kp, gy * kp).rgb;
+	float3 pn = nt.nrm(nt.T2(PebblesN, q * kp, gx * kp, gy * kp));
+	if (r > rt)
+	{
+		col = px.S(Dirt, uv, 128).rgb * clamp(nt.lum(pb) / 0.16, 0.6, 1.5) * (1.0 + (n2 - 0.5) * 0.3 + (n3 - 0.5) * 0.18);
+		col = lerp(col, col * float3(0.86, 0.9, 1.0), saturate((n1 - 0.5) * 2.5));         // cooler, greyer earth in places
 		nrm = px.S(DirtN, uv, 128).xyz * 2.0 - 1.0;
+		nrm.xy += pn.xy * 0.8;
 		rough = 0.9;
 		float3 cb = px.Texel(Cobble, uv, 128).rgb;
 		float body = saturate((px.lum(cb) - 0.05) / 0.2);          // 0 in the joints .. 1 on a stone's face
 		if (r > 0.9 - body * 0.32)
 		{
-			col = px.S(Cobble, uv, 128).rgb;
+			col = px.S(Cobble, uv, 128).rgb * (1.0 + (n3 - 0.5) * 0.2);
 			nrm = px.S(CobbleN, uv, 128).xyz * 2.0 - 1.0;
 			rough = StoneRoughness;
 		}
-		nrm = normalize(float3(-nrm.y * NormalStrength, nrm.x * NormalStrength, nrm.z));
+		nrm = normalize(up * nrm.z + float3(-nrm.y * NormalStrength, nrm.x * NormalStrength, 0.0));
 	}
-	// high ground: bare rock above the tree line, snow above that. Texel by texel across a ragged band, never a soft
-	// blend; grass tips hold out a little higher than the thatch between them.
-	if (P.z > RockLine + (hx - 0.5) * 300.0 + tip * 90.0)
+	// wet ground by the water: dark, sheened soil, mud and leaf litter right at the edge (texel by texel)
+	float wet = saturate(damp * 1.3 - 0.12 + (hx - 0.5) * 0.14);
+	if (damp > 0.66 + (hx - 0.5) * 0.3 + tip * 0.1 && r <= 0.9)
 	{
-		col = px.S(MountainRock, uv, 128).rgb;
-		nrm = float3(0, 0, 1);
-		rough = StoneRoughness + 0.12;
+		float ku = T / MudTile;
+		col = nt.T2(MudD, q * ku, gx * ku, gy * ku).rgb * MudTint.rgb;
+		nrm = normalize(up + float3(-pn.y, pn.x, 0.0) * 0.5);
 	}
-	if (P.z > SnowLine + (hx - 0.5) * 420.0)
+	col *= lerp(1.0, WetDark, wet);
+	rough = lerp(rough, WetRough, wet * wet);
+	spec = lerp(spec, 0.5, wet * wet);
+	// The land's slopes: turf holds on what troops can walk; a mountainside is living rock, and where one turns into
+	// the other the turf breaks: a worn, darker lip of stony earth and scree above the rock's edge. The rock is an
+	// aerial photograph of crags laid on from above, strata from the side where the face stands up, on the world's
+	// own texels in all three axes (never drawn out down the slope); ledges and beds follow the contours.
+	if (land > 0.5)
 	{
-		col = px.S(Snow, uv, 128).rgb;
-		nrm = float3(0, 0, 1);
+		float edge = RockSlope + (n3 - 0.5) * 0.06 + (hx - 0.5) * 0.05 - tip * 0.02;
+		float lipw = saturate((edge + LipWidth - N.z) / LipWidth);                        // 0 on sound turf .. 1 at the rock's edge
+		if (r <= rt && lipw > 0.0)
+		{
+			col *= lerp(1.0, LipDark, lipw);
+			if (lipw > px.h(tc + 7.0) * 0.85 + 0.1)
+			{
+				col = pb * ScreeTint.rgb * (0.75 + 0.5 * hx);
+				nrm = normalize(up + float3(-pn.y, pn.x, 0.0) * 0.9);
+				rough = 0.88;
+			}
+		}
+		float bare = step(RockLine + (hx - 0.5) * 300.0 + tip * 90.0, P.z);               // above the tree line: all rock
+		if (N.z < edge || bare > 0.5)
+		{
+			float3 Pq = float3(nt.Q(P.xy / T), nt.Q1(P.z / T)) * T;                         // this texel in all three axes
+			float3 dPx = ddx(P), dPy = ddy(P);
+			float2 tuv = Pq.xy / RockTile.x;
+			float3 rtop = nt.T2(RockTopD, tuv, dPx.xy / RockTile.x, dPy.xy / RockTile.x).rgb;
+			float3 ntop = nt.nrm(nt.T2(RockTopN, tuv, dPx.xy / RockTile.x, dPy.xy / RockTile.x));
+			// The side view runs along one of the two diagonals (x + y or x - y), whichever the face is not edge-on to:
+			// a coordinate that never stalls on any wall, and only changes over where the smooth normal crosses an axis.
+			float dg = step(0.0, N.x * N.y) * 2.0 - 1.0;
+			float2 suv = float2((Pq.x - dg * Pq.y) * 0.75, -Pq.z) / RockTile.y;
+			float2 sdx = float2((dPx.x - dg * dPx.y) * 0.75, -dPx.z) / RockTile.y, sdy = float2((dPy.x - dg * dPy.y) * 0.75, -dPy.z) / RockTile.y;
+			float3 Ng = normalize(cross(dPy, dPx));                                        // the triangle's own lean: a cliff's vertices lean back, its face does not
+			Ng *= sign(Ng.z + 1e-6);
+			float3 rside = nt.T2(RockSideD, suv, sdx, sdy).rgb;
+			float3 nside = nt.nrm(nt.T2(RockSideN, suv, sdx, sdy));
+			rside = lerp(rside, nt.lum(rside) * SideTint.rgb, SideTint.a);
+			float sw = 1.0 - smoothstep(0.58, 0.8, min(N.z, Ng.z));                                   // 0 leaning back .. 1 standing up (never smoothstep(hi, lo): Metal leaves that undefined)
+			rtop = lerp(rtop, nt.lum(rtop) * float3(1.0, 0.98, 0.94), 0.4) * RockTopGain;     // the photograph's moss, held back: the lichen layer does that here
+			col = lerp(rtop, rside, sw) * RockFaceTint;
+			float side = step(0.5, sw);                                                    // the fine grain: from above, or from the side once the face stands up
+			float2 duv = lerp(Pq.xy, suv * RockTile.y, side) / RockTile.z;
+			float3 rdet = nt.T2(RockDetailD, duv, lerp(dPx.xy, sdx * RockTile.y, side) / RockTile.z, lerp(dPy.xy, sdy * RockTile.y, side) / RockTile.z).rgb;
+			col *= lerp(1.0, clamp(nt.lum(rdet) / 0.17, 0.45, 1.7), 0.85);
+			// beds and ledges along the contours, warped so they are never ruled lines
+			float zz = Pq.z + nt.fbm(Pq.xy / 1100.0) * 300.0 + nt.v(Pq.xy / 170.0) * 30.0;
+			float bed = nt.v(float2(zz / 85.0, 3.7));
+			col *= 1.0 + (bed - 0.5) * Strata * (0.35 + 0.65 * sw);
+			float ledge = smoothstep(0.0, 0.09, frac(zz / LedgeCm)) * (1.0 - smoothstep(0.94, 1.0, frac(zz / LedgeCm)));
+			col *= lerp(1.0 - LedgeDark * (0.3 + 0.7 * sw), 1.0, ledge);
+			float3 bump = lerp(float3(ntop.x, ntop.y, 0.0), float3(0.707, -0.707 * dg, 0.0) * nside.x + float3(0, 0, -1) * nside.y, sw);
+			nrm = normalize(up + bump * RockNormal);
+			rough = StoneRoughness + 0.14;
+			spec = 0.3;
+			// lichen and moss where the rock looks at the sky and the air is damp
+			float mossy = saturate((N.z - MossSlope) / 0.1) * saturate(nt.fbm(wc / 620.0 + 5.0) * 2.6 - 0.75 + sp.g * 0.8) * (1.0 - bare);
+			if (mossy > hx * 0.7 + 0.12)
+			{
+				float kl = 1.0 / RockTile.w;
+				col = lerp(col, nt.T2(LichenD, Pq.xy * kl, dPx.xy * kl, dPy.xy * kl).rgb * LichenTint.rgb, 0.8);
+				if (mossy > hx * 0.5 + 0.5) col = px.S(GrassMoss, uv, 128).rgb * 0.85;
+				rough = 0.93;
+			}
+			float high = saturate((P.z - RockLine * 0.6) / (RockLine * 1.4));              // high rock is colder and greyer
+			col = lerp(col, px.lum(col) * float3(1.02, 1.04, 1.1) * 1.08, high * 0.7);
+		}
+	}
+	if (P.z > SnowLine + (hx - 0.5) * 420.0 && (land < 0.5 || N.z > 0.62 + (hx - 0.5) * 0.1))
+	{
+		col = px.S(Snow, uv, 128).rgb;                              // snow lies where the rock is not too steep to hold it
+		nrm = normalize(lerp(up, nrm, 0.35));
 		rough = 0.55;
 	}
 	col *= lerp(1.0, sp.a, FootShade);                             // shade baked at cliff feet
@@ -318,18 +466,6 @@ else
 	float3 Tw = normalize(float3(-N.y, N.x, 0.0));
 	nrm = normalize(Tw * tn.x * NormalStrength + float3(0, 0, -1) * tn.y * NormalStrength + N * tn.z);
 	rough = StoneRoughness + 0.1;
-	if (UV1.y > 0.5)
-	{
-		// a crag or a mountain face: living rock, not the terraces' coursed strata
-		col = px.S(MountainRock, uv, 128).rgb * RockFaceTint;
-		nrm = N;
-		rough = StoneRoughness + 0.16;
-	}
-	// high rock is colder and greyer than the warm strata of the field's terraces
-	float high = saturate((P.z - RockLine * 0.6) / (RockLine * 1.4));
-	col = lerp(col, px.lum(col) * float3(1.02, 1.04, 1.1) * 1.08, high * 0.7);
-	// turf hanging over the edge, never more than about half the wall. Above the rock line the top is bare (no fringe);
-	// above the snow line it is a snow cornice.
 	float topZ = P.z + UV0.y;
 	float lipMax = min(23.0, wallH / T * LipFraction);
 	if (topZ > RockLine + 150.0 && topZ <= SnowLine) lipMax = 0.0;
@@ -348,11 +484,17 @@ else
 }
 OutNormal = nrm;
 OutRough = rough;
+OutSpec = spec;
 return col * Tint;
 """
 
+NTEX = TEX + "Nature/"
+NORMAL = unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL
+
 
 def build_terrain():
+    _data_map("T_WaterFlow")
+    _data_map("T_Forest")
     mat = get_material("M_Terrain")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
     mat.set_editor_property("tangent_space_normal", False)
@@ -367,13 +509,46 @@ def build_terrain():
         ("Dirt", g.tex("Dirt", "T_Dirt")), ("DirtN", g.tex("DirtNormal", "T_Dirt_N", True)),
         ("Cobble", g.tex("Cobble", "T_Cobble")), ("CobbleN", g.tex("CobbleNormal", "T_Cobble_N", True)),
         ("Cliff", g.tex("Cliff", "T_Cliff")), ("CliffN", g.tex("CliffNormal", "T_Cliff_N", True)),
-        ("Lip", g.tex("Lip", "T_Lip")), ("Splat", g.tex("Splat", "T_Splat", True)),
-        ("MountainRock", g.tex("MountainRock", "T_MountainRock")), ("Snow", g.tex("Snow", "T_Snow")),
+        ("Lip", g.tex("Lip", "T_Lip")), ("Splat", g.tex("Splat", "T_Splat", True)), ("FlowMap", g.tex("FlowMap", "T_WaterFlow", True)),
+        ("Snow", g.tex("Snow", "T_Snow")),
+        # the photographic layers (CC0, Docs/ASSET_CREDITS.md), laid on the world's texel grid
+        ("GrassD", g.tex("NatureGrass", NTEX + "T_N_Grass_D", group="Nature")), ("GrassN", g.tex("NatureGrassNormal", NTEX + "T_N_Grass_N", group="Nature", sampler=NORMAL)),
+        ("MacroD", g.tex("NatureMacro", NTEX + "T_N_AerialGrass_D", group="Nature")),
+        ("PebblesD", g.tex("NaturePebbles", NTEX + "T_N_Pebbles_D", group="Nature")), ("PebblesN", g.tex("NaturePebblesNormal", NTEX + "T_N_Pebbles_N", group="Nature", sampler=NORMAL)),
+        ("MudD", g.tex("NatureMud", NTEX + "T_N_Mud_D", group="Nature")),
+        # the forest floor: T_Forest (gen_battlefield.py > build_forest_map: R = how closed the canopy is, G = its shade)
+        ("ForestMap", g.tex("ForestMap", "T_Forest", True)),
+        ("ForestD", g.tex("NatureForest", NTEX + "T_N_Forest_D", group="Nature")), ("ForestN", g.tex("NatureForestNormal", NTEX + "T_N_Forest_N", group="Nature", sampler=NORMAL)),
+        ("ForestTile", g.scalar("ForestTile", 4096.0, "Forest")), ("ForestTint", g.vector("ForestTint", lin(0.82, 0.74, 0.6), "Forest"), "RGB"),
+        ("ForestShade", g.scalar("ForestShade", 0.8, "Forest")),
+        ("RockTopD", g.tex("RockTop", NTEX + "T_N_AerialRock_D", group="Nature")), ("RockTopN", g.tex("RockTopNormal", NTEX + "T_N_AerialRock_N", group="Nature", sampler=NORMAL)),
+        ("RockSideD", g.tex("RockSide", NTEX + "T_N_Cliff_D", group="Nature")), ("RockSideN", g.tex("RockSideNormal", NTEX + "T_N_Cliff_N", group="Nature", sampler=NORMAL)),
+        ("RockDetailD", g.tex("RockDetail", NTEX + "T_N_RockFace_D", group="Nature")), ("LichenD", g.tex("Lichen", NTEX + "T_N_MossRock_D", group="Nature")),
+        # cm a texture spans. Texel density (one texture pixel per 4 cm texel) is its size x 4: 4096 for a 1k, 8192 for a 2k.
+        ("GrassTile", g.scalar("GrassTile", 4096.0, "Nature")), ("MacroTile", g.scalar("MacroTile", 19000.0, "Nature")),
+        ("PebbleTile", g.scalar("PebbleTile", 4096.0, "Nature")), ("MudTile", g.scalar("MudTile", 4096.0, "Nature")),
+        # RockTile: X = the crags from above, Y = the strata from the side, Z = the fine detail, W = the lichen
+        ("RockTile", g.vector("RockTile", lin(5200.0, 2400.0, 1100.0, 4096.0), "Rock"), "RGBA"),
+        ("GrassDetail", g.scalar("GrassDetail", 0.6, "Turf")), ("GrassNormal", g.scalar("GrassNormal", 0.55, "Turf")),
+        ("MacroStrength", g.scalar("MacroStrength", 0.5, "Turf")), ("Variation", g.scalar("Variation", 0.85, "Turf")),
+        ("LushTint", g.vector("LushTint", lin(0.8, 1.04, 0.82), "Turf"), "RGB"), ("ParchedTint", g.vector("ParchedTint", lin(1.14, 1.05, 0.8), "Turf"), "RGB"),
+        ("CloverTint", g.vector("CloverTint", lin(0.7, 1.1, 0.8), "Turf"), "RGB"),
+        ("Flowers", g.scalar("Flowers", 0.012, "Turf")), ("FlowerBright", g.scalar("FlowerBright", 0.9, "Turf")),
+        ("MudTint", g.vector("MudTint", lin(0.55, 0.5, 0.42), "Wet"), "RGB"), ("WetDark", g.scalar("WetDark", 0.58, "Wet")), ("WetRough", g.scalar("WetRough", 0.3, "Wet")),
         # where bare rock and snow start (cm above the field), from gen_battlefield.py's layout
         ("RockLine", g.scalar("RockLine", _relief()[0], "Relief")), ("SnowLine", g.scalar("SnowLine", _relief()[1], "Relief")),
-        ("RockFaceTint", g.vector("RockFaceTint", lin(0.92, 0.86, 0.76), "Relief"), "RGB"),      # warms the rock toward the strata's sandstone
+        ("RockFaceTint", g.vector("RockFaceTint", lin(1.04, 1.02, 0.98), "Rock"), "RGB"),         # warms the rock toward the masonry's sandstone
+        ("RockTopGain", g.scalar("RockTopGain", 1.5, "Rock")),
+        ("SideTint", g.vector("SideTint", unreal.LinearColor(0.74, 0.7, 0.64, 0.86), "Rock"), "RGBA"),   # the strata, pulled from orange to this (A = how far)
+        ("RockNormal", g.scalar("RockNormal", 2.0, "Rock")), ("Strata", g.scalar("Strata", 0.42, "Rock")),
+        ("LedgeCm", g.scalar("LedgeCm", 230.0, "Rock")), ("LedgeDark", g.scalar("LedgeDark", 0.42, "Rock")),
+        ("MossSlope", g.scalar("MossSlope", 0.7, "Rock")), ("LichenTint", g.vector("LichenTint", lin(0.9, 0.95, 0.7), "Rock"), "RGB"),
+        ("ScreeTint", g.vector("ScreeTint", lin(0.6, 0.56, 0.48), "Rock"), "RGB"),
+        ("LipWidth", g.scalar("LipWidth", 0.07, "Rock")), ("LipDark", g.scalar("LipDark", 0.62, "Rock")),
+        # the land's rock: where the surface normal's Z falls under this (0.86 = a slope of 0.6), turf gives way to rock
+        ("RockSlope", g.scalar("RockSlope", 0.86, "Relief")),
         ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
-        # SplatRect: XY = world origin of the splat map, Z = its world size (cm). Written by gen_battlefield.py's layout.
+        # SplatRect: XY = world origin of the splat map (and of T_WaterFlow), Z = its world size (cm). Written by gen_battlefield.py's layout.
         ("SplatRect", g.vector("SplatRect", lin(*_splat_rect()), "Splat"), "RGBA"),
         ("NormalStrength", g.scalar("NormalStrength", 1.0, "Surface")),
         ("StoneRoughness", g.scalar("StoneRoughness", 0.72, "Surface")),
@@ -383,35 +558,174 @@ def build_terrain():
         ("TintRange", g.scalar("TintRange", 0.08, "Shading")),
         ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Shading")),
     ]
-    colour = g.custom(TERRAIN_CODE, F3, params, "Terrain: turf / road on top, strata + turf lip on the sides", outputs=[("OutNormal", F3), ("OutRough", F1)])
+    colour = g.custom(TERRAIN_CODE, F3, params, "Terrain: turf, road, wet banks, rock and its broken lip, snow; deck sides",
+                      outputs=[("OutNormal", F3), ("OutRough", F1), ("OutSpec", F1)])
     g.out(colour, MP.MP_BASE_COLOR)
     g.out(colour, MP.MP_NORMAL, "OutNormal")
     g.out(colour, MP.MP_ROUGHNESS, "OutRough")
-    g.out(g.scalar("Specular", 0.25, "Surface"), MP.MP_SPECULAR)
+    g.out(colour, MP.MP_SPECULAR, "OutSpec")
+    g.finish()
+    return mat
+
+
+# M_Rock: boulders, scree, standing stones. The mountains' rock again (photographic, on the world's texels, from
+# three sides), so a stone lying on a mountainside is the same stuff as the face under it; lichen and moss on top.
+ROCK_CODE = PIX + NAT + r"""
+float T = max(Texel, 0.5);
+float3 n = normalize(N);
+float3 Pq = float3(nt.Q(P.xy / T), nt.Q1(P.z / T)) * T;
+float3 dPx = ddx(P), dPy = ddy(P);
+float3 w = pow(abs(n), 4.0);
+w /= (w.x + w.y + w.z);
+float k = 1.0 / Tile;
+float3 cx = nt.T2(RockD, Pq.yz * k, dPx.yz * k, dPy.yz * k).rgb;
+float3 cy = nt.T2(RockD, Pq.xz * k, dPx.xz * k, dPy.xz * k).rgb;
+float3 cz = nt.T2(RockD, Pq.xy * k, dPx.xy * k, dPy.xy * k).rgb;
+float3 col = (cx * w.x + cy * w.y + cz * w.z) * Tint.rgb;
+float3 tx = nt.nrm(nt.T2(RockN, Pq.yz * k, dPx.yz * k, dPy.yz * k));
+float3 ty = nt.nrm(nt.T2(RockN, Pq.xz * k, dPx.xz * k, dPy.xz * k));
+float3 tz = nt.nrm(nt.T2(RockN, Pq.xy * k, dPx.xy * k, dPy.xy * k));
+float3 bump = float3(0.0, tx.x, tx.y) * w.x + float3(ty.x, 0.0, ty.y) * w.y + float3(tz.x, tz.y, 0.0) * w.z;
+float3 nrm = normalize(n + bump * NormalStrength);
+float rough = Rough;
+float2 tc = floor(float2(P.y, -P.x) / T) + 0.5;
+float hx = px.h(tc);
+float mossy = saturate((n.z - lerp(1.02, MossSlope, Moss)) / 0.12) * saturate(nt.fbm(P.xy / 300.0 + 5.0) * 2.2 - 0.35);
+if (mossy > hx * 0.6 + 0.1)
+{
+	float kl = 1.0 / 4096.0;
+	col = lerp(col, nt.T2(LichenD, Pq.xy * kl, dPx.xy * kl, dPy.xy * kl).rgb * LichenTint.rgb, 0.85);
+	if (mossy > hx * 0.5 + 0.45) col = px.S(MossTex, float2(P.y, -P.x) / T, 128).rgb * 0.9;
+	rough = 0.93;
+}
+col *= lerp(1.0 - FootShade, 1.0, saturate((P.z - PivotZ + 4.0) / 36.0));        // grounded: darker where the piece meets the turf
+OutNormal = nrm;
+OutRough = rough;
+return col;
+"""
+
+
+def build_rock():
+    mat = get_material("M_Rock")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("tangent_space_normal", False)
+    mel.set_base_material_usage(mat, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
+    g = G(mat)
+    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    obj = g.node(unreal.MaterialExpressionObjectPositionWS)
+    pivot_z = g.node(unreal.MaterialExpressionComponentMask, r=False, g=False, b=True, a=False)
+    g.link(obj, pivot_z, "")
+    params = [
+        ("P", P), ("N", g.node(unreal.MaterialExpressionVertexNormalWS)), ("PivotZ", pivot_z),
+        ("RockD", g.tex("Rock", NTEX + "T_N_RockFace_D")), ("RockN", g.tex("RockNormal", NTEX + "T_N_RockFace_N", sampler=NORMAL)),
+        ("LichenD", g.tex("Lichen", NTEX + "T_N_MossRock_D")), ("MossTex", g.tex("MossTex", "T_GrassMoss")),
+        ("Tile", g.scalar("Tile", 1500.0, "Rock")), ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
+        ("NormalStrength", g.scalar("NormalStrength", 1.2, "Rock")), ("Rough", g.scalar("Roughness", 0.86, "Surface")),
+        ("Moss", g.scalar("Moss", 1.0, "Moss")), ("MossSlope", g.scalar("MossSlope", 0.62, "Moss")),
+        ("LichenTint", g.vector("LichenTint", lin(0.9, 0.95, 0.7), "Moss"), "RGB"),
+        ("FootShade", g.scalar("FootShade", 0.4, "Shading")),
+        ("Tint", g.vector("Tint", lin(0.95, 0.9, 0.82), "Shading"), "RGB"),
+    ]
+    colour = g.custom(ROCK_CODE, F3, params, "Rock: the mountains' stone from three sides, lichen and moss on top", outputs=[("OutNormal", F3), ("OutRough", F1)])
+    g.out(colour, MP.MP_BASE_COLOR)
+    g.out(colour, MP.MP_NORMAL, "OutNormal")
+    g.out(colour, MP.MP_ROUGHNESS, "OutRough")
+    g.out(g.scalar("Specular", 0.3, "Surface"), MP.MP_SPECULAR)
     g.finish()
     return mat
 
 
 # ----------------------------------------------------------------------------- props (rocks, masonry, timber)
+# ----------------------------------------------------------------------------- fade near the camera
+def near_fade(g, P, near=450.0, far=800.0):
+    """1 where the surface is whole, 0 where it is dithered away: masonry and timber the camera has come right up to
+    (nearer than `near` cm it is gone, beyond `far` whole) thin out like the tree crowns do, so the closest zooms at the
+    shallow camera angles look past a wall that stands between the camera and its focus instead of into it. The camera
+    is 9.5 m from its focus at its closest, so nothing at the focus, and nothing at all from the ordinary zooms, fades."""
+    return g.custom(
+        "float d = length(P - Cam);\n"
+        "float f = saturate((d - Fade.x) / max(Fade.y - Fade.x, 1.0));\n"
+        "float2 sp = Parameters.SvPosition.xy + float(View.StateFrameIndexMod8) * float2(5.588, 3.167);\n"
+        "float ign = frac(52.9829189 * frac(dot(sp, float2(0.06711056, 0.00583715))));\n"
+        "return f >= 0.999 ? 1.0 : step(ign, f);", F1, [
+            ("P", P), ("Cam", g.node(unreal.MaterialExpressionCameraPositionWS)),
+            ("Fade", g.vector("CameraFade", lin(near, far, 0.0, 0.0), "Fade"), "RGBA")], "Fade near the camera (dithered)")
+
+
 PROP_CODE = PIX + r"""
 float T = max(Texel, 0.5);
 float2 uv = UV0 / T;
 float3 col = VCb > 0.5 ? px.S(TexA, uv, SizeA.xy).rgb : px.S(TexB, uv, SizeB.xy).rgb;
 // moss / turf settling on up-facing stone, texel by texel
 // turf settles on up-facing facets, a whole facet at a time (no dither: a facet is either mossed over or bare)
+float3 nrm = N;
 if (Moss > 0.0 && N.z > lerp(1.02, MossSlope, Moss))
 {
 	col = px.S(MossTex, float2(P.y, -P.x) / T, 128).rgb;
 }
+else
+{
+	// Relief: the pixel art's own light and dark read as height (joints and cracks sunk, faces proud), one flat tilt a
+	// texel, through the face's own UV frame (flat-shaded pieces: no tangents needed). The low sun then picks the
+	// courses and the grain out instead of lying flat on them.
+	float hl, hr, hd, hu;
+	if (VCb > 0.5)
+	{
+		hl = px.lum(px.Texel(TexA, uv + float2(-1, 0), SizeA.xy).rgb); hr = px.lum(px.Texel(TexA, uv + float2(1, 0), SizeA.xy).rgb);
+		hd = px.lum(px.Texel(TexA, uv + float2(0, -1), SizeA.xy).rgb); hu = px.lum(px.Texel(TexA, uv + float2(0, 1), SizeA.xy).rgb);
+	}
+	else
+	{
+		hl = px.lum(px.Texel(TexB, uv + float2(-1, 0), SizeB.xy).rgb); hr = px.lum(px.Texel(TexB, uv + float2(1, 0), SizeB.xy).rgb);
+		hd = px.lum(px.Texel(TexB, uv + float2(0, -1), SizeB.xy).rgb); hu = px.lum(px.Texel(TexB, uv + float2(0, 1), SizeB.xy).rgb);
+	}
+	float2 grad = clamp(float2(hr - hl, hu - hd) * Relief, -0.9, 0.9);
+	float3 dpx = ddx(P); float3 dpy = ddy(P);
+	float2 dux = ddx(UV0); float2 duy = ddy(UV0);
+	float det = dux.x * duy.y - dux.y * duy.x;
+	if (abs(det) > 1e-10 && Relief > 0.0)
+	{
+		float sgn = det < 0.0 ? -1.0 : 1.0;
+		float3 Tu = (dpx * duy.y - dpy * dux.y) * sgn;
+		float3 Tv = (dpy * dux.x - dpx * duy.x) * sgn;
+		Tu = normalize(Tu - N * dot(Tu, N));
+		Tv = normalize(Tv - N * dot(Tv, N));
+		nrm = normalize(N - Tu * grad.x - Tv * grad.y);
+	}
+	// Weathering in whole texels, like the buildings': a slow blotch so no boundary runs level, a hash to dither the seam.
+	float2 tc = floor(uv);
+	float hx = px.h(tc);
+	float2 q = tc / 22.0;
+	float2 qi = floor(q);
+	float2 qf = q - qi;
+	qf = qf * qf * (3.0 - 2.0 * qf);
+	float bl = lerp(lerp(px.h(qi), px.h(qi + float2(1, 0)), qf.x), lerp(px.h(qi + float2(0, 1)), px.h(qi + float2(1, 1)), qf.x), qf.y);
+	col *= 1.0 + (bl - 0.5) * Blotch;                                        // stone and timber are never one tone
+	float hgt = P.z - PivotZ;
+	float d = saturate(1.0 - hgt / max(DampHeight * (0.5 + bl), 1.0));        // damp and dirt climbing from the turf
+	d = floor(d * 3.0 + 0.5 + (hx - 0.5) * 0.4) / 3.0;
+	col *= lerp(float3(1, 1, 1), DampTint.rgb, d * Damp);
+	float up = saturate((N.z - 0.35) / 0.5);                                 // faces that look at the sky bleach
+	col = lerp(col, col * BleachTint.rgb, floor(up * 2.0 + 0.5 + (hx - 0.5) * 0.4) / 2.0 * Bleach);
+	// lichen and moss take the joints (the dark texels) near the ground first
+	float joint = 1.0 - saturate((px.lum(col) - 0.04) / 0.2);
+	if (Lichen > 0.0 && hx < Lichen * (0.25 + 0.75 * bl) * (0.35 + joint) * saturate(1.3 - hgt / 260.0))
+	{
+		col = lerp(col, px.Texel(MossTex, uv, 128).rgb * 0.8, 0.85);
+	}
+}
 // grounded: darker where the piece meets the turf
 col *= lerp(1.0 - FootShade, 1.0, saturate((P.z - PivotZ + 4.0) / 36.0));
+OutNormal = nrm;
 return col * Tint;
 """
 
 
 def build_prop():
     mat = get_material("M_Prop")
-    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)      # (masked only for the fade near the camera)
+    mat.set_editor_property("opacity_mask_clip_value", 0.5)
+    mat.set_editor_property("tangent_space_normal", False)
     mel.set_base_material_usage(mat, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
     g = G(mat)
     P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
@@ -428,9 +742,19 @@ def build_prop():
         ("Moss", g.scalar("Moss", 0.0, "Moss")), ("MossSlope", g.scalar("MossSlope", 0.6, "Moss")),
         ("FootShade", g.scalar("FootShade", 0.35, "Shading")),
         ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Shading")),
+        ("Relief", g.scalar("Relief", 2.2, "Surface")),
+        ("Blotch", g.scalar("Blotch", 0.22, "Weathering")),
+        ("Damp", g.scalar("Damp", 0.5, "Weathering")), ("DampHeight", g.scalar("DampHeight", 70.0, "Weathering")),
+        ("DampTint", g.vector("DampTint", lin(0.55, 0.53, 0.5), "Weathering"), "RGBA"),
+        ("Bleach", g.scalar("Bleach", 0.25, "Weathering")),
+        ("BleachTint", g.vector("BleachTint", lin(1.25, 1.22, 1.12), "Weathering"), "RGBA"),
+        ("Lichen", g.scalar("Lichen", 0.0, "Weathering")),
     ]
-    colour = g.custom(PROP_CODE, F3, params, "Prop: UV0 in cm, texture A / B by vertex colour B, moss on top")
+    colour = g.custom(PROP_CODE, F3, params, "Prop: UV0 in cm, texture A / B by vertex colour B, relief from the texture, texel-stepped weathering, moss on top",
+                      outputs=[("OutNormal", F3)])
     g.out(colour, MP.MP_BASE_COLOR)
+    g.out(colour, MP.MP_NORMAL, "OutNormal")
+    g.out(near_fade(g, P), MP.MP_OPACITY_MASK)
     g.out(g.scalar("Roughness", 0.82, "Surface"), MP.MP_ROUGHNESS)
     g.out(g.scalar("Specular", 0.3, "Surface"), MP.MP_SPECULAR)
     g.finish()
@@ -485,8 +809,23 @@ def build_foliage():
         ("P", g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)),
         ("Time", g.node(unreal.MaterialExpressionTime)), ("Rand", rand), ("Weight", weight),
         ("Speed", g.scalar("SwaySpeed", 1.1, "Sway")), ("Amount", g.scalar("SwayAmount", 5.0, "Sway"))], "Wind sway")
+    # A crown the camera has come right up to thins away in a dither, so a close view looks in under the trees
+    # instead of into a wall of leaves (gone within 9 m of the camera, whole beyond 23 m; the camera stands 9.5 m from
+    # its focus at its closest, 32 m at the default zoom and 140 m at its furthest, so nothing fades from the ordinary views). Leaves only: the trunks stay.
+    fade = g.custom(
+        "float d = length(P - Cam);\n"
+        "float f = (VCb > 0.5) ? 1.0 : saturate((d - Fade.x) / max(Fade.y - Fade.x, 1.0));\n"
+        "float2 sp = Parameters.SvPosition.xy + float(View.StateFrameIndexMod8) * float2(5.588, 3.167);\n"
+        "float ign = frac(52.9829189 * frac(dot(sp, float2(0.06711056, 0.00583715))));\n"
+        "return f >= 0.999 ? 1.0 : step(ign, f);", F1, [
+        ("P", g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)),
+        ("Cam", g.node(unreal.MaterialExpressionCameraPositionWS)), ("VCb", vc, "B"),
+        ("Fade", g.vector("CameraFade", lin(900.0, 2300.0, 0.0, 0.0), "Fade"), "RGBA")], "Fade near the camera (dithered)")
+    mask = g.node(unreal.MaterialExpressionMultiply)
+    g.link(colour, mask, "A", "OutAlpha")
+    g.link(fade, mask, "B")
     g.out(colour, MP.MP_BASE_COLOR)
-    g.out(colour, MP.MP_OPACITY_MASK, "OutAlpha")
+    g.out(mask, MP.MP_OPACITY_MASK)
     g.out(colour, MP.MP_SUBSURFACE_COLOR, "OutSub")
     g.out(sway, MP.MP_WORLD_POSITION_OFFSET)
     g.out(g.scalar("Roughness", 0.85, "Surface"), MP.MP_ROUGHNESS)
@@ -543,13 +882,11 @@ def build_card():
 #   R = distance in from the bank (0 at the bank .. 1 at 256 cm and beyond)   G = ford   B = current (0 in the still lake)
 # so the water has shallows and a foam line along every bank, and a ford shows its gravel bed. All of it is evaluated per
 # world texel (4 cm), like the ground: edges are stepped and dithered, never soft gradients.
-def _water_info():
+def _water_info(sfx=""):
     """(MapRect, flow in texel space) from the generator's layout. MapRect: XY = world origin of T_WaterMap, Z = its world size."""
-    import json as _json
     rect, flow = (-16000.0, -20480.0, 40960.0, 0.0), (-0.816, 0.578)
     try:
-        with open(os.path.join(os.path.abspath(unreal.Paths.project_dir()), "SourceArt", "World", "layout.json")) as f:
-            w = _json.load(f)["water"]
+        w = _layout(sfx)["water"]
         rect = (float(w["map"]["origin"][0]), float(w["map"]["origin"][1]), float(w["map"]["size"]), 0.0)
         flow = (float(w["flow"][0]), float(w["flow"][1]))
     except Exception:
@@ -575,95 +912,179 @@ def _data_map(name):
     return t
 
 
-WATER_CODE = PIX + r"""
+def _falls(sfx=""):
+    """The feet of a map's waterfalls for M_Water (up to four): XY, Z = how far the churned water reaches (cm)."""
+    out = []
+    try:
+        for f in _layout(sfx)["water"].get("falls", [])[:4]:
+            out.append(lin(float(f["foot"][0]), float(f["foot"][1]), float(f.get("width", 240.0)) * 2.7, 0.0))
+    except Exception:
+        pass
+    return out + [lin(0.0, 0.0, 0.0, 0.0)] * (4 - len(out))
+
+
+# M_Water. Opaque and lit, so Lumen gives it the sky and the banks to reflect and nothing sorts wrong over it; the
+# depth is not read from the screen but from the generator's maps, so the bed shows through exactly where the water is
+# shallow, on any hardware:
+#   T_WaterMap   R = cm in from the bank / 256, G = ford, A = (the mist's)
+#   T_WaterFlow  RG = the current (world XY, 0.5 = still), B = depth / 200 cm
+# Reflections ride smooth ripple normals carried down each river by its own current (two phases of a flow map, so the
+# pattern never stretches) under a cross-chop of wind ripples; the colour, the foam and the glints stay on the
+# world's 4 cm texels like everything else.
+WATER_CODE = PIX + NAT + r"""
 float T = max(Texel, 0.5);
 float2 uv = float2(P.y, -P.x) / T;
 float2 tc = floor(uv) + 0.5;                                    // this texel
 float2 wc = float2(-tc.y, tc.x) * T;                            // its world XY
+float2 gx = ddx(P.xy), gy = ddy(P.xy);
 float4 m = Map.SampleLevel(View.SharedBilinearClampedSampler, (wc - MapRect.xy) / MapRect.z, 0);
+float4 fl = FlowMap.SampleLevel(View.SharedBilinearClampedSampler, (P.xy - MapRect.xy) / MapRect.z, 0);
 float bank = m.r * 256.0;                                       // cm in from the bank
+float depth = fl.b * 200.0;                                     // cm of water over the bed
 float hx = px.h(tc);
-float2 fd = normalize(Flow.xy + float2(1e-4, 0.0));             // downstream, in texel space
-float2 side = float2(-fd.y, fd.x);
+float2 flow = fl.rg * 2.0 - 1.0;                                // downstream, world XY; its length is the current's strength
+float cur = saturate(length(flow) * 1.15);
+float2 fdir = normalize(flow + float2(1e-3, 1e-3));
 
-// ---- open water: two layers of ripple streaks carried downstream at different speeds (the second also drifts a
-// little across the current), each stepped a whole texel at a time so the pixels stay pixels
-float2 a = uv - floor(fd * Time * Speed.x);
-float2 b = uv + float2(37.0, 71.0) - floor(fd * Time * Speed.y + side * sin(Time * 0.23) * 3.0);
-float3 ca = px.S(Tex, a, 128).rgb;
-float3 cb = px.S(Tex, b, 128).rgb;
-float3 rip = max(ca, cb * 0.85);
-float ripL = px.lum(rip);
-float3 col = lerp(rip * Tint.rgb, Deep.rgb, DeepMix);
-
-// ---- shallows: the bed shows through near the bank, in three stepped bands with a dithered edge
-float sh = saturate(1.0 - (bank + (hx - 0.5) * 14.0) / max(ShallowWidth, 1.0));
-float band = ceil(sh * 3.0 - 0.001) / 3.0;
-col = lerp(col, Shallow.rgb * (0.8 + 0.6 * saturate(ripL * 3.0)), band * Shallow.a);
-
-// ---- ford: ankle-deep water over pale gravel, with quick bright ripples running across it
-float foamAmt = 0.0;
-if (m.g > 0.5 + (hx - 0.5) * 0.3)
+// ---- churned water at the foot of a fall
+float churn = 0.0, ringD = 0.0;
+float4 F[4] = { Fall0, Fall1, Fall2, Fall3 };
+for (int i = 0; i < 4; ++i)
 {
-	float3 bed = px.S(Gravel, uv, 128).rgb * FordTint.rgb;
-	col = lerp(bed, Shallow.rgb, FordTint.a);
-	float2 r = uv + float2(11.0, 53.0) - floor(fd * Time * Speed.z);
-	float rl = px.lum(px.Texel(Tex, r, 128).rgb);
-	foamAmt = saturate((rl - RippleLevel) * 12.0) * 0.75;
+	float d = length(wc - F[i].xy);
+	float k = saturate(1.0 - d / max(F[i].z, 1.0));
+	if (k > churn) { churn = k; ringD = d; }
 }
 
-// ---- foam along the bank: a broken line that laps in and out, each stretch in its own time, and a fainter one behind it
-float lap = 0.5 + 0.5 * sin(Time * FoamSpeed + px.h(floor(tc / 8.0)) * 6.2832);
-float foamW = FoamWidth * (0.5 + 0.5 * lap);
-if (bank < foamW && px.h(floor(tc / 5.0) + 17.0) > FoamBreak) foamAmt = max(foamAmt, 1.0);
-float d2 = bank - foamW - FoamWidth * 0.7;
-if (d2 > 0.0 && d2 < T * 1.2 && px.h(floor(tc / float2(7.0, 3.0)) + 41.0) > 0.55) foamAmt = max(foamAmt, 0.45);
-col = lerp(col, Foam.rgb, foamAmt * Foam.a);
+// ---- ripples: two phases of the same normals, each sliding down the current and fading out as the other fades in
+float off = nt.v(P.xy / 900.0);
+float ph = Time * FlowRate + off;
+float p0 = frac(ph), p1 = frac(ph + 0.5);
+float2 adv = flow * FlowSpeed / max(FlowRate, 1e-3);
+float kw = 1.0 / WaveTile.x;
+float2 nA = nt.nrm(nt.T2(Waves, (P.xy - adv * p0) * kw, gx * kw, gy * kw)).xy;
+float2 nB = nt.nrm(nt.T2(Waves, (P.xy - adv * p1) * kw + 0.37, gx * kw, gy * kw)).xy;
+float2 nflow = lerp(nA, nB, abs(1.0 - 2.0 * p0));
+float k1 = 1.0 / WaveTile.y, k2 = 1.0 / WaveTile.z;
+float2 nw = nt.nrm(nt.T2(Waves, P.xy * k1 + Time * Wind.xy, gx * k1, gy * k1)).xy
+          + nt.nrm(nt.T2(Waves, float2(P.y, -P.x) * k2 - Time * Wind.zw, gx * k2, gy * k2)).xy;
+float2 nxy = nflow * lerp(0.3, 1.25, cur) + nw * lerp(0.55, 0.3, cur);
+nxy *= NormalStrength * lerp(0.45, 1.0, saturate(depth / 45.0)) * (1.0 + m.g * FordChop + churn * 2.5);
+float3 nrm = normalize(float3(nxy, 1.0));
 
-// ---- glints: the brightest ripple crests, and a few sun sparkles that wink on and off
-float glint = saturate((ripL - GlintLevel) * 6.0) * (1.0 - m.g);
-float sparkle = step(1.0 - Sparkle, px.h(tc + floor(Time * 3.0) * 13.7)) * saturate(ripL * 6.0);
-OutEmissive = Glint.rgb * (glint + sparkle * 2.5) * Glint.a * (1.0 - foamAmt);
-OutRough = lerp(Rough, 0.7, saturate(foamAmt + m.g * 0.4));
+// ---- the bed through the water: clear over the shallows, turquoise as it deepens, dark in the channel
+float kb = 1.0 / BedTile;
+float2 bw = wc + nxy * min(depth, 60.0) * Refraction;
+float3 bed = nt.T2(BedD, bw * kb, gx * kb, gy * kb).rgb * BedTint.rgb;
+bed = lerp(bed, px.S(Gravel, uv, 128).rgb * FordTint.rgb, saturate(m.g * 1.5));       // a ford: pale gravel
+bed *= 1.0 + (nt.v(wc / 55.0 + nxy * 1.5 + Time * 0.35) - 0.5) * Caustics * saturate(depth / 12.0);   // light playing on the bed
+float clear = exp(-depth / max(ClearDepth, 1.0));
+float deep = 1.0 - exp(-max(depth - 8.0, 0.0) / max(DeepDepth, 1.0));
+float3 col = lerp(Shallow.rgb, bed, clear);
+col = lerp(col, Deep.rgb * (0.85 + 0.3 * nt.fbm(wc / 2600.0)), deep);
+col *= 1.0 + (nxy.x * 0.55 - nxy.y * 0.45) * WaveShade;                                  // the ripples' lit and shaded sides (the sky they mirror is one even blue)
+
+// shallow water close in under a bank over a ford's bed (a marsh pool is all of that; a ford only at its two ends):
+// murky and peat-stained, not pale gravel
+float streakless = 0.0;
+col = lerp(col, col * MarshTint.rgb, saturate(m.g * 1.5) * saturate(1.0 - bank / 420.0) * saturate(1.0 - streakless));
+
+// ---- foam, on the texel grid
+float kf = 1.0 / FoamTile;
+float4 nz = nt.T2(Noise, (wc - flow * Time * 26.0) * kf, gx * kf, gy * kf);
+float foam = 0.0;
+// the bank: a ragged white edge, and lines that lap in to it and die
+if (bank < EdgeFoam * (0.35 + 1.3 * nz.r) && nz.g > 0.3) foam = 1.0;
+float lap = frac(bank / LapSpacing + Time * LapSpeed + nz.g * 0.8);
+float lapLine = smoothstep(0.0, 0.12, lap) * (1.0 - smoothstep(0.14, 0.42, lap));
+float reach = saturate(1.0 - bank / LapReach);
+if (lapLine * reach * lerp(1.0, 0.6, cur) > 0.38 + nz.r * 0.55) foam = max(foam, 0.45 * reach + 0.1);
+// the current: white streaks drawn out downstream over the fords and the fast shallows, faint lines of it everywhere it runs
+float2 fl2 = float2(dot(wc, fdir), dot(wc, float2(-fdir.y, fdir.x)));
+float ks = 1.0 / StreakTile;
+float streak = nt.T2(Noise, float2(fl2.x - Time * StreakSpeed, fl2.y * 1.7) * ks, gx * ks, gy * ks).a;
+float fast = saturate(m.g * cur * 1.5 + cur * saturate(1.0 - depth / 55.0) * 0.7);                // a still marsh pool has none
+// (a riffle, not a rapid: thin broken threads of white where the water runs over the stones, most of the bed left clear)
+if (streak + nz.b * 0.2 > 1.09 - fast * 0.17 && nz.r > 0.42) foam = max(foam, 0.26 + 0.34 * nz.g);
+foam = max(foam, cur * smoothstep(0.66, 0.8, streak) * 0.16);
+// under a fall: boiling white at the foot, rings running out from it
+float ring = frac(ringD / 130.0 - Time * 0.55 + nz.g * 0.8);
+float ringLine = smoothstep(0.0, 0.2, ring) * (1.0 - smoothstep(0.25, 0.7, ring));
+if (nz.r * 0.75 + ringLine * 0.45 + nz.b * 0.2 > 1.28 - churn * 1.05) foam = max(foam, saturate(0.35 + churn));
+foam = saturate(foam);
+col = lerp(col, Foam.rgb, foam * Foam.a);
+// shallow water lying level with its bank (a marsh pool, the ends of a ford; anywhere still): the edge silts up texel by texel into the same wet mud the
+// land draws there, so the sheet's own outline is lost
+float silt = 0.0;
+if (bank < SiltWidth * (0.25 + 1.5 * nz.r) * (0.6 + 0.8 * hx) * saturate(m.g * 2.0 + (1.0 - saturate(cur * 4.0))) && depth < 30.0 && churn <= 0.0)
+{
+	float ku = T / MudTile;
+	float2 mq = nt.Q(uv);
+	col = nt.T2(MudD, mq * ku, ddx(uv) * ku, ddy(uv) * ku).rgb * MudTint.rgb;
+	silt = 1.0;
+	foam = 0.0;
+}
+
+// ---- glints: a few sun sparkles winking on the crests
+float crest = saturate((nxy.x - nxy.y) * 2.2);
+float sparkle = step(1.0 - Sparkle * (1.0 + cur * 2.0), px.h(tc + floor(Time * 4.0) * 13.7)) * crest;
+OutEmissive = Glint.rgb * sparkle * Glint.a * (1.0 - foam);
+OutRough = lerp(lerp(lerp(Rough, FordRough, saturate(m.g * 1.5)), 0.7, foam), 0.5, silt);        // a ford: wet gravel under a film of water, too rough for Lumen to trace (0.4)
+OutSpec = lerp(Spec, 0.2, foam);
+OutNormal = normalize(lerp(nrm, float3(0, 0, 1), saturate(foam * 0.6 + silt)));
 return col;
 """
 
 
 def build_water():
-    rect, flow = _water_info()
+    rect, _ = _water_info()
     _data_map("T_WaterMap")
+    _data_map("T_WaterFlow")
     mat = get_material("M_Water")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("tangent_space_normal", False)
     g = G(mat)
+    falls = _falls()
     colour = g.custom(WATER_CODE, F3, [
         ("P", g.node(unreal.MaterialExpressionWorldPosition)), ("Time", g.node(unreal.MaterialExpressionTime)),
-        ("Tex", g.tex("Tex", "T_Water")), ("Gravel", g.tex("Gravel", "T_Gravel")), ("Map", g.tex("WaterMap", "T_WaterMap", True)),
+        ("Gravel", g.tex("Gravel", "T_Gravel")), ("Map", g.tex("WaterMap", "T_WaterMap", True)), ("FlowMap", g.tex("FlowMap", "T_WaterFlow", True)),
+        ("Waves", g.tex("Waves", NTEX + "T_N_WaterWaves_N", sampler=NORMAL)), ("Noise", g.tex("Noise", NTEX + "T_N_WaterNoise", sampler=unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)),
+        ("BedD", g.tex("Bed", NTEX + "T_N_Pebbles_D")),
+        ("MudD", g.tex("Mud", NTEX + "T_N_Mud_D")), ("MudTile", g.scalar("MudTile", 4096.0, "Colour")),
+        ("MudTint", g.vector("MudTint", lin(0.32, 0.29, 0.245), "Colour"), "RGB"),           # M_Terrain's MudTint x its WetDark: the bank's own wet mud
+        ("SiltWidth", g.scalar("SiltWidth", 85.0, "Foam")), ("MarshTint", g.vector("MarshTint", lin(0.5, 0.56, 0.44), "Colour"), "RGB"),
         ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
-        # MapRect: XY = world origin of T_WaterMap, Z = its world size (cm). Flow: downstream in texel space. Both from layout.json.
+        # MapRect: XY = world origin of T_WaterMap / T_WaterFlow, Z = their world size (cm). From layout.json.
         ("MapRect", g.vector("MapRect", lin(*rect), "Map"), "RGBA"),
-        ("Flow", g.vector("Flow", lin(*flow), "Motion"), "RGBA"),
-        # texels per second: ripple layer A, ripple layer B, the fords' quick ripples
-        ("Speed", g.vector("ScrollTexelsPerSecond", lin(2.2, 1.3, 5.0, 0.0), "Motion"), "RGBA"),
-        ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Colour")),
-        ("Deep", g.vector("Deep", srgb("#12303a"), "Colour")),
-        ("DeepMix", g.scalar("DeepMix", 0.25, "Colour")),
-        ("Shallow", g.vector("Shallow", unreal.LinearColor(0.085, 0.235, 0.2, 0.62), "Shallows"), "RGBA"),      # A = how far the nearest band goes to it
-        ("ShallowWidth", g.scalar("ShallowWidth", 150.0, "Shallows")),
-        ("FordTint", g.vector("FordTint", unreal.LinearColor(0.74, 0.9, 0.84, 0.28), "Shallows"), "RGBA"),      # RGB wets the gravel, A = water colour over it
-        ("RippleLevel", g.scalar("FordRippleLevel", 0.12, "Shallows")),
-        ("Foam", g.vector("Foam", unreal.LinearColor(0.62, 0.76, 0.7, 0.8), "Foam"), "RGBA"),
-        ("FoamWidth", g.scalar("FoamWidth", 12.0, "Foam")),
-        ("FoamSpeed", g.scalar("FoamSpeed", 1.1, "Foam")),
-        ("FoamBreak", g.scalar("FoamBreak", 0.42, "Foam")),
-        ("Glint", g.vector("Glint", lin(1.0, 0.92, 0.75, 0.6), "Colour"), "RGBA"),
-        ("GlintLevel", g.scalar("GlintLevel", 0.32, "Colour")),
-        ("Sparkle", g.scalar("Sparkle", 0.004, "Colour")),
-        ("Rough", g.scalar("Roughness", 0.1, "Surface")),
-    ], "Water: ripples, shallows, ford, bank foam, glints", outputs=[("OutEmissive", F3), ("OutRough", F1)])
+        ("Fall0", g.vector("Fall0", falls[0], "Map"), "RGBA"), ("Fall1", g.vector("Fall1", falls[1], "Map"), "RGBA"),
+        ("Fall2", g.vector("Fall2", falls[2], "Map"), "RGBA"), ("Fall3", g.vector("Fall3", falls[3], "Map"), "RGBA"),
+        # motion. FlowSpeed: cm per second the ripples ride a full current; FlowRate: how often a phase is renewed
+        ("FlowSpeed", g.scalar("FlowSpeed", 85.0, "Motion")), ("FlowRate", g.scalar("FlowRate", 0.3, "Motion")),
+        ("Wind", g.vector("WindScroll", lin(0.021, 0.012, 0.014, 0.026), "Motion"), "RGBA"),       # tiles per second, the two wind layers
+        ("WaveTile", g.vector("WaveTile", lin(520.0, 760.0, 330.0, 0.0), "Motion"), "RGBA"),       # cm: current ripples, wind chop A, B
+        ("NormalStrength", g.scalar("NormalStrength", 0.55, "Surface")), ("WaveShade", g.scalar("WaveShade", 0.9, "Surface")), ("FordChop", g.scalar("FordChop", 0.9, "Surface")),
+        ("Rough", g.scalar("Roughness", 0.07, "Surface")), ("FordRough", g.scalar("FordRoughness", 0.45, "Surface")), ("Spec", g.scalar("Specular", 0.5, "Surface")),
+        # colour by depth
+        ("Shallow", g.vector("Shallow", srgb("#2f8f86"), "Colour"), "RGB"),                        # turquoise
+        ("Deep", g.vector("Deep", srgb("#0d2a36"), "Colour"), "RGB"),
+        ("ClearDepth", g.scalar("ClearDepth", 26.0, "Colour")), ("DeepDepth", g.scalar("DeepDepth", 80.0, "Colour")),
+        ("BedTint", g.vector("BedTint", lin(0.62, 0.66, 0.6), "Colour"), "RGB"), ("BedTile", g.scalar("BedTile", 4096.0, "Colour")),
+        ("FordTint", g.vector("FordTint", lin(0.62, 0.74, 0.7), "Colour"), "RGB"),
+        ("Refraction", g.scalar("Refraction", 0.5, "Colour")), ("Caustics", g.scalar("Caustics", 0.5, "Colour")),
+        # foam
+        ("Foam", g.vector("Foam", unreal.LinearColor(0.78, 0.86, 0.84, 0.92), "Foam"), "RGBA"),
+        ("FoamTile", g.scalar("FoamTile", 620.0, "Foam")), ("EdgeFoam", g.scalar("EdgeFoam", 7.0, "Foam")),
+        ("LapSpacing", g.scalar("LapSpacing", 64.0, "Foam")), ("LapSpeed", g.scalar("LapSpeed", 0.22, "Foam")), ("LapReach", g.scalar("LapReach", 150.0, "Foam")),
+        ("StreakTile", g.scalar("StreakTile", 900.0, "Foam")), ("StreakSpeed", g.scalar("StreakSpeed", 150.0, "Foam")),
+        ("Glint", g.vector("Glint", lin(1.0, 0.92, 0.75, 1.6), "Colour"), "RGBA"),
+        ("Sparkle", g.scalar("Sparkle", 0.01, "Colour")),
+    ], "Water: depth colour, the bed, flow-mapped ripples, bank foam, current streaks, churn under the falls, glints",
+        outputs=[("OutEmissive", F3), ("OutRough", F1), ("OutSpec", F1), ("OutNormal", F3)])
     g.out(colour, MP.MP_BASE_COLOR)
     g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
     g.out(colour, MP.MP_ROUGHNESS, "OutRough")
-    g.out(g.scalar("Specular", 0.6, "Surface"), MP.MP_SPECULAR)
+    g.out(colour, MP.MP_SPECULAR, "OutSpec")
+    g.out(colour, MP.MP_NORMAL, "OutNormal")
     g.finish()
 
 
@@ -708,27 +1129,24 @@ def build_cloud_shadow():
     return mat
 
 
-# M_Mist: low mist. A soft, drifting sheet a hand above the river (the water mesh again, raised) that thins to nothing at
-# the banks (T_WaterMap.r: distance in from the bank), and big level sheets at the foot of the far mountains that fade
-# toward their own rim (MI_Mist_Valley, UseMap = 0, on the engine's plane). Unlit, translucent, two layers of value noise.
-MIST_CODE = r"""
-struct SRNoise
-{
-	float h(float2 p) { float3 p3 = frac(float3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return frac((p3.x + p3.y) * p3.z); }
-	float v(float2 p)
-	{
-		float2 i = floor(p), f = frac(p);
-		f = f * f * (3.0 - 2.0 * f);
-		return lerp(lerp(h(i), h(i + float2(1, 0)), f.x), lerp(h(i + float2(0, 1)), h(i + float2(1, 1)), f.x), f.y);
-	}
-};
-SRNoise nz;
+# M_Mist: low mist, never the fog of war (that is the game's own, M_FogOfWar). Unlit, translucent, soft against whatever
+# it meets (depth fade), built of slow drifting wisps. Three ways of being laid, chosen by an instance:
+#   UseMap 1            over the rivers: the water mesh again, a hand above the surface, thinning to nothing at the banks
+#                       (T_WaterMap.r: distance in from the bank)
+#   Ground 1            ground mist: the land's own meshes again, lifted `Lift` cm, showing only where mist pools
+#                       (T_WaterMap.a: the hollows and the water's margins), so it lies in the dips and follows every slope
+#   neither             a level sheet fading toward its own rim: the valley sheets under the far mountains, the spray
+#                       at a waterfall's foot (MI_Mist_Valley, MI_Mist_Spray, on the engine's plane)
+MIST_CODE = NAT + r"""
 float2 p = (P.xy + Time * Wind.xy) / max(Scale, 1.0);
-float n = nz.v(p) * 0.62 + nz.v(p * 2.3 + 11.0 - Time * 0.013) * 0.38;
+p += (float2(nt.v(p * 0.6 + Time * 0.021), nt.v(p * 0.6 + 31.0 - Time * 0.017)) - 0.5) * 1.3;        // the wisps curl as they drift
+float n = nt.v(p) * 0.5 + nt.v(p * 2.3 + 11.0 - Time * 0.013) * 0.32 + nt.v(p * 5.1 + 3.0 + Time * 0.031) * 0.18;
 float wisps = smoothstep(Cover, Cover + Soft, n);
-float inWater = Map.SampleLevel(View.SharedBilinearClampedSampler, (P.xy - MapRect.xy) / MapRect.z, 0).r;
+float4 m = Map.SampleLevel(View.SharedBilinearClampedSampler, (P.xy - MapRect.xy) / MapRect.z, 0);
 float rim = saturate(1.0 - length(UV - 0.5) * 2.0);
-float edge = lerp(smoothstep(0.0, 0.55, rim), saturate(inWater * 1.5), UseMap);
+float edge = lerp(smoothstep(0.0, 0.55, rim), saturate(m.r * 1.5), UseMap);
+float pool = smoothstep(0.12, 0.75, m.a) * (1.0 - saturate(m.r * 6.0));
+edge = lerp(edge, pool * smoothstep(0.86, 0.97, normalize(N).z), Ground);          // none on the steeps: the lifted land would stand off them
 return wisps * edge * Strength;
 """
 
@@ -740,23 +1158,85 @@ def build_mist():
     mat.set_editor_property("two_sided", True)
     g = G(mat)
     rect, _ = _water_info()
-    P = g.node(unreal.MaterialExpressionWorldPosition)
+    P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
     _data_map("T_WaterMap")
+    ground = g.scalar("Ground", 0.0, "Mist")
     params = [
-        ("P", P), ("UV", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)), ("Time", g.node(unreal.MaterialExpressionTime)),
+        ("P", P), ("N", g.node(unreal.MaterialExpressionVertexNormalWS)), ("UV", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)), ("Time", g.node(unreal.MaterialExpressionTime)),
         ("Map", g.tex("Map", "T_WaterMap", True)), ("MapRect", g.vector("MapRect", lin(*rect), "Map"), "RGBA"),
-        ("UseMap", g.scalar("UseMap", 1.0, "Mist")),
+        ("UseMap", g.scalar("UseMap", 1.0, "Mist")), ("Ground", ground),
         ("Wind", g.vector("Wind", lin(22.0, 48.0, 0.0, 0.0), "Mist"), "RGBA"),       # cm per second, with the clouds but slower
         ("Scale", g.scalar("Scale", 620.0, "Mist")), ("Cover", g.scalar("Cover", 0.34, "Mist")), ("Soft", g.scalar("Soft", 0.42, "Mist")),
         ("Strength", g.scalar("Strength", 0.27, "Mist")),
     ]
-    a = g.custom(MIST_CODE, F1, params, "Mist: drifting wisps, thinning to nothing at the bank / the sheet's rim")
+    a = g.custom(MIST_CODE, F1, params, "Mist: drifting wisps; thinning at the bank / pooling in the hollows / fading to the sheet's rim")
     fade = g.node(unreal.MaterialExpressionDepthFade, fade_distance_default=170.0)      # no hard line where a sheet meets a cliff or a troop
     g.link(a, fade, "Opacity")
+    g.link(g.scalar("FadeDistance", 170.0, "Mist"), fade, "FadeDistance")
     g.out(fade, MP.MP_OPACITY)
-    g.out(g.vector("Colour", lin(0.62, 0.68, 0.74), "Mist"), MP.MP_EMISSIVE_COLOR)
+    g.out(g.vector("Colour", lin(0.66, 0.69, 0.71), "Mist"), MP.MP_EMISSIVE_COLOR)
+    # ground mist rides above the land it is drawn from
+    lift = g.custom("return float3(0.0, 0.0, Lift * Ground);", F3, [("Lift", g.scalar("Lift", 75.0, "Mist")), ("Ground", ground)], "Ground mist: lifted off the land")
+    g.out(lift, MP.MP_WORLD_POSITION_OFFSET)
     g.finish()
     return mat
+
+
+# M_Waterfall: the falls off the highlands' rims (SM_Waterfall_<n>, gen_battlefield.fall_mesh: UV0 = (0..1 across, cm
+# fallen), UV1.x = 0 at the lip .. 1 at the pool). Unlit, translucent, in chunky cells like everything else: glassy
+# green water sliding over the lip, breaking into three speeds of white streak as it falls, solid white at the foot;
+# ragged, thinner sides. The pool's churn and rings are M_Water's (Fall0..3), the spray MI_Mist_Spray's.
+WATERFALL_CODE = NAT + r"""
+float2 cell = float2(floor(UV.x * Columns), floor(UV.y / CellCm));          // texel-sized cells
+float fallen = UV.y;
+float v = Speed * (0.55 + 0.45 * saturate(fallen / 500.0));                // it gathers speed
+float y1 = cell.y - floor(Time * v / CellCm);
+float y2 = cell.y - floor(Time * v * 1.45 / CellCm);
+float y3 = cell.y - floor(Time * v * 0.7 / CellCm);
+float s1 = nt.v(float2(cell.x * 1.9 + 3.0, y1 * 0.06));
+float s2 = nt.v(float2(cell.x * 0.83 + 17.0, y2 * 0.17 + 9.0));
+float s3 = nt.v(float2(cell.x * 3.7 + 5.0, y3 * 0.028 + 4.0));
+float streak = s1 * 0.5 + s2 * 0.3 + s3 * 0.2;
+float broken = smoothstep(0.02, 0.45, T);                                   // glassy at the lip, white lower down
+float foot = saturate((T - 0.82) / 0.18);
+float white = saturate(smoothstep(0.62 - broken * 0.3, 0.8 - broken * 0.25, streak) + foot * 1.2);
+float side = saturate((0.5 - abs(UV.x - 0.5)) * 5.0 + (s2 - 0.5) * 0.8);     // ragged edges
+float a = saturate(lerp(0.62, 1.0, smoothstep(0.3, 0.7, streak)) + foot * 0.6) * smoothstep(0.0, 0.5, side);
+a = floor(a * 5.0 + 0.5) / 5.0;                                             // flat steps
+OutOpacity = a * Strength;
+float3 col = lerp(Deep.rgb, Foam.rgb, white);
+col *= 0.86 + 0.14 * s2;
+return col * Bright;
+"""
+
+
+def build_waterfall():
+    mat = get_material("M_Waterfall")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    mat.set_editor_property("two_sided", True)
+    g = G(mat)
+    params = [
+        ("UV", g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)),
+        ("T", _fall_t(g)),
+        ("Time", g.node(unreal.MaterialExpressionTime)),
+        ("Columns", g.scalar("Columns", 60.0, "Fall")), ("CellCm", g.scalar("CellCm", 4.0, "Fall")), ("Speed", g.scalar("Speed", 520.0, "Fall")),
+        ("Strength", g.scalar("Strength", 0.95, "Fall")), ("Bright", g.scalar("Bright", 0.82, "Fall")),
+        ("Deep", g.vector("Deep", lin(0.2, 0.42, 0.44), "Fall"), "RGBA"), ("Foam", g.vector("Foam", lin(0.9, 0.95, 0.96), "Fall"), "RGBA"),
+    ]
+    rgb = g.custom(WATERFALL_CODE, F3, params, "Waterfall: glassy lip, three speeds of streak, white foot", outputs=[("OutOpacity", F1)])
+    g.out(rgb, MP.MP_EMISSIVE_COLOR)
+    g.out(rgb, MP.MP_OPACITY, "OutOpacity")
+    g.finish()
+    return mat
+
+
+def _fall_t(g):
+    """UV1.x as a scalar."""
+    uv1 = g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1)
+    m = g.node(unreal.MaterialExpressionComponentMask, r=True, g=False, b=False, a=False)
+    g.link(uv1, m, "")
+    return m
 
 
 # M_Birds: the birds (ASRBirds, a procedural mesh rebuilt each frame: it moves and beats the wings itself). Unlit,
@@ -928,11 +1408,20 @@ def build_sprite():
     return mat, sh
 
 
+def make_wildlife_instances(sprite, shadow):
+    """Wildlife (ASRWildlife): the stag and the hind, on the troops' card and layout; nothing on them takes a team colour."""
+    for beast in ("Deer", "Doe"):
+        make_instance("MI_UnitSprite_" + beast, sprite, textures={
+            "SpriteSheet": CHAR + "T_%s_Color" % beast, "TeamMask": CHAR + "T_%s_TeamMask" % beast, "NormalSheet": CHAR + "T_%s_Normal" % beast})
+        make_instance("MI_UnitSpriteShadow_" + beast, shadow, textures={"SpriteSheet": CHAR + "T_%s_Color" % beast})
+
+
 def make_sprite_instances(sprite, shadow):
-    for troop in ("Shieldbearer", "Archer", "Miner", "Farmer", "Builder", "Scout"):
+    for troop in ("Shieldbearer", "Archer", "Miner", "Farmer", "Builder", "Scout", "Medic"):
         make_instance("MI_UnitSprite_" + troop, sprite, textures={
             "SpriteSheet": CHAR + "T_%s_Color" % troop, "TeamMask": CHAR + "T_%s_TeamMask" % troop, "NormalSheet": CHAR + "T_%s_Normal" % troop})
         make_instance("MI_UnitSpriteShadow_" + troop, shadow, textures={"SpriteSheet": CHAR + "T_%s_Color" % troop})
+    make_wildlife_instances(sprite, shadow)
     # the arrow: one 44 x 9 frame, no normal sheet (one even normal), no billboard correction (the code orients its card)
     arrow = {"SheetCells": lin(1, 1, 0, 0), "CellPx": lin(44, 9, 0, 0)}
     make_instance("MI_ArrowSprite", sprite, scalars={"NormalStrength": 0.0, "Billboard": 0.0}, vectors=arrow,
@@ -997,6 +1486,18 @@ if (Moss > 0.0)
 // turf settling on up-facing facets of rock, a whole facet at a time
 if (MossTop > 0.0 && N.z > MossSlope) col = px.S(MossTex, float2(P.y, -P.x) / T, 128).rgb;
 col *= VCr;
+// soot: a burning building blackens from its wall heads and roofs down (UV1.x = cm below the head), in whole texels,
+// in drifting patches. Burn arrives per building (custom primitive data 4, ASRBuilding::StepFire).
+float ember = 0.0;
+if (Burn > 0.0)
+{
+	float up01 = saturate(1.0 - UV1.x / 240.0);
+	float s = Burn * (0.5 + 0.85 * up01) + (bl - 0.5) * 0.9;
+	float lv = floor(saturate(s * 1.7 - 0.2 + (hx - 0.5) * 0.4) * 3.0 + 0.5) / 3.0;
+	col = lerp(col, col * float3(0.13, 0.115, 0.11), lv * 0.92);
+	// a few texels in the worst of it still glow, winking
+	ember = step(0.99, px.h(tc + 17.0)) * step(0.66, lv) * saturate(Burn * 2.0 - 0.6) * (0.5 + 0.5 * sin(Time * 5.0 + hx * 40.0));
+}
 // normal map through the face's own UV frame (flat-shaded pieces: no tangents needed)
 float3 nrm = N;
 float3 tn = px.S(NormalTex, uv, Size.xy).xyz * 2.0 - 1.0;
@@ -1013,7 +1514,7 @@ if (abs(det) > 1e-10 && NormalStrength > 0.0 && WorldTop < 0.5)
 	nrm = normalize(Tu * tn.x * NormalStrength + Tv * tn.y * NormalStrength + N * max(tn.z, 0.2));
 }
 OutNormal = nrm;
-OutEmissive = c.rgb * mask * GlowMask * Glow;
+OutEmissive = c.rgb * mask * GlowMask * Glow + float3(2.4, 0.5, 0.05) * ember;
 return col * Tint.rgb;
 """
 
@@ -1030,6 +1531,7 @@ float3 n = N * Side;
 OutNormal = normalize(lerp(n, float3(0, 0, 1), UpNormal));
 float flick = 0.85 + 0.15 * sin(Time * 17.0 + P.x * 0.05) * sin(Time * 11.0 + P.y * 0.07);
 OutEmissive = c.rgb * Glow * flick;
+col *= lerp(1.0, 0.32, saturate(Burn * 1.3));                       // cloth, thatch and crops singe as the building burns
 return col * Tint.rgb * (Glow > 0.0 ? 0.0 : 1.0);
 """
 
@@ -1079,13 +1581,20 @@ BUILDING_SLOTS = {
     "Char": ("opaque", "T_Bld_Char", (64, 64), None, {"Damp": 0.0, "Bleach": 0.0, "Moss": 0.0, "Roughness": 1.0, "Specular": 0.1}, {}),
     "Scorch": ("card", "T_Bld_Scorch", (256, 128), None, {"UpNormal": 0.0, "SwayAmount": 0.0, "SwaySpeed": 0.0}, {}),
     "Water": ("opaque", "T_Bld_Water", (32, 32), None, {"Damp": 0.0, "Bleach": 0.0, "Moss": 0.0, "Roughness": 0.3, "Specular": 0.6}, {}),  # stable trough
+    # the level banner (bldkit.Kit.level_flag): lit mostly from above so the numeral reads on the shaded front
+    "Slate": ("opaque", "T_Bld_Slate", (64, 64), "T_Bld_Slate_N", {"Damp": 0.0, "Bleach": 0.0, "Moss": 0.0, "Roughness": 0.6, "Specular": 0.45}, {}),
+    "Iron": ("opaque", "T_Bld_Iron", (32, 32), None, {"Damp": 0.0, "Bleach": 0.0, "Moss": 0.0, "Roughness": 0.5, "Specular": 0.55}, {}),
+    "StoneDark": ("opaque", "T_Bld_StoneDark", (128, 128), "T_Bld_StoneDark_N", dict(_STONE, Moss=0.45), {}),
+    "Timber": ("opaque", "T_Bld_Timber", (64, 64), "T_Bld_Timber_N", {"Damp": 0.4, "Bleach": 0.15, "Moss": 0.1}, {}),
+    "LevelFlag": ("card", "T_Bld_LevelFlag", (256, 64), None, {"TeamMask": 1.0, "UpNormal": 0.55, "SwayAmount": 1.6, "SwaySpeed": 2.0}, {}),
 }
 
 
 def build_building():
     """M_Building (opaque) and M_BuildingCard (masked, two-sided), then one instance per mesh slot."""
     mat = get_material("M_Building")
-    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_OPAQUE)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)      # (masked only for the fade near the camera)
+    mat.set_editor_property("opacity_mask_clip_value", 0.5)
     mat.set_editor_property("tangent_space_normal", False)
     g = G(mat)
     P = g.node(unreal.MaterialExpressionWorldPosition, world_position_shader_offset=unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
@@ -1116,11 +1625,13 @@ def build_building():
         ("MossTop", g.scalar("MossTop", 0.0, "Weathering")), ("MossSlope", g.scalar("MossSlope", 0.84, "Weathering")),
         ("NormalStrength", g.scalar("NormalStrength", 1.0, "Surface")),
         ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Surface"), "RGBA"),
+        ("Burn", g.scalar("Burn", 0.0, "Per building (custom primitive data)", cpd=4)), ("Time", g.node(unreal.MaterialExpressionTime)),
     ], "Building surface: cm UVs, team / glow mask, texel-stepped weathering, normal map in the face's UV frame",
         outputs=[("OutNormal", F3), ("OutEmissive", F3)])
     g.out(colour, MP.MP_BASE_COLOR)
     g.out(colour, MP.MP_NORMAL, "OutNormal")
     g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
+    g.out(near_fade(g, P), MP.MP_OPACITY_MASK)
     g.out(g.scalar("Roughness", 0.84, "Surface"), MP.MP_ROUGHNESS)
     g.out(g.scalar("Specular", 0.3, "Surface"), MP.MP_SPECULAR)
     g.finish()
@@ -1143,7 +1654,7 @@ def build_building():
         ("Size", g.vector("Size", lin(64.0, 32.0, 0.0, 0.0), "Textures"), "RGBA"),
         ("Texel", g.scalar("TexelSize", 4.0, "Crunch")),
         ("TeamMask", g.scalar("TeamMask", 0.0, "Team")), ("TeamBoost", g.scalar("TeamBoost", 2.0, "Team")),
-        ("Glow", g.scalar("Glow", 0.0, "Glow")),
+        ("Glow", g.scalar("Glow", 0.0, "Glow")), ("Burn", g.scalar("Burn", 0.0, "Per building (custom primitive data)", cpd=4)),
         ("RootShade", g.scalar("RootShade", 1.0, "Colour")), ("UpNormal", g.scalar("UpNormal", 0.0, "Colour")),
         ("Tint", g.vector("Tint", lin(1.0, 1.0, 1.0), "Colour"), "RGBA"),
     ], "Building card: cloth, crops, leaves, flame", outputs=[("OutAlpha", F1), ("OutNormal", F3), ("OutEmissive", F3)])
@@ -1152,7 +1663,10 @@ def build_building():
     sway = g.custom(BUILDING_SWAY, F3, [("P", P), ("Time", time), ("Weight", weight),
                                         ("Speed", g.scalar("SwaySpeed", 1.6, "Sway")), ("Amount", g.scalar("SwayAmount", 3.0, "Sway"))], "Wind sway")
     g.out(colour, MP.MP_BASE_COLOR)
-    g.out(colour, MP.MP_OPACITY_MASK, "OutAlpha")
+    cmask = g.node(unreal.MaterialExpressionMultiply)
+    g.link(colour, cmask, "A", "OutAlpha")
+    g.link(near_fade(g, P), cmask, "B")
+    g.out(cmask, MP.MP_OPACITY_MASK)
     g.out(colour, MP.MP_NORMAL, "OutNormal")
     g.out(colour, MP.MP_EMISSIVE_COLOR, "OutEmissive")
     g.out(sway, MP.MP_WORLD_POSITION_OFFSET)
@@ -1257,26 +1771,51 @@ if not ONLY or "terrain" in ONLY:
     build_terrain()
 if not ONLY or "water" in ONLY:
     build_water()
+if not ONLY or "rock" in ONLY or "prop" in ONLY:
+    rock = build_rock()
+    make_instance("MI_Rock_Ruin", rock, scalars={"Moss": 0.6, "MossSlope": 0.8, "Tile": 1100.0}, vectors={"Tint": lin(1.05, 0.98, 0.86)})   # standing stones, barrows, relics: a paler dressed stone
 if not ONLY or "prop" in ONLY:
     prop = build_prop()
-    make_instance("MI_Prop_Rock", prop, scalars={"Moss": 1.0, "MossSlope": 0.84, "Roughness": 0.86},
+    make_instance("MI_Prop_Rock", prop, scalars={"Moss": 1.0, "MossSlope": 0.84, "Roughness": 0.86, "Lichen": 0.35},
                   vectors={"SizeA": lin(64, 64, 0, 0), "Tint": lin(0.8, 0.78, 0.72)}, textures={"TexA": "T_Rock"})
-    make_instance("MI_Prop_Sandstone", prop, scalars={"Moss": 0.0, "Roughness": 0.8},
+    make_instance("MI_Prop_Sandstone", prop, scalars={"Moss": 0.0, "Roughness": 0.8, "Lichen": 0.3, "DampHeight": 110.0},
                   vectors={"SizeA": lin(128, 64, 0, 0)}, textures={"TexA": "T_Sandstone"})
-    make_instance("MI_Prop_Wood", prop, scalars={"Roughness": 0.8, "FootShade": 0.25},
+    make_instance("MI_Prop_Wood", prop, scalars={"Roughness": 0.8, "FootShade": 0.25, "Relief": 1.6, "Bleach": 0.3, "DampHeight": 45.0},
                   vectors={"SizeA": lin(64, 32, 0, 0)}, textures={"TexA": "T_Wood"})
     make_instance("MI_Prop_Log", prop, scalars={"Moss": 0.0, "Roughness": 0.85},
                   vectors={"SizeA": lin(16, 16, 0, 0), "SizeB": lin(32, 64, 0, 0)}, textures={"TexA": "T_LogEnd", "TexB": "T_Bark"})
+    make_instance("MI_Prop_LogMossy", prop, scalars={"Moss": 1.0, "MossSlope": 0.55, "Roughness": 0.88},         # fallen timber in the woods: moss along the top
+                  vectors={"SizeA": lin(16, 16, 0, 0), "SizeB": lin(32, 64, 0, 0), "Tint": lin(0.8, 0.78, 0.72)}, textures={"TexA": "T_LogEnd", "TexB": "T_Bark"})
+    make_instance("MI_Prop_Bone", prop, scalars={"Moss": 0.3, "MossSlope": 0.9, "Roughness": 0.7},        # the wyrm's bones: old ivory, a little moss
+                  vectors={"SizeA": lin(64, 64, 0, 0), "Tint": lin(1.3, 1.24, 1.06)}, textures={"TexA": "T_Rock"})
 if not ONLY or "atmosphere" in ONLY or "birds" in ONLY:
     build_birds()
+if not ONLY or "atmosphere" in ONLY or "waterfall" in ONLY:
+    build_waterfall()
+if ONLY and "wildlife" in ONLY and "sprite" not in ONLY:      # only the deer's instances, on the sprite materials as they stand
+    make_wildlife_instances(eal.load_asset(DIR + "/M_UnitSprite"), eal.load_asset(DIR + "/M_UnitSpriteShadow"))
 if not ONLY or "atmosphere" in ONLY:
     build_cloud_shadow()
     mist = build_mist()
-    make_instance("MI_Mist_Valley", mist, scalars={"UseMap": 0.0, "Scale": 1500.0, "Cover": 0.3, "Soft": 0.5, "Strength": 0.42})
+    make_instance("MI_Mist_Valley", mist, scalars={"UseMap": 0.0, "Scale": 1500.0, "Cover": 0.34, "Soft": 0.5, "Strength": 0.3})
+    make_instance("MI_Mist_Ground", mist, scalars={"UseMap": 0.0, "Ground": 1.0, "Scale": 900.0, "Cover": 0.42, "Soft": 0.45, "Strength": 0.24, "FadeDistance": 110.0, "Lift": 75.0},
+                  vectors={"Wind": lin(16.0, 34.0, 0.0, 0.0)})
+    make_instance("MI_Mist_Spray", mist, scalars={"UseMap": 0.0, "Scale": 230.0, "Cover": 0.25, "Soft": 0.5, "Strength": 0.42, "FadeDistance": 90.0},
+                  vectors={"Wind": lin(60.0, 95.0, 0.0, 0.0), "Colour": lin(0.8, 0.84, 0.86)})
 if not ONLY or "foliage" in ONLY:
-    build_foliage()
+    foliage = build_foliage()
+    # the broadleaves (Tools/world/props.py > broadleaf, Tools/textures/gen_forest_textures.py): the firs' material with
+    # a leafy clump for the bough tier; less sunk in shade under each clump, a stronger glow through the leaves
+    make_instance("MI_Foliage_Oak", foliage, scalars={"ShadeFloor": 0.34, "Subsurface": 0.7, "SwayAmount": 6.0, "SwaySpeed": 0.9},
+                  vectors={"TipTint": lin(1.14, 1.1, 0.8)}, textures={"Needles": "T_Leaves"})
+    make_instance("MI_Foliage_Birch", foliage, scalars={"ShadeFloor": 0.42, "Subsurface": 0.85, "SwayAmount": 8.0, "SwaySpeed": 1.3},
+                  vectors={"TipTint": lin(1.12, 1.08, 0.82)}, textures={"Needles": "T_LeavesBirch", "Bark": "T_BarkBirch"})
+    make_instance("MI_Foliage_Maple", foliage, scalars={"ShadeFloor": 0.36, "Subsurface": 0.8, "SwayAmount": 6.0, "SwaySpeed": 1.0},
+                  vectors={"TipTint": lin(1.16, 1.04, 0.8)}, textures={"Needles": "T_LeavesMaple"})
 if not ONLY or "card" in ONLY:
     cardm = build_card()
+    make_instance("MI_Card_Under", cardm, scalars={"RootShade": 0.55, "SwayAmount": 2.0, "SwaySpeed": 1.3},      # the forest floor's cards (T_Undergrowth)
+                  vectors={"Size": lin(160, 32, 0, 0), "Tint": lin(0.84, 0.84, 0.84)}, textures={"Tex": "T_Undergrowth"})
     make_instance("MI_Card_Banner", cardm, scalars={"RootShade": 1.0, "SwayAmount": 5.0, "SwaySpeed": 2.2},
                   vectors={"Size": lin(16, 40, 0, 0), "Tint": lin(1, 1, 1)}, textures={"Tex": "T_Banner"})
 if not ONLY or "building" in ONLY:
@@ -1288,3 +1827,21 @@ if not ONLY or "placement" in ONLY or "ghost" in ONLY:
 if not ONLY or "sprite" in ONLY:
     sprite_m, sprite_shadow_m = build_sprite()
     make_sprite_instances(sprite_m, sprite_shadow_m)
+
+# ---- the second map's own instances: its splat map, its water map and their world squares (map "two" is the parents'
+# defaults). Tools/build_battlefield_visuals.py puts them on the meshes under /Game/SR/Meshes4.
+if not ONLY or "terrain" in ONLY or "water" in ONLY or "atmosphere" in ONLY or "maps" in ONLY:
+    for _map, _sfx in MAP_SFX.items():
+        if not _sfx or not eal.does_asset_exist(TEX + "T_Splat" + _sfx):
+            continue
+        _data_map("T_WaterMap" + _sfx)
+        _data_map("T_WaterFlow" + _sfx)
+        _data_map("T_Forest" + _sfx)
+        _rect, _flow = _water_info(_sfx)
+        _f = _falls(_sfx)
+        make_instance("MI_Terrain" + _sfx, eal.load_asset(DIR + "/M_Terrain"), scalars={"RockLine": _relief(_sfx)[0], "SnowLine": _relief(_sfx)[1]},
+                      vectors={"SplatRect": lin(*_splat_rect(_sfx))}, textures={"Splat": "T_Splat" + _sfx, "FlowMap": "T_WaterFlow" + _sfx, "ForestMap": "T_Forest" + _sfx})
+        make_instance("MI_Water" + _sfx, eal.load_asset(DIR + "/M_Water"), vectors={"MapRect": lin(*_rect), "Fall0": _f[0], "Fall1": _f[1], "Fall2": _f[2], "Fall3": _f[3]},
+                      textures={"WaterMap": "T_WaterMap" + _sfx, "FlowMap": "T_WaterFlow" + _sfx})
+        make_instance("MI_Mist" + _sfx, eal.load_asset(DIR + "/M_Mist"), vectors={"MapRect": lin(*_rect)}, textures={"Map": "T_WaterMap" + _sfx})
+        make_instance("MI_Mist_Ground" + _sfx, eal.load_asset(DIR + "/MI_Mist_Ground"), vectors={"MapRect": lin(*_rect)}, textures={"Map": "T_WaterMap" + _sfx})

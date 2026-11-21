@@ -103,13 +103,32 @@ public:
 	bool IsFinished() const { return !bDestroyed && BuildProgress >= 1.f; }
 	bool IsUnderConstruction() const { return !bDestroyed && BuildProgress < 1.f; }
 	float GetBuildProgress() const { return BuildProgress; }
+	/** How fast the site is rising right now (1 = on its own inside the castle's zone; more with Builders at the
+	 * walls; 0 = outside the zone with no Builder on it). */
+	float GetConstructionRate() const;
+	/** Seconds until the site is finished at the rate it is rising now (0 when it is not a site). bOutWaiting: it
+	 * is not rising at all (it waits for a Builder), and the time is the work still to be done by one. */
+	float GetBuildSecondsLeft(bool* bOutWaiting = nullptr) const;
+	/** Seconds until the level in hand is done, at its present rate (0 when it is not upgrading). */
+	float GetUpgradeSecondsLeft() const;
 	float GetHealth() const { return Health; }
 	float GetHealthFrac() const;
+	/** How hard it burns, 0..1: nothing above FireStartFraction of its health, ablaze from end to end near none. */
+	float GetFireStrength() const;
+	/** Testing (sr.HurtBuilding): put its health at a fraction of the full, with the look that goes with it. */
+	void DebugSetHealthFrac(float Frac);
+	int32 DebugFireSeats() const;
 	double GetLastDamagedTime() const { return LastDamagedTime; }
 	/** Arrows and blades. From may be null (another building's arrow). */
 	void ReceiveDamage(float Amount, ASRUnit* From);
 	/** Pull down a building still under construction and get CancelRefund of its price back. */
 	void CancelConstruction();
+	/** A finished building of ours that may be pulled down (not the Citadel, not a ruin). */
+	bool CanDemolish() const { return !bDestroyed && IsFinished() && !IsCastle(); }
+	/** What demolishing it would bring back now: DemolishRefund of its price and its levels, plus its queue in full. */
+	FSRCost GetDemolishRefund() const;
+	/** Pull it down (it slumps into rubble, as if it had fallen) and give back GetDemolishRefund. */
+	void Demolish();
 	/** Population this building lets its kingdom field right now. */
 	int32 GetPopProvided() const;
 	/** Where an arrow shot from From should land on this building (on the near wall, a little up). */
@@ -145,7 +164,12 @@ public:
 	/** Trains troops at all (finished barracks or range). */
 	bool CanRecruit() const { return Stats().bRecruits && IsFinished(); }
 	/** Is this the kind of building that trains Type (finished or not)? */
-	bool Trains(ESRUnitType Type) const { return Stats().bRecruits && (Stats().RecruitType == Type || (IsCastle() && Type == ESRUnitType::Scout)); }
+	bool Trains(ESRUnitType Type) const
+	{
+		// one troop type each, and a second at two of them: the Citadel's Scout, the Barracks' Medic
+		return Stats().bRecruits && (Stats().RecruitType == Type || (IsCastle() && Type == ESRUnitType::Scout)
+			|| (BuildingType == ESRBuildingType::Barracks && Type == ESRUnitType::Medic));
+	}
 	bool IsRecruiter() const { return Stats().bRecruits; }
 	ESRBuildingState GetState() const { return State; }
 	bool IsCastle() const { return BuildingType == ESRBuildingType::Castle; }
@@ -203,6 +227,10 @@ public:
 	bool CanUpgrade() const;
 	/** The price of the next level. */
 	FSRCost GetUpgradeCost() const;
+	/** The price of raising it to ToLevel (from ToLevel - 1). */
+	FSRCost GetUpgradeCostTo(int32 ToLevel) const;
+	/** The Citadel level the next level waits for (0: none; a storehouse's levels do). */
+	int32 GetUpgradeRequiredCastleLevel() const;
 	/** Pays and starts the next level; false (with feedback) if it cannot. */
 	bool StartUpgrade();
 	/** Health with the building's level counted. */
@@ -211,6 +239,8 @@ public:
 	float GetAttackRange() const;
 	float GetAttackDamage() const;
 	float GetAttackInterval() const;
+	/** Archers shooting from it (the castle: one per manned corner pillar, by level). */
+	int32 GetArcherCount() const;
 	/** What one delivery brings (a farm's food, a mine's gold at its level). */
 	int32 GetPayoutAmount() const;
 	/** Seconds the next level takes to build. */
@@ -219,6 +249,8 @@ public:
 	float GetBuildZoneRadius() const;
 	/** Saved games. */
 	void SetLevelForLoad(int32 InLevel, float InUpgradeProgress);
+	/** Testing (sr.SetLevel): jump straight to a level, free and at once, with the new look and its flourish. */
+	void SetLevelNow(int32 InLevel);
 	/** Builders at its walls working on it right now (counted each frame while it needs work). */
 	int32 GetBuildersWorking() const { return BuildersWorking; }
 	/** Builders are mending it: until they finish it does not work (no training, payouts or shooting). */
@@ -235,12 +267,40 @@ private:
 	void UpdateFeedback(float Dt);
 	void StepConstruction(float Dt);
 	void StepDefence(float Dt);
+	/** The archers seen on top (tower, relic tower, the castle's corner pillars): cards of the Archer's sprite sheet
+	 * that draw, loose (the arrow leaves on the release frame) and recover with each shot, and stand idle between. */
+	struct FPostArcher
+	{
+		FVector2D Offset = FVector2D::ZeroVector;   // from the footprint centre, in the mesh's own axes
+		float FeetZ = 0.f;                          // above the actor
+		float Yaw = 0.f;
+		int32 Facing = 0;
+		float Clock = -1.f;                         // time into the current shot, -1 = idle
+		float IdlePhase = 0.f;
+		bool bLoosed = true;
+		TWeakObjectPtr<ASRUnit> Mark;
+		FVector4 Applied = FVector4(-1.f, -1.f, -1.f, -1.f);
+	};
+	TArray<FPostArcher> Posts;
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> PostCards;
+	bool HasPostArchers() const;
+	void EnsurePosts();
+	void StepPosts(float Dt);
+	FVector PostFeet(int32 i) const;
+	FVector2D PostXY(int32 i) const;
+	int32 PostsLevel = -1;
 	void StepCollapse(float Dt);
-	void Collapse(ASRUnit* Killer);
+	/** It falls (or, bDemolished, is pulled down by its own side: no alert, no shake, not counted as a loss). */
+	void Collapse(ASRUnit* Killer, bool bDemolished = false);
 	void ApplyBuildVisual();
 	void UpdateWorkers();
 	void SetState(ESRBuildingState NewState);
 	void LoadStateMeshes();
+	/** The finished (or damaged) mesh for the current level: SM_Bld_<Name>_L<n>[_Damaged], else the nearest level below. */
+	UStaticMesh* GetLevelMesh(bool bDamaged) const;
+	/** Re-applies the current state's mesh for the level and lifts the label (HUD bars) by the level's growth;
+	 * bFlourish: dust and debris burst off it, as when an upgrade finishes. */
+	void ApplyLevelLook(bool bFlourish);
 
 	UPROPERTY(VisibleAnywhere, Category = "Building") TObjectPtr<USceneComponent> Root;
 	UPROPERTY(VisibleAnywhere, Category = "Building") TObjectPtr<UStaticMeshComponent> Mesh;
@@ -252,9 +312,27 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> SiteMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> DamagedMeshAsset;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> RuinMeshAsset;
+	/** Per-level looks (Tools/blender/build_building.py, LEVELS): index = level - 1; [0] stays empty (BuildingMesh /
+	 * DamagedMeshAsset), and so does a level without its own mesh (it keeps the one below). */
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> LevelMeshes;
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMesh>> LevelDamagedMeshes;
+	/** LabelOffset as placed (level 1); a higher level's taller mesh raises it. */
+	FVector BaseLabelOffset = FVector::ZeroVector;
 	ESRBuildingState State = ESRBuildingState::Complete;
-	/** Fire and smoke while it burns (damaged), smoke over the ruin. */
+	/** The sprite fire and smoke (ASRFXSprite): what burns when the new fire cannot be drawn (UsesNewFire() false). */
 	TArray<TWeakObjectPtr<class ASRFXSprite>> StateFX;
+	/** The new fire is on (Sovereign Feel > Buildings > Fire) and its materials are in the build. Otherwise the
+	 * building burns as it always did: two fire sprites and a smoke sprite while damaged, smoke over the ruin. */
+	bool UsesNewFire() const;
+	/** The fire on it (ASRBuildingFire): made the first time it burns, fed the fire's strength as its health falls,
+	 * throws the pall when it comes down and smoulders over the ruin. */
+	TWeakObjectPtr<class ASRBuildingFire> FireFX;
+	/** How sooted the mesh is drawn (M_Building / M_BuildingCard, custom primitive data 4): follows the fire, clears as it is repaired. */
+	float Soot = 0.f;
+	float SootShown = -1.f;
+	uint8 FireSeated = 0;            // 0 not seated, 1 on the standing mesh, 2 on the damaged mesh, 3 on the ruin
+	void StepFire(float Dt);
+	class ASRBuildingFire* NeedFire(uint8 SeatKind);
 	double LastDebrisTime = -10.0;
 	void ClearStateFX(bool bKeepSmoke);
 	/** The rally flag (barracks and range): planted at the rally point while the castle is selected or just after it moves. */

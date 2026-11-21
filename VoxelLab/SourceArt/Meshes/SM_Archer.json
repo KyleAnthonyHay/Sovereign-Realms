@@ -1,0 +1,444 @@
+{
+ "height": 1.66,
+ "radius": 0.4,
+ "voxel": 0.0125,
+ "mesh_yaw": -90.0,
+ "stride": 1.7,
+ "elbow_l": 50.0,
+ "elbow_r": 25.0,
+ "wrist_l": 25.0,
+ "cape": {
+  "cols": 5,
+  "rows": 4
+ },
+ "parts": {
+  "Body": {
+   "mesh": "SM_Archer_Body",
+   "pivot": [
+    0.0,
+    0.0,
+    0.725
+   ],
+   "parent": ""
+  },
+  "Chest": {
+   "mesh": "SM_Archer_Chest",
+   "pivot": [
+    0.0,
+    0.0,
+    0.925
+   ],
+   "parent": "Body"
+  },
+  "Head": {
+   "mesh": "SM_Archer_Head",
+   "pivot": [
+    0.0,
+    0.0,
+    1.225
+   ],
+   "parent": "Chest"
+  },
+  "ArmL": {
+   "mesh": "SM_Archer_ArmL",
+   "pivot": [
+    0.2875,
+    0.0,
+    1.175
+   ],
+   "parent": "Chest"
+  },
+  "ForeL": {
+   "mesh": "SM_Archer_ForeL",
+   "pivot": [
+    0.31625,
+    0.0,
+    0.90151
+   ],
+   "parent": "ArmL"
+  },
+  "ArmR": {
+   "mesh": "SM_Archer_ArmR",
+   "pivot": [
+    -0.2875,
+    0.0,
+    1.175
+   ],
+   "parent": "Chest"
+  },
+  "ForeR": {
+   "mesh": "SM_Archer_ForeR",
+   "pivot": [
+    -0.31625,
+    0.0,
+    0.90151
+   ],
+   "parent": "ArmR"
+  },
+  "HandR": {
+   "mesh": "SM_Archer_HandR",
+   "pivot": [
+    -0.33965,
+    -0.11132,
+    0.6788
+   ],
+   "parent": "ForeR"
+  },
+  "LegL": {
+   "mesh": "SM_Archer_LegL",
+   "pivot": [
+    0.1125,
+    0.0,
+    0.7
+   ],
+   "parent": ""
+  },
+  "ShinL": {
+   "mesh": "SM_Archer_ShinL",
+   "pivot": [
+    0.1125,
+    0.0,
+    0.35
+   ],
+   "parent": "LegL"
+  },
+  "LegR": {
+   "mesh": "SM_Archer_LegR",
+   "pivot": [
+    -0.1125,
+    0.0,
+    0.7
+   ],
+   "parent": ""
+  },
+  "ShinR": {
+   "mesh": "SM_Archer_ShinR",
+   "pivot": [
+    -0.1125,
+    0.0,
+    0.35
+   ],
+   "parent": "LegR"
+  },
+  "Cape": {
+   "mesh": "SM_Archer_Cape",
+   "pivot": [
+    0.0,
+    0.15,
+    1.2
+   ],
+   "parent": "Chest"
+  },
+  "Cape00": {
+   "mesh": "SM_Archer_Cape00",
+   "pivot": [
+    -0.35833,
+    0.15833,
+    1.025
+   ],
+   "parent": "Cape"
+  },
+  "Cape01": {
+   "mesh": "SM_Archer_Cape01",
+   "pivot": [
+    -0.40833,
+    0.20833,
+    0.8125
+   ],
+   "parent": "Cape00"
+  },
+  "Cape02": {
+   "mesh": "SM_Archer_Cape02",
+   "pivot": [
+    -0.435,
+    0.235,
+    0.6
+   ],
+   "parent": "Cape01"
+  },
+  "Cape03": {
+   "mesh": "SM_Archer_Cape03",
+   "pivot": [
+    -0.4875,
+    0.2625,
+    0.3875
+   ],
+   "parent": "Cape02"
+  },
+  "Cape10": {
+   "mesh": "SM_Archer_Cape10",
+   "pivot": [
+    -0.195,
+    0.185,
+    0.975
+   ],
+   "parent": "Cape"
+  },
+  "Cape11": {
+   "mesh": "SM_Archer_Cape11",
+   "pivot": [
+    -0.23333,
+    0.21667,
+    0.7625
+   ],
+   "parent": "Cape10"
+  },
+  "Cape12": {
+   "mesh": "SM_Archer_Cape12",
+   "pivot": [
+    -0.26667,
+    0.25833,
+    0.55
+   ],
+   "parent": "Cape11"
+  },
+  "Cape13": {
+   "mesh": "SM_Archer_Cape13",
+   "pivot": [
+    -0.26875,
+    0.2875,
+    0.3375
+   ],
+   "parent": "Cape12"
+  },
+  "Cape20": {
+   "mesh": "SM_Archer_Cape20",
+   "pivot": [
+    0.0,
+    0.175,
+    1.025
+   ],
+   "parent": "Cape"
+  },
+  "Cape21": {
+   "mesh": "SM_Archer_Cape21",
+   "pivot": [
+    0.0,
+    0.20833,
+    0.8125
+   ],
+   "parent": "Cape20"
+  },
+  "Cape22": {
+   "mesh": "SM_Archer_Cape22",
+   "pivot": [
+    0.03125,
+    0.25625,
+    0.6
+   ],
+   "parent": "Cape21"
+  },
+  "Cape23": {
+   "mesh": "SM_Archer_Cape23",
+   "pivot": [
+    0.0,
+    0.26667,
+    0.3875
+   ],
+   "parent": "Cape22"
+  },
+  "Cape30": {
+   "mesh": "SM_Archer_Cape30",
+   "pivot": [
+    0.195,
+    0.185,
+    0.975
+   ],
+   "parent": "Cape"
+  },
+  "Cape31": {
+   "mesh": "SM_Archer_Cape31",
+   "pivot": [
+    0.23333,
+    0.21667,
+    0.7625
+   ],
+   "parent": "Cape30"
+  },
+  "Cape32": {
+   "mesh": "SM_Archer_Cape32",
+   "pivot": [
+    0.26667,
+    0.25833,
+    0.55
+   ],
+   "parent": "Cape31"
+  },
+  "Cape33": {
+   "mesh": "SM_Archer_Cape33",
+   "pivot": [
+    0.26875,
+    0.2875,
+    0.3375
+   ],
+   "parent": "Cape32"
+  },
+  "Cape40": {
+   "mesh": "SM_Archer_Cape40",
+   "pivot": [
+    0.35833,
+    0.15833,
+    1.025
+   ],
+   "parent": "Cape"
+  },
+  "Cape41": {
+   "mesh": "SM_Archer_Cape41",
+   "pivot": [
+    0.40833,
+    0.20833,
+    0.8125
+   ],
+   "parent": "Cape40"
+  },
+  "Cape42": {
+   "mesh": "SM_Archer_Cape42",
+   "pivot": [
+    0.435,
+    0.235,
+    0.6
+   ],
+   "parent": "Cape41"
+  },
+  "Cape43": {
+   "mesh": "SM_Archer_Cape43",
+   "pivot": [
+    0.4875,
+    0.2625,
+    0.3875
+   ],
+   "parent": "Cape42"
+  },
+  "Bow": {
+   "mesh": "SM_Archer_Bow",
+   "pivot": [
+    0.32824,
+    -0.27769,
+    0.76351
+   ],
+   "parent": "ForeL"
+  },
+  "BowStringU": {
+   "mesh": "SM_Archer_BowStringU",
+   "pivot": [
+    0.53312,
+    -0.38926,
+    1.34834
+   ],
+   "parent": "Bow"
+  },
+  "BowStringL": {
+   "mesh": "SM_Archer_BowStringL",
+   "pivot": [
+    0.64823,
+    -0.09421,
+    0.25322
+   ],
+   "parent": "Bow"
+  },
+  "Quiver": {
+   "mesh": "SM_Archer_Quiver",
+   "pivot": [
+    -0.2375,
+    0.35,
+    1.0
+   ],
+   "parent": "Chest"
+  },
+  "Arrow": {
+   "mesh": "SM_Archer_Arrow",
+   "pivot": [
+    -0.34285,
+    -0.17806,
+    0.62444
+   ],
+   "parent": "HandR"
+  }
+ },
+ "bow": {
+  "part": "Bow",
+  "hand": "L",
+  "parent": "ForeL",
+  "grip": [
+   0.32824,
+   -0.27769,
+   0.76351
+  ],
+  "axis": [
+   -0.10097,
+   -0.25882,
+   0.96063
+  ],
+  "string_dir": [
+   0.98108,
+   0.13443,
+   0.13933
+  ],
+  "shoot_dir": [
+   -0.98108,
+   -0.13443,
+   -0.13933
+  ],
+  "length": 1.425,
+  "string_offset": 0.2675,
+  "nock": [
+   0.59067,
+   -0.24173,
+   0.80078
+  ],
+  "string_ends": [
+   [
+    0.53312,
+    -0.38926,
+    1.34834
+   ],
+   [
+    0.64823,
+    -0.09421,
+    0.25322
+   ]
+  ],
+  "string_parts": [
+   "BowStringU",
+   "BowStringL"
+  ]
+ },
+ "arrow": {
+  "part": "Arrow",
+  "hand": "R",
+  "parent": "HandR",
+  "grip": [
+   -0.34285,
+   -0.17806,
+   0.62444
+  ],
+  "dir": [
+   0.04418,
+   -0.90631,
+   0.4203
+  ],
+  "length": 0.75,
+  "tip_offset": 0.5,
+  "nock_offset": 0.25
+ },
+ "quiver": {
+  "part": "Quiver",
+  "parent": "Chest",
+  "pivot": [
+   -0.2375,
+   0.35,
+   1.0
+  ],
+  "axis": [
+   -0.32557,
+   0.0,
+   0.94552
+  ],
+  "mouth": [
+   -0.30261,
+   0.35,
+   1.1891
+  ],
+  "arrows": 11
+ }
+}

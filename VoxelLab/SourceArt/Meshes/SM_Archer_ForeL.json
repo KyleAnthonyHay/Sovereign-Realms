@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_ForeL",
+ "faces": 460,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0986,
+   -0.3553,
+   -0.2278
+  ],
+  [
+   0.1171,
+   0.0878,
+   0.0951
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.31625,
+  0.0,
+  0.90151
+ ],
+ "part": "ForeL",
+ "parent": "ArmL",
+ "triangles": 920,
+ "blocks": 40
+}

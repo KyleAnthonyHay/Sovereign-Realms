@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_HandR",
+ "faces": 150,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0885,
+   -0.1519,
+   -0.1429
+  ],
+  [
+   0.0858,
+   0.0486,
+   0.0419
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.33965,
+  -0.11132,
+  0.6788
+ ],
+ "part": "HandR",
+ "parent": "ForeR",
+ "triangles": 300,
+ "blocks": 7
+}

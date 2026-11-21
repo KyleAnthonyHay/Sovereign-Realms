@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_Cape12",
+ "faces": 402,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1497,
+   -0.058,
+   -0.2573
+  ],
+  [
+   0.156,
+   0.1045,
+   0.0053
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.30278,
+  0.35278,
+  0.55
+ ],
+ "part": "Cape12",
+ "triangles": 804,
+ "blocks": 38
+}

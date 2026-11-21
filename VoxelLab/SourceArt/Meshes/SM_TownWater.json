@@ -1,0 +1,18 @@
+{
+ "name": "SM_TownWater",
+ "faces": 15046,
+ "collision": "complex",
+ "bounds": [
+  [
+   -33.25,
+   -52.5,
+   -5.25
+  ],
+  [
+   57.75,
+   11.75,
+   1.0
+  ]
+ ],
+ "lights": []
+}

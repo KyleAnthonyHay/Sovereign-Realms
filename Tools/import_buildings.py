@@ -19,7 +19,7 @@ DST = "/Game/SR/Buildings"
 MAT = "/Game/SR/Materials/"
 eal = unreal.EditorAssetLibrary
 tools = unreal.AssetToolsHelpers.get_asset_tools()
-ONLY = globals().get("ONLY")           # e.g. ["castle"]
+ONLY = globals().get("ONLY")           # e.g. ["castle"] (all its meshes) or ["castle_l3", "castle_l3_damaged"]
 
 
 def pipeline():
@@ -50,7 +50,8 @@ for stale in ("castle", "farm", "mine"):
 n = 0
 for path in sorted(glob.glob(os.path.join(SRC, "SM_Bld_*.gltf"))):
     name = os.path.splitext(os.path.basename(path))[0]
-    if ONLY and name[7:].lower() not in ONLY:
+    # ONLY: module names ("castle": every mesh of it, its states and levels) or exact names ("castle_l3_damaged")
+    if ONLY and name[7:].lower() not in ONLY and name[7:].split("_")[0].lower() not in ONLY:
         continue
     task = unreal.AssetImportTask()
     task.filename = path
@@ -66,14 +67,21 @@ for path in sorted(glob.glob(os.path.join(SRC, "SM_Bld_*.gltf"))):
             continue
         mats = sm.get_editor_property("static_materials")
         missing = []
-        for i, m in enumerate(mats):
+        new = []
+        for m in mats:
             slot = str(m.get_editor_property("material_slot_name"))
             key = slot[4:] if slot.startswith("Bld_") else slot
             mi = eal.load_asset(MAT + "MI_Bld_" + key)
             if mi is None:
                 missing.append(slot)
-                continue
-            sm.set_material(i, mi)
+                mi = m.get_editor_property("material_interface")
+            new.append(unreal.StaticMaterial(material_interface=mi, material_slot_name=m.get_editor_property("material_slot_name"),
+                                             uv_channel_data=m.get_editor_property("uv_channel_data")))
+        # all slots at once, as fresh structs (the ones read back are copies): set_material() per slot rebuilds the
+        # mesh and its distance field once per slot, ~40 s a building mesh
+        sm.set_editor_property("static_materials", new)
+        # the fire seats its flames on the mesh's own high places (ASRBuildingFire::Seat reads the vertices at run time)
+        sm.set_editor_property("allow_cpu_access", True)
         body = sm.get_editor_property("body_setup")
         if body:
             body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_DEFAULT)

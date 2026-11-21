@@ -1,7 +1,7 @@
 {
  "name": "range",
  "mesh": "SM_Bld_Range",
- "triangles": 3408,
+ "triangles": 3486,
  "bounds": {
   "min": [
    -437.2,
@@ -69,6 +69,7 @@
   "Bld_Frieze",
   "Bld_LeafCore",
   "Bld_Leaves",
+  "Bld_LevelFlag",
   "Bld_Mudbrick",
   "Bld_Planks",
   "Bld_Plaster",
@@ -104,7 +105,7 @@
   },
   "damaged": {
    "mesh": "SM_Bld_Range_Damaged",
-   "triangles": 3424,
+   "triangles": 3496,
    "bounds": {
     "min": [
      -420.0,
@@ -129,6 +130,7 @@
     "Bld_Frieze",
     "Bld_LeafCore",
     "Bld_Leaves",
+    "Bld_LevelFlag",
     "Bld_Mudbrick",
     "Bld_Planks",
     "Bld_Plaster",
@@ -164,6 +166,232 @@
     "Bld_Target",
     "Bld_Thatch"
    ]
+  }
+ },
+ "levels": {
+  "2": {
+   "complete": {
+    "mesh": "SM_Bld_Range_L2",
+    "triangles": 3788,
+    "bounds": {
+     "min": [
+      -437.9,
+      -415.0,
+      -5.1
+     ],
+     "max": [
+      418.7,
+      400.0,
+      471.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_AshlarLarge",
+     "Bld_Awning",
+     "Bld_Banner",
+     "Bld_Bark",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Dark",
+     "Bld_Dirt",
+     "Bld_Frieze",
+     "Bld_Iron",
+     "Bld_LeafCore",
+     "Bld_Leaves",
+     "Bld_LevelFlag",
+     "Bld_Planks",
+     "Bld_Plaster",
+     "Bld_Pot",
+     "Bld_Shutter",
+     "Bld_Slate",
+     "Bld_Target",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ],
+    "sockets": {
+     "gate": [
+      -460.0,
+      -190.0,
+      0.0
+     ],
+     "rally": [
+      -760.0,
+      -190.0,
+      0.0
+     ],
+     "label": [
+      120.0,
+      0.0,
+      590.0
+     ],
+     "popup": [
+      0.0,
+      0.0,
+      320.0
+     ]
+    }
+   },
+   "damaged": {
+    "mesh": "SM_Bld_Range_L2_Damaged",
+    "triangles": 3854,
+    "bounds": {
+     "min": [
+      -426.8,
+      -425.1,
+      -24.1
+     ],
+     "max": [
+      418.7,
+      408.7,
+      471.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_AshlarLarge",
+     "Bld_Awning",
+     "Bld_Banner",
+     "Bld_Bark",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Char",
+     "Bld_Dark",
+     "Bld_Dirt",
+     "Bld_Frieze",
+     "Bld_Iron",
+     "Bld_LeafCore",
+     "Bld_Leaves",
+     "Bld_LevelFlag",
+     "Bld_Mudbrick",
+     "Bld_Planks",
+     "Bld_Plaster",
+     "Bld_Pot",
+     "Bld_Scorch",
+     "Bld_Shutter",
+     "Bld_Slate",
+     "Bld_Target",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ]
+   }
+  },
+  "3": {
+   "complete": {
+    "mesh": "SM_Bld_Range_L3",
+    "triangles": 5064,
+    "bounds": {
+     "min": [
+      -422.0,
+      -430.5,
+      -5.1
+     ],
+     "max": [
+      429.0,
+      412.0,
+      630.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_AshlarLarge",
+     "Bld_Awning",
+     "Bld_Banner",
+     "Bld_Bark",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Dark",
+     "Bld_Dirt",
+     "Bld_Flame",
+     "Bld_Frieze",
+     "Bld_Iron",
+     "Bld_LeafCore",
+     "Bld_Leaves",
+     "Bld_LevelFlag",
+     "Bld_Planks",
+     "Bld_Plaster",
+     "Bld_Pot",
+     "Bld_RoofClay",
+     "Bld_Shutter",
+     "Bld_Slate",
+     "Bld_StoneDark",
+     "Bld_Target",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ],
+    "sockets": {
+     "gate": [
+      -460.0,
+      -190.0,
+      0.0
+     ],
+     "rally": [
+      -760.0,
+      -190.0,
+      0.0
+     ],
+     "label": [
+      120.0,
+      0.0,
+      790.0
+     ],
+     "popup": [
+      0.0,
+      0.0,
+      320.0
+     ]
+    }
+   },
+   "damaged": {
+    "mesh": "SM_Bld_Range_L3_Damaged",
+    "triangles": 4974,
+    "bounds": {
+     "min": [
+      -420.0,
+      -418.0,
+      -24.1
+     ],
+     "max": [
+      429.0,
+      415.2,
+      630.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_AshlarLarge",
+     "Bld_Awning",
+     "Bld_Banner",
+     "Bld_Bark",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Char",
+     "Bld_Dark",
+     "Bld_Dirt",
+     "Bld_Flame",
+     "Bld_Frieze",
+     "Bld_Iron",
+     "Bld_LeafCore",
+     "Bld_Leaves",
+     "Bld_LevelFlag",
+     "Bld_Mudbrick",
+     "Bld_Planks",
+     "Bld_Plaster",
+     "Bld_Pot",
+     "Bld_RoofClay",
+     "Bld_Scorch",
+     "Bld_Shutter",
+     "Bld_Slate",
+     "Bld_StoneDark",
+     "Bld_Target",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ]
+   }
   }
  }
 }

@@ -98,6 +98,14 @@ public:
 	int32 GetMaxBuilders(ESRTeam Team) const;
 	/** Watchtowers a kingdom may have (standing or going up): TowerLimitBase, +TowerLimitPerCastleLevel per castle level. */
 	int32 GetMaxTowers(ESRTeam Team) const;
+	/** Farms a kingdom may have (standing or going up): FarmLimitBase, +FarmLimitPerCastleLevel per castle level. */
+	int32 GetMaxFarms(ESRTeam Team) const;
+	/** How many of a kind of building a kingdom may have at its castle's level (INDEX_NONE: no limit). Counts standing
+	 * buildings and sites (CountStanding). */
+	int32 GetBuildLimit(ESRBuildingType Type, ESRTeam Team) const;
+	bool IsAtBuildLimit(ESRBuildingType Type, ESRTeam Team) const;
+	/** "Farm limit 3 reached: raise the Citadel for another" (empty when not at the limit). */
+	FText GetBuildLimitReason(ESRBuildingType Type, ESRTeam Team) const;
 	/** Saved games. */
 	void SetStock(ESRTeam Team, ESRResource Resource, int32 Amount) { Stock[int32(Team)][int32(Resource)] = FMath::Max(0, Amount); }
 	bool CanAfford(ESRTeam Team, const FSRCost& Cost) const;
@@ -130,6 +138,8 @@ public:
 	/** One of the player's troops was hit: an alert if it is out of view (throttled). */
 	void NotifyUnitAttacked(const ASRUnit* Victim);
 	void NotifyBuildingDestroyed(ASRBuilding* Building);
+	/** Stock over what the kingdom can now hold is lost (a storehouse pulled down). */
+	void ClampToStorage(ESRTeam Team);
 	/** The team's castle, if it still stands. */
 	ASRBuilding* GetCastle(ESRTeam Team) const;
 	/** Inside one of the kingdom's building zones (its castle's TerritoryRadius): buildings there raise themselves. */

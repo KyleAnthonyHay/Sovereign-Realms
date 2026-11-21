@@ -1,0 +1,18 @@
+{
+ "name": "SM_GrassTuft_B",
+ "faces": 468,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.3125,
+   -0.25,
+   0.0
+  ],
+  [
+   0.3125,
+   0.4375,
+   0.5
+  ]
+ ],
+ "lights": []
+}

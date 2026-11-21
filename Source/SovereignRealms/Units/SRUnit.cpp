@@ -5,6 +5,7 @@
 #include "Units/SRProjectile.h"
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SRGridSubsystem.h"
+#include "Battle/SRFogSubsystem.h"
 #include "Buildings/SRBuilding.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRAISubsystem.h"
@@ -55,6 +56,9 @@ void ASRUnit::InitUnit(ESRUnitType InType, ESRTeam InTeam, float InSpawnDelay, c
 	RetargetTimer = FMath::FRandRange(0.f, 0.3f);
 	SnortClock = FMath::FRandRange(3.f, 16.f);
 
+	// a Medic is dear: it starts Passive (it runs from foes); G makes it Assertive
+	if (UnitType == ESRUnitType::Medic) { Stance = ESRStance::Defensive; }
+
 	BuildVisuals();
 	StepVisual(0.f);
 }
@@ -97,6 +101,7 @@ void ASRUnit::OrderMove(const FVector2D& Dest)
 	Target = nullptr;
 	TargetBuilding = nullptr;
 	bReturnHomeWhenDone = false;
+	RepathsLeft = 5;
 	CancelAttack();
 	ResetProgress();
 }
@@ -109,7 +114,38 @@ void ASRUnit::OrderAttackMove(const FVector2D& Dest)
 	Destination = Dest;
 	Waypoints.Reset();
 	RetargetTimer = 0.f; // look for something to fight right away
+	RepathsLeft = 5;
 	ResetProgress();
+}
+
+void ASRUnit::MarchTo(const FVector2D& T, float Pace, bool bAttackMove)
+{
+	if (!IsAlive()) { return; }
+	const ESROrder Want = bAttackMove ? ESROrder::AttackMove : ESROrder::Move;
+	if (Order != Want) { Order = Want; RepathsLeft = 5; ResetProgress(); }
+	// a target that keeps moving is not "no progress": only a troop standing still is held up
+	if (Velocity.SizeSquared() > FMath::Square(60.f)) { ResetProgress(); }
+	Destination = T;
+	Waypoints.Reset();
+	PaceSpeed = Pace;
+}
+
+bool ASRUnit::Repath()
+{
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	if (!Grid || RepathsLeft <= 0) { return false; }
+	--RepathsLeft;
+	// the march's end stays what it was; only the way there is planned again, from where the troop stands now
+	const FVector2D Final = Waypoints.Num() > 0 ? Waypoints.Last() : Destination;
+	TArray<FVector2D> Path;
+	if (!Grid->FindPath(GetPos2D(), Final, Path) || Path.Num() == 0) { return false; }
+	Destination = Path[0];
+	Waypoints.Reset();
+	for (int32 i = 1; i < Path.Num(); ++i) { Waypoints.Add(Path[i]); }
+	ResetProgress();
+	SlideSide = 0;
+	UE_LOG(LogSovereign, Verbose, TEXT("REPATH %s at (%.0f, %.0f): %d corner(s) to (%.0f, %.0f), %d more allowed"), *GetLabel(), SimPos.X, SimPos.Y, Path.Num(), Final.X, Final.Y, RepathsLeft);
+	return true;
 }
 
 void ASRUnit::OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove)
@@ -122,7 +158,7 @@ void ASRUnit::OrderMovePath(const TArray<FVector2D>& Points, bool bAttackMove)
 
 void ASRUnit::OrderAttack(ASRUnit* InTarget)
 {
-	if (!IsAlive() || !InTarget || !InTarget->IsAlive() || InTarget == this) { return; }
+	if (!IsAlive() || !InTarget || !InTarget->IsAlive() || InTarget == this || IsMedic()) { return; }   // a Medic strikes nobody
 	if (Target.Get() != InTarget) { CancelAttack(); }
 	Order = ESROrder::AttackTarget;
 	Waypoints.Reset();
@@ -133,7 +169,7 @@ void ASRUnit::OrderAttack(ASRUnit* InTarget)
 
 void ASRUnit::OrderAttackBuilding(ASRBuilding* InTarget)
 {
-	if (!IsAlive() || !InTarget || !InTarget->IsAlive() || InTarget->Team == Team) { return; }
+	if (!IsAlive() || !InTarget || !InTarget->IsAlive() || InTarget->Team == Team || IsMedic()) { return; }
 	if (TargetBuilding.Get() != InTarget) { CancelAttack(); }
 	Order = ESROrder::AttackTarget;
 	Waypoints.Reset();
@@ -186,6 +222,254 @@ void ASRUnit::OrderGuard(ASRUnit* Ward, ASRBuilding* WardBuilding, const FVector
 	ResetProgress();
 	FVector2D W;
 	if (GuardWardPos(W)) { GuardLastWard = W; Home = W + GuardOffset; }
+}
+
+void ASRUnit::OrderHeal(ASRUnit* Ward)
+{
+	if (!IsAlive() || !IsMedic() || !Ward || Ward == this || !Ward->IsAlive() || Ward->GetTeam() != Team) { return; }
+	PaceSpeed = 0.f;
+	Order = ESROrder::Heal;
+	HealWard = Ward;
+	Waypoints.Reset();
+	Target = nullptr;
+	TargetBuilding = nullptr;
+	bReturnHomeWhenDone = false;
+	ResetProgress();
+	UE_LOG(LogSovereign, Log, TEXT("HEAL %s follows %s"), *GetLabel(), *Ward->GetLabel());
+}
+
+float ASRUnit::Heal(float Amount)
+{
+	if (!IsAlive() || Amount <= 0.f) { return 0.f; }
+	const float Before = Health;
+	Health = FMath::Min(Stats().MaxHealth, Health + Amount);
+	return Health - Before;
+}
+
+bool ASRUnit::InContact(const ASRUnit* Other) const
+{
+	return Other && FVector2D::Distance(GetPos2D(), Other->GetPos2D()) - GetRadius() - Other->GetRadius() <= USRFeelSettings::Get().MedicContactReach;
+}
+
+ASRUnit* ASRUnit::FindWounded(const FVector2D& Centre, float Radius, bool bAvoidFoes) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	TArray<ASRUnit*> Near;
+	Battle->QueryUnits(Centre, Radius, Near);
+	ASRUnit* Best = nullptr;
+	float BestScore = TNumericLimits<float>::Max();
+	for (ASRUnit* U : Near)
+	{
+		if (!U || U == this || !U->IsActive() || U->GetTeam() != Team) { continue; }
+		if (U->Stats().MaxHealth - U->GetHealth() < 0.5f) { continue; }
+		if (FVector2D::Distance(U->GetPos2D(), Centre) > Radius) { continue; }
+		if (bAvoidFoes)
+		{
+			const ASRUnit* Foe = Battle->FindNearestEnemy(U, F.MedicFleeRange);
+			if (Foe && Foe->Stats().AcquireRange > 0.f) { continue; }
+		}
+		// the worst hurt first; of two alike, the nearer
+		const float Score = U->GetHealthFrac() * 1000.f + FVector2D::Distance(U->GetPos2D(), GetPos2D()) * 0.15f;
+		if (Score < BestScore) { BestScore = Score; Best = U; }
+	}
+	return Best;
+}
+
+void ASRUnit::HealPulse()
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	ASRUnit* P = Patient.Get();
+	if (!P || !P->IsAlive() || FVector2D::Distance(GetPos2D(), P->GetPos2D()) - GetRadius() - P->GetRadius() > F.MedicContactReach + 40.f) { return; }
+	const float Got = P->Heal(F.MedicHealAmount);
+	if (Got >= 0.5f && (Team == ESRTeam::Player || Battle->IsVisibleToPlayer(P)))
+	{
+		Battle->AddHealPopup(P->GetSimPos() + FVector(0.f, 0.f, P->GetBodyHeight() + 20.f), FMath::RoundToInt(Got));
+	}
+	UE_LOG(LogSovereign, Verbose, TEXT("HEAL %s bandaged %s (+%.0f)"), *GetLabel(), *P->GetLabel(), Got);
+}
+
+bool ASRUnit::StepMedic(float Dt, FVector2D& Desired, FVector2D& FaceDir)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const FSRUnitStats& S = Stats();
+	const FVector2D Pos = GetPos2D();
+	auto Approach = [&](const FVector2D& To, float StopAt)
+	{
+		const float Dist = FVector2D::Distance(Pos, To);
+		const float Remaining = FMath::Max(Dist - StopAt, 0.f);
+		return ChaseDir(To, Dt) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 60.f);
+	};
+
+	// 1) Passive: a foe close by and it runs, whatever it was doing (it comes back to its work once clear).
+	bFleeing = false;
+	if (Stance == ESRStance::Defensive && F.MedicFleeRange > 0.f)
+	{
+		TArray<ASRUnit*> Near;
+		Battle->QueryUnits(Pos, F.MedicFleeRange, Near);
+		FVector2D Away = FVector2D::ZeroVector;
+		for (const ASRUnit* E : Near)
+		{
+			if (!E || !E->IsActive() || E->GetTeam() == Team || E->Stats().AcquireRange <= 0.f) { continue; }   // (a Scout or a Medic threatens nobody)
+			const FVector2D D = Pos - E->GetPos2D();
+			const float Dist = D.Size();
+			if (Dist > F.MedicFleeRange) { continue; }
+			Away += D.GetSafeNormal() * (1.f - Dist / F.MedicFleeRange + 0.2f);
+		}
+		if (!Away.IsNearlyZero())
+		{
+			bFleeing = true;
+			Patient = nullptr;
+			if (AttackPhase != ESRAttackPhase::Ready) { CancelAttack(); }
+			FVector2D To = Pos + Away.GetSafeNormal() * 700.f;
+			if (const USRGridSubsystem* Grid = USRGridSubsystem::Get(this)) { To = Grid->NearestWalkable(To, 12, &Pos); }
+			Desired = ChaseDir(To, Dt) * S.MaxSpeed;
+			ResetProgress();
+			return true;
+		}
+	}
+
+	// 2) Mid-bandaging: it stays down beside the patient until it is done (a patient that walks off, or falls, ends it).
+	if (AttackPhase != ESRAttackPhase::Ready)
+	{
+		ASRUnit* P = Patient.Get();
+		// (a little slack once it has knelt: the patient being nudged a step does not break off the bandaging)
+		if (!P || !P->IsAlive() || FVector2D::Distance(Pos, P->GetPos2D()) - GetRadius() - P->GetRadius() > F.MedicContactReach + 40.f) { CancelAttack(); }
+		else
+		{
+			FaceDir = (P->GetPos2D() - Pos).GetSafeNormal();
+			TickAttack(Dt, nullptr);
+			return true;
+		}
+	}
+
+	// 3) On the march it does not stop (a move order is kept).
+	const bool bMarching = (Order == ESROrder::Move || Order == ESROrder::AttackMove || Order == ESROrder::Roam) && FVector2D::Distance(Pos, Destination) > 120.f;
+	if (bMarching) { Patient = nullptr; return false; }
+
+	// 4) Who to treat: the one in hand while it still needs it, else the most hurt it may go to. Looking after a troop:
+	// that troop and the wounded round it. Otherwise: round itself, far into the fight when Assertive, close and only
+	// away from foes when Passive, none it would have to walk to when holding ground.
+	ASRUnit* Ward = Order == ESROrder::Heal ? HealWard.Get() : nullptr;
+	if (Order == ESROrder::Heal && (!Ward || !Ward->IsAlive()))
+	{
+		Order = ESROrder::Idle;
+		HealWard = nullptr;
+		Home = Pos;
+		Ward = nullptr;
+	}
+	ASRUnit* P = Patient.Get();
+	if (P && (!P->IsAlive() || P->GetHealth() >= P->Stats().MaxHealth - 0.5f)) { P = nullptr; }
+	if (!P)
+	{
+		const bool bPassive = Stance == ESRStance::Defensive;
+		if (Ward) { P = FindWounded(Ward->GetPos2D(), F.MedicWardRadius, bPassive); }
+		else if (Order == ESROrder::Idle || Order == ESROrder::Guard)
+		{
+			const float Reach = Stance == ESRStance::Aggressive ? F.MedicSeekRange : (bPassive ? F.MedicSeekRangePassive : 0.f);
+			P = Reach > 0.f ? FindWounded(Pos, Reach, bPassive) : nullptr;
+		}
+		if (!P && (Order == ESROrder::Hold || Stance == ESRStance::HoldGround))
+		{
+			// holding: only one already within touch
+			ASRUnit* Close = FindWounded(Pos, GetRadius() + 120.f + F.MedicContactReach, false);
+			P = Close && InContact(Close) ? Close : nullptr;
+		}
+	}
+	Patient = P;
+
+	// 5) Treat it: run to it, and once touching, kneel and bandage (one every Attack Interval).
+	if (P)
+	{
+		if (InContact(P))
+		{
+			FaceDir = (P->GetPos2D() - Pos).GetSafeNormal();
+			if (Cooldown <= 0.f)
+			{
+				AttackPhase = ESRAttackPhase::Windup;
+				PhaseTime = 0.f;
+			}
+		}
+		else
+		{
+			Desired = Approach(P->GetPos2D(), GetRadius() + P->GetRadius() + F.MedicContactReach * 0.3f);
+		}
+		Home = Pos;
+		return true;
+	}
+
+	// 6) Looking after a troop with nobody to treat: keep beside it.
+	if (Ward)
+	{
+		const float Dist = FVector2D::Distance(Pos, Ward->GetPos2D());
+		if (Dist > F.MedicFollowDistance) { Desired = Approach(Ward->GetPos2D(), F.MedicFollowDistance * 0.6f); }
+		else if (Velocity.SizeSquared() < FMath::Square(30.f)) { FaceDir = (Ward->GetPos2D() - Pos).GetSafeNormal(); }
+		Home = Pos;
+		return true;
+	}
+	return false;
+}
+
+void ASRUnit::OrderRoam()
+{
+	if (!IsAlive()) { return; }
+	PickRoamPoint();   // (sets the path; the order stays Roam)
+	Order = ESROrder::Roam;
+	UE_LOG(LogSovereign, Log, TEXT("ROAM %s sets out"), *GetLabel());
+}
+
+bool ASRUnit::PickRoamPoint()
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	const USRFogSubsystem* Fog = USRFogSubsystem::Get(this);
+	const FVector2D Pos = GetPos2D();
+	const FVector2D Half = F.MapHalfExtent * 0.94f;
+	// a few candidates 20-70 m off; ground never seen is worth most, then ground out of sight, then distance
+	FVector2D Best = Pos;
+	float BestScore = -1.f;
+	for (int32 i = 0; i < 12; ++i)
+	{
+		const float A = FMath::FRandRange(0.f, 2.f * PI), R = FMath::FRandRange(2000.f, 7000.f);
+		FVector2D P(FMath::Clamp(Pos.X + FMath::Cos(A) * R, -Half.X, Half.X), FMath::Clamp(Pos.Y + FMath::Sin(A) * R, -Half.Y, Half.Y));
+		if (Grid) { P = Grid->NearestWalkable(P); }
+		if (Battle && (Battle->IsDeepWater(P) || Battle->IsSteep(P))) { continue; }
+		float Score = FVector2D::Distance(P, Pos) * 0.2f + FMath::FRandRange(0.f, 600.f);
+		if (Fog && Team == ESRTeam::Player)
+		{
+			if (!Fog->IsExplored(P)) { Score += 4000.f; }
+			else if (!Fog->IsVisible(P)) { Score += 1500.f; }
+		}
+		if (Score > BestScore) { BestScore = Score; Best = P; }
+	}
+	if (BestScore < 0.f) { return false; }
+	TArray<FVector2D> Path;
+	if (!Grid || !Grid->FindPath(Pos, Best, Path) || Path.Num() == 0) { Path.Reset(); Path.Add(Best); }
+	OrderMovePath(Path, false);
+	Order = ESROrder::Roam;
+	RoamLegTime = 0.f;
+	return true;
+}
+
+void ASRUnit::FleeHome()
+{
+	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	const ASRBuilding* Castle = Eco ? Eco->GetCastle(Team) : nullptr;
+	if (!Castle) { OrderStop(); return; }
+	const FVector Gate = Castle->GetGatePoint();
+	TArray<FVector2D> Path;
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	if (!Grid || !Grid->FindPath(GetPos2D(), FVector2D(Gate.X, Gate.Y), Path) || Path.Num() == 0) { Path.Reset(); Path.Add(FVector2D(Gate.X, Gate.Y)); }
+	OrderMovePath(Path, false);
+	SetHome(Path.Last());
+	UE_LOG(LogSovereign, Log, TEXT("ROAM %s struck: running home"), *GetLabel());
+	if (Team == ESRTeam::Player)
+	{
+		if (USREconomySubsystem* E = USREconomySubsystem::Get(this))
+		{
+			const FVector2D At = GetPos2D();
+			E->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRUnit", "ScoutFlees", "Your {0} was attacked: running home"), FText::FromString(Stats().DisplayName)), &At);
+		}
+	}
 }
 
 bool ASRUnit::GuardWardPos(FVector2D& Out) const
@@ -268,7 +552,11 @@ void ASRUnit::StepSim(float Dt)
 	FVector2D Desired = FVector2D::ZeroVector;
 	FVector2D FaceDir = FVector2D::ZeroVector; // zero = face the direction of travel
 
-	if (Order == ESROrder::Build && AttackPhase == ESRAttackPhase::Ready)
+	if (IsMedic() && StepMedic(Dt, Desired, FaceDir))
+	{
+		// (the Medic's own: running from foes, healing, following its ward, going to the wounded)
+	}
+	else if (Order == ESROrder::Build && AttackPhase == ESRAttackPhase::Ready)
 	{
 		StepBuild(Dt, Desired, FaceDir);
 	}
@@ -278,6 +566,15 @@ void ASRUnit::StepSim(float Dt)
 		if (T) { FaceDir = (T->GetPos2D() - Pos).GetSafeNormal(); }
 		else if (TB) { FaceDir = (TB->ClosestPointOnFootprint(Pos, 0.f) - Pos).GetSafeNormal(); }
 		TickAttack(Dt, T);
+	}
+	else if (!T && !TB && S.MinRange > 0.f && !bHolding && Order != ESROrder::Move && TooCloseThreat(Pos))
+	{
+		// A catapult with a foe right under it and nothing farther off to throw at: it cannot lob that close, so it
+		// rolls back out to where it can, then takes up the fight again (rather than standing there doing nothing).
+		// (with anything in reach beyond its minimum range it stays and shoots that instead)
+		const ASRUnit* Threat = TooCloseThreat(Pos);
+		Desired = ChaseDir(Pos + (Pos - Threat->GetPos2D()).GetSafeNormal() * (S.MinRange + 200.f), Dt) * S.MaxSpeed;
+		ResetProgress();
 	}
 	else if (TB)
 	{
@@ -292,7 +589,7 @@ void ASRUnit::StepSim(float Dt)
 			if (!bHolding)
 			{
 				const float Remaining = FMath::Max(Dist - Reach * 0.85f, 0.f);
-				Desired = ChaseDir(TB->ClosestPointOnFootprint(Pos, GetRadius() + 10.f), Dt) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
+				Desired = ChaseDir(TB->ClosestPointOnFootprint(Pos, GetRadius() + 10.f), Dt, TB) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
 			}
 		}
 		else
@@ -330,7 +627,7 @@ void ASRUnit::StepSim(float Dt)
 			{
 				BeginSwing();
 			}
-			else if (S.bRanged && S.KeepDistance > 0.f && Cooldown > 0.2f)
+			else if (S.bRanged && S.KeepDistance > 0.f && Cooldown > 0.2f && !bHolding)
 			{
 				// Between shots, give ground to melee attackers that get too close (classic kiting).
 				const ASRUnit* Threat = Battle->FindNearestEnemy(this, S.KeepDistance + GetRadius());
@@ -360,8 +657,9 @@ void ASRUnit::StepSim(float Dt)
 			if (GuardWardPos(Ward) && FVector2D::DistSquared(Pos, Ward) > 1.f) { FaceDir = (Pos - Ward).GetSafeNormal(); }   // facing out, watching
 		}
 	}
-	else if (Order == ESROrder::Move || Order == ESROrder::AttackMove)
+	else if (Order == ESROrder::Move || Order == ESROrder::AttackMove || Order == ESROrder::Roam)
 	{
+		if (Order == ESROrder::Roam) { RoamLegTime += Dt; }
 		const float Top = PaceSpeed > 0.f ? FMath::Min(PaceSpeed, S.MaxSpeed) : S.MaxSpeed;   // a group keeps its slowest pace
 		const FVector2D To = Destination - Pos;
 		const float Dist = To.Size();
@@ -373,18 +671,35 @@ void ASRUnit::StepSim(float Dt)
 		const bool bGiveUp = NoProgressTime > (Dist < 260.f ? F.GiveUpTimeNear : F.GiveUpTimeFar);
 		if (Waypoints.Num() > 0)
 		{
-			// A corner on the way round a building: cut it at a run, no braking, and head for the next point.
-			if (Dist <= FMath::Max(F.ArriveTolerance, 55.f) || bGiveUp)
+			// A corner on the way round something: cut it at a run, no braking, and head for the next point.
+			// Held up on the way to one (a wall the route clipped, a new building, a crowd): plan the rest again from
+			// here. Only when that has been tried too often is the corner skipped, as a last resort.
+			if (Dist <= FMath::Max(F.ArriveTolerance, 55.f))
 			{
 				Destination = Waypoints[0];
 				Waypoints.RemoveAt(0);
 				ResetProgress();
 			}
+			else if (NoProgressTime > 0.9f && !Repath())
+			{
+				if (bGiveUp)
+				{
+					Destination = Waypoints[0];
+					Waypoints.RemoveAt(0);
+					ResetProgress();
+				}
+			}
 			Desired = (Destination - Pos).GetSafeNormal() * Top;
 		}
-		else if (Dist <= F.ArriveTolerance || bGiveUp)
+		else if (bGiveUp && Dist > 260.f && Repath())
 		{
-			Order = ESROrder::Idle;
+			// stopped well short of where it was sent: another way round, rather than standing at the obstacle
+			Desired = (Destination - Pos).GetSafeNormal() * Top;
+		}
+		else if (Dist <= F.ArriveTolerance || bGiveUp || (Order == ESROrder::Roam && RoamLegTime > 40.f))
+		{
+			// roaming: on to the next spot (a leg that drags on, stuck somewhere, is given up)
+			if (Order != ESROrder::Roam || !PickRoamPoint()) { Order = ESROrder::Idle; }
 		}
 		else
 		{
@@ -450,12 +765,15 @@ void ASRUnit::UpdateTargeting(float Dt)
 		if (Order == ESROrder::AttackTarget) { Order = ESROrder::Idle; Home = Pos; }
 	}
 
+	// A Medic fights nobody, ever.
+	if (IsMedic()) { Target = nullptr; TargetBuilding = nullptr; return; }
 	// Explicit orders are obeyed, not second-guessed. Builders never pick a fight of their own.
-	if (Order == ESROrder::Move || Order == ESROrder::AttackTarget || Order == ESROrder::Build) { return; }
+	if (Order == ESROrder::Move || Order == ESROrder::AttackTarget || Order == ESROrder::Build || Order == ESROrder::Roam) { return; }
 	if (S.bBuilder) { Target = nullptr; TargetBuilding = nullptr; return; }
 
-	// Defensive stance: a short chase, then back to the post.
-	if (Stance == ESRStance::Defensive && Order != ESROrder::Guard && (T || TargetBuilding.IsValid()) && FVector2D::Distance(Pos, Home) > F.DefensiveChaseDistance)
+	// Defensive stance: chase out to the edge of its sight from its post, then back to the post.
+	const float DefensiveLeash = FMath::Max(F.DefensiveChaseDistance, S.Sight());
+	if (Stance == ESRStance::Defensive && Order != ESROrder::Guard && (T || TargetBuilding.IsValid()) && FVector2D::Distance(Pos, Home) > DefensiveLeash)
 	{
 		Target = nullptr;
 		TargetBuilding = nullptr;
@@ -507,7 +825,10 @@ void ASRUnit::UpdateTargeting(float Dt)
 	RetargetTimer = FMath::FRandRange(0.18f, 0.3f);
 
 	const bool bHold = Order == ESROrder::Hold || Stance == ESRStance::HoldGround;
-	const float Range = bAuto ? 1.e7f : (bHold ? S.AttackRange + GetRadius() * 2.f + 40.f : S.AcquireRange);
+	// what it notices: everything in its line of sight (Hold Ground: only what is in reach; a unit with no acquire
+	// range of its own, the Scout, picks no fights)
+	const float SightReach = S.AcquireRange > 0.f ? FMath::Max(S.AcquireRange, S.Sight()) : 0.f;
+	const float Range = bAuto ? 1.e7f : (bHold ? S.AttackRange + GetRadius() * 2.f + 40.f : SightReach);
 	const double Now = GetWorld()->GetTimeSeconds();
 
 	if (T)
@@ -515,19 +836,20 @@ void ASRUnit::UpdateTargeting(float Dt)
 		// (a hard-to-notice target, the Scout, slips away at a shorter distance; a unit told to hold or with no
 		// acquire range of its own lets go as soon as it is no longer being hit)
 		const bool bProvoked = (Now - LastProvokedTime) < 4.0;
-		if (!bProvoked && FVector2D::Distance(Pos, T->GetPos2D()) > Range * 1.35f * (bAuto ? 1.f : T->GetNoticeScale()))
+		// (Aggressive runs a foe down well past its sight; Defensive's leash above brings it home anyway)
+		const float Keep = Stance == ESRStance::Aggressive && !bHold ? 2.f : 1.35f;
+		if (!bProvoked && FVector2D::Distance(Pos, T->GetPos2D()) > Range * Keep * (bAuto ? 1.f : T->GetNoticeScale()))
 		{
 			Target = nullptr;
 			T = nullptr;
 		}
 	}
 
-	ASRUnit* Nearest = Battle->FindNearestEnemy(this, Range);
+	ASRUnit* Nearest = Battle->FindNearestEnemy(this, Range, S.MinRange);
 	if (bGuarding && Nearest && FVector2D::Distance(Nearest->GetPos2D(), GuardWard) > F.GuardLeash * 0.85f) { Nearest = nullptr; }   // not near the ward: not our business
 	// A catapult cannot lob at what is right under it.
 	if (S.MinRange > 0.f)
 	{
-		if (Nearest && FVector2D::Distance(Pos, Nearest->GetPos2D()) < S.MinRange) { Nearest = nullptr; }
 		if (T && FVector2D::Distance(Pos, T->GetPos2D()) < S.MinRange) { Target = nullptr; T = nullptr; }
 	}
 	// Siege: a building in sight comes before troops.
@@ -558,9 +880,9 @@ void ASRUnit::UpdateTargeting(float Dt)
 	{
 		if (!TargetBuilding.IsValid() && (Order == ESROrder::AttackMove || Order == ESROrder::Idle || Order == ESROrder::Hold))
 		{
-			// In sight and not told otherwise (idle, attack-moving): go for it, like a troop.
-			const bool bSeekBuildings = Stance == ESRStance::Aggressive || Order == ESROrder::AttackMove;
-			const float BuildingRange = bHold ? S.AttackRange + GetRadius() + 20.f : (bSeekBuildings ? S.AcquireRange : S.AttackRange + 200.f);
+			// In sight and not told otherwise (idle, attack-moving): go for it, like a troop. Defensive goes too (its leash
+			// brings it back); Hold Ground only strikes a wall in reach.
+			const float BuildingRange = bHold ? S.AttackRange + GetRadius() + 20.f : SightReach;
 			TargetBuilding = Battle->FindNearestEnemyBuilding(this, BuildingRange);
 		}
 	}
@@ -594,7 +916,7 @@ void ASRUnit::StepBuild(float Dt, FVector2D& Desired, FVector2D& FaceDir)
 	{
 		bWorking = false;
 		const float Remaining = FMath::Max(Dist - Reach * 0.6f, 0.f);
-		Desired = ChaseDir(B->ClosestPointOnFootprint(Pos, GetRadius() + 15.f), Dt) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
+		Desired = ChaseDir(B->ClosestPointOnFootprint(Pos, GetRadius() + 15.f), Dt, B) * FMath::Min(S.MaxSpeed, FMath::Sqrt(2.f * S.Deceleration * 0.6f * Remaining) + 40.f);
 		return;
 	}
 	if (!bWorking) { WorkClock = FMath::FRandRange(0.f, 1.f); }
@@ -662,6 +984,23 @@ void ASRUnit::TickAttack(float Dt, ASRUnit* T)
 	const FSRUnitStats& S = Stats();
 	PhaseTime += Dt;
 
+	if (IsMedic())
+	{
+		// the heal gesture: staff up (the heal goes out at its top), staff down
+		if (AttackPhase == ESRAttackPhase::Windup && PhaseTime >= S.WindupTime)
+		{
+			HealPulse();
+			AttackPhase = ESRAttackPhase::Recovery;
+			PhaseTime = 0.f;
+			Cooldown = FMath::Max(0.f, S.AttackInterval - S.WindupTime);
+		}
+		else if (AttackPhase == ESRAttackPhase::Recovery && PhaseTime >= S.RecoveryTime)
+		{
+			AttackPhase = ESRAttackPhase::Ready;
+			PhaseTime = 0.f;
+		}
+		return;
+	}
 	if (AttackPhase == ESRAttackPhase::Windup)
 	{
 		ASRBuilding* B = T ? nullptr : TargetBuilding.Get();
@@ -733,6 +1072,7 @@ void ASRUnit::ReceiveDamage(float Amount, ASRUnit* From, const FVector2D& HitDir
 
 	Health = FMath::Max(0.f, Health - Amount);
 	LastDamagedTime = Now;
+	if (Order == ESROrder::Roam && Health > 0.f && (!From || From->GetTeam() != Team)) { FleeHome(); }   // (a tower's arrow has no shooter)
 	if (Team == ESRTeam::Player && From)
 	{
 		if (USREconomySubsystem* Eco = USREconomySubsystem::Get(this)) { Eco->NotifyUnitAttacked(this); }
@@ -761,9 +1101,9 @@ void ASRUnit::ReceiveDamage(float Amount, ASRUnit* From, const FVector2D& HitDir
 	if (From && From->IsAlive() && From->GetTeam() != Team)
 	{
 		LastProvokedTime = Now;
-		if (!Target.IsValid() && (Order == ESROrder::Idle || Order == ESROrder::AttackMove))
+		if (!Target.IsValid() && !IsMedic() && (Order == ESROrder::Idle || Order == ESROrder::AttackMove))
 		{
-			Target = From; // hit back, even if the shooter is outside acquire range
+			Target = From; // hit back, even if the shooter is outside acquire range (a Medic never does)
 		}
 		TArray<ASRUnit*> Near;
 		Battle->QueryUnits(GetPos2D(), F.AlertRadius, Near);
@@ -899,8 +1239,14 @@ bool ASRUnit::CanStep(const FVector2D& Step) const
 	// Probe a body-radius ahead: walls / rocks / trunks, then ledges and drops in the ground itself.
 	const FVector2D Probe = Pos + Step + Dir * GetRadius() * 0.8f;
 	if (Battle->IsPathBlocked(SimPos, FVector(Probe.X, Probe.Y, SimPos.Z))) { return false; }
-	// deep water is a wall (one already in it may always step out)
-	if (!Stats().bWaterWalker && Battle->IsDeepWater(Probe) && !Battle->IsDeepWater(Pos)) { return false; }
+	// deep water is a wall (one already in it may always step out). The spot stepped onto is asked as well as the probe
+	// ahead of it: along a bank the probe can clear a water cell's corner that the step itself lands in.
+	const FVector2D Next = Pos + Step;
+	if (!Stats().bWaterWalker && !Battle->IsDeepWater(Pos) && (Battle->IsDeepWater(Probe) || Battle->IsDeepWater(Next))) { return false; }
+	// and so is ground too steep to walk. The terrain is a smooth heightfield: a mountainside rises less than a step
+	// across this short probe, so nothing below would stop a troop that is shoved, or chasing, from walking straight
+	// up a slope the grid routes everyone round. (One already on it may always step off.)
+	if (!Battle->IsSteep(Pos) && (Battle->IsSteep(Probe) || Battle->IsSteep(Next))) { return false; }
 
 	float ProbeZ = SimPos.Z;
 	if (!Battle->SampleGround(Probe, SimPos.Z, ProbeZ)) { return false; } // off the edge of the world
@@ -949,7 +1295,10 @@ void ASRUnit::Nudge(const FVector2D& Delta)
 	const FVector To(SimPos.X + Delta.X, SimPos.Y + Delta.Y, SimPos.Z);
 	// a shove never pushes anyone into deep water
 	const FVector2D Edge = FVector2D(To) + Delta.GetSafeNormal() * GetRadius() * 0.6f;
-	if (!Stats().bWaterWalker && Battle->IsDeepWater(Edge) && !Battle->IsDeepWater(GetPos2D())) { return; }
+	// (the spot shoved onto is asked as well as the edge beyond it: a shove along a bank can clear a water cell's corner)
+	if (!Stats().bWaterWalker && !Battle->IsDeepWater(GetPos2D()) && (Battle->IsDeepWater(Edge) || Battle->IsDeepWater(FVector2D(To)))) { return; }
+	// nor onto ground too steep to walk (a mountainside is no wall the trace below would find)
+	if (!Battle->IsSteep(GetPos2D()) && (Battle->IsSteep(Edge) || Battle->IsSteep(FVector2D(To)))) { return; }
 	if (Battle->IsPathBlocked(SimPos, To)) { return; }
 	// nor off a cliff or up a ledge: the ground under the shove must be ground this troop could have stepped onto
 	// (the heights and the mountains are tall enough that a shove over the edge would drop a troop out of the fight)
@@ -962,13 +1311,25 @@ void ASRUnit::Nudge(const FVector2D& Delta)
 
 void ASRUnit::FollowGround(float Dt)
 {
+	// Standing still on ground it has settled onto: the terrain never changes (buildings are not ground), so the
+	// last sample still holds. Most of an army is standing most of the time; this is its only trace per frame.
+	const FVector2D Pos = GetPos2D();
+	if (bGroundSettled && FVector2D::DistSquared(Pos, GroundSampleXY) < 0.01f) { return; }
+	bGroundSettled = false;
+	GroundSampleXY = Pos;
+
 	float GroundZ = SimPos.Z;
-	if (Battle->SampleGround(GetPos2D(), SimPos.Z, GroundZ))
+	if (Battle->SampleGround(Pos, SimPos.Z, GroundZ))
 	{
 		// No step ever takes a troop down more than MaxDropHeight, so ground far below is a seam between two terrain
 		// meshes seen for a frame (a ramp against its cliff), not somewhere to fall: stay at this height.
 		if (SimPos.Z - GroundZ > USRFeelSettings::Get().MaxDropHeight + 30.f) { return; }
 		SimPos.Z = FMath::FInterpTo(SimPos.Z, GroundZ, Dt, 20.f);
+		if (FMath::Abs(SimPos.Z - GroundZ) < 0.05f)
+		{
+			SimPos.Z = GroundZ;
+			bGroundSettled = true;
+		}
 	}
 }
 
@@ -990,23 +1351,50 @@ void ASRUnit::StrikeBuilding(ASRBuilding* B)
 	}
 }
 
-FVector2D ASRUnit::ChaseDir(const FVector2D& Goal, float Dt)
+FVector2D ASRUnit::ChaseDir(const FVector2D& Goal, float Dt, const ASRBuilding* Toward)
 {
 	const FVector2D Pos = GetPos2D();
 	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
 	ChaseRepath -= Dt;
-	if (!Grid || FVector2D::DistSquared(Pos, Goal) < FMath::Square(250.f) || Grid->CanWalkStraight(Pos, Goal))
+	// Right on top of it, or nothing in between: straight there. (The straight walk is checked even at close range:
+	// a wall's foot can be a few steps from a troop standing on the cliff above it.)
+	if (!Grid || FVector2D::DistSquared(Pos, Goal) < FMath::Square(120.f) || Grid->CanWalkStraight(Pos, Goal))
 	{
 		ChasePath.Reset();
 		return (Goal - Pos).GetSafeNormal();
 	}
-	if (ChasePath.Num() == 0 || ChaseRepath <= 0.f || FVector2D::DistSquared(Goal, ChaseGoal) > FMath::Square(300.f))
+	// A building does not move: its route is kept until the troop is held up or the timer runs out. A troop being
+	// chased does: a fresh route when it has gone 3 m from where the last one led.
+	const bool bStale = Toward ? ChaseBuilding.Get() != Toward : FVector2D::DistSquared(Goal, ChaseGoal) > FMath::Square(300.f);
+	if (ChasePath.Num() == 0 || ChaseRepath <= 0.f || bStale)
 	{
 		ChasePath.Reset();
-		Grid->FindPath(Pos, Goal, ChasePath);
+		if (Toward) { Grid->FindPathToBuilding(Pos, Toward, GetRadius() + 10.f, ChasePath); }
+		else { Grid->FindPath(Pos, Goal, ChasePath); }
 		ChaseGoal = Goal;
-		ChaseRepath = FMath::FRandRange(1.0f, 1.6f);
+		ChaseBuilding = Toward;
+		ChaseRepath = Toward ? FMath::FRandRange(2.2f, 3.0f) : FMath::FRandRange(1.0f, 1.6f);
 	}
 	while (ChasePath.Num() > 1 && FVector2D::DistSquared(Pos, ChasePath[0]) < FMath::Square(70.f)) { ChasePath.RemoveAt(0); }
 	return ChasePath.Num() > 0 ? (ChasePath[0] - Pos).GetSafeNormal() : (Goal - Pos).GetSafeNormal();
+}
+
+FString ASRUnit::DescribeState() const
+{
+	const FVector2D Pos = GetPos2D();
+	FString Tgt = TEXT("none");
+	if (const ASRUnit* T = Target.Get()) { Tgt = FString::Printf(TEXT("unit %s d=%.0f"), *T->GetLabel(), FVector2D::Distance(Pos, T->GetPos2D())); }
+	else if (const ASRBuilding* B = TargetBuilding.Get()) { Tgt = FString::Printf(TEXT("bld %s wall=%.0f"), *B->GetDisplayName(), B->DistanceToFootprint(Pos)); }
+	return FString::Printf(TEXT("%s (%.0f,%.0f) order=%d dest=(%.0f,%.0f) wp=%d tgt=[%s] phase=%d cd=%.1f v=%.0f stuck=%.1f"),
+		*Label, Pos.X, Pos.Y, int32(Order), Destination.X, Destination.Y, Waypoints.Num(), *Tgt, int32(AttackPhase), Cooldown, Velocity.Size(), NoProgressTime);
+}
+
+const ASRUnit* ASRUnit::TooCloseThreat(const FVector2D& Pos) const
+{
+	// (only a foe that can hurt it up close counts: a lone Builder or Scout wandering past is not worth fleeing)
+	const FSRUnitStats& S = Stats();
+	if (S.MinRange <= 0.f || !Battle) { return nullptr; }
+	const ASRUnit* Near = Battle->FindNearestEnemy(this, S.MinRange * 0.85f);
+	if (!Near || Near->GetUnitType() == ESRUnitType::Builder || Near->GetUnitType() == ESRUnitType::Scout || Near->GetUnitType() == ESRUnitType::Medic) { return nullptr; }
+	return Near;
 }

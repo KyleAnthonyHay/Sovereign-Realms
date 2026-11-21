@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_LegR",
+ "faces": 1029,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1414,
+   -0.1375,
+   -0.375
+  ],
+  [
+   0.0914,
+   0.1375,
+   0.1274
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegR",
+ "triangles": 2058,
+ "blocks": 111
+}

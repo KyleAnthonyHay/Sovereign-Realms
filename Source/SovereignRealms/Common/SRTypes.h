@@ -29,7 +29,9 @@ enum class ESRBuildingType : uint8
 	Stable,       // trains Horse Riders
 	Workshop,     // builds Catapults
 	Granary,      // holds food on top of the castle's stores
-	Treasury      // holds gold on top of the castle's stores
+	Treasury,     // holds gold on top of the castle's stores
+	RelicTower,   // raised on a relic (one of the map's ancient ruins): two archers, a very long reach and sight
+	SiegeTower    // a stone-thrower on a squat tower: slow, heavy shots that hurt everyone where they land
 };
 
 /** The build menu's tabs. */
@@ -55,8 +57,8 @@ enum class ESRBuildingState : uint8
 UENUM(BlueprintType)
 enum class ESRStance : uint8
 {
-	Aggressive,   // chase anything in acquire range, as far as it takes
-	Defensive,    // engage what comes close, give up a short chase and return to position
+	Aggressive,   // chase anything in acquire range, as far as it takes     (a Medic: Assertive, into the fight to heal)
+	Defensive,    // engage what comes close, give up a short chase and return to position   (a Medic: Passive, runs from foes)
 	HoldGround    // never move to fight; strike / shoot only what is in reach
 };
 
@@ -133,6 +135,14 @@ struct FSRCastleLevel
 	/** The most gold / food the kingdom can hold; income beyond it is lost. */
 	UPROPERTY(EditAnywhere, Config, Category = "Castle")
 	FSRCost Storage = FSRCost(600, 600);
+
+	/** Archers on the castle's corner pillars, each loosing at a foe in reach every Attack Interval. */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "0", ClampMax = "4"))
+	int32 Archers = 1;
+
+	/** Damage of each archer's arrow. */
+	UPROPERTY(EditAnywhere, Config, Category = "Castle", meta = (ClampMin = "0"))
+	float ArrowDamage = 36.f;
 };
 
 /** One level of a watchtower (Sovereign Feel > Buildings > TowerLevels; index 0 is level 1). */
@@ -186,6 +196,22 @@ struct FSRStoreLevel
 	/** How much of its resource it holds at this level. */
 	UPROPERTY(EditAnywhere, Config, Category = "Store", meta = (ClampMin = "0")) int32 Capacity = 400;
 	UPROPERTY(EditAnywhere, Config, Category = "Store", meta = (ClampMin = "1")) float Health = 900.f;
+	/** The Citadel level needed before a storehouse can be raised to this level (0: none). */
+	UPROPERTY(EditAnywhere, Config, Category = "Store", meta = (ClampMin = "0")) int32 RequiredCastleLevel = 0;
+};
+
+/** One level of a farm (index 0 is level 1): richer harvests and more room for troops. */
+USTRUCT()
+struct FSRFarmLevel
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, Config, Category = "Farm") FSRCost UpgradeCost = FSRCost(0, 0);
+	UPROPERTY(EditAnywhere, Config, Category = "Farm", meta = (ClampMin = "1")) float UpgradeTime = 30.f;
+	/** Food each harvest brings (harvests come every FarmPayoutInterval). */
+	UPROPERTY(EditAnywhere, Config, Category = "Farm", meta = (ClampMin = "0")) int32 FoodPerPayout = 14;
+	/** Troops it houses. */
+	UPROPERTY(EditAnywhere, Config, Category = "Farm", meta = (ClampMin = "0")) int32 Housing = 4;
+	UPROPERTY(EditAnywhere, Config, Category = "Farm", meta = (ClampMin = "1")) float Health = 1000.f;
 };
 
 UENUM()
@@ -196,16 +222,17 @@ enum class ESRUnitType : uint8
 	Horseman,     // fast cavalry: a charge doubles its first blow
 	Catapult,     // slow siege engine: long range, splash, wrecks buildings
 	Builder,      // trained at the castle: raises buildings outside the castle's reach, repairs; does not fight
-	Scout         // trained at the castle (level 3, one at a time): very fast, sees far, hard to notice, weak in a fight
+	Scout,        // trained at the castle (level 3, one at a time): very fast, sees far, hard to notice, weak in a fight
+	Medic         // trained at the barracks, dear: heals its own side's troops round it; never fights
 };
 
 /** How many troop types there are (arrays indexed by ESRUnitType). */
-constexpr int32 SRNumUnitTypes = 6;
+constexpr int32 SRNumUnitTypes = 7;
 
 /** Every troop type, in recruit-menu order. */
 inline const TArray<ESRUnitType>& SRAllUnitTypes()
 {
-	static const TArray<ESRUnitType> Types = { ESRUnitType::Shieldbearer, ESRUnitType::Archer, ESRUnitType::Horseman, ESRUnitType::Catapult, ESRUnitType::Builder, ESRUnitType::Scout };
+	static const TArray<ESRUnitType> Types = { ESRUnitType::Shieldbearer, ESRUnitType::Archer, ESRUnitType::Horseman, ESRUnitType::Catapult, ESRUnitType::Builder, ESRUnitType::Scout, ESRUnitType::Medic };
 	return Types;
 }
 
@@ -298,6 +325,22 @@ struct FSRBuildingStats
 	/** Height (cm) arrows leave from. */
 	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0"))
 	float MuzzleHeight = 700.f;
+
+	/** Stones instead of arrows: each lands on the target's spot and hurts every foe within this radius (cm). 0 = arrows. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0"))
+	float SplashRadius = 0.f;
+
+	/** It cannot hit what is closer than this (cm): a stone-thrower's arc. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0"))
+	float MinRange = 0.f;
+
+	/** Height (cm) the second archer shoots from (a lower gallery); 0 = the same as Muzzle Height. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "0"))
+	float SecondMuzzleHeight = 0.f;
+
+	/** Archers on top: each loosing at a target in reach every Attack Interval. */
+	UPROPERTY(EditAnywhere, Config, Category = "Building|Defence", meta = (ClampMin = "1", ClampMax = "4"))
+	int32 Archers = 1;
 };
 
 
@@ -311,7 +354,9 @@ enum class ESROrder : uint8
 	AttackTarget, // chase and attack one specific unit (or building)
 	Hold,         // stand here; strike only what is in reach (Hold Ground stance, or the H key)
 	Build,        // builders: walk to a building site (or a damaged building) and work on it
-	Guard         // keep close to a Builder or a building of our own; fight what comes near it, never chase far
+	Guard,        // keep close to a Builder or a building of our own; fight what comes near it, never chase far
+	Roam,         // (the Scout) wander from place to place, unexplored ground first; struck, it runs home to the castle
+	Heal          // (the Medic) keep beside one troop of our own, following it, and heal everyone in reach
 };
 
 enum class ESRAttackPhase : uint8

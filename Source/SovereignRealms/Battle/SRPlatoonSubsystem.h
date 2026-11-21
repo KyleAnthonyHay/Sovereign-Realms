@@ -55,6 +55,7 @@ struct FSRPlatoonInfo
 	int32 Catapults = 0;
 	int32 Builders = 0;
 	int32 Scouts = 0;
+	int32 Medics = 0;
 	/** Mean health fraction of the living members. */
 	float Health = 1.f;
 	/** Members fighting right now. */

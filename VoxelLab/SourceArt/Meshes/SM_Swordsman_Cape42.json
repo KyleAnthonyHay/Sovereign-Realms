@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_Cape42",
+ "faces": 439,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.125,
+   -0.2595,
+   -0.2573
+  ],
+  [
+   0.1323,
+   0.1472,
+   0.0061
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.575,
+  0.25278,
+  0.6
+ ],
+ "part": "Cape42",
+ "triangles": 878,
+ "blocks": 40
+}

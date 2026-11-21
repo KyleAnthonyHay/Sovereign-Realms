@@ -1,0 +1,11566 @@
+{
+ "instances": [
+  {
+   "mesh": "SM_Castle",
+   "pos": [
+    -75.562,
+    -1.6,
+    -0.01
+   ],
+   "yaw": 0.0,
+   "scale": 0.8,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_TownHall",
+   "pos": [
+    -58.287,
+    -1.75,
+    -0.01
+   ],
+   "yaw": 0.0,
+   "scale": 0.85,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_BarracksYard",
+   "pos": [
+    -37.112,
+    3.75,
+    -0.01
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_TrainingDummy",
+   "pos": [
+    -33.362,
+    2.0,
+    0.125
+   ],
+   "yaw": -15.0,
+   "scale": 1.0,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_TrainingDummy",
+   "pos": [
+    -31.362,
+    0.25,
+    0.125
+   ],
+   "yaw": -20.0,
+   "scale": 1.0,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_TrainingDummy",
+   "pos": [
+    -30.112,
+    -2.0,
+    0.125
+   ],
+   "yaw": -28.0,
+   "scale": 1.0,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_ArcheryHall",
+   "pos": [
+    -10.537,
+    1.15,
+    -0.01
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_WatchTower",
+   "pos": [
+    11.788,
+    1.25,
+    -0.01
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_MineCliff",
+   "pos": [
+    32.163,
+    -0.5,
+    -0.01
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_Farmstead",
+   "pos": [
+    58.663,
+    3.875,
+    -0.01
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.202,
+    -3.11,
+    0.25
+   ],
+   "yaw": 80.1,
+   "scale": 1.026,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.23,
+    -2.136,
+    0.25
+   ],
+   "yaw": 170.7,
+   "scale": 1.092,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.188,
+    -1.167,
+    0.25
+   ],
+   "yaw": 281.8,
+   "scale": 0.942,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.213,
+    -0.097,
+    0.25
+   ],
+   "yaw": 173.3,
+   "scale": 0.937,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.227,
+    0.853,
+    0.25
+   ],
+   "yaw": 273.7,
+   "scale": 0.988,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.093,
+    1.841,
+    0.25
+   ],
+   "yaw": 89.3,
+   "scale": 1.052,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.178,
+    2.865,
+    0.25
+   ],
+   "yaw": 6.8,
+   "scale": 0.937,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    49.194,
+    3.875,
+    0.25
+   ],
+   "yaw": 1.3,
+   "scale": 0.977,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.121,
+    -3.171,
+    0.25
+   ],
+   "yaw": 84.6,
+   "scale": 0.903,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.12,
+    -2.066,
+    0.25
+   ],
+   "yaw": 185.1,
+   "scale": 1.016,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.149,
+    -1.08,
+    0.25
+   ],
+   "yaw": 273.2,
+   "scale": 0.902,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.183,
+    -0.059,
+    0.25
+   ],
+   "yaw": 95.0,
+   "scale": 0.915,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.176,
+    0.849,
+    0.25
+   ],
+   "yaw": -11.6,
+   "scale": 0.902,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.106,
+    1.853,
+    0.25
+   ],
+   "yaw": 279.2,
+   "scale": 1.013,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.186,
+    2.811,
+    0.25
+   ],
+   "yaw": 177.1,
+   "scale": 1.026,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    50.198,
+    3.885,
+    0.25
+   ],
+   "yaw": -5.3,
+   "scale": 0.936,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.152,
+    -3.159,
+    0.25
+   ],
+   "yaw": 9.4,
+   "scale": 1.061,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.11,
+    -2.085,
+    0.25
+   ],
+   "yaw": 258.4,
+   "scale": 0.927,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.191,
+    -1.15,
+    0.25
+   ],
+   "yaw": 184.5,
+   "scale": 1.028,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.177,
+    -0.067,
+    0.25
+   ],
+   "yaw": 278.0,
+   "scale": 0.906,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.231,
+    0.865,
+    0.25
+   ],
+   "yaw": 188.9,
+   "scale": 1.084,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.201,
+    1.906,
+    0.25
+   ],
+   "yaw": 78.2,
+   "scale": 0.955,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.207,
+    2.945,
+    0.25
+   ],
+   "yaw": 96.3,
+   "scale": 0.923,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    51.198,
+    3.855,
+    0.25
+   ],
+   "yaw": 79.9,
+   "scale": 0.935,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.172,
+    -3.129,
+    0.25
+   ],
+   "yaw": 266.4,
+   "scale": 1.019,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.146,
+    -2.087,
+    0.25
+   ],
+   "yaw": 168.2,
+   "scale": 1.018,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.175,
+    -1.187,
+    0.25
+   ],
+   "yaw": 93.2,
+   "scale": 1.09,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.119,
+    -0.136,
+    0.25
+   ],
+   "yaw": 278.8,
+   "scale": 1.089,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.189,
+    0.854,
+    0.25
+   ],
+   "yaw": 178.9,
+   "scale": 1.007,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.188,
+    1.935,
+    0.25
+   ],
+   "yaw": 168.2,
+   "scale": 1.04,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.221,
+    2.857,
+    0.25
+   ],
+   "yaw": 1.7,
+   "scale": 0.906,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    52.206,
+    3.873,
+    0.25
+   ],
+   "yaw": 3.9,
+   "scale": 1.056,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.096,
+    -3.168,
+    0.25
+   ],
+   "yaw": 182.6,
+   "scale": 0.973,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.132,
+    -2.191,
+    0.25
+   ],
+   "yaw": 88.3,
+   "scale": 1.088,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.097,
+    -1.111,
+    0.25
+   ],
+   "yaw": 101.3,
+   "scale": 1.061,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.123,
+    -0.059,
+    0.25
+   ],
+   "yaw": -4.5,
+   "scale": 1.038,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.13,
+    0.846,
+    0.25
+   ],
+   "yaw": 85.1,
+   "scale": 0.982,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.097,
+    1.807,
+    0.25
+   ],
+   "yaw": -11.8,
+   "scale": 1.076,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.151,
+    2.933,
+    0.25
+   ],
+   "yaw": 181.4,
+   "scale": 0.974,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    53.202,
+    3.853,
+    0.25
+   ],
+   "yaw": 97.4,
+   "scale": 0.978,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.111,
+    -3.137,
+    0.25
+   ],
+   "yaw": 87.3,
+   "scale": 0.977,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.192,
+    -2.055,
+    0.25
+   ],
+   "yaw": -8.3,
+   "scale": 1.022,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.21,
+    -1.1,
+    0.25
+   ],
+   "yaw": 88.1,
+   "scale": 1.087,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.166,
+    -0.1,
+    0.25
+   ],
+   "yaw": -4.6,
+   "scale": 1.058,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.172,
+    0.915,
+    0.25
+   ],
+   "yaw": 263.6,
+   "scale": 0.936,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.176,
+    1.816,
+    0.25
+   ],
+   "yaw": 86.3,
+   "scale": 1.033,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.132,
+    2.841,
+    0.25
+   ],
+   "yaw": 89.4,
+   "scale": 1.051,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    54.13,
+    3.88,
+    0.25
+   ],
+   "yaw": 11.8,
+   "scale": 1.0,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.131,
+    -3.078,
+    0.25
+   ],
+   "yaw": 5.9,
+   "scale": 0.965,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.163,
+    -2.15,
+    0.25
+   ],
+   "yaw": 280.1,
+   "scale": 0.902,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.215,
+    -1.158,
+    0.25
+   ],
+   "yaw": 98.2,
+   "scale": 1.058,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.099,
+    -0.154,
+    0.25
+   ],
+   "yaw": -9.7,
+   "scale": 1.049,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.22,
+    0.846,
+    0.25
+   ],
+   "yaw": -11.2,
+   "scale": 0.92,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.102,
+    1.906,
+    0.25
+   ],
+   "yaw": 83.0,
+   "scale": 0.993,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.131,
+    2.878,
+    0.25
+   ],
+   "yaw": 266.3,
+   "scale": 0.953,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    55.22,
+    3.936,
+    0.25
+   ],
+   "yaw": 179.2,
+   "scale": 0.98,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.166,
+    -3.119,
+    0.25
+   ],
+   "yaw": -1.6,
+   "scale": 0.969,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.226,
+    -2.104,
+    0.25
+   ],
+   "yaw": 261.2,
+   "scale": 1.009,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.208,
+    -1.116,
+    0.25
+   ],
+   "yaw": 86.7,
+   "scale": 1.046,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.171,
+    -0.193,
+    0.25
+   ],
+   "yaw": 85.7,
+   "scale": 1.048,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.102,
+    0.861,
+    0.25
+   ],
+   "yaw": 175.3,
+   "scale": 1.037,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.102,
+    1.936,
+    0.25
+   ],
+   "yaw": 186.2,
+   "scale": 1.075,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.166,
+    2.87,
+    0.25
+   ],
+   "yaw": -9.6,
+   "scale": 1.003,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    56.136,
+    3.926,
+    0.25
+   ],
+   "yaw": 81.9,
+   "scale": 0.908,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    65.613,
+    6.583,
+    0.25
+   ],
+   "yaw": 273.7,
+   "scale": 0.992,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    65.7,
+    7.674,
+    0.25
+   ],
+   "yaw": 8.1,
+   "scale": 0.91,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    65.639,
+    8.64,
+    0.25
+   ],
+   "yaw": 179.5,
+   "scale": 0.966,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    65.592,
+    9.667,
+    0.25
+   ],
+   "yaw": -1.9,
+   "scale": 0.921,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    65.613,
+    10.683,
+    0.25
+   ],
+   "yaw": -7.5,
+   "scale": 0.913,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    66.571,
+    6.648,
+    0.25
+   ],
+   "yaw": 87.9,
+   "scale": 1.07,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    66.573,
+    7.667,
+    0.25
+   ],
+   "yaw": 92.2,
+   "scale": 0.982,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    66.515,
+    8.654,
+    0.25
+   ],
+   "yaw": 188.6,
+   "scale": 1.045,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    66.558,
+    9.567,
+    0.25
+   ],
+   "yaw": 1.2,
+   "scale": 1.032,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    66.503,
+    10.687,
+    0.25
+   ],
+   "yaw": 5.2,
+   "scale": 1.044,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    67.575,
+    6.642,
+    0.25
+   ],
+   "yaw": 263.4,
+   "scale": 1.037,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    67.535,
+    7.688,
+    0.25
+   ],
+   "yaw": 100.4,
+   "scale": 0.998,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    67.556,
+    8.689,
+    0.25
+   ],
+   "yaw": 2.6,
+   "scale": 1.019,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    67.504,
+    9.621,
+    0.25
+   ],
+   "yaw": 83.3,
+   "scale": 0.938,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    67.48,
+    10.638,
+    0.25
+   ],
+   "yaw": 277.7,
+   "scale": 0.957,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    68.446,
+    6.618,
+    0.25
+   ],
+   "yaw": 172.1,
+   "scale": 1.096,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    68.421,
+    7.652,
+    0.25
+   ],
+   "yaw": 186.5,
+   "scale": 1.067,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    68.507,
+    8.6,
+    0.25
+   ],
+   "yaw": 184.0,
+   "scale": 0.963,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    68.416,
+    9.666,
+    0.25
+   ],
+   "yaw": 275.6,
+   "scale": 0.925,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Wheat",
+   "pos": [
+    68.51,
+    10.643,
+    0.25
+   ],
+   "yaw": 179.2,
+   "scale": 1.083,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Sheep",
+   "pos": [
+    51.263,
+    8.175,
+    0.0
+   ],
+   "yaw": -35.0,
+   "scale": 1.0,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Sheep",
+   "pos": [
+    52.563,
+    8.975,
+    0.0
+   ],
+   "yaw": 10.0,
+   "scale": 1.0,
+   "group": "props"
+  },
+  {
+   "mesh": "SM_Bridge",
+   "pos": [
+    79.163,
+    -2.5,
+    0.04
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "buildings"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    43.61,
+    44.48,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0458671048340564,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    43.61,
+    44.48,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0458671048340564,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    -82.41,
+    29.12,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.107591408776452,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    -82.41,
+    29.12,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.107591408776452,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    -53.24,
+    22.72,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0919639867933462,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    -53.24,
+    22.72,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0919639867933462,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    37.34,
+    43.04,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0489419197091963,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    37.34,
+    43.04,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0489419197091963,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    70.46,
+    41.38,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0773344355548162,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    70.46,
+    41.38,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0773344355548162,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    -76.15,
+    37.98,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.9349739911600626,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    -76.15,
+    37.98,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.9349739911600626,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -57.26,
+    44.96,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0232657917100758,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -57.26,
+    44.96,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0232657917100758,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    -61.86,
+    18.9,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.1106816959906711,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    -61.86,
+    18.9,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.1106816959906711,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    38.15,
+    49.64,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0816148510659536,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    38.15,
+    49.64,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0816148510659536,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    13.98,
+    21.9,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1006930124365273,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    13.98,
+    21.9,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1006930124365273,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -44.95,
+    28.67,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1264429598435646,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -44.95,
+    28.67,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1264429598435646,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -45.21,
+    44.26,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.1323108017145251,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -45.21,
+    44.26,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.1323108017145251,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    -6.3,
+    34.0,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.9768916782555009,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    -6.3,
+    34.0,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.9768916782555009,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -56.72,
+    29.33,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 0.855016030805608,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -56.72,
+    29.33,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 0.855016030805608,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    34.21,
+    33.25,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.8638424744535257,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    34.21,
+    33.25,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.8638424744535257,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -30.41,
+    32.05,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.9810465466892808,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -30.41,
+    32.05,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.9810465466892808,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    2.95,
+    40.83,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.099650646740411,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    2.95,
+    40.83,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.099650646740411,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    78.27,
+    30.81,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0729411935442963,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    78.27,
+    30.81,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0729411935442963,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -90.63,
+    37.53,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9088179505009673,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -90.63,
+    37.53,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9088179505009673,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    91.53,
+    29.63,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9545462985210257,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    91.53,
+    29.63,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9545462985210257,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    -81.85,
+    21.67,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1277925029854063,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    -81.85,
+    21.67,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1277925029854063,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -89.61,
+    26.4,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9702644926883849,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -89.61,
+    26.4,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9702644926883849,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -29.95,
+    47.05,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.058124074135125,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -29.95,
+    47.05,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.058124074135125,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    18.5,
+    32.45,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9721203945088173,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    18.5,
+    32.45,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9721203945088173,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -13.73,
+    29.67,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.0236418340925963,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -13.73,
+    29.67,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.0236418340925963,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    23.73,
+    17.62,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 0.8627409286432333,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    23.73,
+    17.62,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 0.8627409286432333,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -23.3,
+    45.11,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 0.9100444770532476,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -23.3,
+    45.11,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 0.9100444770532476,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    22.6,
+    38.74,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9340276997548065,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    22.6,
+    38.74,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9340276997548065,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    37.07,
+    20.2,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.037915179182937,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    37.07,
+    20.2,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.037915179182937,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    28.06,
+    22.21,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.090919452002666,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    28.06,
+    22.21,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.090919452002666,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    67.65,
+    20.64,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0429901790569458,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    67.65,
+    20.64,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0429901790569458,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -84.58,
+    44.58,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.1132956043365962,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -84.58,
+    44.58,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.1132956043365962,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    55.5,
+    43.87,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0851292606724237,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    55.5,
+    43.87,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0851292606724237,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    87.55,
+    42.11,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0782795226395556,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    87.55,
+    42.11,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0782795226395556,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -17.99,
+    49.87,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 0.9232272880478151,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -17.99,
+    49.87,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 0.9232272880478151,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -67.31,
+    30.05,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.965460249004225,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -67.31,
+    30.05,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 0.965460249004225,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    87.28,
+    12.52,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.0675501207952107,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    87.28,
+    12.52,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.0675501207952107,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    78.17,
+    47.44,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 0.9398447368756248,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    78.17,
+    47.44,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 0.9398447368756248,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    -73.68,
+    43.97,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.8628026946002523,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    -73.68,
+    43.97,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.8628026946002523,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -67.14,
+    49.99,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9342697783870525,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -67.14,
+    49.99,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.9342697783870525,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    5.63,
+    20.77,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0090323626500857,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    5.63,
+    20.77,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.0090323626500857,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    39.39,
+    30.2,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.091692613425512,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    39.39,
+    30.2,
+    -0.15
+   ],
+   "yaw": 270.0,
+   "scale": 1.091692613425512,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    76.74,
+    20.12,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0382936545755819,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    76.74,
+    20.12,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0382936545755819,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    -40.22,
+    33.29,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.8775456775081314,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    -40.22,
+    33.29,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 0.8775456775081314,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    66.93,
+    30.75,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1146883554955267,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    66.93,
+    30.75,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.1146883554955267,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    -15.8,
+    36.29,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0961247270190804,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    -15.8,
+    36.29,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0961247270190804,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    82.41,
+    38.23,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0463715141786256,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    82.41,
+    38.23,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.0463715141786256,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Trunk",
+   "pos": [
+    -0.91,
+    28.55,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.073079541953522,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_A_Leaves",
+   "pos": [
+    -0.91,
+    28.55,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.073079541953522,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    43.74,
+    36.47,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.0466102853889436,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    43.74,
+    36.47,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 1.0466102853889436,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Trunk",
+   "pos": [
+    62.66,
+    35.31,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 0.9001597430277004,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_C_Leaves",
+   "pos": [
+    62.66,
+    35.31,
+    -0.15
+   ],
+   "yaw": 0.0,
+   "scale": 0.9001597430277004,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Trunk",
+   "pos": [
+    49.43,
+    24.12,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.044756100029933,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_D_Leaves",
+   "pos": [
+    49.43,
+    24.12,
+    -0.15
+   ],
+   "yaw": 180.0,
+   "scale": 1.044756100029933,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Trunk",
+   "pos": [
+    -1.85,
+    20.74,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0541884470993246,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Tree2_B_Leaves",
+   "pos": [
+    -1.85,
+    20.74,
+    -0.15
+   ],
+   "yaw": 90.0,
+   "scale": 1.0541884470993246,
+   "group": "forest"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    74.3,
+    47.26,
+    0.0
+   ],
+   "yaw": 159.957384772361,
+   "scale": 0.9349199320440837,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -94.79,
+    9.11,
+    0.0
+   ],
+   "yaw": 138.516272340206,
+   "scale": 0.9146398380563808,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    -74.2,
+    47.92,
+    0.0
+   ],
+   "yaw": 344.25020242685787,
+   "scale": 1.1531753183068523,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -20.37,
+    46.36,
+    0.0
+   ],
+   "yaw": 345.39278002376625,
+   "scale": 0.8954419260122407,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    87.17,
+    -0.38,
+    0.0
+   ],
+   "yaw": 218.78242713057915,
+   "scale": 0.8008074878118562,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    61.5,
+    30.17,
+    0.0
+   ],
+   "yaw": 334.89391463454837,
+   "scale": 1.1817840909076305,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -25.3,
+    -24.25,
+    0.0
+   ],
+   "yaw": 329.98778178788314,
+   "scale": 1.0959372870659865,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    -20.15,
+    50.34,
+    0.0
+   ],
+   "yaw": 168.39821566903856,
+   "scale": 0.9403866659638663,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -10.75,
+    42.13,
+    0.0
+   ],
+   "yaw": 93.65977844715002,
+   "scale": 0.836420188759164,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -85.9,
+    -21.73,
+    0.0
+   ],
+   "yaw": 226.3520409443929,
+   "scale": 1.160206085795602,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    -40.83,
+    34.02,
+    0.0
+   ],
+   "yaw": 149.6491925066196,
+   "scale": 0.9055482548795609,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    -88.32,
+    14.31,
+    0.0
+   ],
+   "yaw": 164.32418575273383,
+   "scale": 0.8113066045843687,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -70.54,
+    -30.96,
+    0.0
+   ],
+   "yaw": 225.61882339647613,
+   "scale": 1.0206426916067115,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    -3.82,
+    18.48,
+    0.0
+   ],
+   "yaw": 355.21055818241007,
+   "scale": 0.8427327263362642,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    74.38,
+    -29.05,
+    0.0
+   ],
+   "yaw": 226.2975945585475,
+   "scale": 0.8967965779172099,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    -84.43,
+    34.12,
+    0.0
+   ],
+   "yaw": 358.73097789035336,
+   "scale": 1.1574171050303197,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    -49.27,
+    -3.18,
+    0.0
+   ],
+   "yaw": 171.97366542968126,
+   "scale": 1.0964930090961216,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -93.36,
+    48.61,
+    0.0
+   ],
+   "yaw": 335.9927074732953,
+   "scale": 1.090601648953299,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    8.35,
+    54.67,
+    0.0
+   ],
+   "yaw": 3.427976745583563,
+   "scale": 1.087821372584481,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    28.07,
+    50.9,
+    0.0
+   ],
+   "yaw": 108.97107468056383,
+   "scale": 0.8409755502326554,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    -36.81,
+    47.41,
+    0.0
+   ],
+   "yaw": 337.4429405149281,
+   "scale": 1.1641540562391943,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -37.58,
+    14.96,
+    0.0
+   ],
+   "yaw": 163.57734645824814,
+   "scale": 1.1300228628490534,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    58.79,
+    21.77,
+    0.0
+   ],
+   "yaw": 112.5954194036133,
+   "scale": 0.9742717854729941,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -30.15,
+    16.67,
+    0.0
+   ],
+   "yaw": 116.20764077363705,
+   "scale": 1.0125517048853132,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    1.34,
+    3.25,
+    0.0
+   ],
+   "yaw": 7.067198865511153,
+   "scale": 1.0624981244205174,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    52.99,
+    36.61,
+    0.0
+   ],
+   "yaw": 271.525850475661,
+   "scale": 0.9545788622395386,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    36.9,
+    14.2,
+    0.0
+   ],
+   "yaw": 97.84947893086411,
+   "scale": 1.0977321808060088,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    84.05,
+    22.61,
+    0.0
+   ],
+   "yaw": 5.519545282170841,
+   "scale": 0.9215958208183659,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    71.3,
+    42.16,
+    0.0
+   ],
+   "yaw": 72.41082175233193,
+   "scale": 0.8920250478922039,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    -0.3,
+    10.12,
+    0.0
+   ],
+   "yaw": 324.0946515911263,
+   "scale": 0.860318230926923,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    55.1,
+    51.15,
+    0.0
+   ],
+   "yaw": 348.6675364801295,
+   "scale": 0.8166664994947436,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    -22.36,
+    14.12,
+    0.0
+   ],
+   "yaw": 191.08810733926106,
+   "scale": 1.011116833307398,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    19.47,
+    -15.54,
+    0.0
+   ],
+   "yaw": 30.641901933372203,
+   "scale": 0.8723107158481043,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    -70.05,
+    32.0,
+    0.0
+   ],
+   "yaw": 98.52858004655646,
+   "scale": 0.8404844742439239,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    63.11,
+    40.57,
+    0.0
+   ],
+   "yaw": 81.28650443839392,
+   "scale": 1.0679370987673154,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_A",
+   "pos": [
+    -66.72,
+    31.11,
+    0.0
+   ],
+   "yaw": 65.95174864470548,
+   "scale": 0.8249134255246243,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    -48.11,
+    48.54,
+    0.0
+   ],
+   "yaw": 249.81124093085145,
+   "scale": 1.0796515447201127,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    -84.39,
+    27.61,
+    0.0
+   ],
+   "yaw": 255.17950169297194,
+   "scale": 0.8101233704129456,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_C",
+   "pos": [
+    2.05,
+    -0.58,
+    0.0
+   ],
+   "yaw": 189.1624556111666,
+   "scale": 1.150033170055324,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Bush_B",
+   "pos": [
+    7.1,
+    9.71,
+    0.0
+   ],
+   "yaw": 86.08525602993174,
+   "scale": 0.8424462052376311,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Rock_B",
+   "pos": [
+    25.59,
+    -21.95,
+    0.0
+   ],
+   "yaw": 95.10039954951215,
+   "scale": 1.005999230323251,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_A",
+   "pos": [
+    -18.97,
+    -29.58,
+    0.0
+   ],
+   "yaw": 226.68460953953738,
+   "scale": 0.9714203410058476,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_B",
+   "pos": [
+    -49.65,
+    42.99,
+    0.0
+   ],
+   "yaw": 14.978024549986845,
+   "scale": 0.8161947508431961,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_C",
+   "pos": [
+    -83.67,
+    54.58,
+    0.0
+   ],
+   "yaw": 33.33797221906694,
+   "scale": 0.9298311788746129,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_C",
+   "pos": [
+    -47.4,
+    25.09,
+    0.0
+   ],
+   "yaw": 94.33485319303344,
+   "scale": 0.8619366149873454,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_C",
+   "pos": [
+    -64.75,
+    20.98,
+    0.0
+   ],
+   "yaw": 271.95317917508373,
+   "scale": 0.8204039619588127,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_B",
+   "pos": [
+    -70.1,
+    30.7,
+    0.0
+   ],
+   "yaw": 90.68853285855184,
+   "scale": 0.8391043044324862,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_C",
+   "pos": [
+    53.44,
+    16.91,
+    0.0
+   ],
+   "yaw": 109.05756772648037,
+   "scale": 0.8760561966053649,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_B",
+   "pos": [
+    -83.7,
+    -4.26,
+    0.0
+   ],
+   "yaw": 193.14887025575015,
+   "scale": 0.9038582880138879,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_B",
+   "pos": [
+    -85.94,
+    -33.94,
+    0.0
+   ],
+   "yaw": 112.23373504452042,
+   "scale": 0.9051228297158194,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_C",
+   "pos": [
+    18.13,
+    11.71,
+    0.0
+   ],
+   "yaw": 153.87981025456295,
+   "scale": 0.9655161743261197,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_C",
+   "pos": [
+    28.62,
+    50.34,
+    0.0
+   ],
+   "yaw": 121.03011846603334,
+   "scale": 0.9427379237300333,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_A",
+   "pos": [
+    9.28,
+    27.75,
+    0.0
+   ],
+   "yaw": 350.4628305551092,
+   "scale": 0.9619026910987691,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Rock_B",
+   "pos": [
+    71.48,
+    22.93,
+    0.0
+   ],
+   "yaw": 213.3524893720376,
+   "scale": 0.9317616414572508,
+   "group": "rocks"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    89.4,
+    28.17,
+    0.0
+   ],
+   "yaw": 100.24753820102318,
+   "scale": 1.1722757784195519,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -61.04,
+    -30.51,
+    0.0
+   ],
+   "yaw": 104.81000347511142,
+   "scale": 0.968703357871457,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    13.33,
+    34.23,
+    0.0
+   ],
+   "yaw": 249.78664834549264,
+   "scale": 1.1883210352033948,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    84.34,
+    42.8,
+    0.0
+   ],
+   "yaw": 11.13019899074953,
+   "scale": 0.9275352830609087,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    12.51,
+    48.26,
+    0.0
+   ],
+   "yaw": 112.70863433860241,
+   "scale": 0.9590481351908318,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    44.44,
+    32.87,
+    0.0
+   ],
+   "yaw": 325.64750104076154,
+   "scale": 0.9717211789622897,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -47.77,
+    3.76,
+    0.0
+   ],
+   "yaw": 175.72462845920938,
+   "scale": 1.1689228567125187,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    26.14,
+    -26.41,
+    0.0
+   ],
+   "yaw": 129.57508320073273,
+   "scale": 1.1425740372293554,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    14.66,
+    33.18,
+    0.0
+   ],
+   "yaw": 210.47487677209645,
+   "scale": 0.9115371957353643,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -8.9,
+    20.39,
+    0.0
+   ],
+   "yaw": 291.25488197812234,
+   "scale": 1.015241798274546,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -27.24,
+    34.34,
+    0.0
+   ],
+   "yaw": 351.5715432474797,
+   "scale": 0.9454460190871519,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -22.89,
+    35.17,
+    0.0
+   ],
+   "yaw": 7.913565671619267,
+   "scale": 0.964477530290252,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    48.01,
+    17.35,
+    0.0
+   ],
+   "yaw": 338.46712378556924,
+   "scale": 1.1433680390582615,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -9.2,
+    24.73,
+    0.0
+   ],
+   "yaw": 316.069769975961,
+   "scale": 1.1552911587768286,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    16.0,
+    45.35,
+    0.0
+   ],
+   "yaw": 238.74029255746194,
+   "scale": 1.0224704517062602,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    18.67,
+    50.26,
+    0.0
+   ],
+   "yaw": 76.85352781435815,
+   "scale": 1.0064777324057153,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    87.69,
+    -14.74,
+    0.0
+   ],
+   "yaw": 8.282321164223795,
+   "scale": 0.9664921226242708,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -52.19,
+    -2.23,
+    0.0
+   ],
+   "yaw": 284.40656267108943,
+   "scale": 1.1779084830570625,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -60.61,
+    25.66,
+    0.0
+   ],
+   "yaw": 110.39517486913394,
+   "scale": 0.9646695632716785,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -73.38,
+    16.63,
+    0.0
+   ],
+   "yaw": 67.16148325829636,
+   "scale": 1.0171653749841463,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    35.82,
+    7.77,
+    0.0
+   ],
+   "yaw": 302.3080741112147,
+   "scale": 1.0220051835775426,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -63.38,
+    -19.71,
+    0.0
+   ],
+   "yaw": 174.79299968381002,
+   "scale": 1.0595737010692818,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -54.46,
+    53.62,
+    0.0
+   ],
+   "yaw": 221.99989853848805,
+   "scale": 1.1578862814368407,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    90.6,
+    52.77,
+    0.0
+   ],
+   "yaw": 38.75932333707512,
+   "scale": 0.9139669886245076,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -89.63,
+    0.36,
+    0.0
+   ],
+   "yaw": 168.2233562559671,
+   "scale": 1.079793942369095,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    50.18,
+    33.26,
+    0.0
+   ],
+   "yaw": 188.02359328712507,
+   "scale": 0.9125685392873737,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    5.97,
+    38.66,
+    0.0
+   ],
+   "yaw": 25.29174796560655,
+   "scale": 1.192223989876598,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -71.05,
+    33.25,
+    0.0
+   ],
+   "yaw": 325.07543328145823,
+   "scale": 0.9126636979111543,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -1.85,
+    31.68,
+    0.0
+   ],
+   "yaw": 160.43249525980792,
+   "scale": 0.9377584319381429,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -63.81,
+    -29.99,
+    0.0
+   ],
+   "yaw": 154.5622507615854,
+   "scale": 1.055557673821442,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -83.17,
+    53.72,
+    0.0
+   ],
+   "yaw": 278.36772006091337,
+   "scale": 1.145856963557326,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    75.04,
+    4.7,
+    0.0
+   ],
+   "yaw": 101.08646167590895,
+   "scale": 0.9952526174487797,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    78.25,
+    52.11,
+    0.0
+   ],
+   "yaw": 227.80724128134622,
+   "scale": 0.9569472501778666,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    30.12,
+    39.71,
+    0.0
+   ],
+   "yaw": 109.51910934764203,
+   "scale": 1.0002833538517908,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -5.37,
+    -24.39,
+    0.0
+   ],
+   "yaw": 81.62226939961648,
+   "scale": 0.9317235008969375,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -24.48,
+    1.04,
+    0.0
+   ],
+   "yaw": 342.5519709061469,
+   "scale": 0.9317666599863359,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    87.37,
+    52.43,
+    0.0
+   ],
+   "yaw": 7.867736482303522,
+   "scale": 1.1601411389363914,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -70.63,
+    51.28,
+    0.0
+   ],
+   "yaw": 40.720855785217665,
+   "scale": 1.0080574342111543,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    20.92,
+    -33.37,
+    0.0
+   ],
+   "yaw": 206.1713698057469,
+   "scale": 1.078853477956242,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    47.0,
+    35.01,
+    0.0
+   ],
+   "yaw": 283.11334109168683,
+   "scale": 0.9790420239293157,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    41.21,
+    -12.98,
+    0.0
+   ],
+   "yaw": 242.43201176727797,
+   "scale": 1.0404074579537868,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -24.54,
+    43.68,
+    0.0
+   ],
+   "yaw": 66.22636249393595,
+   "scale": 0.9343379032491443,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    72.99,
+    47.98,
+    0.0
+   ],
+   "yaw": 333.29728856463015,
+   "scale": 0.9793109364787342,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    45.71,
+    31.38,
+    0.0
+   ],
+   "yaw": 292.15271249063505,
+   "scale": 1.1853184495174214,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    44.39,
+    -5.73,
+    0.0
+   ],
+   "yaw": 262.93672699696225,
+   "scale": 1.0603851748198223,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -18.61,
+    28.47,
+    0.0
+   ],
+   "yaw": 287.8210255063961,
+   "scale": 1.1966136739840578,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -29.3,
+    26.83,
+    0.0
+   ],
+   "yaw": 274.2978916665733,
+   "scale": 0.9082720590490685,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -63.31,
+    4.4,
+    0.0
+   ],
+   "yaw": 167.7630117501265,
+   "scale": 1.0973713348310976,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    81.69,
+    15.72,
+    0.0
+   ],
+   "yaw": 281.60953200421613,
+   "scale": 0.9775269549293348,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -71.0,
+    17.75,
+    0.0
+   ],
+   "yaw": 65.8705725242448,
+   "scale": 1.0874829120692129,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -10.7,
+    26.81,
+    0.0
+   ],
+   "yaw": 18.393336882350088,
+   "scale": 0.9216284161972592,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -25.02,
+    -14.0,
+    0.0
+   ],
+   "yaw": 252.00788604113382,
+   "scale": 1.049093251387825,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    85.1,
+    4.85,
+    0.0
+   ],
+   "yaw": 64.68904123246956,
+   "scale": 0.9258741807199765,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -2.1,
+    33.85,
+    0.0
+   ],
+   "yaw": 95.73104401786105,
+   "scale": 1.0595237239540798,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    82.92,
+    4.16,
+    0.0
+   ],
+   "yaw": 247.90415173711793,
+   "scale": 1.0368147775168872,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    20.06,
+    -3.92,
+    0.0
+   ],
+   "yaw": 247.03236777425533,
+   "scale": 1.0372922143030392,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -26.69,
+    38.13,
+    0.0
+   ],
+   "yaw": 112.53592737228252,
+   "scale": 0.9278879337744946,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    35.21,
+    32.08,
+    0.0
+   ],
+   "yaw": 93.42370923863702,
+   "scale": 0.94352034220616,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -78.61,
+    43.84,
+    0.0
+   ],
+   "yaw": 307.46199793402843,
+   "scale": 1.165131073788247,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    68.86,
+    -23.13,
+    0.0
+   ],
+   "yaw": 203.30309455322663,
+   "scale": 0.9631053939293992,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -72.13,
+    -15.67,
+    0.0
+   ],
+   "yaw": 55.58779885928098,
+   "scale": 0.9832902031714056,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -34.94,
+    37.55,
+    0.0
+   ],
+   "yaw": 0.38892858398161145,
+   "scale": 1.1863536284372305,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    29.47,
+    53.86,
+    0.0
+   ],
+   "yaw": 205.35500529983673,
+   "scale": 1.1217178939499466,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -91.1,
+    12.21,
+    0.0
+   ],
+   "yaw": 57.28302320938483,
+   "scale": 1.007632115144232,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    39.67,
+    23.57,
+    0.0
+   ],
+   "yaw": 282.194363693077,
+   "scale": 1.023579806073373,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    84.77,
+    53.93,
+    0.0
+   ],
+   "yaw": 19.819758273596335,
+   "scale": 1.1562491294636073,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    16.13,
+    12.18,
+    0.0
+   ],
+   "yaw": 123.22834916281477,
+   "scale": 1.0107485946495989,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -49.58,
+    -28.24,
+    0.0
+   ],
+   "yaw": 64.73311647890026,
+   "scale": 0.9353793473660311,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    30.57,
+    47.23,
+    0.0
+   ],
+   "yaw": 318.5366145029494,
+   "scale": 0.9766686695004814,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    21.45,
+    -27.31,
+    0.0
+   ],
+   "yaw": 186.37037803314036,
+   "scale": 1.1284127563185986,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    86.65,
+    -31.91,
+    0.0
+   ],
+   "yaw": 60.49277869967871,
+   "scale": 1.059641734183539,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -38.86,
+    51.45,
+    0.0
+   ],
+   "yaw": 11.510708828420903,
+   "scale": 1.1493360885279864,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -88.59,
+    13.27,
+    0.0
+   ],
+   "yaw": 134.1871558581762,
+   "scale": 1.132788969447844,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -17.88,
+    54.63,
+    0.0
+   ],
+   "yaw": 38.765783053418744,
+   "scale": 0.9427013401559947,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    0.48,
+    46.08,
+    0.0
+   ],
+   "yaw": 121.4520990942467,
+   "scale": 1.1729158068502772,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    10.34,
+    38.66,
+    0.0
+   ],
+   "yaw": 324.1768282389462,
+   "scale": 1.0032316398240724,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -55.19,
+    44.27,
+    0.0
+   ],
+   "yaw": 42.62073200132115,
+   "scale": 1.0191664901619202,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    54.1,
+    20.35,
+    0.0
+   ],
+   "yaw": 117.13392028155646,
+   "scale": 1.1298368237839478,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -73.47,
+    18.81,
+    0.0
+   ],
+   "yaw": 72.45825294267591,
+   "scale": 0.9362392430439782,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -91.12,
+    47.59,
+    0.0
+   ],
+   "yaw": 261.8713801163407,
+   "scale": 1.002746187251467,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    37.62,
+    29.57,
+    0.0
+   ],
+   "yaw": 31.077459024214434,
+   "scale": 0.9047718336310928,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -28.12,
+    14.93,
+    0.0
+   ],
+   "yaw": 319.48623619082264,
+   "scale": 1.0137530376231312,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    37.59,
+    9.6,
+    0.0
+   ],
+   "yaw": 22.07115122752581,
+   "scale": 1.0098376887600902,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -80.07,
+    53.63,
+    0.0
+   ],
+   "yaw": 242.59783259632553,
+   "scale": 1.1216286873284274,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    81.43,
+    9.19,
+    0.0
+   ],
+   "yaw": 169.40588654193152,
+   "scale": 1.0791150514924632,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    2.05,
+    36.05,
+    0.0
+   ],
+   "yaw": 190.91969342837382,
+   "scale": 0.9610487183605119,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -25.65,
+    26.34,
+    0.0
+   ],
+   "yaw": 208.90066263906806,
+   "scale": 1.068661806710936,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -43.21,
+    24.96,
+    0.0
+   ],
+   "yaw": 214.97768020192558,
+   "scale": 1.0390370590259508,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    12.16,
+    29.92,
+    0.0
+   ],
+   "yaw": 32.191581591738945,
+   "scale": 1.175873878964899,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -19.22,
+    -19.73,
+    0.0
+   ],
+   "yaw": 157.5008694172866,
+   "scale": 1.0226956562087959,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    94.95,
+    7.66,
+    0.0
+   ],
+   "yaw": 123.7736928521964,
+   "scale": 1.1951893371831817,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    58.78,
+    38.92,
+    0.0
+   ],
+   "yaw": 67.87568735351437,
+   "scale": 1.0686731626982247,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -23.67,
+    11.43,
+    0.0
+   ],
+   "yaw": 285.25020785505393,
+   "scale": 1.0256337249604839,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    32.08,
+    37.4,
+    0.0
+   ],
+   "yaw": 136.04698966067312,
+   "scale": 0.9365267662598074,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    76.45,
+    50.62,
+    0.0
+   ],
+   "yaw": 126.01576554962806,
+   "scale": 0.9284059813237352,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -64.48,
+    54.93,
+    0.0
+   ],
+   "yaw": 344.07168423696027,
+   "scale": 1.143987009625879,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -16.88,
+    10.33,
+    0.0
+   ],
+   "yaw": 349.3569325306187,
+   "scale": 0.9918716375996542,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    53.78,
+    -33.0,
+    0.0
+   ],
+   "yaw": 182.53094406985295,
+   "scale": 1.0126210846201869,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    55.21,
+    26.75,
+    0.0
+   ],
+   "yaw": 245.1363407209289,
+   "scale": 1.136741259744385,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    17.39,
+    18.33,
+    0.0
+   ],
+   "yaw": 150.81030200490497,
+   "scale": 1.135396604776925,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    7.65,
+    53.58,
+    0.0
+   ],
+   "yaw": 156.22463450370043,
+   "scale": 1.068442315380971,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -15.1,
+    -20.2,
+    0.0
+   ],
+   "yaw": 225.83299576097102,
+   "scale": 1.0435673214731287,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    24.77,
+    -16.07,
+    0.0
+   ],
+   "yaw": 228.50299532346892,
+   "scale": 0.9743547762818963,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -68.14,
+    -34.28,
+    0.0
+   ],
+   "yaw": 84.64064222484927,
+   "scale": 1.0881856578712144,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    7.25,
+    -25.4,
+    0.0
+   ],
+   "yaw": 159.18407111020514,
+   "scale": 1.0262234859060968,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    52.0,
+    -19.76,
+    0.0
+   ],
+   "yaw": 339.91935412656284,
+   "scale": 1.0293095549322908,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -7.59,
+    14.74,
+    0.0
+   ],
+   "yaw": 353.447841848414,
+   "scale": 0.940137336217181,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -80.28,
+    36.35,
+    0.0
+   ],
+   "yaw": 18.57590953055322,
+   "scale": 1.0412449497128164,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    70.05,
+    48.39,
+    0.0
+   ],
+   "yaw": 201.37344305397383,
+   "scale": 1.1305528245631606,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    85.52,
+    38.84,
+    0.0
+   ],
+   "yaw": 104.12905970509122,
+   "scale": 1.1611169989367465,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -17.38,
+    14.52,
+    0.0
+   ],
+   "yaw": 57.54682760162193,
+   "scale": 1.19243944718997,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    2.81,
+    -1.34,
+    0.0
+   ],
+   "yaw": 111.14553662975011,
+   "scale": 1.1245787969136456,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    50.17,
+    -33.08,
+    0.0
+   ],
+   "yaw": 9.83441195217285,
+   "scale": 1.079237410250081,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    91.96,
+    -27.79,
+    0.0
+   ],
+   "yaw": 109.99342867581845,
+   "scale": 0.9592877067033754,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    22.48,
+    -33.56,
+    0.0
+   ],
+   "yaw": 216.3548081305944,
+   "scale": 0.9177570311381587,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    84.23,
+    12.05,
+    0.0
+   ],
+   "yaw": 359.6078687239348,
+   "scale": 0.9759825875424573,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -92.22,
+    5.88,
+    0.0
+   ],
+   "yaw": 96.49802877672428,
+   "scale": 0.9000629349666044,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -2.52,
+    -33.7,
+    0.0
+   ],
+   "yaw": 283.4743062778524,
+   "scale": 1.1134866205999103,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    83.68,
+    -33.54,
+    0.0
+   ],
+   "yaw": 148.0051302327952,
+   "scale": 0.9367680000471789,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    45.97,
+    -30.29,
+    0.0
+   ],
+   "yaw": 146.97012323725195,
+   "scale": 1.160394421319952,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    56.74,
+    28.81,
+    0.0
+   ],
+   "yaw": 151.31582979780632,
+   "scale": 1.0147210895300145,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -67.26,
+    9.0,
+    0.0
+   ],
+   "yaw": 250.90661080824634,
+   "scale": 0.9084910460039204,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    71.28,
+    3.77,
+    0.0
+   ],
+   "yaw": 247.77458206665165,
+   "scale": 1.0421535074296124,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    89.22,
+    -6.07,
+    0.0
+   ],
+   "yaw": 79.69272894581009,
+   "scale": 0.9944260359300282,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    0.89,
+    8.1,
+    0.0
+   ],
+   "yaw": 34.93031667767254,
+   "scale": 0.9606388466774136,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -46.62,
+    44.64,
+    0.0
+   ],
+   "yaw": 258.44242587632436,
+   "scale": 1.1022281851383857,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    90.12,
+    24.4,
+    0.0
+   ],
+   "yaw": 36.05739226885185,
+   "scale": 1.1629805277537144,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    15.37,
+    28.96,
+    0.0
+   ],
+   "yaw": 113.1273544525206,
+   "scale": 0.9993387994400935,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    71.34,
+    15.77,
+    0.0
+   ],
+   "yaw": 179.2200780498564,
+   "scale": 0.9286549058488996,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    94.46,
+    12.26,
+    0.0
+   ],
+   "yaw": 187.15227720998706,
+   "scale": 1.0831798632144787,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -38.01,
+    46.53,
+    0.0
+   ],
+   "yaw": 225.4248273607538,
+   "scale": 0.9143667557496956,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    94.84,
+    43.48,
+    0.0
+   ],
+   "yaw": 314.0653482601474,
+   "scale": 1.1440981278411635,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -3.17,
+    53.62,
+    0.0
+   ],
+   "yaw": 83.09477375837865,
+   "scale": 1.0662090575764318,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -83.08,
+    -16.8,
+    0.0
+   ],
+   "yaw": 163.94582911634433,
+   "scale": 1.125011607802367,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -76.11,
+    24.75,
+    0.0
+   ],
+   "yaw": 348.35811360862436,
+   "scale": 0.9513013667601131,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    44.1,
+    34.52,
+    0.0
+   ],
+   "yaw": 57.727898242065415,
+   "scale": 0.95251065745811,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -50.15,
+    -14.92,
+    0.0
+   ],
+   "yaw": 345.972960672357,
+   "scale": 0.9696311621694597,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -61.88,
+    -28.15,
+    0.0
+   ],
+   "yaw": 2.4071063070772825,
+   "scale": 1.0644002628593525,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    13.77,
+    13.67,
+    0.0
+   ],
+   "yaw": 277.86633818053076,
+   "scale": 1.114711953175932,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    70.04,
+    -27.91,
+    0.0
+   ],
+   "yaw": 17.60504885171258,
+   "scale": 1.0166183515217901,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    5.54,
+    19.09,
+    0.0
+   ],
+   "yaw": 139.96428033138415,
+   "scale": 1.0836018614559697,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    24.46,
+    -14.86,
+    0.0
+   ],
+   "yaw": 107.42930115506203,
+   "scale": 0.9007787544273705,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    11.46,
+    41.87,
+    0.0
+   ],
+   "yaw": 257.59114922260216,
+   "scale": 1.0606739565641476,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    30.35,
+    51.17,
+    0.0
+   ],
+   "yaw": 83.81019459941041,
+   "scale": 0.9004234946434376,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -24.65,
+    49.45,
+    0.0
+   ],
+   "yaw": 356.0353146317652,
+   "scale": 0.998868855423897,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    0.46,
+    -32.38,
+    0.0
+   ],
+   "yaw": 328.2938256407942,
+   "scale": 1.1768661258693667,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -70.92,
+    -20.62,
+    0.0
+   ],
+   "yaw": 180.8262409764459,
+   "scale": 0.9850928352106072,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -55.42,
+    45.83,
+    0.0
+   ],
+   "yaw": 258.3744998225187,
+   "scale": 1.1417960055831247,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -21.86,
+    -27.91,
+    0.0
+   ],
+   "yaw": 76.4544921541252,
+   "scale": 1.0434296950210953,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    22.92,
+    19.68,
+    0.0
+   ],
+   "yaw": 357.2033471324666,
+   "scale": 1.0449559698767894,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -50.74,
+    -6.37,
+    0.0
+   ],
+   "yaw": 128.48465841644008,
+   "scale": 1.1924532403284838,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -57.5,
+    33.06,
+    0.0
+   ],
+   "yaw": 350.1358010689373,
+   "scale": 1.0547157088933934,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -81.32,
+    28.64,
+    0.0
+   ],
+   "yaw": 278.4026561867539,
+   "scale": 1.146519923983047,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -8.36,
+    48.87,
+    0.0
+   ],
+   "yaw": 252.1485344757273,
+   "scale": 0.9388881251526253,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    15.98,
+    -23.93,
+    0.0
+   ],
+   "yaw": 145.26821548562566,
+   "scale": 0.9191404792876523,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -33.05,
+    -20.74,
+    0.0
+   ],
+   "yaw": 202.86980248802604,
+   "scale": 1.0630460622510574,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    68.77,
+    24.23,
+    0.0
+   ],
+   "yaw": 329.2172717933225,
+   "scale": 0.9692808371163081,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    27.78,
+    -34.76,
+    0.0
+   ],
+   "yaw": 298.5440227592074,
+   "scale": 0.988114973462773,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -40.48,
+    20.1,
+    0.0
+   ],
+   "yaw": 273.4411685387351,
+   "scale": 1.1936336653892403,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    75.09,
+    37.46,
+    0.0
+   ],
+   "yaw": 131.51515219232385,
+   "scale": 1.1760913976763416,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -66.11,
+    16.3,
+    0.0
+   ],
+   "yaw": 108.73763199732724,
+   "scale": 1.1716208074565313,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -76.91,
+    5.35,
+    0.0
+   ],
+   "yaw": 212.07894541966886,
+   "scale": 1.1221502228376743,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    72.97,
+    28.84,
+    0.0
+   ],
+   "yaw": 0.7034574685465333,
+   "scale": 0.907445516814655,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    51.69,
+    -26.44,
+    0.0
+   ],
+   "yaw": 64.95771421644139,
+   "scale": 1.1513101101691645,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -65.69,
+    53.41,
+    0.0
+   ],
+   "yaw": 79.89822760044161,
+   "scale": 1.0966508955198793,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    16.56,
+    -12.64,
+    0.0
+   ],
+   "yaw": 333.61321724521775,
+   "scale": 1.1866740452112365,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -82.22,
+    -25.09,
+    0.0
+   ],
+   "yaw": 17.922390740667765,
+   "scale": 1.1388559462927752,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -80.73,
+    21.53,
+    0.0
+   ],
+   "yaw": 291.72817089354777,
+   "scale": 1.1067207919911444,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    79.35,
+    16.02,
+    0.0
+   ],
+   "yaw": 306.3778336738386,
+   "scale": 1.0209592074893163,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    86.09,
+    -33.11,
+    0.0
+   ],
+   "yaw": 37.535652532407006,
+   "scale": 1.0452391402851031,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -5.22,
+    9.15,
+    0.0
+   ],
+   "yaw": 289.47276395112516,
+   "scale": 1.0680575168414388,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    84.63,
+    -21.78,
+    0.0
+   ],
+   "yaw": 158.83340711346335,
+   "scale": 1.0025115123412722,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    56.66,
+    15.43,
+    0.0
+   ],
+   "yaw": 139.19144624018415,
+   "scale": 1.0419308380454413,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    80.11,
+    6.57,
+    0.0
+   ],
+   "yaw": 223.49924175483164,
+   "scale": 0.9040474003646648,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -81.8,
+    -31.45,
+    0.0
+   ],
+   "yaw": 259.99868978562233,
+   "scale": 1.1100536519799904,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -50.42,
+    17.34,
+    0.0
+   ],
+   "yaw": 288.5930734621502,
+   "scale": 1.063266869484295,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    44.61,
+    10.95,
+    0.0
+   ],
+   "yaw": 246.6409526186491,
+   "scale": 1.0815264217466676,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -93.76,
+    28.76,
+    0.0
+   ],
+   "yaw": 254.47123945347667,
+   "scale": 1.0945369374379896,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    68.15,
+    30.86,
+    0.0
+   ],
+   "yaw": 95.32904900292885,
+   "scale": 1.1285627287072633,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    63.64,
+    -23.65,
+    0.0
+   ],
+   "yaw": 182.16222702023106,
+   "scale": 1.0186166047480714,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    41.31,
+    -0.31,
+    0.0
+   ],
+   "yaw": 284.83642972234355,
+   "scale": 1.0090797629854364,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    3.65,
+    -32.92,
+    0.0
+   ],
+   "yaw": 171.58480702210747,
+   "scale": 0.9123849102032145,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    23.47,
+    33.39,
+    0.0
+   ],
+   "yaw": 80.664355356517,
+   "scale": 1.1677927224523375,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    93.52,
+    -28.74,
+    0.0
+   ],
+   "yaw": 110.87057350291462,
+   "scale": 1.0866841749029894,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -90.39,
+    -34.36,
+    0.0
+   ],
+   "yaw": 53.519393504902474,
+   "scale": 0.9442914197186335,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    86.92,
+    5.82,
+    0.0
+   ],
+   "yaw": 308.6924329788906,
+   "scale": 1.1189042355215668,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -21.8,
+    -1.75,
+    0.0
+   ],
+   "yaw": 252.5431420920689,
+   "scale": 1.0562850318349033,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -71.15,
+    -29.59,
+    0.0
+   ],
+   "yaw": 60.530538614532794,
+   "scale": 1.0761935612237612,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -90.61,
+    -26.16,
+    0.0
+   ],
+   "yaw": 312.11627177751535,
+   "scale": 1.0372108767057842,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -20.43,
+    29.28,
+    0.0
+   ],
+   "yaw": 122.64361171820943,
+   "scale": 0.9168344195830356,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -21.99,
+    -16.97,
+    0.0
+   ],
+   "yaw": 66.18892820162556,
+   "scale": 1.0702608384816386,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -46.11,
+    19.2,
+    0.0
+   ],
+   "yaw": 33.68986797710455,
+   "scale": 1.1916454746470972,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -47.54,
+    40.01,
+    0.0
+   ],
+   "yaw": 240.096590319119,
+   "scale": 1.193891422500088,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -52.73,
+    -17.87,
+    0.0
+   ],
+   "yaw": 172.20084874363639,
+   "scale": 0.9047648235619122,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    34.04,
+    45.16,
+    0.0
+   ],
+   "yaw": 103.33128603202287,
+   "scale": 1.0527015359129026,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    10.17,
+    7.83,
+    0.0
+   ],
+   "yaw": 261.90827636013023,
+   "scale": 0.934975865535517,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -26.04,
+    44.5,
+    0.0
+   ],
+   "yaw": 62.03832314709619,
+   "scale": 0.9887833529055251,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    64.77,
+    20.28,
+    0.0
+   ],
+   "yaw": 256.60884832717016,
+   "scale": 0.9051602205289069,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -55.37,
+    9.15,
+    0.0
+   ],
+   "yaw": 156.41086671705378,
+   "scale": 1.171643363129672,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    26.35,
+    41.25,
+    0.0
+   ],
+   "yaw": 195.9913255552979,
+   "scale": 1.0510840089312634,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    47.56,
+    15.37,
+    0.0
+   ],
+   "yaw": 165.1509890196702,
+   "scale": 0.9145721761153688,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -46.51,
+    42.84,
+    0.0
+   ],
+   "yaw": 20.35396683360354,
+   "scale": 1.1505287784693434,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -76.63,
+    9.27,
+    0.0
+   ],
+   "yaw": 287.73622505765417,
+   "scale": 0.9477846467428869,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -38.87,
+    28.61,
+    0.0
+   ],
+   "yaw": 146.23916701818365,
+   "scale": 0.9475561638457708,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    61.42,
+    25.07,
+    0.0
+   ],
+   "yaw": 147.84049584985897,
+   "scale": 0.9092428735434605,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    63.8,
+    35.52,
+    0.0
+   ],
+   "yaw": 148.2213589940855,
+   "scale": 0.9766327679977463,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -53.55,
+    -21.66,
+    0.0
+   ],
+   "yaw": 162.04300040463895,
+   "scale": 1.0128497698828238,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    38.33,
+    -34.94,
+    0.0
+   ],
+   "yaw": 183.23265242388263,
+   "scale": 1.0829053147260173,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -31.42,
+    -33.58,
+    0.0
+   ],
+   "yaw": 7.85698747084536,
+   "scale": 0.9648495709924252,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -66.5,
+    -21.28,
+    0.0
+   ],
+   "yaw": 145.86556139493462,
+   "scale": 1.1137634367261295,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -88.09,
+    31.45,
+    0.0
+   ],
+   "yaw": 238.35270246892472,
+   "scale": 0.9071595806608856,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    79.11,
+    11.17,
+    0.0
+   ],
+   "yaw": 286.0390377958087,
+   "scale": 1.0279020743741476,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -94.49,
+    -4.75,
+    0.0
+   ],
+   "yaw": 264.5352761334314,
+   "scale": 1.043156024999219,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -32.77,
+    37.68,
+    0.0
+   ],
+   "yaw": 65.76673519172205,
+   "scale": 1.1458868570007485,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    84.43,
+    44.86,
+    0.0
+   ],
+   "yaw": 187.7320312004865,
+   "scale": 0.9951940165457118,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -68.98,
+    19.47,
+    0.0
+   ],
+   "yaw": 29.86403839116525,
+   "scale": 0.9133951796621245,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -44.25,
+    19.12,
+    0.0
+   ],
+   "yaw": 80.50903032538373,
+   "scale": 1.0989855005580245,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -20.1,
+    -31.41,
+    0.0
+   ],
+   "yaw": 156.93472589131107,
+   "scale": 1.0973688372956656,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    65.64,
+    36.77,
+    0.0
+   ],
+   "yaw": 298.0639396570445,
+   "scale": 1.0140079383264051,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -27.65,
+    -23.1,
+    0.0
+   ],
+   "yaw": 289.3749970814002,
+   "scale": 1.0987167745492563,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -70.84,
+    -24.32,
+    0.0
+   ],
+   "yaw": 86.38291007476107,
+   "scale": 1.1858854632558742,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -87.98,
+    18.37,
+    0.0
+   ],
+   "yaw": 181.23278710416565,
+   "scale": 1.1576538318608987,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -49.84,
+    -4.22,
+    0.0
+   ],
+   "yaw": 206.38221300926105,
+   "scale": 1.091656433354895,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    49.65,
+    -14.09,
+    0.0
+   ],
+   "yaw": 82.29755906631202,
+   "scale": 0.9374841555506088,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -44.72,
+    -24.28,
+    0.0
+   ],
+   "yaw": 229.5882703557946,
+   "scale": 0.9178104518362848,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -63.63,
+    25.5,
+    0.0
+   ],
+   "yaw": 257.60280064996243,
+   "scale": 0.929055856597194,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -88.23,
+    -24.16,
+    0.0
+   ],
+   "yaw": 70.88970884933492,
+   "scale": 0.941910794724775,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    37.48,
+    7.66,
+    0.0
+   ],
+   "yaw": 25.912202119437715,
+   "scale": 1.1654129897792067,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    90.8,
+    -33.44,
+    0.0
+   ],
+   "yaw": 342.3613128930194,
+   "scale": 0.9735979865554518,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -33.45,
+    51.18,
+    0.0
+   ],
+   "yaw": 118.45806075713598,
+   "scale": 1.1750164602489939,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -54.94,
+    26.67,
+    0.0
+   ],
+   "yaw": 113.10365373065116,
+   "scale": 0.9199037128448374,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -48.2,
+    17.68,
+    0.0
+   ],
+   "yaw": 69.83189093777487,
+   "scale": 1.006806183876814,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    88.51,
+    27.31,
+    0.0
+   ],
+   "yaw": 119.01555918887048,
+   "scale": 0.9564536804885557,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -17.22,
+    47.35,
+    0.0
+   ],
+   "yaw": 14.21646503520571,
+   "scale": 1.0376384369216816,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    77.13,
+    40.4,
+    0.0
+   ],
+   "yaw": 6.214067293598395,
+   "scale": 1.0355998705374472,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -45.45,
+    40.51,
+    0.0
+   ],
+   "yaw": 259.49339203352366,
+   "scale": 1.1618885484270023,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -86.87,
+    39.19,
+    0.0
+   ],
+   "yaw": 183.30004349161115,
+   "scale": 1.154790565216851,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    27.56,
+    -32.21,
+    0.0
+   ],
+   "yaw": 150.16638786349432,
+   "scale": 0.9877093141221792,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -3.11,
+    37.96,
+    0.0
+   ],
+   "yaw": 205.35613157806137,
+   "scale": 0.9390054238585199,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -22.85,
+    30.97,
+    0.0
+   ],
+   "yaw": 145.509337356068,
+   "scale": 0.9793841121936162,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -52.54,
+    34.41,
+    0.0
+   ],
+   "yaw": 171.36520567239697,
+   "scale": 0.9781000552055219,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -36.79,
+    17.64,
+    0.0
+   ],
+   "yaw": 344.52906868070505,
+   "scale": 1.0308641526936544,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -2.46,
+    -14.67,
+    0.0
+   ],
+   "yaw": 288.7449291780119,
+   "scale": 1.0608438928552846,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    46.17,
+    -16.3,
+    0.0
+   ],
+   "yaw": 106.29953161246867,
+   "scale": 1.1530369390518949,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    42.13,
+    30.04,
+    0.0
+   ],
+   "yaw": 316.4776066042577,
+   "scale": 0.9432818635432373,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -37.44,
+    50.67,
+    0.0
+   ],
+   "yaw": 137.27835945440998,
+   "scale": 1.1145845346748657,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -61.15,
+    3.98,
+    0.0
+   ],
+   "yaw": 292.9560064878062,
+   "scale": 0.9489326734708633,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -81.59,
+    3.43,
+    0.0
+   ],
+   "yaw": 139.5388759545446,
+   "scale": 1.179716237637288,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -31.88,
+    -14.64,
+    0.0
+   ],
+   "yaw": 154.6311755376066,
+   "scale": 1.0685247878507653,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    68.42,
+    50.9,
+    0.0
+   ],
+   "yaw": 44.368494237526484,
+   "scale": 0.9799803936929199,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    72.94,
+    54.19,
+    0.0
+   ],
+   "yaw": 138.90357817946906,
+   "scale": 1.0032794258924327,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    56.13,
+    18.28,
+    0.0
+   ],
+   "yaw": 273.5385406331235,
+   "scale": 1.143513898194385,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -21.27,
+    4.23,
+    0.0
+   ],
+   "yaw": 182.7430464889403,
+   "scale": 0.9757514719914243,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_B",
+   "pos": [
+    -46.91,
+    -25.78,
+    0.0
+   ],
+   "yaw": 37.65689987699553,
+   "scale": 0.9531335310467923,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    -7.01,
+    27.3,
+    0.0
+   ],
+   "yaw": 43.533441384718756,
+   "scale": 1.0363705672614685,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    8.43,
+    13.41,
+    0.0
+   ],
+   "yaw": 207.4405296476744,
+   "scale": 1.0178764184259912,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_C",
+   "pos": [
+    -40.56,
+    45.47,
+    0.0
+   ],
+   "yaw": 210.741878845859,
+   "scale": 1.0354861396183013,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    -38.06,
+    39.32,
+    0.0
+   ],
+   "yaw": 178.19109289524107,
+   "scale": 1.064736003495574,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_A",
+   "pos": [
+    72.48,
+    -3.38,
+    0.0
+   ],
+   "yaw": 238.51227255496107,
+   "scale": 1.1970692609200768,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_Flowers_D",
+   "pos": [
+    63.35,
+    -21.28,
+    0.0
+   ],
+   "yaw": 176.13076927249205,
+   "scale": 0.9774762530867614,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -7.24,
+    34.76,
+    0.0
+   ],
+   "yaw": 317.92837085027116,
+   "scale": 1.1386529938570003,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    11.5,
+    50.57,
+    0.0
+   ],
+   "yaw": 61.450867723026846,
+   "scale": 1.2773233347211792,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -49.59,
+    20.84,
+    0.0
+   ],
+   "yaw": 284.65252601209306,
+   "scale": 1.2116321087911501,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -32.77,
+    -25.95,
+    0.0
+   ],
+   "yaw": 337.1170096869792,
+   "scale": 1.4312925018688765,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    9.95,
+    26.31,
+    0.0
+   ],
+   "yaw": 222.25929953856695,
+   "scale": 0.9178149761439609,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -54.83,
+    25.57,
+    0.0
+   ],
+   "yaw": 243.72060847842386,
+   "scale": 1.1569505949038397,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    68.84,
+    -17.97,
+    0.0
+   ],
+   "yaw": 72.8669090145885,
+   "scale": 1.4027950259736675,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    14.19,
+    17.09,
+    0.0
+   ],
+   "yaw": 121.87024406657582,
+   "scale": 1.3395028474148505,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    2.53,
+    -1.02,
+    0.0
+   ],
+   "yaw": 140.64579483712117,
+   "scale": 1.0431280512560281,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    15.45,
+    -30.58,
+    0.0
+   ],
+   "yaw": 106.75482455136488,
+   "scale": 1.1716559707911496,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -86.77,
+    33.28,
+    0.0
+   ],
+   "yaw": 169.34112696562298,
+   "scale": 1.0237930790460952,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    16.02,
+    27.74,
+    0.0
+   ],
+   "yaw": 33.939473179562334,
+   "scale": 1.157943530333745,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    76.4,
+    20.81,
+    0.0
+   ],
+   "yaw": 263.4176701373129,
+   "scale": 1.4155989883784865,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -42.22,
+    19.35,
+    0.0
+   ],
+   "yaw": 25.831241057016868,
+   "scale": 1.4985792213373743,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    7.99,
+    27.17,
+    0.0
+   ],
+   "yaw": 73.63422389530187,
+   "scale": 1.1083317994117536,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -56.51,
+    30.85,
+    0.0
+   ],
+   "yaw": 291.0387852577317,
+   "scale": 1.0547399918125726,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -75.23,
+    6.04,
+    0.0
+   ],
+   "yaw": 237.24880934086246,
+   "scale": 1.2603945602433766,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -23.19,
+    40.75,
+    0.0
+   ],
+   "yaw": 197.42996229356078,
+   "scale": 1.4461818562553548,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -91.09,
+    41.07,
+    0.0
+   ],
+   "yaw": 197.30522743428403,
+   "scale": 1.4807501059291224,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    69.94,
+    -22.93,
+    0.0
+   ],
+   "yaw": 142.63960353574606,
+   "scale": 1.397804243869218,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    74.15,
+    41.7,
+    0.0
+   ],
+   "yaw": 26.419298189923246,
+   "scale": 1.089255582509206,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    36.48,
+    12.3,
+    0.0
+   ],
+   "yaw": 157.32583533074936,
+   "scale": 0.9876745161077037,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -62.61,
+    37.86,
+    0.0
+   ],
+   "yaw": 308.3052816025545,
+   "scale": 1.4338243753013078,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -0.16,
+    51.19,
+    0.0
+   ],
+   "yaw": 287.8049700315683,
+   "scale": 1.195340098000275,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    3.06,
+    16.04,
+    0.0
+   ],
+   "yaw": 99.89166413943002,
+   "scale": 1.4099025373283205,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -36.95,
+    43.54,
+    0.0
+   ],
+   "yaw": 193.6996886528781,
+   "scale": 0.9110006247859139,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    24.26,
+    -14.76,
+    0.0
+   ],
+   "yaw": 45.3288508807373,
+   "scale": 1.4006536215958625,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -58.97,
+    10.6,
+    0.0
+   ],
+   "yaw": 77.52426754040691,
+   "scale": 1.2582880602929547,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    60.6,
+    27.0,
+    0.0
+   ],
+   "yaw": 336.6681272692845,
+   "scale": 0.907289132161074,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    82.46,
+    48.6,
+    0.0
+   ],
+   "yaw": 108.76101781570476,
+   "scale": 1.1360464818843916,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    87.26,
+    49.51,
+    0.0
+   ],
+   "yaw": 47.0541917428541,
+   "scale": 1.1043859386729942,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    11.55,
+    30.37,
+    0.0
+   ],
+   "yaw": 0.6788173765928551,
+   "scale": 0.9044491188116003,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -49.8,
+    -13.59,
+    0.0
+   ],
+   "yaw": 141.9943805029151,
+   "scale": 0.9521418844806099,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    30.29,
+    -21.92,
+    0.0
+   ],
+   "yaw": 25.99738528455287,
+   "scale": 1.1740508713464421,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    84.67,
+    49.4,
+    0.0
+   ],
+   "yaw": 352.9819184858785,
+   "scale": 1.4846364953384685,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -26.06,
+    -5.78,
+    0.0
+   ],
+   "yaw": 112.3734553186874,
+   "scale": 1.3789856778410827,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -44.86,
+    38.49,
+    0.0
+   ],
+   "yaw": 206.15936194292956,
+   "scale": 1.4532460823366056,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    20.27,
+    29.82,
+    0.0
+   ],
+   "yaw": 212.73738098174618,
+   "scale": 1.3515316447379442,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -63.2,
+    49.46,
+    0.0
+   ],
+   "yaw": 332.2368718717646,
+   "scale": 1.1672055498143514,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    15.63,
+    -28.01,
+    0.0
+   ],
+   "yaw": 82.5902073090509,
+   "scale": 1.482481649518994,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -73.72,
+    48.23,
+    0.0
+   ],
+   "yaw": 300.2171860264678,
+   "scale": 1.1579983783590104,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -76.13,
+    24.03,
+    0.0
+   ],
+   "yaw": 162.04061110900173,
+   "scale": 1.1405451830436073,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -81.47,
+    46.36,
+    0.0
+   ],
+   "yaw": 178.73637841685405,
+   "scale": 1.2830122307523417,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -23.69,
+    -34.17,
+    0.0
+   ],
+   "yaw": 222.7958872098789,
+   "scale": 1.235362461634649,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    26.82,
+    32.39,
+    0.0
+   ],
+   "yaw": 44.257738102203724,
+   "scale": 1.0297397634745804,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -50.26,
+    47.87,
+    0.0
+   ],
+   "yaw": 176.14494445309182,
+   "scale": 1.4336593209383273,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -45.16,
+    -25.01,
+    0.0
+   ],
+   "yaw": 198.81540673601768,
+   "scale": 1.2727444794588956,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    94.5,
+    -34.12,
+    0.0
+   ],
+   "yaw": 275.3499005711722,
+   "scale": 0.9424893862329861,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    77.17,
+    25.7,
+    0.0
+   ],
+   "yaw": 224.36382765809986,
+   "scale": 0.9778776208988743,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -20.1,
+    45.02,
+    0.0
+   ],
+   "yaw": 22.779879885133504,
+   "scale": 0.9288600664813467,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    46.16,
+    46.48,
+    0.0
+   ],
+   "yaw": 268.51620313603905,
+   "scale": 1.254026100721505,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    62.81,
+    48.11,
+    0.0
+   ],
+   "yaw": 99.79449219803486,
+   "scale": 0.9423560405911152,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    22.33,
+    18.68,
+    0.0
+   ],
+   "yaw": 246.33240641998162,
+   "scale": 0.9313130578187467,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    62.8,
+    -32.27,
+    0.0
+   ],
+   "yaw": 233.51579288307943,
+   "scale": 1.28456443269967,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -31.63,
+    -18.2,
+    0.0
+   ],
+   "yaw": 340.4798757157587,
+   "scale": 1.1076278189613258,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    58.22,
+    26.04,
+    0.0
+   ],
+   "yaw": 132.4600717804006,
+   "scale": 0.9692057689303851,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    88.75,
+    19.22,
+    0.0
+   ],
+   "yaw": 6.559974127894432,
+   "scale": 1.3743111852316179,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -91.81,
+    16.48,
+    0.0
+   ],
+   "yaw": 35.26027343222708,
+   "scale": 1.0117457387034665,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -85.62,
+    -19.87,
+    0.0
+   ],
+   "yaw": 14.78185378436108,
+   "scale": 1.1903781862526834,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    44.15,
+    27.31,
+    0.0
+   ],
+   "yaw": 176.42400796141897,
+   "scale": 0.9040778324344715,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -36.14,
+    20.98,
+    0.0
+   ],
+   "yaw": 188.5494627577156,
+   "scale": 1.0989600772899224,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -8.87,
+    13.25,
+    0.0
+   ],
+   "yaw": 77.52306407781697,
+   "scale": 1.4387988390668243,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -24.27,
+    10.58,
+    0.0
+   ],
+   "yaw": 11.878195676646964,
+   "scale": 1.0519683831826336,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -80.66,
+    -34.89,
+    0.0
+   ],
+   "yaw": 116.94514730226989,
+   "scale": 1.3150569189997934,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -53.76,
+    54.24,
+    0.0
+   ],
+   "yaw": 30.359839561102007,
+   "scale": 0.9730720043791644,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    24.49,
+    35.48,
+    0.0
+   ],
+   "yaw": 119.67247058092536,
+   "scale": 1.3594342157680137,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    38.03,
+    -26.5,
+    0.0
+   ],
+   "yaw": 11.659984673541945,
+   "scale": 1.1126211862461794,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -47.95,
+    6.25,
+    0.0
+   ],
+   "yaw": 224.49052365255906,
+   "scale": 1.4146977727342525,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    70.8,
+    -29.34,
+    0.0
+   ],
+   "yaw": 341.1687411120993,
+   "scale": 1.060239697582305,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -94.67,
+    -28.11,
+    0.0
+   ],
+   "yaw": 179.16486979201426,
+   "scale": 1.1226119518414743,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -2.28,
+    27.78,
+    0.0
+   ],
+   "yaw": 221.58796999467214,
+   "scale": 1.0542340134191313,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -88.36,
+    -21.02,
+    0.0
+   ],
+   "yaw": 0.9774155625682823,
+   "scale": 1.025706110384729,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -25.4,
+    43.1,
+    0.0
+   ],
+   "yaw": 20.81336172957835,
+   "scale": 1.1189091277892822,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -9.45,
+    23.61,
+    0.0
+   ],
+   "yaw": 200.33714772550624,
+   "scale": 1.316148088366679,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -70.8,
+    25.73,
+    0.0
+   ],
+   "yaw": 171.3455816967654,
+   "scale": 1.136867074526542,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    93.15,
+    2.17,
+    0.0
+   ],
+   "yaw": 118.03358182507388,
+   "scale": 1.3691336827183045,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -83.89,
+    2.44,
+    0.0
+   ],
+   "yaw": 328.79579818159107,
+   "scale": 1.098864476704406,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -59.44,
+    23.13,
+    0.0
+   ],
+   "yaw": 263.5307547821655,
+   "scale": 1.2866610906041862,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    36.5,
+    16.08,
+    0.0
+   ],
+   "yaw": 120.16951017525005,
+   "scale": 1.3337856563760073,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    46.51,
+    -23.76,
+    0.0
+   ],
+   "yaw": 295.0423082672494,
+   "scale": 1.2501400580634248,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -29.19,
+    39.91,
+    0.0
+   ],
+   "yaw": 76.11265410543612,
+   "scale": 1.1621731064390084,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -11.94,
+    23.78,
+    0.0
+   ],
+   "yaw": 268.31978846910636,
+   "scale": 1.2682967337355728,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    17.65,
+    8.75,
+    0.0
+   ],
+   "yaw": 18.125393750772744,
+   "scale": 1.3794963953226858,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -58.17,
+    54.7,
+    0.0
+   ],
+   "yaw": 267.60975024684546,
+   "scale": 1.327179965193556,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -53.32,
+    20.09,
+    0.0
+   ],
+   "yaw": 149.89604528274373,
+   "scale": 1.488235137938015,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    86.17,
+    38.06,
+    0.0
+   ],
+   "yaw": 198.71254470239327,
+   "scale": 0.9495751460198001,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -34.1,
+    42.68,
+    0.0
+   ],
+   "yaw": 209.90005386314235,
+   "scale": 1.3992910208119913,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -4.77,
+    -20.43,
+    0.0
+   ],
+   "yaw": 347.0543451377654,
+   "scale": 1.0095485959251511,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -70.54,
+    19.88,
+    0.0
+   ],
+   "yaw": 32.89357814544814,
+   "scale": 1.1526163450400386,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -34.03,
+    15.79,
+    0.0
+   ],
+   "yaw": 81.89115510999576,
+   "scale": 0.9195696287020794,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -20.39,
+    37.78,
+    0.0
+   ],
+   "yaw": 72.68648561879813,
+   "scale": 1.010302374935408,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -82.05,
+    33.56,
+    0.0
+   ],
+   "yaw": 245.06835498594575,
+   "scale": 1.3838227264926601,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -18.4,
+    45.14,
+    0.0
+   ],
+   "yaw": 155.8525052646154,
+   "scale": 0.9611486442155945,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -61.2,
+    40.74,
+    0.0
+   ],
+   "yaw": 283.7076220948977,
+   "scale": 0.9280707591361268,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -75.87,
+    18.15,
+    0.0
+   ],
+   "yaw": 181.90627748433752,
+   "scale": 1.1303892598565597,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    93.17,
+    -28.33,
+    0.0
+   ],
+   "yaw": 59.65239085244064,
+   "scale": 1.4039804158551303,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    44.29,
+    39.61,
+    0.0
+   ],
+   "yaw": 214.7746782968567,
+   "scale": 1.1258509295618244,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    27.83,
+    -19.31,
+    0.0
+   ],
+   "yaw": 78.24054291631757,
+   "scale": 1.4415479808940186,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -34.88,
+    30.48,
+    0.0
+   ],
+   "yaw": 204.78486319107887,
+   "scale": 1.389062851597657,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -56.45,
+    6.6,
+    0.0
+   ],
+   "yaw": 70.21108237763146,
+   "scale": 1.243071352794793,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    66.17,
+    -23.75,
+    0.0
+   ],
+   "yaw": 16.862247892783536,
+   "scale": 1.4530541635204892,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    69.41,
+    16.41,
+    0.0
+   ],
+   "yaw": 314.75162039195766,
+   "scale": 0.9469233497887948,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -5.88,
+    29.38,
+    0.0
+   ],
+   "yaw": 345.95150738532277,
+   "scale": 1.404322482290403,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -91.21,
+    34.82,
+    0.0
+   ],
+   "yaw": 58.86723131356506,
+   "scale": 1.0531928966157846,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    44.48,
+    36.59,
+    0.0
+   ],
+   "yaw": 45.32554273544148,
+   "scale": 1.2774736891813727,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    58.51,
+    23.09,
+    0.0
+   ],
+   "yaw": 110.10385222182543,
+   "scale": 1.1322425271845977,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    34.7,
+    10.28,
+    0.0
+   ],
+   "yaw": 279.3601891244238,
+   "scale": 1.2286972165808039,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -68.57,
+    -14.74,
+    0.0
+   ],
+   "yaw": 133.3035631940616,
+   "scale": 1.2171959427000645,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    30.67,
+    26.3,
+    0.0
+   ],
+   "yaw": 197.30453836757414,
+   "scale": 1.3223317179300749,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -56.0,
+    13.92,
+    0.0
+   ],
+   "yaw": 263.14553474183634,
+   "scale": 1.2848111163789224,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    24.84,
+    -24.63,
+    0.0
+   ],
+   "yaw": 310.19903504955573,
+   "scale": 1.0702464591542227,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -7.86,
+    50.27,
+    0.0
+   ],
+   "yaw": 68.0630319471899,
+   "scale": 0.953086809578016,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -29.94,
+    23.4,
+    0.0
+   ],
+   "yaw": 303.00374156663145,
+   "scale": 1.1278647649272295,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    76.45,
+    44.51,
+    0.0
+   ],
+   "yaw": 38.64636478808464,
+   "scale": 1.044458797219212,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    76.33,
+    26.85,
+    0.0
+   ],
+   "yaw": 131.79660510498726,
+   "scale": 1.1057313155267268,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    83.43,
+    33.88,
+    0.0
+   ],
+   "yaw": 195.21819335080934,
+   "scale": 1.2303253231883156,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    76.89,
+    35.29,
+    0.0
+   ],
+   "yaw": 33.05400125361701,
+   "scale": 1.1308079693246957,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -49.59,
+    -31.2,
+    0.0
+   ],
+   "yaw": 174.97377593344157,
+   "scale": 1.0160800581443137,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -51.85,
+    34.1,
+    0.0
+   ],
+   "yaw": 72.79108502628986,
+   "scale": 1.179720107458853,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -43.43,
+    29.56,
+    0.0
+   ],
+   "yaw": 131.7267622578238,
+   "scale": 1.3581504704994483,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -24.97,
+    17.01,
+    0.0
+   ],
+   "yaw": 121.22605551335457,
+   "scale": 1.3407646781238907,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -30.44,
+    22.69,
+    0.0
+   ],
+   "yaw": 344.64789248133485,
+   "scale": 1.2903668128279966,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -82.91,
+    48.22,
+    0.0
+   ],
+   "yaw": 43.00227763553742,
+   "scale": 1.4142813889538246,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -50.8,
+    -29.72,
+    0.0
+   ],
+   "yaw": 318.6349955134749,
+   "scale": 0.9343706515447631,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    17.64,
+    19.31,
+    0.0
+   ],
+   "yaw": 238.67024597077852,
+   "scale": 1.1605374743929353,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    20.79,
+    35.95,
+    0.0
+   ],
+   "yaw": 6.413193927953862,
+   "scale": 1.1514991093461655,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -3.62,
+    9.39,
+    0.0
+   ],
+   "yaw": 7.3230611638721,
+   "scale": 1.2409760675002757,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -31.1,
+    33.11,
+    0.0
+   ],
+   "yaw": 181.10341971580263,
+   "scale": 1.2913364537458152,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -43.51,
+    49.71,
+    0.0
+   ],
+   "yaw": 221.04290324203203,
+   "scale": 1.0329153834826321,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -1.08,
+    12.46,
+    0.0
+   ],
+   "yaw": 0.18309443144766124,
+   "scale": 1.3314593747950978,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -54.31,
+    -26.74,
+    0.0
+   ],
+   "yaw": 352.6556903411728,
+   "scale": 1.3644396819122637,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -45.6,
+    -17.87,
+    0.0
+   ],
+   "yaw": 155.07238441670202,
+   "scale": 1.0004383558661067,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -58.11,
+    23.32,
+    0.0
+   ],
+   "yaw": 8.67820249111881,
+   "scale": 1.1519327776884876,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -88.63,
+    24.96,
+    0.0
+   ],
+   "yaw": 188.64127057536513,
+   "scale": 1.4151482526744659,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    84.13,
+    39.13,
+    0.0
+   ],
+   "yaw": 215.28422696743027,
+   "scale": 1.3607621475734908,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -75.72,
+    53.16,
+    0.0
+   ],
+   "yaw": 152.0524940542843,
+   "scale": 1.349317959173564,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    94.09,
+    -23.39,
+    0.0
+   ],
+   "yaw": 239.531333148761,
+   "scale": 1.27516685498804,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    5.85,
+    12.66,
+    0.0
+   ],
+   "yaw": 276.7569666043573,
+   "scale": 1.377336510074236,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -35.07,
+    17.9,
+    0.0
+   ],
+   "yaw": 147.44177460377742,
+   "scale": 1.3107970064945749,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -62.66,
+    50.81,
+    0.0
+   ],
+   "yaw": 40.95238263735274,
+   "scale": 0.939231608322392,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -33.81,
+    30.34,
+    0.0
+   ],
+   "yaw": 272.1229764443693,
+   "scale": 1.3800550379895782,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -1.38,
+    24.4,
+    0.0
+   ],
+   "yaw": 89.0664934339353,
+   "scale": 1.0627328217399892,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    79.18,
+    39.86,
+    0.0
+   ],
+   "yaw": 138.4473217922795,
+   "scale": 1.1865182351656376,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -44.74,
+    45.63,
+    0.0
+   ],
+   "yaw": 335.05410051638916,
+   "scale": 1.0536755999979912,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -52.06,
+    16.85,
+    0.0
+   ],
+   "yaw": 305.55466727784903,
+   "scale": 1.4737813745568489,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    67.01,
+    18.28,
+    0.0
+   ],
+   "yaw": 162.55889296781353,
+   "scale": 1.290181385330614,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    75.34,
+    -22.51,
+    0.0
+   ],
+   "yaw": 273.01045672449874,
+   "scale": 1.175079451825048,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -79.51,
+    3.55,
+    0.0
+   ],
+   "yaw": 238.5720939492541,
+   "scale": 1.2034499742627696,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -83.63,
+    6.01,
+    0.0
+   ],
+   "yaw": 301.19960848193733,
+   "scale": 1.091429388316757,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    17.61,
+    -22.85,
+    0.0
+   ],
+   "yaw": 129.75884421533635,
+   "scale": 1.1910304419077498,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -39.76,
+    44.8,
+    0.0
+   ],
+   "yaw": 323.30922044372375,
+   "scale": 1.1807576209917952,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    55.01,
+    40.53,
+    0.0
+   ],
+   "yaw": 200.60740407570995,
+   "scale": 1.2437829763745702,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -88.11,
+    -15.83,
+    0.0
+   ],
+   "yaw": 37.186390425142505,
+   "scale": 1.4395341722594517,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -41.64,
+    28.95,
+    0.0
+   ],
+   "yaw": 350.06907257119724,
+   "scale": 1.115725923272805,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    40.41,
+    -34.94,
+    0.0
+   ],
+   "yaw": 254.59662054525927,
+   "scale": 1.091351772896271,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -83.72,
+    54.9,
+    0.0
+   ],
+   "yaw": 354.29607965923935,
+   "scale": 1.0525782304806417,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -72.31,
+    -34.67,
+    0.0
+   ],
+   "yaw": 75.75537060058575,
+   "scale": 0.9818322964293491,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -84.61,
+    48.05,
+    0.0
+   ],
+   "yaw": 107.2913612748409,
+   "scale": 1.0568088162425573,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -7.14,
+    -24.96,
+    0.0
+   ],
+   "yaw": 245.380232140669,
+   "scale": 1.4374548518611434,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -71.74,
+    52.06,
+    0.0
+   ],
+   "yaw": 286.1081065332009,
+   "scale": 1.4505755022851485,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    42.11,
+    23.88,
+    0.0
+   ],
+   "yaw": 60.544117026651,
+   "scale": 1.1776321073748206,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    2.64,
+    52.76,
+    0.0
+   ],
+   "yaw": 81.7845794982289,
+   "scale": 1.087274536336179,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    18.4,
+    25.07,
+    0.0
+   ],
+   "yaw": 261.68267531101344,
+   "scale": 1.3098087245051497,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    32.43,
+    14.62,
+    0.0
+   ],
+   "yaw": 88.03777825693227,
+   "scale": 1.2421732660933285,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    90.32,
+    33.73,
+    0.0
+   ],
+   "yaw": 131.30467164915595,
+   "scale": 1.4157341830441739,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -48.96,
+    25.44,
+    0.0
+   ],
+   "yaw": 311.41489752973325,
+   "scale": 1.14495434131288,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -93.67,
+    40.82,
+    0.0
+   ],
+   "yaw": 64.95530584304672,
+   "scale": 1.0002741057125004,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -29.34,
+    37.86,
+    0.0
+   ],
+   "yaw": 48.662062163380575,
+   "scale": 0.9769391064519696,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -26.87,
+    2.9,
+    0.0
+   ],
+   "yaw": 235.26629652828134,
+   "scale": 1.3940399871626803,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    83.88,
+    2.13,
+    0.0
+   ],
+   "yaw": 97.61454451703047,
+   "scale": 1.4832313668994819,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    32.36,
+    47.59,
+    0.0
+   ],
+   "yaw": 69.11288646052175,
+   "scale": 1.227198727742754,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -79.32,
+    23.19,
+    0.0
+   ],
+   "yaw": 250.1211417868647,
+   "scale": 1.2794040906858664,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -90.41,
+    14.72,
+    0.0
+   ],
+   "yaw": 320.0478084652402,
+   "scale": 1.0496994900902161,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -78.63,
+    31.31,
+    0.0
+   ],
+   "yaw": 110.67613491133159,
+   "scale": 1.4368850155617297,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    10.19,
+    14.29,
+    0.0
+   ],
+   "yaw": 123.06430617868803,
+   "scale": 1.1782894345857708,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    1.22,
+    8.4,
+    0.0
+   ],
+   "yaw": 29.524769815003154,
+   "scale": 1.06787265816727,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -11.82,
+    41.05,
+    0.0
+   ],
+   "yaw": 320.915533813738,
+   "scale": 1.3169125349747248,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -91.65,
+    49.87,
+    0.0
+   ],
+   "yaw": 112.84966378401384,
+   "scale": 1.4553002902731196,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -49.48,
+    39.69,
+    0.0
+   ],
+   "yaw": 77.91449373394573,
+   "scale": 0.9415985834013912,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -70.29,
+    37.39,
+    0.0
+   ],
+   "yaw": 195.05863051945525,
+   "scale": 1.1798817724341968,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -86.77,
+    -19.53,
+    0.0
+   ],
+   "yaw": 255.46160176451693,
+   "scale": 1.235224510635028,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    78.6,
+    48.58,
+    0.0
+   ],
+   "yaw": 287.35556762409993,
+   "scale": 1.3619717380185692,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -79.06,
+    -24.63,
+    0.0
+   ],
+   "yaw": 295.38579650702974,
+   "scale": 1.1366471363955772,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    18.66,
+    48.53,
+    0.0
+   ],
+   "yaw": 246.75489743902912,
+   "scale": 0.9931976165626542,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -23.14,
+    -30.59,
+    0.0
+   ],
+   "yaw": 120.18680620149028,
+   "scale": 1.4886748212184269,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -27.04,
+    15.13,
+    0.0
+   ],
+   "yaw": 110.3250006238549,
+   "scale": 1.432576242292699,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    74.14,
+    46.7,
+    0.0
+   ],
+   "yaw": 338.79626703740496,
+   "scale": 1.1342251667428922,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    54.17,
+    48.91,
+    0.0
+   ],
+   "yaw": 155.22023525039202,
+   "scale": 1.4352014225972372,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -75.26,
+    51.65,
+    0.0
+   ],
+   "yaw": 193.88048650214662,
+   "scale": 1.059951921636847,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -65.5,
+    12.28,
+    0.0
+   ],
+   "yaw": 23.678143311745792,
+   "scale": 1.2185369634924723,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -10.25,
+    47.59,
+    0.0
+   ],
+   "yaw": 306.6248919247973,
+   "scale": 1.0324907899272115,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -42.81,
+    28.53,
+    0.0
+   ],
+   "yaw": 215.95340314063176,
+   "scale": 0.9029248878133728,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -6.43,
+    51.72,
+    0.0
+   ],
+   "yaw": 82.84237003868324,
+   "scale": 1.225480428497171,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -22.85,
+    -13.06,
+    0.0
+   ],
+   "yaw": 119.0354223870571,
+   "scale": 0.9729380516794685,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    84.48,
+    -16.65,
+    0.0
+   ],
+   "yaw": 282.7076425615995,
+   "scale": 0.9571329893960245,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    31.73,
+    37.24,
+    0.0
+   ],
+   "yaw": 18.186074707895546,
+   "scale": 1.0775126332902374,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    89.26,
+    -18.54,
+    0.0
+   ],
+   "yaw": 106.1488251545857,
+   "scale": 0.9381096535185552,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    91.95,
+    18.35,
+    0.0
+   ],
+   "yaw": 71.24012644097586,
+   "scale": 1.2836788733618507,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -38.69,
+    27.79,
+    0.0
+   ],
+   "yaw": 132.62175599418103,
+   "scale": 1.1966977716134317,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -25.54,
+    52.98,
+    0.0
+   ],
+   "yaw": 233.42777153493594,
+   "scale": 1.1799687783675712,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -34.69,
+    52.2,
+    0.0
+   ],
+   "yaw": 104.39139013577667,
+   "scale": 1.0129874832081307,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    43.4,
+    35.43,
+    0.0
+   ],
+   "yaw": 288.515462172132,
+   "scale": 0.9242816614397539,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    64.0,
+    37.27,
+    0.0
+   ],
+   "yaw": 84.96876846993042,
+   "scale": 1.1749353413458719,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -60.69,
+    31.85,
+    0.0
+   ],
+   "yaw": 194.09193442792554,
+   "scale": 1.1250628020166067,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    85.96,
+    -6.1,
+    0.0
+   ],
+   "yaw": 93.910226594239,
+   "scale": 1.0683382954639764,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    73.03,
+    37.63,
+    0.0
+   ],
+   "yaw": 357.15915635475596,
+   "scale": 1.4891320279872655,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -61.93,
+    32.08,
+    0.0
+   ],
+   "yaw": 313.28956406454193,
+   "scale": 1.3339214449315617,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    42.37,
+    9.52,
+    0.0
+   ],
+   "yaw": 120.66737409417183,
+   "scale": 1.3978460055285025,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    2.62,
+    23.11,
+    0.0
+   ],
+   "yaw": 295.97278209729,
+   "scale": 1.3563991161917899,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -52.05,
+    53.87,
+    0.0
+   ],
+   "yaw": 39.57549248094785,
+   "scale": 1.405878100063429,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -59.89,
+    3.17,
+    0.0
+   ],
+   "yaw": 12.263542080790097,
+   "scale": 1.0771450995531449,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -11.46,
+    10.26,
+    0.0
+   ],
+   "yaw": 310.20571905806145,
+   "scale": 1.0529911781720287,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    3.78,
+    54.88,
+    0.0
+   ],
+   "yaw": 247.94224404091602,
+   "scale": 1.3774133938205526,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    72.73,
+    -1.25,
+    0.0
+   ],
+   "yaw": 176.32586183421947,
+   "scale": 1.258585385592672,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -86.49,
+    8.59,
+    0.0
+   ],
+   "yaw": 75.46827283051923,
+   "scale": 1.462143592629272,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    1.46,
+    3.01,
+    0.0
+   ],
+   "yaw": 349.75264632470925,
+   "scale": 0.969951781949988,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    78.43,
+    24.3,
+    0.0
+   ],
+   "yaw": 339.26044959485967,
+   "scale": 1.3601747629513048,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -53.54,
+    33.45,
+    0.0
+   ],
+   "yaw": 149.40694486514687,
+   "scale": 1.1443890141330344,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    8.84,
+    42.3,
+    0.0
+   ],
+   "yaw": 218.829454891834,
+   "scale": 1.0665708250220842,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -27.11,
+    28.94,
+    0.0
+   ],
+   "yaw": 288.0031557324242,
+   "scale": 1.3093364724317973,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -20.0,
+    40.63,
+    0.0
+   ],
+   "yaw": 207.71990718807453,
+   "scale": 0.9532395967204307,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -52.2,
+    39.23,
+    0.0
+   ],
+   "yaw": 279.24684532169783,
+   "scale": 0.9072030239000416,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -55.06,
+    13.19,
+    0.0
+   ],
+   "yaw": 129.13159240278827,
+   "scale": 1.4516148594144989,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    9.7,
+    28.61,
+    0.0
+   ],
+   "yaw": 131.07171685919732,
+   "scale": 0.9037438074129309,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -5.67,
+    53.06,
+    0.0
+   ],
+   "yaw": 309.95485303453574,
+   "scale": 1.2682949640132029,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -76.96,
+    33.55,
+    0.0
+   ],
+   "yaw": 93.55446548095057,
+   "scale": 1.1064254129558815,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -35.66,
+    50.13,
+    0.0
+   ],
+   "yaw": 239.36856374771207,
+   "scale": 1.1705650570824842,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    76.85,
+    38.58,
+    0.0
+   ],
+   "yaw": 165.13371399246756,
+   "scale": 0.9330562949937654,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    72.74,
+    35.55,
+    0.0
+   ],
+   "yaw": 212.81978066475742,
+   "scale": 1.043703294147062,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    54.05,
+    -22.48,
+    0.0
+   ],
+   "yaw": 27.91456207380004,
+   "scale": 0.9245999298415845,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -44.41,
+    36.55,
+    0.0
+   ],
+   "yaw": 228.77744593106607,
+   "scale": 1.248184774936054,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -55.82,
+    37.06,
+    0.0
+   ],
+   "yaw": 343.251038183795,
+   "scale": 1.4658950407055578,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    82.39,
+    -27.41,
+    0.0
+   ],
+   "yaw": 144.5119608580277,
+   "scale": 1.0616025529853927,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    90.81,
+    5.89,
+    0.0
+   ],
+   "yaw": 308.1012030814295,
+   "scale": 1.1005279294732042,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    49.65,
+    13.76,
+    0.0
+   ],
+   "yaw": 82.36228256967514,
+   "scale": 1.445428106766921,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -22.92,
+    19.52,
+    0.0
+   ],
+   "yaw": 117.09080570047747,
+   "scale": 1.092253126079798,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -69.99,
+    -31.53,
+    0.0
+   ],
+   "yaw": 351.448837248672,
+   "scale": 0.9065855348727114,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    28.49,
+    -16.52,
+    0.0
+   ],
+   "yaw": 14.981261366404581,
+   "scale": 0.964973775880895,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    94.77,
+    2.12,
+    0.0
+   ],
+   "yaw": 15.242479538121824,
+   "scale": 1.017210644617691,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    32.84,
+    46.73,
+    0.0
+   ],
+   "yaw": 347.0293798947637,
+   "scale": 1.485676200760716,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    22.44,
+    -24.58,
+    0.0
+   ],
+   "yaw": 177.7016296790069,
+   "scale": 1.045410900731645,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -54.19,
+    12.22,
+    0.0
+   ],
+   "yaw": 83.96620065379642,
+   "scale": 1.2715408736000746,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    52.53,
+    30.71,
+    0.0
+   ],
+   "yaw": 17.436655567368668,
+   "scale": 1.420492592310532,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    91.96,
+    49.69,
+    0.0
+   ],
+   "yaw": 334.6307619100438,
+   "scale": 1.4151230480397348,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    34.61,
+    49.35,
+    0.0
+   ],
+   "yaw": 260.3514479649897,
+   "scale": 1.0782397335440133,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    30.26,
+    52.38,
+    0.0
+   ],
+   "yaw": 178.3667980232144,
+   "scale": 1.07865919506413,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -38.3,
+    31.21,
+    0.0
+   ],
+   "yaw": 33.19685752071416,
+   "scale": 1.0245941267631105,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -90.38,
+    19.16,
+    0.0
+   ],
+   "yaw": 39.235828417380375,
+   "scale": 1.1305308325312364,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -94.99,
+    39.66,
+    0.0
+   ],
+   "yaw": 140.9018129578642,
+   "scale": 0.9470917103730134,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    28.91,
+    -30.61,
+    0.0
+   ],
+   "yaw": 149.70952275210252,
+   "scale": 1.1104017961863106,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -63.19,
+    -30.56,
+    0.0
+   ],
+   "yaw": 262.8695584997945,
+   "scale": 0.9493248633825672,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    47.46,
+    46.96,
+    0.0
+   ],
+   "yaw": 105.32285379304493,
+   "scale": 1.3758124869901331,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    17.53,
+    22.84,
+    0.0
+   ],
+   "yaw": 293.2589440579542,
+   "scale": 0.9542430590796378,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -54.32,
+    52.65,
+    0.0
+   ],
+   "yaw": 357.1983495285007,
+   "scale": 1.1048953536446386,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -51.71,
+    37.67,
+    0.0
+   ],
+   "yaw": 351.6361014024034,
+   "scale": 1.2554380006398984,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -20.9,
+    28.17,
+    0.0
+   ],
+   "yaw": 66.02982131614769,
+   "scale": 1.032786716153512,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    21.93,
+    -26.15,
+    0.0
+   ],
+   "yaw": 53.337957155396204,
+   "scale": 1.1778775799040913,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    17.54,
+    -17.02,
+    0.0
+   ],
+   "yaw": 83.05155590839456,
+   "scale": 1.1945221019706926,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -4.89,
+    -21.51,
+    0.0
+   ],
+   "yaw": 68.9526968158236,
+   "scale": 1.4320453252643608,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -65.1,
+    13.68,
+    0.0
+   ],
+   "yaw": 307.0553989244993,
+   "scale": 1.2010281824918745,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    91.45,
+    36.26,
+    0.0
+   ],
+   "yaw": 114.26998002924744,
+   "scale": 1.3672097681988475,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    87.63,
+    -24.99,
+    0.0
+   ],
+   "yaw": 94.32133701794956,
+   "scale": 0.9557043438742313,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -10.94,
+    38.44,
+    0.0
+   ],
+   "yaw": 155.534784909943,
+   "scale": 1.3576909120376626,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    87.15,
+    43.59,
+    0.0
+   ],
+   "yaw": 173.08786214203408,
+   "scale": 1.3865398444206696,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    73.63,
+    11.72,
+    0.0
+   ],
+   "yaw": 287.8805404733744,
+   "scale": 0.9495968620982619,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -43.29,
+    52.29,
+    0.0
+   ],
+   "yaw": 197.00950776692736,
+   "scale": 1.1765399011110904,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -46.71,
+    33.38,
+    0.0
+   ],
+   "yaw": 55.714451773964605,
+   "scale": 1.2095924765373036,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    66.35,
+    44.04,
+    0.0
+   ],
+   "yaw": 13.44720489471252,
+   "scale": 0.9756331631199756,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    87.55,
+    -15.32,
+    0.0
+   ],
+   "yaw": 118.73439481757295,
+   "scale": 1.4644783519129303,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    91.92,
+    -28.52,
+    0.0
+   ],
+   "yaw": 231.1306653442544,
+   "scale": 1.2233837995474621,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -31.16,
+    38.54,
+    0.0
+   ],
+   "yaw": 282.1985110186068,
+   "scale": 1.0019502116664363,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -79.35,
+    50.36,
+    0.0
+   ],
+   "yaw": 296.4592802032023,
+   "scale": 1.388932860436225,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    5.01,
+    -25.83,
+    0.0
+   ],
+   "yaw": 339.87528808974366,
+   "scale": 1.000390079973425,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -60.83,
+    46.23,
+    0.0
+   ],
+   "yaw": 224.62393194705868,
+   "scale": 1.004191494360137,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -78.63,
+    22.73,
+    0.0
+   ],
+   "yaw": 22.261529458875376,
+   "scale": 1.2050722961635647,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -63.08,
+    -22.4,
+    0.0
+   ],
+   "yaw": 27.074239512398623,
+   "scale": 0.9249706868633081,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -5.88,
+    49.37,
+    0.0
+   ],
+   "yaw": 156.4307639308889,
+   "scale": 1.4272166894762721,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -25.62,
+    0.22,
+    0.0
+   ],
+   "yaw": 134.39491111174468,
+   "scale": 1.4400894265851503,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -63.8,
+    18.37,
+    0.0
+   ],
+   "yaw": 165.29264231006155,
+   "scale": 1.0158919507376492,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    69.19,
+    51.12,
+    0.0
+   ],
+   "yaw": 176.25851938113374,
+   "scale": 1.395378080849257,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -46.42,
+    -34.43,
+    0.0
+   ],
+   "yaw": 36.419192210850774,
+   "scale": 1.0747179038125274,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    5.41,
+    49.24,
+    0.0
+   ],
+   "yaw": 46.632340646425206,
+   "scale": 1.0599510964955214,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    70.34,
+    -21.38,
+    0.0
+   ],
+   "yaw": 30.874713928274723,
+   "scale": 1.3368761585057343,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -72.24,
+    25.7,
+    0.0
+   ],
+   "yaw": 10.703252359419334,
+   "scale": 1.3199743378001778,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -79.06,
+    43.35,
+    0.0
+   ],
+   "yaw": 328.20917105668997,
+   "scale": 0.941600426491261,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -94.45,
+    40.33,
+    0.0
+   ],
+   "yaw": 203.44275668891953,
+   "scale": 1.1135904531238734,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    44.03,
+    -33.89,
+    0.0
+   ],
+   "yaw": 244.42512341228993,
+   "scale": 1.4067783852355267,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    15.58,
+    41.06,
+    0.0
+   ],
+   "yaw": 36.94715430004886,
+   "scale": 1.3886353494615709,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    1.75,
+    20.42,
+    0.0
+   ],
+   "yaw": 244.33141236629177,
+   "scale": 1.1903621104811752,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -33.57,
+    13.49,
+    0.0
+   ],
+   "yaw": 240.84711374049476,
+   "scale": 1.0109212876611395,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    91.38,
+    9.81,
+    0.0
+   ],
+   "yaw": 67.92219556330352,
+   "scale": 1.4208090081432299,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -47.95,
+    26.75,
+    0.0
+   ],
+   "yaw": 263.5875303663713,
+   "scale": 0.9407074363522431,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -68.72,
+    36.13,
+    0.0
+   ],
+   "yaw": 77.4256877226758,
+   "scale": 1.028398015237881,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -36.89,
+    37.9,
+    0.0
+   ],
+   "yaw": 44.02668908388453,
+   "scale": 1.3262636508025396,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    46.79,
+    38.72,
+    0.0
+   ],
+   "yaw": 355.5521281479333,
+   "scale": 1.382722871318449,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    94.04,
+    48.59,
+    0.0
+   ],
+   "yaw": 243.69722814920647,
+   "scale": 1.1462444240165321,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    31.5,
+    19.72,
+    0.0
+   ],
+   "yaw": 250.00314143900155,
+   "scale": 1.3155022120893358,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -46.34,
+    27.69,
+    0.0
+   ],
+   "yaw": 284.6372081843191,
+   "scale": 1.1012241741358462,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -35.09,
+    42.04,
+    0.0
+   ],
+   "yaw": 221.73421339698632,
+   "scale": 1.2998850890905993,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -18.24,
+    -27.71,
+    0.0
+   ],
+   "yaw": 67.4495349912524,
+   "scale": 1.0024590646198364,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    78.0,
+    10.74,
+    0.0
+   ],
+   "yaw": 151.62029157713945,
+   "scale": 1.3121295218204208,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    90.55,
+    0.49,
+    0.0
+   ],
+   "yaw": 324.75410392809556,
+   "scale": 1.016388298763694,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    25.45,
+    15.71,
+    0.0
+   ],
+   "yaw": 322.87291398022893,
+   "scale": 1.2679333154343968,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -55.42,
+    17.06,
+    0.0
+   ],
+   "yaw": 82.66598233907024,
+   "scale": 1.487806689908378,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    6.51,
+    40.91,
+    0.0
+   ],
+   "yaw": 247.42728474989966,
+   "scale": 1.074063581435,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    27.43,
+    52.11,
+    0.0
+   ],
+   "yaw": 18.410070128017097,
+   "scale": 1.176471128267171,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    40.1,
+    40.57,
+    0.0
+   ],
+   "yaw": 13.794695988987321,
+   "scale": 1.2618383722802506,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    71.35,
+    36.25,
+    0.0
+   ],
+   "yaw": 233.80991416566272,
+   "scale": 0.9281771959879732,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    11.71,
+    32.97,
+    0.0
+   ],
+   "yaw": 22.964629474136178,
+   "scale": 1.2035430694757678,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    31.62,
+    34.58,
+    0.0
+   ],
+   "yaw": 179.18532834541057,
+   "scale": 1.4169970632832385,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    8.6,
+    38.35,
+    0.0
+   ],
+   "yaw": 182.6328552365384,
+   "scale": 1.145225894864116,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    74.06,
+    35.35,
+    0.0
+   ],
+   "yaw": 98.0634255966539,
+   "scale": 1.4835413301345886,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    51.54,
+    -30.55,
+    0.0
+   ],
+   "yaw": 86.36953122880942,
+   "scale": 1.0646589240680455,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    20.06,
+    -32.92,
+    0.0
+   ],
+   "yaw": 196.77281583096442,
+   "scale": 1.0859808895676457,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -41.51,
+    -24.3,
+    0.0
+   ],
+   "yaw": 323.728715012689,
+   "scale": 1.0836365203174139,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    89.31,
+    -6.24,
+    0.0
+   ],
+   "yaw": 31.87374273883377,
+   "scale": 1.3760136043021862,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -82.5,
+    10.45,
+    0.0
+   ],
+   "yaw": 46.71803679986618,
+   "scale": 1.3024670994280825,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -32.56,
+    26.5,
+    0.0
+   ],
+   "yaw": 132.0805471493259,
+   "scale": 0.9323210724000448,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    29.73,
+    40.44,
+    0.0
+   ],
+   "yaw": 241.99145981665774,
+   "scale": 1.0570264101172142,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -52.47,
+    -27.43,
+    0.0
+   ],
+   "yaw": 45.80135227059047,
+   "scale": 1.370668758630063,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    24.21,
+    -16.14,
+    0.0
+   ],
+   "yaw": 69.36968104367615,
+   "scale": 1.245135380283696,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -78.98,
+    -25.52,
+    0.0
+   ],
+   "yaw": 76.96392452054477,
+   "scale": 1.4892262819749815,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -33.51,
+    -17.99,
+    0.0
+   ],
+   "yaw": 121.7569614096485,
+   "scale": 0.948563642159269,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -64.15,
+    4.53,
+    0.0
+   ],
+   "yaw": 93.97802125323506,
+   "scale": 1.1603316291386523,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    0.85,
+    27.8,
+    0.0
+   ],
+   "yaw": 351.79698227787765,
+   "scale": 0.9460994162128662,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    94.3,
+    27.34,
+    0.0
+   ],
+   "yaw": 78.57759268497041,
+   "scale": 1.1269430256658837,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -64.8,
+    52.73,
+    0.0
+   ],
+   "yaw": 198.77470611661136,
+   "scale": 1.3957166349807704,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -72.53,
+    21.89,
+    0.0
+   ],
+   "yaw": 326.0379436240389,
+   "scale": 1.0793792298082563,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    89.81,
+    -23.02,
+    0.0
+   ],
+   "yaw": 319.3349901737345,
+   "scale": 1.4164819323879985,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    7.26,
+    46.25,
+    0.0
+   ],
+   "yaw": 24.537339106816663,
+   "scale": 1.40732561095831,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -76.22,
+    12.31,
+    0.0
+   ],
+   "yaw": 240.406913008528,
+   "scale": 1.199890497649497,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    88.66,
+    4.58,
+    0.0
+   ],
+   "yaw": 217.15642381988692,
+   "scale": 0.9424166472454304,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -43.35,
+    35.61,
+    0.0
+   ],
+   "yaw": 227.33896571217875,
+   "scale": 1.323281701955274,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -80.33,
+    50.98,
+    0.0
+   ],
+   "yaw": 31.51959648108526,
+   "scale": 0.9953808932880298,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -2.34,
+    39.8,
+    0.0
+   ],
+   "yaw": 194.76199731612016,
+   "scale": 1.0538654213863363,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    13.59,
+    45.39,
+    0.0
+   ],
+   "yaw": 154.8290195118511,
+   "scale": 1.3988470672205104,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    73.18,
+    -14.77,
+    0.0
+   ],
+   "yaw": 159.90177083955768,
+   "scale": 1.3493580663849898,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    53.06,
+    -24.39,
+    0.0
+   ],
+   "yaw": 312.88590624646594,
+   "scale": 1.0781759424509536,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -29.74,
+    -28.85,
+    0.0
+   ],
+   "yaw": 214.20402603943558,
+   "scale": 1.0386371781583972,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -77.38,
+    3.57,
+    0.0
+   ],
+   "yaw": 342.9484440300061,
+   "scale": 1.4121003449476153,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -42.49,
+    29.21,
+    0.0
+   ],
+   "yaw": 251.66755923219205,
+   "scale": 1.441718505696767,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -38.64,
+    38.13,
+    0.0
+   ],
+   "yaw": 304.34504555094577,
+   "scale": 1.45382475447649,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -45.03,
+    29.88,
+    0.0
+   ],
+   "yaw": 226.0216719094465,
+   "scale": 1.2193222862830047,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -7.77,
+    18.16,
+    0.0
+   ],
+   "yaw": 276.45186137338453,
+   "scale": 1.402186278389118,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -72.25,
+    -19.63,
+    0.0
+   ],
+   "yaw": 52.275217231969634,
+   "scale": 1.4963305670668987,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -83.27,
+    19.4,
+    0.0
+   ],
+   "yaw": 261.4533980775489,
+   "scale": 1.0926479248727146,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -2.16,
+    39.08,
+    0.0
+   ],
+   "yaw": 125.43241795685199,
+   "scale": 1.1006802202649575,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -88.94,
+    12.34,
+    0.0
+   ],
+   "yaw": 343.50744713472926,
+   "scale": 0.9388042228911773,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    20.35,
+    -19.19,
+    0.0
+   ],
+   "yaw": 88.87701905459718,
+   "scale": 1.184200309221557,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -39.42,
+    39.73,
+    0.0
+   ],
+   "yaw": 273.51021532033116,
+   "scale": 1.3545344544606879,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -67.87,
+    36.94,
+    0.0
+   ],
+   "yaw": 148.15902534666944,
+   "scale": 0.9499916391860008,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -24.46,
+    -29.67,
+    0.0
+   ],
+   "yaw": 188.13240169972988,
+   "scale": 1.0582305629485311,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    26.79,
+    9.45,
+    0.0
+   ],
+   "yaw": 196.0867648566505,
+   "scale": 1.2466964837303736,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    64.73,
+    -16.11,
+    0.0
+   ],
+   "yaw": 91.78856791270215,
+   "scale": 1.0032508362734716,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -68.96,
+    -28.75,
+    0.0
+   ],
+   "yaw": 16.108131678081328,
+   "scale": 0.9644969222240694,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -0.92,
+    26.98,
+    0.0
+   ],
+   "yaw": 170.31226069168628,
+   "scale": 0.9842494385478071,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -47.63,
+    18.73,
+    0.0
+   ],
+   "yaw": 266.88881284071306,
+   "scale": 1.1343193534277665,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    81.41,
+    30.58,
+    0.0
+   ],
+   "yaw": 313.7211063339974,
+   "scale": 1.3186559821211041,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -53.16,
+    15.26,
+    0.0
+   ],
+   "yaw": 267.49384286885385,
+   "scale": 1.2667436541741883,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -64.1,
+    49.72,
+    0.0
+   ],
+   "yaw": 328.68610125807317,
+   "scale": 1.431016744602095,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    43.55,
+    39.59,
+    0.0
+   ],
+   "yaw": 24.298269821374472,
+   "scale": 1.025588850311526,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -62.83,
+    22.47,
+    0.0
+   ],
+   "yaw": 45.374321346270925,
+   "scale": 0.9746654087786797,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    18.39,
+    -18.79,
+    0.0
+   ],
+   "yaw": 311.5228611364921,
+   "scale": 1.2303899261158595,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    22.06,
+    -2.9,
+    0.0
+   ],
+   "yaw": 289.0587535814042,
+   "scale": 1.1159832754782681,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    89.07,
+    16.02,
+    0.0
+   ],
+   "yaw": 15.770786393392878,
+   "scale": 1.2908695798077696,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -15.39,
+    -28.27,
+    0.0
+   ],
+   "yaw": 87.67002210575156,
+   "scale": 0.9812950261352822,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -7.01,
+    19.07,
+    0.0
+   ],
+   "yaw": 264.4485102597586,
+   "scale": 1.3565553755555484,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -23.39,
+    42.8,
+    0.0
+   ],
+   "yaw": 297.4073199107468,
+   "scale": 1.231966006191668,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -67.3,
+    13.92,
+    0.0
+   ],
+   "yaw": 204.05512529374954,
+   "scale": 1.4273305925664983,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    73.96,
+    1.86,
+    0.0
+   ],
+   "yaw": 247.27594851373203,
+   "scale": 1.1412365869524124,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    45.68,
+    27.01,
+    0.0
+   ],
+   "yaw": 60.801007124882524,
+   "scale": 1.3369745437843363,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    59.26,
+    29.11,
+    0.0
+   ],
+   "yaw": 348.3602366484643,
+   "scale": 1.132627879626876,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -59.96,
+    30.76,
+    0.0
+   ],
+   "yaw": 136.84882523354779,
+   "scale": 1.3817924834968636,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    39.41,
+    44.55,
+    0.0
+   ],
+   "yaw": 45.86017833234877,
+   "scale": 1.439208826777925,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -93.94,
+    -29.49,
+    0.0
+   ],
+   "yaw": 4.698028793630122,
+   "scale": 1.1159418252539857,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -45.43,
+    42.74,
+    0.0
+   ],
+   "yaw": 93.8744882033414,
+   "scale": 1.0531409612836018,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -83.2,
+    42.74,
+    0.0
+   ],
+   "yaw": 82.4708855346789,
+   "scale": 1.3010430246360418,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    8.07,
+    18.75,
+    0.0
+   ],
+   "yaw": 200.52072974388153,
+   "scale": 1.4084982982934073,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -88.14,
+    33.97,
+    0.0
+   ],
+   "yaw": 166.8911000468839,
+   "scale": 1.48115526460146,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -18.68,
+    22.05,
+    0.0
+   ],
+   "yaw": 290.5771626449624,
+   "scale": 1.3413352184248815,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -59.54,
+    42.59,
+    0.0
+   ],
+   "yaw": 111.78229333193835,
+   "scale": 1.2129019331911501,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -12.15,
+    17.44,
+    0.0
+   ],
+   "yaw": 69.17520367077503,
+   "scale": 1.4358119432439906,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    59.32,
+    38.93,
+    0.0
+   ],
+   "yaw": 345.86550412202786,
+   "scale": 1.4302965720916243,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    57.61,
+    24.5,
+    0.0
+   ],
+   "yaw": 50.5087440218006,
+   "scale": 1.3661175685890545,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -33.63,
+    -27.06,
+    0.0
+   ],
+   "yaw": 50.61338838955608,
+   "scale": 1.3802239916538972,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    73.66,
+    -23.46,
+    0.0
+   ],
+   "yaw": 203.59562264676725,
+   "scale": 1.2057203704391228,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -84.28,
+    11.92,
+    0.0
+   ],
+   "yaw": 61.019872999881294,
+   "scale": 1.1202253032634628,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -68.09,
+    -34.24,
+    0.0
+   ],
+   "yaw": 331.2047254603238,
+   "scale": 1.133265873617289,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    36.3,
+    49.34,
+    0.0
+   ],
+   "yaw": 176.04440519350396,
+   "scale": 1.1370502405369993,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    92.28,
+    52.77,
+    0.0
+   ],
+   "yaw": 18.988934460507465,
+   "scale": 1.496176565147644,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    62.58,
+    -22.82,
+    0.0
+   ],
+   "yaw": 304.58184492795675,
+   "scale": 1.234415290594424,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -13.5,
+    32.55,
+    0.0
+   ],
+   "yaw": 161.93971203785193,
+   "scale": 1.4530291078271216,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    6.87,
+    -26.51,
+    0.0
+   ],
+   "yaw": 19.289578274684523,
+   "scale": 1.3445950302846608,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -85.82,
+    6.75,
+    0.0
+   ],
+   "yaw": 259.15098590974054,
+   "scale": 1.0927524674518134,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    38.65,
+    45.01,
+    0.0
+   ],
+   "yaw": 218.1302695882077,
+   "scale": 1.1683510847120107,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    73.13,
+    25.19,
+    0.0
+   ],
+   "yaw": 170.48468711870734,
+   "scale": 1.2752611088002814,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    88.49,
+    36.92,
+    0.0
+   ],
+   "yaw": 86.77283902348904,
+   "scale": 1.3801610424249902,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    16.06,
+    -24.55,
+    0.0
+   ],
+   "yaw": 144.4743449763643,
+   "scale": 1.2037956836457724,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    45.98,
+    34.28,
+    0.0
+   ],
+   "yaw": 227.3290772969335,
+   "scale": 1.2634802926201338,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -29.46,
+    28.11,
+    0.0
+   ],
+   "yaw": 181.71283873589485,
+   "scale": 0.9913815968133709,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    52.53,
+    52.09,
+    0.0
+   ],
+   "yaw": 76.26190418203109,
+   "scale": 1.3157594182365193,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    2.07,
+    11.0,
+    0.0
+   ],
+   "yaw": 325.8471851194658,
+   "scale": 1.4402183878570927,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    68.02,
+    54.68,
+    0.0
+   ],
+   "yaw": 307.9682524377992,
+   "scale": 1.4492603635805834,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    17.23,
+    24.85,
+    0.0
+   ],
+   "yaw": 283.904059415737,
+   "scale": 1.3002378504326622,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -69.05,
+    10.51,
+    0.0
+   ],
+   "yaw": 176.86454929408038,
+   "scale": 1.3471135520522615,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -50.94,
+    38.07,
+    0.0
+   ],
+   "yaw": 40.85101290722141,
+   "scale": 1.4428993883643884,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -19.35,
+    25.0,
+    0.0
+   ],
+   "yaw": 287.99329246159846,
+   "scale": 1.427325938508411,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -68.95,
+    -30.22,
+    0.0
+   ],
+   "yaw": 95.67275853427394,
+   "scale": 1.023758716393129,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -1.7,
+    36.74,
+    0.0
+   ],
+   "yaw": 34.414502925207636,
+   "scale": 1.2236733234396415,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    72.37,
+    -17.03,
+    0.0
+   ],
+   "yaw": 117.54726862176712,
+   "scale": 1.2316140648555622,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    40.63,
+    26.71,
+    0.0
+   ],
+   "yaw": 57.6915795623241,
+   "scale": 1.124878190878799,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    44.42,
+    1.2,
+    0.0
+   ],
+   "yaw": 130.96197188158334,
+   "scale": 1.1398884896709103,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -86.78,
+    49.24,
+    0.0
+   ],
+   "yaw": 192.5649407679842,
+   "scale": 1.1983006935498053,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    23.6,
+    25.66,
+    0.0
+   ],
+   "yaw": 314.79484120058487,
+   "scale": 1.2717532386846944,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    49.94,
+    -13.02,
+    0.0
+   ],
+   "yaw": 120.74261344307554,
+   "scale": 1.367380487408042,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -47.08,
+    -33.6,
+    0.0
+   ],
+   "yaw": 204.01455321025816,
+   "scale": 1.2715269933792697,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    1.14,
+    50.19,
+    0.0
+   ],
+   "yaw": 228.39135877423527,
+   "scale": 1.1029555813446796,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    50.77,
+    -15.05,
+    0.0
+   ],
+   "yaw": 88.61698339486111,
+   "scale": 1.0123236490003311,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    92.91,
+    -0.07,
+    0.0
+   ],
+   "yaw": 340.98687386190755,
+   "scale": 1.11048961785155,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    11.67,
+    37.85,
+    0.0
+   ],
+   "yaw": 259.51861559187915,
+   "scale": 1.4592478520762104,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -16.98,
+    17.97,
+    0.0
+   ],
+   "yaw": 257.44625290528074,
+   "scale": 1.009284136363712,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    52.1,
+    -26.0,
+    0.0
+   ],
+   "yaw": 156.28145263523658,
+   "scale": 1.0318184798671586,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -44.64,
+    26.89,
+    0.0
+   ],
+   "yaw": 325.3856277718341,
+   "scale": 0.9007698992710933,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    55.67,
+    42.01,
+    0.0
+   ],
+   "yaw": 306.06383134127316,
+   "scale": 1.1199053094881892,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    90.32,
+    10.56,
+    0.0
+   ],
+   "yaw": 317.4360024538897,
+   "scale": 0.983408665773228,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    71.46,
+    31.9,
+    0.0
+   ],
+   "yaw": 46.34853416510934,
+   "scale": 1.450048440628136,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -22.58,
+    21.48,
+    0.0
+   ],
+   "yaw": 333.1605795368666,
+   "scale": 1.386341785998597,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    57.6,
+    33.53,
+    0.0
+   ],
+   "yaw": 253.04240817435397,
+   "scale": 1.0940352323410458,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    53.0,
+    25.07,
+    0.0
+   ],
+   "yaw": 34.253623972313754,
+   "scale": 1.048099042344077,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -45.01,
+    -21.2,
+    0.0
+   ],
+   "yaw": 235.28162165567366,
+   "scale": 1.0017899911572712,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    3.07,
+    18.26,
+    0.0
+   ],
+   "yaw": 274.942010448635,
+   "scale": 1.2026067959629514,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -80.41,
+    -12.84,
+    0.0
+   ],
+   "yaw": 149.21820117835063,
+   "scale": 1.4212348956468577,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -29.3,
+    32.49,
+    0.0
+   ],
+   "yaw": 173.94640035993893,
+   "scale": 1.2165711832372097,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    2.6,
+    34.03,
+    0.0
+   ],
+   "yaw": 223.75218091082442,
+   "scale": 0.9626062023571598,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -30.52,
+    19.49,
+    0.0
+   ],
+   "yaw": 200.33686687653014,
+   "scale": 1.0965802905472324,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    52.89,
+    -22.97,
+    0.0
+   ],
+   "yaw": 47.94355392984317,
+   "scale": 1.2060769943190655,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    39.12,
+    20.46,
+    0.0
+   ],
+   "yaw": 157.41476043615745,
+   "scale": 1.399352712420097,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -94.37,
+    15.22,
+    0.0
+   ],
+   "yaw": 279.2590853243617,
+   "scale": 1.041935100473237,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    60.66,
+    21.64,
+    0.0
+   ],
+   "yaw": 190.59541972745666,
+   "scale": 1.3062896587091188,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    61.96,
+    30.69,
+    0.0
+   ],
+   "yaw": 304.34115193024934,
+   "scale": 1.0067596901223883,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -39.06,
+    43.17,
+    0.0
+   ],
+   "yaw": 139.93698687697386,
+   "scale": 0.941425714302643,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -76.68,
+    34.72,
+    0.0
+   ],
+   "yaw": 223.25630965484558,
+   "scale": 1.0231224829323988,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -26.86,
+    -16.19,
+    0.0
+   ],
+   "yaw": 39.136802844848155,
+   "scale": 1.1590027214107466,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -47.2,
+    30.32,
+    0.0
+   ],
+   "yaw": 130.85638804762607,
+   "scale": 1.127288042549199,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -14.33,
+    31.3,
+    0.0
+   ],
+   "yaw": 172.79419488085293,
+   "scale": 1.4152032546384996,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -0.41,
+    36.69,
+    0.0
+   ],
+   "yaw": 200.84532169159468,
+   "scale": 1.1109814714664061,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    81.63,
+    42.63,
+    0.0
+   ],
+   "yaw": 285.90142666939545,
+   "scale": 0.9032812391225227,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -61.45,
+    10.86,
+    0.0
+   ],
+   "yaw": 340.3031745032383,
+   "scale": 1.1936983616592955,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -30.56,
+    41.13,
+    0.0
+   ],
+   "yaw": 218.84842292193684,
+   "scale": 1.4487318916626406,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -40.03,
+    31.32,
+    0.0
+   ],
+   "yaw": 297.136410270244,
+   "scale": 1.3244697507700285,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    86.3,
+    52.2,
+    0.0
+   ],
+   "yaw": 123.52661921482967,
+   "scale": 1.1889281305353958,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -12.46,
+    14.91,
+    0.0
+   ],
+   "yaw": 58.57759034891245,
+   "scale": 1.2346631465883078,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    90.12,
+    50.57,
+    0.0
+   ],
+   "yaw": 122.99738241568818,
+   "scale": 0.958532762752546,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    22.01,
+    8.71,
+    0.0
+   ],
+   "yaw": 133.34032775740113,
+   "scale": 1.1075222978072679,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -32.08,
+    -19.76,
+    0.0
+   ],
+   "yaw": 338.1703859497027,
+   "scale": 1.0785671365678453,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    86.09,
+    41.51,
+    0.0
+   ],
+   "yaw": 12.908615680676911,
+   "scale": 0.944610786437553,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -5.66,
+    35.35,
+    0.0
+   ],
+   "yaw": 286.38782588509645,
+   "scale": 1.2393716985446197,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -79.0,
+    7.95,
+    0.0
+   ],
+   "yaw": 25.961045488844185,
+   "scale": 1.061898561059804,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    41.55,
+    -3.47,
+    0.0
+   ],
+   "yaw": 40.667812878824364,
+   "scale": 1.3777024597968053,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    70.89,
+    -0.94,
+    0.0
+   ],
+   "yaw": 76.09028263353166,
+   "scale": 1.3911168787007864,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    74.59,
+    -22.56,
+    0.0
+   ],
+   "yaw": 121.07469189987889,
+   "scale": 1.1415648259744913,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -9.7,
+    9.13,
+    0.0
+   ],
+   "yaw": 98.43085043472783,
+   "scale": 1.271412529635919,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -73.58,
+    27.73,
+    0.0
+   ],
+   "yaw": 217.98357359327002,
+   "scale": 1.2715058235174426,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    15.12,
+    51.63,
+    0.0
+   ],
+   "yaw": 142.26259214497307,
+   "scale": 1.211362109919424,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    58.07,
+    35.67,
+    0.0
+   ],
+   "yaw": 248.74837699564733,
+   "scale": 1.0016081818226439,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -50.27,
+    49.49,
+    0.0
+   ],
+   "yaw": 345.9563227907085,
+   "scale": 1.4298780745948418,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -62.94,
+    8.75,
+    0.0
+   ],
+   "yaw": 42.539347410697594,
+   "scale": 1.493773409939163,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    43.58,
+    48.09,
+    0.0
+   ],
+   "yaw": 350.5884511992374,
+   "scale": 1.3487656944416024,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    87.63,
+    5.77,
+    0.0
+   ],
+   "yaw": 16.027091669054066,
+   "scale": 1.4774189629075463,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    57.2,
+    32.88,
+    0.0
+   ],
+   "yaw": 171.14310438204478,
+   "scale": 0.9676182789778093,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -43.69,
+    24.23,
+    0.0
+   ],
+   "yaw": 190.48408856031494,
+   "scale": 1.4933319592146626,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    49.65,
+    -16.29,
+    0.0
+   ],
+   "yaw": 69.27158310799558,
+   "scale": 1.4857954249797158,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    32.65,
+    48.98,
+    0.0
+   ],
+   "yaw": 149.42677844492874,
+   "scale": 1.2963424809837403,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -82.24,
+    -31.41,
+    0.0
+   ],
+   "yaw": 89.80507032383233,
+   "scale": 1.4997068916645684,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    5.55,
+    5.35,
+    0.0
+   ],
+   "yaw": 110.79015482359345,
+   "scale": 1.432174379488543,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -12.56,
+    51.05,
+    0.0
+   ],
+   "yaw": 15.638917238249164,
+   "scale": 1.1850958228688226,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -41.51,
+    -21.32,
+    0.0
+   ],
+   "yaw": 312.18705378982867,
+   "scale": 1.4348263378644457,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    75.65,
+    0.98,
+    0.0
+   ],
+   "yaw": 20.178265933175815,
+   "scale": 1.0686692073517996,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    44.93,
+    -29.99,
+    0.0
+   ],
+   "yaw": 6.76146409383517,
+   "scale": 1.260559267565132,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -4.3,
+    -34.0,
+    0.0
+   ],
+   "yaw": 351.7299132883263,
+   "scale": 1.4529671887131277,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    24.13,
+    34.22,
+    0.0
+   ],
+   "yaw": 67.37635987524803,
+   "scale": 1.2173170553222583,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    47.55,
+    -19.73,
+    0.0
+   ],
+   "yaw": 348.0474840030453,
+   "scale": 1.1976789644448087,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    21.78,
+    -27.87,
+    0.0
+   ],
+   "yaw": 51.25434153578418,
+   "scale": 1.32935855876676,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -88.88,
+    38.46,
+    0.0
+   ],
+   "yaw": 78.24454767552314,
+   "scale": 0.9352118726269988,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -18.34,
+    20.2,
+    0.0
+   ],
+   "yaw": 38.84292938262276,
+   "scale": 1.3689222446495193,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -75.72,
+    19.07,
+    0.0
+   ],
+   "yaw": 76.92331847099103,
+   "scale": 1.286032321196254,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    20.75,
+    5.69,
+    0.0
+   ],
+   "yaw": 103.11044550433182,
+   "scale": 1.053974763012549,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    24.29,
+    47.48,
+    0.0
+   ],
+   "yaw": 317.91622467708254,
+   "scale": 1.2384932267691815,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    30.24,
+    -18.48,
+    0.0
+   ],
+   "yaw": 293.51976211429627,
+   "scale": 1.4740521474414434,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -58.07,
+    16.92,
+    0.0
+   ],
+   "yaw": 32.972261937179844,
+   "scale": 1.0142331468789196,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -48.66,
+    -19.85,
+    0.0
+   ],
+   "yaw": 342.37015844747145,
+   "scale": 1.2185049950823252,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -90.26,
+    -4.17,
+    0.0
+   ],
+   "yaw": 253.1342212344825,
+   "scale": 0.9744303785517607,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -11.67,
+    38.89,
+    0.0
+   ],
+   "yaw": 222.57731813877754,
+   "scale": 0.959761277491118,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -67.7,
+    -32.7,
+    0.0
+   ],
+   "yaw": 199.43065123118785,
+   "scale": 1.0380246257422174,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -61.98,
+    16.94,
+    0.0
+   ],
+   "yaw": 344.1054200583983,
+   "scale": 1.45389261087471,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    87.65,
+    50.48,
+    0.0
+   ],
+   "yaw": 255.0794209452454,
+   "scale": 1.2202654884031858,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    25.25,
+    18.72,
+    0.0
+   ],
+   "yaw": 88.18181890733067,
+   "scale": 1.1957241126060725,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    65.1,
+    28.86,
+    0.0
+   ],
+   "yaw": 286.4695210391906,
+   "scale": 1.1478097181323303,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -39.23,
+    45.81,
+    0.0
+   ],
+   "yaw": 110.48977701903453,
+   "scale": 1.2563737686823333,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    83.66,
+    -20.68,
+    0.0
+   ],
+   "yaw": 346.14679522523505,
+   "scale": 1.3337985964929466,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -79.4,
+    -30.0,
+    0.0
+   ],
+   "yaw": 33.961342283265274,
+   "scale": 1.284438493908567,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    2.36,
+    26.1,
+    0.0
+   ],
+   "yaw": 139.0537833742128,
+   "scale": 0.9596786493405189,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    3.74,
+    26.62,
+    0.0
+   ],
+   "yaw": 214.10770082988583,
+   "scale": 1.141474533327375,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -24.55,
+    -34.91,
+    0.0
+   ],
+   "yaw": 181.5695388906512,
+   "scale": 1.3100948508513826,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    4.69,
+    47.93,
+    0.0
+   ],
+   "yaw": 190.70718424967384,
+   "scale": 1.188044645896793,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    35.39,
+    14.07,
+    0.0
+   ],
+   "yaw": 50.746189439439206,
+   "scale": 0.9758030098808211,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    -41.86,
+    18.14,
+    0.0
+   ],
+   "yaw": 21.69136493860563,
+   "scale": 1.0133857022115214,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    45.0,
+    -25.05,
+    0.0
+   ],
+   "yaw": 19.17812928338058,
+   "scale": 0.994221453285456,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -10.91,
+    28.23,
+    0.0
+   ],
+   "yaw": 57.4166504800123,
+   "scale": 1.4299488957389423,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -51.34,
+    51.03,
+    0.0
+   ],
+   "yaw": 223.33344057741857,
+   "scale": 1.4834040161865267,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    18.3,
+    -2.52,
+    0.0
+   ],
+   "yaw": 52.95043060992808,
+   "scale": 1.0474329280811436,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -18.4,
+    15.17,
+    0.0
+   ],
+   "yaw": 148.9797164222668,
+   "scale": 1.3539628522621783,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    -74.02,
+    9.77,
+    0.0
+   ],
+   "yaw": 11.561508592422376,
+   "scale": 1.4283588024031346,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -63.44,
+    -21.55,
+    0.0
+   ],
+   "yaw": 327.91068929986164,
+   "scale": 1.0118361528404014,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    -68.31,
+    51.63,
+    0.0
+   ],
+   "yaw": 223.75442511596833,
+   "scale": 0.9710721350181324,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    76.94,
+    42.52,
+    0.0
+   ],
+   "yaw": 139.72659379587566,
+   "scale": 1.2947240002644416,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    33.07,
+    22.28,
+    0.0
+   ],
+   "yaw": 226.58836146752458,
+   "scale": 1.2344189718712346,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_B",
+   "pos": [
+    5.14,
+    6.64,
+    0.0
+   ],
+   "yaw": 138.92459207778032,
+   "scale": 1.3296436593179477,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_C",
+   "pos": [
+    88.91,
+    -28.51,
+    0.0
+   ],
+   "yaw": 277.14949697744674,
+   "scale": 1.244575489876146,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_GrassTuft_A",
+   "pos": [
+    3.52,
+    38.75,
+    0.0
+   ],
+   "yaw": 330.82281293522857,
+   "scale": 1.2527981258420322,
+   "group": "plants"
+  },
+  {
+   "mesh": "SM_LanternPost",
+   "pos": [
+    -66.5,
+    -7.1,
+    0.0
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "village"
+  },
+  {
+   "mesh": "SM_LanternPost",
+   "pos": [
+    -47.27,
+    -7.1,
+    0.0
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "village"
+  },
+  {
+   "mesh": "SM_LanternPost",
+   "pos": [
+    -23.82,
+    -7.1,
+    0.0
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "village"
+  },
+  {
+   "mesh": "SM_LanternPost",
+   "pos": [
+    0.62,
+    -7.1,
+    0.0
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "village"
+  },
+  {
+   "mesh": "SM_LanternPost",
+   "pos": [
+    23.22,
+    -7.1,
+    0.0
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "village"
+  },
+  {
+   "mesh": "SM_LanternPost",
+   "pos": [
+    46.66,
+    -7.1,
+    0.0
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "village"
+  },
+  {
+   "mesh": "SM_LanternPost",
+   "pos": [
+    68.91,
+    -7.1,
+    0.0
+   ],
+   "yaw": 0.0,
+   "scale": 1.0,
+   "group": "village"
+  }
+ ],
+ "labels": [
+  {
+   "text": "Castle",
+   "pos": [
+    -75.56,
+    -14.2,
+    0.0
+   ],
+   "door": -75.56
+  },
+  {
+   "text": "Town Hall",
+   "pos": [
+    -57.44,
+    -14.2,
+    0.0
+   ],
+   "door": -57.44
+  },
+  {
+   "text": "Barracks",
+   "pos": [
+    -37.11,
+    -14.2,
+    0.0
+   ],
+   "door": -37.11
+  },
+  {
+   "text": "Archery Range",
+   "pos": [
+    -10.54,
+    -14.2,
+    0.0
+   ],
+   "door": -10.54
+  },
+  {
+   "text": "Watch Tower",
+   "pos": [
+    11.79,
+    -14.2,
+    0.0
+   ],
+   "door": 11.79
+  },
+  {
+   "text": "Gold Mine",
+   "pos": [
+    34.66,
+    -14.2,
+    0.0
+   ],
+   "door": 34.66
+  },
+  {
+   "text": "Farm",
+   "pos": [
+    58.66,
+    -14.2,
+    0.0
+   ],
+   "door": 58.66
+  },
+  {
+   "text": "Bridge",
+   "pos": [
+    79.16,
+    -14.2,
+    0.0
+   ],
+   "door": 79.16
+  }
+ ],
+ "spawn": {
+  "pos": [
+   0.0,
+   -9.5,
+   0.0
+  ],
+  "yaw": 90.0
+ },
+ "camera": {
+  "target": [
+   0.0,
+   4.0,
+   2.0
+  ],
+  "az": -8.0,
+  "el": 30.0,
+  "dist": 159.0785,
+  "hfov": 60.0,
+  "width": 1600,
+  "height": 900
+ },
+ "ground": {
+  "w": 196.0,
+  "d": 96.0,
+  "cy": 10.0
+ }
+}

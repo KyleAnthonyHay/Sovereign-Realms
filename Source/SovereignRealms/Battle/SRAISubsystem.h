@@ -138,6 +138,8 @@ public:
 
 	/** Turns the player's-side commander on or off (balance testing). */
 	void SetPlayerAI(bool bEnabled);
+	/** Turns the enemy commander on or off (the sandbox: an enemy that never builds, recruits or attacks). */
+	void SetEnemyCommander(bool bEnabled) { Commanders[1].bActive = bEnabled; }
 	bool IsPlayerAI() const { return Commanders[0].bActive; }
 	/** Seconds until the enemy's next main attack may leave (for the HUD's warning), negative once it is due. */
 	float GetEnemyNextWaveIn() const;

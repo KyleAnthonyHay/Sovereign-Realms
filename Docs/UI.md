@@ -92,8 +92,11 @@ Use `U(designUnits)` for every size and position. Body text is 14-17 units, head
         +------- Main Menu ------------ Ended -- Play Again -> Playing <---+
 
 - `EnterMainMenu()`: resets the battle, pauses the simulation, frames the Citadel; the controller drifts the
-  camera slowly. Entries: New Game (Easy / Normal / Hard -> `AIDifficulty`), How to Play, Settings, Quit.
-- `StartMatch(difficulty)`: sets the difficulty (-1 keeps it), `ResetBattle`, focuses between the Citadel and
+  camera slowly. Entries: New Game (the map: one button per entry of Sovereign Feel > Maps, THE RIVERLANDS or THE FOUR
+  MARCHES, the one being shown chosen at first; then Easy / Normal / Hard -> `AIDifficulty`), How to Play, Settings, Quit.
+- `StartMatch(difficulty, map)`: with a map other than the one loaded it opens that map's level and starts the match
+  there (a saved game from another map travels the same way; saves from before the two maps are listed as "Old map"
+  and cannot be loaded). Else: sets the difficulty (-1 keeps it), `ResetBattle`, focuses between the Citadel and
   the troops. Restart and Play Again are the same call.
 - `SetPaused(bool)`: **not** a world pause. It is `USRBattleSubsystem::SetSimPaused`: troops, buildings, the
   commanders, projectiles, workers and the battle clock hold still, while actors, input, sound, the interface
@@ -105,8 +108,14 @@ Use `U(designUnits)` for every size and position. Body text is 14-17 units, head
   sub-screen, then (pause menu) resumes. F1: the controls overlay while playing, the Controls screen in menus.
 
 Settings (main and pause menu): five volumes, interface scale (applied when the slider is released), edge pan,
-WASD pan. The game reads them from `USRFeelSettings` as always; `USRUserSettings` stores them per user in
+WASD pan, frame rate limit (30 / 60 / 120 / unlimited; 60 by default) and battery saver (off / on battery power /
+always). The game reads them from `USRFeelSettings` as always; `USRUserSettings` stores them per user in
 `GameUserSettings.ini` (`Apply()` at start-up, `CaptureAndSave()` when the Settings screen closes).
+
+Power (`USRPowerSubsystem`, Sovereign Feel > Performance): the frame-rate cap is the tightest of the player's limit,
+30 while the battery saver is on, 30 while a menu is up and 10 while the game is not the front window (the last one
+not inside the editor). In a standalone game the battery saver also takes lighting, reflections, shadows and
+anti-aliasing from Epic to High; in the editor it only caps the frame rate.
 
 ## Input
 

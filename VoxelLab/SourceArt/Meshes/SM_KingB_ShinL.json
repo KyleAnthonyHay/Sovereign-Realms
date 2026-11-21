@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_ShinL",
+ "faces": 600,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1213,
+   -0.2075,
+   -0.35
+  ],
+  [
+   0.13,
+   0.0975,
+   0.0772
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.15,
+  0.0,
+  0.35
+ ],
+ "part": "ShinL",
+ "triangles": 1201,
+ "blocks": 65
+}

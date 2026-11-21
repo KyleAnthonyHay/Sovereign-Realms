@@ -6,16 +6,25 @@ washed gold under a striped awning, a windlass over a side shaft, a spoil heap, 
 
 States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
 damage(); `site` and `ruin` are small meshes of their own on the same footprint.
+
+Levels 1-3 (k.level), each adding to the last. Towers end flat and crenellated, like a chess rook (the castle's
+language: an oversailing head on a trim corbel course, a glazed frieze, crow-stepped merlons, a banner on the roof):
+  2  the timber set at the mouth is rebuilt as a stone portal (ashlar piers, an iron-bound timber lintel, crow-stepped
+     merlons, banners) and a square crenellated stone lookout with a glazed head stands on the crest, a banner on it
+  3  fortified: the portal stands on dark heavy stone between two crenellated pylons; the lookout rises a storey in
+     dark stone with a timber hoarding under its head; fires beside it, creeper on the stone
+The level banner (kit.level_flag) stands on the ground at the front-left, left of the stores' awning.
 """
 import math
 
-from bldkit import STATES, clip_ring, convex_ring, rect  # noqa: F401
+from bldkit import STATES, clip_ring, convex_ring, inset_ring, rect  # noqa: F401
 
 NAME = "mine"
 MESH = "SM_Bld_Mine"
 SEED = 37
 FOOTPRINT = [-400.0, -420.0, 420.0, 420.0]
 RING_RADIUS = 580.0
+LEVELS = 3
 PREVIEW_FIGURES = [(-520, -120), (-560, 0)]
 
 MOUTH_X = -30.0          # the cliff face the adit is cut into
@@ -77,18 +86,109 @@ def timber_set(k, x, hw, h, post=26.0, shade=False, broken=False):
             k.obox("Bld_Bronze", (x - post / 2 - 1.5, s * hw, h + post * 0.4), (3, 8, post + 6))
 
 
+PX0, PX1, PW, PZ = -88.0, MOUTH_X + 6.0, 208.0, 304.0     # the stone portal of level 2 on: front, back, half width, top
+
+
+def stone_portal(k):
+    """Level 2 on: the mouth dressed in stone: two ashlar piers, a block over them on an iron-bound timber lintel,
+    crow-stepped merlons, banners down the piers. Level 3: dark heavy stone below, a slate-capped turret on each end,
+    creeper. Damaged: the right half of the head has come down."""
+    lv = k.level
+    y1 = PW if not k.damaged else -6.0
+    zb = 96.0                                                # level 3: dark stone up to here
+    for s in (-1, 1):
+        ya, yb = (-PW, -AW) if s < 0 else (AW, PW)
+        u0 = 20.0 if s < 0 else 320.0
+        if lv >= 3:
+            k.box("Bld_StoneDark", (PX0 - 6, ya - (6 if s < 0 else 0), 0), (PX1, yb + (6 if s > 0 else 0), zb), u0=u0, top="Bld_Trim")
+            k.box("Bld_AshlarLarge", (PX0, ya, zb), (PX1, yb, AH + 8), u0=u0, top="Bld_Trim")
+        else:
+            k.box("Bld_AshlarLarge", (PX0, ya, 0), (PX1, yb, AH + 8), u0=u0, top="Bld_Trim")
+    k.obox("Bld_Beam", (PX0 - 4, (y1 - PW) / 2 if k.damaged else 0, AH + 22), (26, (y1 + PW) if k.damaged else AW * 2 + 84, 30), grain="y")
+    for y in ((-AW - 36, -AW + 10, 0, AW - 10, AW + 36) if not k.damaged else (-AW - 36, -AW + 10)):     # iron straps on the lintel
+        k.obox("Bld_Iron", (PX0 - 5, y, AH + 22), (30, 10, 34))
+    k.box("Bld_Ashlar", (PX0, -PW, AH + 8), (PX1, y1, PZ - 14), u0=60.0, bottom=True)
+    k.box("Bld_Trim", (PX0 - 6, -PW - 6, PZ - 14), (PX1, y1 + (6 if not k.damaged else 0), PZ), v0=0.0, u0=60.0, bottom=True)
+    head = rect(PX0 - 6, -PW - 6, PX1, y1 + (6 if not k.damaged else 0))
+    L = y1 + PW + 12
+    k.stepped_merlons("Bld_Ashlar", head, PZ, width=50, gap=28, thick=24, h1=26, h2=22, cap="Bld_Trim", edges=(2,),
+                      skip_spans={2: [(0, 100), (L - 100, L)] if not k.damaged else [(L - 100, L)]} if lv >= 3 else None)
+    for s in (-1, 1):                                        # banners down the piers on iron rods
+        y = s * (AW + 62)
+        k.cyl("Bld_Iron", (PX0 - 8, y - 40, 200), (PX0 - 8, y + 40, 200), 2.6, sides=4)
+        k.hang_cloth((PX0 - 8, y - 32, 198), (PX0 - 8, y + 32, 198), 150.0)
+    if lv >= 3:
+        for s in (-1, 1):
+            if k.damaged and s > 0:                          # the right turret went with the head
+                continue
+            ya, yb = (-PW - 10, -PW + 100) if s < 0 else (PW - 100, PW + 10)
+            pr = rect(PX0 - 10, ya, PX1, yb)
+            k.wall("Bld_AshlarLarge", pr, PZ - 14, PZ + 60, u0=100.0)
+            k.band("Bld_Trim", pr, PZ + 60, PZ + 70, out=6)
+            ph = inset_ring(pr, -6)
+            k.cap("Bld_AshlarLarge", ph, PZ + 70, down=True, shade=0.55)
+            k.wall("Bld_Frieze", ph, PZ + 70, PZ + 118, v0=0.0, bleach=False, u0=100.0)
+            k.parapet("Bld_Ashlar", ph, PZ + 96, PZ + 118, thick=18, top="Bld_Trim")
+            k.stepped_merlons("Bld_Ashlar", ph, PZ + 118, width=36, gap=22, thick=18, h1=20, h2=16, cap="Bld_Trim")
+            k.obox("Bld_Dark", (PX0 - 10, (ya + yb) / 2, PZ + 26), (6, 11, 44))
+        k.patch("Bld_Leaves", (PX0 - 2, 150, 0), (0, -1, 0), (0, 0, 1), 110, 250, cells=12, fill=0.55, out=14)
+    if k.damaged:
+        k.rubble((-150, 120, 0), (130, 170), 40, blocks=9, beams=1)
+        k.scorch("smear", (PX0, -90, PZ - 150), out=5)
+    # inside the stone: the first timber set, in the dark
+    timber_set(k, MOUTH_X + 14, AW - 6, AH - 8, post=20, shade=True)
+
+
+def lookout(k):
+    """Level 2 on: a square stone lookout on the crest of the outcrop: an oversailing glazed head, crow-stepped merlons,
+    a banner on its roof. Level 3: a storey taller in dark stone, a timber hoarding under the head. Returns the top
+    of its stonework."""
+    lv = k.level
+    cx, cy, half = 276.0, 4.0, 82.0
+    z0, zt = 440.0, (800.0 if lv >= 3 else 700.0)
+    r0 = rect(cx - half, cy - half, cx + half, cy + half)
+    side = 2 * half
+    win = dict(depth=13, back="Bld_Dark", reveal="Bld_Trim", shade=0.55)
+    ops = {2: [dict(a=side / 2 + y - 7, b=side / 2 + y + 7, z0=552, z1=612, **win) for y in (-34, 34)] + k.breach(26, 92, 540, 640)}
+    r1 = k.wall("Bld_StoneDark" if lv >= 3 else "Bld_AshlarLarge", r0, z0, zt - 66, inset=5, u0=220.0, openings=ops, bleach=False)
+    k.band("Bld_Trim", r1, zt - 66, zt - 54, out=8)
+    r3 = inset_ring(r1, -9)
+    k.cap("Bld_AshlarLarge", r3, zt - 54, down=True, shade=0.55)
+    k.wall("Bld_Frieze", r3, zt - 54, zt, v0=0.0, bleach=False, u0=220.0)
+    k.parapet("Bld_Ashlar", r3, zt - 26, zt, thick=22, top="Bld_Trim")
+    k.stepped_merlons("Bld_Ashlar", r3, zt, width=44, gap=26, thick=22, h1=24, h2=20, cap="Bld_Trim")
+    k.pole_banner((cx + 20, cy + 16, zt - 26), height=230.0, cloth_w=56, cloth_h=150)
+    if k.damaged:
+        k.scorch("smear", (cx - half, cy + 26, 646), out=7)
+    if lv >= 3:
+        k.band("Bld_Iron", inset_ring(r0, 2), 524, 534, out=3)
+        hx = cx - half + 2                                   # timber hoarding over the front, under the head
+        g1 = half - 4 if not k.damaged else 10.0
+        k.beam_ends("Bld_Beam", (hx, -half + 14 + cy), (hx, half - 14 + cy), zt - 96, 4, size=(16, 16), out=50)
+        k.obox("Bld_Planks", (hx - 30, cy + (g1 - half + 4) / 2, zt - 82), (62, g1 + half - 4, 10), grain="y")
+        k.obox("Bld_Beam", (hx - 58, cy + (g1 - half + 4) / 2, zt - 36), (8, g1 + half - 4, 8), grain="y")
+        for y in (-74, -25, 25, 74):
+            if y < g1:
+                k.obox("Bld_Beam", (hx - 58, cy + y, zt - 58), (8, 8, 48), grain="z")
+    return zt + 44
+
+
 def portal(k):
     x = MOUTH_X - 20
-    timber_set(k, x, AW, AH, broken=k.damaged)
-    # lagging: boards between the cap and the rock, and cribbing either side
-    if not k.damaged:
-        k.obox("Bld_Planks", (x + 10, 0, AH + 44), (8, AW * 2 + 40, 36), grain="y")
-        k.obox("Bld_Planks", (x + 12, 0, AH + 80), (8, AW * 2 + 6, 30), grain="y")
-    for s in (-1, 1):
-        for i, z in enumerate((30, 78, 126)):
-            k.obox("Bld_Planks", (x + 12, s * (AW + 58 + i * 4), z), (8, 70 - i * 10, 36), grain="y", roll=s * (2 + i))
-    # a lantern hung from the cap beam's end, another on a post by the track
-    lantern(k, (x - 4, -AW - 44, AH + 4), hang=34)
+    if k.level >= 2:
+        stone_portal(k)
+    else:
+        timber_set(k, x, AW, AH, broken=k.damaged)
+        # lagging: boards between the cap and the rock, and cribbing either side
+        if not k.damaged:
+            k.obox("Bld_Planks", (x + 10, 0, AH + 44), (8, AW * 2 + 40, 36), grain="y")
+            k.obox("Bld_Planks", (x + 12, 0, AH + 80), (8, AW * 2 + 6, 30), grain="y")
+        for s in (-1, 1):
+            for i, z in enumerate((30, 78, 126)):
+                k.obox("Bld_Planks", (x + 12, s * (AW + 58 + i * 4), z), (8, 70 - i * 10, 36), grain="y", roll=s * (2 + i))
+        # a lantern hung from the cap beam's end
+        lantern(k, (x - 4, -AW - 44, AH + 4), hang=34)
+    # a lantern on a post by the track
     k.cyl("Bld_Beam", (-196, -110, 0), (-196, -110, 178), 5.0, 4.0, sides=5)
     k.obox("Bld_Beam", (-196, -92, 172), (5, 44, 5), grain="y")
     lantern(k, (-196, -74, 170), hang=22)
@@ -227,9 +327,16 @@ def complete(k):
         k.blob("Bld_LeafCore", (x, y, z), (s, s, s * 0.6), points=10)
         k.blob("Bld_Leaves", (x, y, z), (s * 1.18, s * 1.18, s * 0.72), points=10, w=0.2)
     k.pole_banner((84, -150, 372), height=300.0)
-    k.brazier((-110, 96, 0), h=88)
+    k.brazier((-110, 96, 0) if k.level == 1 else (-150, 60, 0), h=88)
+    label = 620.0
+    if k.level >= 2:
+        label = lookout(k) + 150.0
+    if k.level >= 3:
+        for y in (-104, 112):
+            k.brazier((176, y, 468), h=76)
+    k.level_flag((-340, -412, 0), height=250.0)
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 420))
-    k.sockets["label"] = (120.0, 0.0, 620.0)
+    k.sockets["label"] = (120.0, 0.0, label)
     k.sockets["popup"] = (-214.0, 0.0, 200.0)
 
 
@@ -239,8 +346,9 @@ def damage(k):
                                   (-110, -84, 6, 54, 50, 40)):
         k.blob("Bld_Rock", (x, y, z), (sx, sy, sz), points=11)
     k.scorch("smear", (39, 10, 256), out=10)                 # over the mouth, on the ledge's face
-    k.scorch("plume_m", (MOUTH_X, -160, 4), out=5)
-    k.scorch("lick", (MOUTH_X, 150, 0), out=5, flip=True)
+    fx = MOUTH_X if k.level == 1 else PX0                   # the face at the mouth: the rock, or the stone portal
+    k.scorch("plume_m", (fx, -160 if k.level == 1 else -150, 4), out=5)
+    k.scorch("lick", (fx, 150, 0), out=5, flip=True)
     k.scorch("blot_l", (-262, -258, 0), "up", out=2.0)       # the stores burnt out under their awning
     k.scorch("blot_m", (-150, 228, 31), "up", out=1.5)
     k.charred((-330, -330, 4), (-250, -210, 150), size=9)

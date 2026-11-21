@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_Sword",
+ "faces": 492,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0609,
+   -0.5893,
+   -0.1482
+  ],
+  [
+   0.0535,
+   0.1958,
+   0.3934
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.37198,
+  -0.24229,
+  0.66022
+ ],
+ "part": "Sword",
+ "triangles": 984,
+ "blocks": 23
+}

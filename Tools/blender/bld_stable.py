@@ -8,13 +8,20 @@ bales on the right, and a wide gateway between two tall posts with the team's st
 
 States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
 damage(); `site` and `ruin` are small meshes of their own on the same footprint.
+
+Levels 1-3 (k.level), the training buildings' shared progression (built up under slate, then fortified):
+  2  the stall range is rebuilt taller in stone under a steep dark slate roof; the loft gets stone below and a taller,
+     jettied half-timbered hay storey under slate; stone gate piers with iron caps
+  3  fortified: a watch turret at the loft's front corner, flat-topped like the castle's (frieze under an oversailing
+     head, crow-stepped merlons, a standard on its roof); dark stone at the foot, the front of the yard walled and crenellated, fires on the gate piers, a banner on the turret, creeper
+The level banner (kit.level_flag) stands at the front-left corner, outside the corral fence.
 """
 import math
 
-from bld_barracks import spear_rack
+from bld_barracks import rook_head, spear_rack
 from bld_farm import fence, haystack
 from bld_range import bale
-from bldkit import STATES, rect  # noqa: F401
+from bldkit import STATES, inset_ring, rect  # noqa: F401
 
 NAME = "stable"
 MESH = "SM_Bld_Stable"
@@ -22,6 +29,7 @@ SEED = 71
 FOOTPRINT = [-500.0, -450.0, 500.0, 450.0]
 RING_RADIUS = 700.0
 PREVIEW_FIGURES = [(-610, -70), (-660, 60)]
+LEVELS = 3
 
 SX0, SX1, SY0, SY1 = 160.0, 470.0, -434.0, 170.0         # the stall range
 S_EAVE, S_RISE = 220.0, 100.0
@@ -35,6 +43,13 @@ FX, FY = 484.0, 434.0                                    # the fence line
 GATE = 130.0                                             # half width of the gateway
 S_HOLES = ((-1, -300.0, 96.0, 70.0), (-1, 20.0, 60.0, 54.0), (1, -150.0, 80.0, 60.0))     # burnt through the tiles (damaged)
 L_HOLES = ((-1, 40.0, 70.0, 52.0),)
+JETTY = 14.0                                             # level 2 on: the hay storey's overhang
+TUR, TUR_TOP = (56.0, 172.0, 346.0, 462.0), 560.0        # level 3: the watch turret (x0, x1, y0, y1), its parapet top
+
+
+def stone(k, mud="Bld_Mudbrick"):
+    """What the mudbrick becomes: dressed stone at level 2, dark heavy stone at level 3."""
+    return mud if k.level < 2 else ("Bld_AshlarLarge" if k.level < 3 else "Bld_StoneDark")
 
 
 def band_ops(ops, z0, z1):
@@ -97,16 +112,47 @@ def hitch_rail(k, pos, yaw=0.0, length=150.0):
         k.rope((0, length / 2 - 6, 96), (0, length / 2 - 2, 70), 1.6)
 
 
+def stall_eave(k):
+    """The stall range's wall head: raised at level 2."""
+    return S_EAVE + (36.0 if k.level >= 2 else 0.0)
+
+
+def loft_eave(k):
+    """The loft's wall head: a taller hay storey at level 2."""
+    return L_EAVE + (50.0 if k.level >= 2 else 0.0)
+
+
+def turret(k):
+    """Level 3: a square watch turret at the loft's front corner: dark stone below, the castle's flat top (rook_head),
+    a standard on the roof and the company's banner down its face."""
+    x0, x1, y0, y1 = TUR
+    cx, cy, hw = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2
+    top = TUR_TOP
+    r0 = rect(x0, y0, x1, y1)
+    r1 = k.wall("Bld_StoneDark", r0, 0, 96, inset=7, u0=210.0, bleach=False)
+    k.band("Bld_Trim", r1, 96, 104, out=3, u0=210.0)
+    side = 2 * (hw - 7)
+    slit = lambda z: dict(a=side / 2 - 6, b=side / 2 + 6, z0=z, z1=z + 56, depth=12, back="Bld_Dark", shade=0.5)
+    r2 = k.wall("Bld_Ashlar", r1, 104, top - 76, u0=210.0, openings={2: [slit(150)] + k.breach(8, 60, 190, 290), 3: [slit(170), slit(310)]})
+    rook_head(k, r2, top - 76, top, u0=210.0, width=34.0, gap=18.0, thick=20.0)
+    k.pole_banner((cx + 6, cy, top - 34), height=180.0)
+    k.cyl("Bld_Iron", (x0 + 1, cy - 32, top - 96), (x0 + 1, cy + 32, top - 96), 2.4, sides=4)
+    k.hang_cloth((x0 + 1, cy - 26, top - 98), (x0 + 1, cy + 26, top - 98), 190.0)
+    k.patch("Bld_Leaves", (cx, y0, 0), (1, 0, 0), (0, 0, 1), 90, 200, cells=12, fill=0.55, out=4)
+
+
 def stalls(k):
     u0 = 24.0
     r0 = rect(SX0, SY0, SX1, SY1)
-    opening = lambda y: dict(a=SY1 - (y + 48), b=SY1 - (y - 48), z0=0.0, z1=176.0, depth=44, back="Bld_Dark", reveal="Bld_Mudbrick",
+    S_EAVE = stall_eave(k)
+    rev = "Bld_Mudbrick" if k.level < 2 else "Bld_Trim"
+    opening = lambda y: dict(a=SY1 - (y + 48), b=SY1 - (y - 48), z0=0.0, z1=176.0, depth=44, back="Bld_Dark", reveal=rev,
                              shade=0.62, back_shade=0.9, no_sill=True)
     ops = {2: [opening(y) for y in STALLS] + k.breach(SY1 - (-124), SY1 - (-172), 30, 150, depth=30),
-           3: [dict(a=120, b=168, z0=110, z1=160, depth=12, back="Bld_Shutter", reveal="Bld_Mudbrick", shade=0.7)]}
-    k.wall("Bld_Mudbrick", r0, 0, PLINTH, u0=u0, openings={e: band_ops(o, 0, PLINTH) for e, o in ops.items()}, bleach=False)
-    k.wall("Bld_Plaster", r0, PLINTH, S_EAVE, u0=u0, openings={e: band_ops(o, PLINTH, S_EAVE) for e, o in ops.items()})
-    k.cap("Bld_Mudbrick", r0, 0.5, down=True)
+           3: [dict(a=120, b=168, z0=110, z1=160, depth=12, back="Bld_Shutter", reveal=rev, shade=0.7)]}
+    k.wall(stone(k), r0, 0, PLINTH, u0=u0, openings={e: band_ops(o, 0, PLINTH) for e, o in ops.items()}, bleach=False)
+    k.wall("Bld_Plaster" if k.level < 2 else "Bld_Ashlar", r0, PLINTH, S_EAVE, u0=u0, openings={e: band_ops(o, PLINTH, S_EAVE) for e, o in ops.items()})
+    k.cap(stone(k), r0, 0.5, down=True)
     fx = SX0
     for i, y in enumerate(STALLS):                           # plank half-doors; one stands open
         if i == 2 and not k.damaged:
@@ -121,9 +167,16 @@ def stalls(k):
         k.obox("Bld_Beam", (fx - 3, y, S_EAVE / 2), (10, 15, S_EAVE), grain="z")
     k.obox("Bld_Beam", (fx - 4, (SY0 + SY1) / 2 - 20, 184), (10, SY1 - SY0 - 40, 14), grain="y")
     k.band("Bld_Beam", r0, S_EAVE - 10, S_EAVE + 2, out=4, u0=u0)
-    k.gable_end("Bld_Plaster", SX0, SX1, SY0, S_EAVE, S_RISE)
-    k.obox("Bld_Beam", ((SX0 + SX1) / 2, SY0 - 2.5, S_EAVE + S_RISE * 0.4), (12, 9, S_RISE * 0.8), grain="z")
-    k.gable_roof("Bld_RoofTile", SX0, SX1, SY0, SY1 + 6, S_EAVE, S_RISE, over=30, verge=20, ridge="Bld_RoofTile", holes=S_HOLES)
+    if k.level < 2:
+        k.gable_end("Bld_Plaster", SX0, SX1, SY0, S_EAVE, S_RISE)
+        k.obox("Bld_Beam", ((SX0 + SX1) / 2, SY0 - 2.5, S_EAVE + S_RISE * 0.4), (12, 9, S_RISE * 0.8), grain="z")
+        k.gable_roof("Bld_RoofTile", SX0, SX1, SY0, SY1 + 6, S_EAVE, S_RISE, over=30, verge=20, ridge="Bld_RoofTile", holes=S_HOLES)
+    else:                                                    # level 2 on: a timbered gable under a steeper slate roof
+        rise = S_RISE + 36
+        k.gable_end("Bld_Timber", SX0, SX1, SY0, S_EAVE, rise)
+        k.gable_roof("Bld_Slate", SX0, SX1, SY0, SY1 + 6, S_EAVE, rise, over=26, verge=20, ridge="Bld_Slate", holes=S_HOLES)
+        if k.level >= 3:
+            k.patch("Bld_Leaves", (SX0 + 120, SY0, 0), (1, 0, 0), (0, 0, 1), 170, 190, cells=12, fill=0.55, out=4)
 
 
 def loft(k):
@@ -133,25 +186,45 @@ def loft(k):
         r0 = rect(-LHW, -LHD, LHW, LHD)
         door = dict(a=LHW - 64, b=LHW + 64, z0=0.0, z1=154.0, depth=20, back="Bld_Door", back_uv=(64, 50), reveal="Bld_Mudbrick", shade=0.62,
                     back_shade=0.82, no_sill=True)
-        k.wall("Bld_Mudbrick", r0, 0, PLINTH, u0=u0, openings={1: band_ops([door], 0, PLINTH)}, bleach=False)
-        k.wall("Bld_Plaster", r0, PLINTH, 172, u0=u0, openings={1: band_ops([door], PLINTH, 172)}, bleach=False)
-        k.cap("Bld_Mudbrick", r0, 0.5, down=True)
+        up = k.level >= 2
+        J = JETTY if up else 0.0
+        L_EAVE, L_RISE = loft_eave(k), (150.0 if up else 120.0)      # shadow the level-1 constants
+        k.wall(stone(k), r0, 0, PLINTH, u0=u0, openings={1: band_ops([door], 0, PLINTH)}, bleach=False)
+        k.wall("Bld_Ashlar" if up else "Bld_Plaster", r0, PLINTH, 172, u0=u0, openings={1: band_ops([door], PLINTH, 172)}, bleach=False)
+        k.cap(stone(k), r0, 0.5, down=True)
         k.wall("Bld_Frieze", r0, 172, 236, v0=0.0, bleach=False, u0=u0)
         k.band("Bld_Beam", r0, 236, 248, out=5, u0=u0)
-        hatch = dict(a=LHW - 52, b=LHW + 52, z0=258.0, z1=338.0, depth=12, back="Bld_Thatch", reveal="Bld_Beam", shade=0.7, back_shade=0.8)
-        k.wall("Bld_Planks", r0, 248, L_EAVE, u0=u0, openings={1: [hatch] + k.breach(LHW + 60, LHW + 118, 256, 340, depth=14)})
+        hatch = dict(a=LHW + J - 52, b=LHW + J + 52, z0=258.0, z1=338.0, depth=12, back="Bld_Thatch", reveal="Bld_Beam", shade=0.7, back_shade=0.8)
         fy = LHD
+        if not up:
+            k.wall("Bld_Planks", r0, 248, L_EAVE, u0=u0, openings={1: [hatch] + k.breach(LHW + 60, LHW + 118, 256, 340, depth=14)})
+        else:                                                # level 2 on: the hay storey half-timbered, jettied out on beam ends
+            for i in (0, 1, 2):
+                k.beam_ends("Bld_Beam", r0[i], r0[i + 1], 240, 5 if i == 1 else 6, size=(12, 12), out=J + 4)
+            rj = inset_ring(r0, -J)
+            k.cap("Bld_Beam", rj, 248, down=True, shade=0.6)
+            k.wall("Bld_Timber", rj, 248, L_EAVE, u0=u0, v0=0.0, openings={1: [hatch] + k.breach(LHW + J + 60, LHW + J + 118, 256, 340, depth=14)})
+            for z in (56, 110):                              # the tack room door bound in iron
+                k.obox("Bld_Iron", (0, fy - 16, z), (118, 4, 8))
         k.obox("Bld_Beam", (0, fy + 4, 162), (150, 10, 14))                       # the door's lintel
+        ph = 248.0 if up else L_EAVE
         for s in (-1, 1):                                                        # corner posts, the loft door's leaves folded back
-            k.obox("Bld_Beam", (s * (LHW - 5), fy + 2.5, L_EAVE / 2), (14, 9, L_EAVE), grain="z")
+            k.obox("Bld_Beam", (s * (LHW - 5), fy + 2.5, ph / 2), (14, 9, ph), grain="z")
             if not (k.damaged and s > 0):
-                k.obox("Bld_Planks", (s * 78, fy + 4, 298), (46, 5, 80), grain="z")
+                k.obox("Bld_Planks", (s * 78, fy + J + 4, 298), (46, 5, 80), grain="z")
+        fy += J
         k.obox("Bld_Beam", (0, fy + 5, 254), (118, 12, 8))                        # the hatch sill
         k.blob("Bld_Thatch", (0, fy - 4, 262), (96, 30, 40), points=9, squash=0.3)      # hay spilling over it
-        for facing, y in ((1, fy), (-1, -fy)):
-            k.gable_end("Bld_Planks", -LHW, LHW, y, L_EAVE, L_RISE, facing=facing)
-        k.obox("Bld_Beam", (0, fy + 3, L_EAVE - 2), (2 * LHW + 8, 10, 12))
-        k.gable_roof("Bld_Thatch", -LHW, LHW, -LHD, LHD, L_EAVE, L_RISE, over=22, verge=28, holes=L_HOLES)
+        if not up:
+            for facing, y in ((1, fy), (-1, -fy)):
+                k.gable_end("Bld_Planks", -LHW, LHW, y, L_EAVE, L_RISE, facing=facing)
+            k.obox("Bld_Beam", (0, fy + 3, L_EAVE - 2), (2 * LHW + 8, 10, 12))
+            k.gable_roof("Bld_Thatch", -LHW, LHW, -LHD, LHD, L_EAVE, L_RISE, over=22, verge=28, holes=L_HOLES)
+        else:
+            for facing, y in ((1, fy), (-1, -fy)):
+                k.gable_end("Bld_Timber", -LHW - J, LHW + J, y, L_EAVE, L_RISE, facing=facing)
+            k.obox("Bld_Beam", (0, fy + 3, L_EAVE - 2), (2 * (LHW + J) + 8, 10, 12))
+            k.gable_roof("Bld_Slate", -LHW - J, LHW + J, -LHD - J, LHD + J, L_EAVE, L_RISE, over=20, verge=22, ridge="Bld_Slate", holes=L_HOLES)
         # the hoist: a beam out of the gable, a bronze block, a bale on the rope
         zb = L_EAVE + L_RISE - 34
         k.obox("Bld_Beam", (0, fy + 36, zb), (12, 104, 12), grain="y")
@@ -167,12 +240,30 @@ def yard(k):
     k.box("Bld_Dirt", (-FX + 8, SY1 - 2, -2), (SX0 + 2, FY - 8, 3), u0=0.0)
     k.box("Bld_Dirt", (SX0, SY1, -2), (LFX + 2, FY - 8, 3), u0=0.0)
     d = k.damaged
-    fence(k, [(SX0 - 4, -FY), (-FX, -FY), (-FX, -GATE)], gaps=((0, 200, 420),) if d else ())
-    fence(k, [(-FX, GATE), (-FX, FY), (LFX - 4, FY)], gaps=((1, 120, 300),) if d else ())
+    if k.level < 3:
+        fence(k, [(SX0 - 4, -FY), (-FX, -FY), (-FX, -GATE)], gaps=((0, 200, 420),) if d else ())
+        fence(k, [(-FX, GATE), (-FX, FY), (LFX - 4, FY)], gaps=((1, 120, 300),) if d else ())
+    else:                                                    # level 3: the front of the yard walled in stone
+        fence(k, [(SX0 - 4, -FY), (-FX, -FY)], gaps=((0, 200, 420),) if d else ())
+        fence(k, [(-FX, FY), (LFX - 4, FY)], gaps=((0, 120, 300),) if d else ())
+        for (ya, yb, broken) in ((-FY - 12, -GATE - 36, False), (GATE + 36, FY + 12, True)):
+            if broken and d:
+                k.stub("Bld_Ashlar", (-FX, ya), (-FX, yb), thick=24, hmax=96, hmin=16, seg=46, ends=(0.9, 1.0), gaps=0.34, top="Bld_Trim")
+                continue
+            ring = k.box("Bld_Ashlar", (-FX - 12, ya, 0), (-FX + 12, yb, 88), top="Bld_Trim", u0=40.0, bleach=True)
+            k.band("Bld_Trim", ring, 88, 96, out=3, u0=40.0)
+            k.crenels("Bld_Ashlar", ring, 96, height=38, width=44, gap=34, thick=24, cap="Bld_Trim", edges=(2,))
     for s in (-1, 1):                                        # the gateway: tall posts, bronze caps, the standards inside
-        k.cyl("Bld_Bark", (-FX, s * GATE, -4), (-FX, s * GATE, 236), 10.0, 8.0, sides=7, grain="ring", cap_slot="Bld_Beam")
-        k.lathe("Bld_Bronze", (-FX, s * GATE, 236), [(10, 0), (8, 6), (1, 20)], sides=7)
-        k.cyl("Bld_Beam", (-FX + 4, s * (GATE + 70), 4), (-FX, s * GATE, 150), 4.0, sides=4, caps=False)       # a strut
+        if k.level < 2:
+            k.cyl("Bld_Bark", (-FX, s * GATE, -4), (-FX, s * GATE, 236), 10.0, 8.0, sides=7, grain="ring", cap_slot="Bld_Beam")
+            k.lathe("Bld_Bronze", (-FX, s * GATE, 236), [(10, 0), (8, 6), (1, 20)], sides=7)
+            k.cyl("Bld_Beam", (-FX + 4, s * (GATE + 70), 4), (-FX, s * GATE, 150), 4.0, sides=4, caps=False)       # a strut
+        else:                                                # level 2 on: stone piers, iron caps; fires on them at level 3
+            k.obox_wall(stone(k), (-FX + 6, s * (GATE + 12), 0), (50, 50, 210), 0.0, cap="Bld_Trim")
+            if k.level >= 3:
+                k.brazier((-FX + 6, s * (GATE + 12), 210), h=58)
+            else:
+                k.lathe("Bld_Iron", (-FX + 6, s * (GATE + 12), 210), [(16, 0), (12, 8), (1, 30)], sides=7)
         if not (d and s > 0):
             k.pole_banner((-FX - 2, s * (GATE + 52), 0), height=350.0)
     # the corral, left of the way in: water, a heap of fodder
@@ -193,11 +284,17 @@ def yard(k):
         haystack(k, (-392, 322, 0), r=74.0, h=136.0)
     else:
         k.lathe("Bld_Char", (-392, 322, 0), [(74, 0), (66, 26), (20, 44)], sides=9, rot=11)
-    bale(k, (56, 396, 0), 88)
-    bale(k, (60, 392, 46), 80)
-    bale(k, (-44, 396, 0), 96)
+    if k.level < 3:
+        bale(k, (56, 396, 0), 88)
+        bale(k, (60, 392, 46), 80)
+        bale(k, (-44, 396, 0), 96)
+    else:                                                    # the turret stands where the bales were stacked
+        bale(k, (-44, 396, 0), 96)
+        bale(k, (-150, 400, 0), 86)
+        bale(k, (-96, 398, 46), 92)
     k.pot((LFX - 26, 196, 0), 0.95)
-    k.sack((LFX - 30, 388, 92), 0.9, yaw=30)
+    if k.level < 3:
+        k.sack((LFX - 30, 388, 92), 0.9, yaw=30)
 
 
 def build(k, state="complete"):
@@ -214,10 +311,13 @@ def complete(k):
     stalls(k)
     loft(k)
     yard(k)
+    if k.level >= 3:
+        turret(k)
+    k.level_flag((-FX - 22, -384.0, 0), height=250.0)
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 320))
     k.sockets["gate"] = (-570.0, 0.0, 0.0)           # where a rider appears: just outside the gateway
     k.sockets["rally"] = (-870.0, 0.0, 0.0)          # default rally point, straight out from it
-    k.sockets["label"] = (200.0, 0.0, 640.0)
+    k.sockets["label"] = (200.0, 0.0, (640.0, 720.0, 880.0)[k.level - 1])
     k.sockets["popup"] = (0.0, 0.0, 420.0)
 
 
@@ -226,7 +326,13 @@ def damage(k):
     fx = SX0
     k.scorch("smear", (fx, -150, 150))                       # over the breach, up under the eave
     k.scorch("plume_s", (fx, -360, 120), flip=True)
-    k.scorch("plume_s", (LFX, LC[1] + 86, 250), out=6)
+    if k.level < 2:
+        k.scorch("plume_s", (LFX, LC[1] + 86, 250), out=6)
+    else:
+        k.scorch("plume_s", (LFX - JETTY, LC[1] - 84, 256), out=4)           # up the timber storey
+    if k.level >= 3:
+        k.scorch("plume_s", (TUR[0] + 7, (TUR[2] + TUR[3]) / 2 + 14, 250))   # the turret, over its breach
+        k.rubble((TUR[0] - 40, TUR[2] + 30, 0), (70, 90), 0, slot="Bld_Ashlar", blocks=5, beams=0, mound=False)
     k.scorch("lick", (LFX, LC[1] - 96, 60))
     k.rubble((fx - 54, -150, 0), (110, 130), 24, slot="Bld_Mudbrick", blocks=7, beams=1, block=(30, 18, 12))
     k.rubble((fx - 76, 20, 3), (100, 200), 0, slot="Bld_RoofTile", blocks=8, beams=1, mound=False, block=(34, 26, 6))       # slid tiles

@@ -1,0 +1,366 @@
+{
+ "height": 1.75,
+ "radius": 0.42,
+ "voxel": 0.0125,
+ "elbow_l": 14.0,
+ "elbow_r": 33.0,
+ "cape": {
+  "cols": 5,
+  "rows": 4
+ },
+ "has_sheath": false,
+ "parts": {
+  "Body": {
+   "mesh": "SM_Swordsman_Body",
+   "pivot": [
+    0.0,
+    0.0,
+    0.7
+   ],
+   "parent": ""
+  },
+  "Chest": {
+   "mesh": "SM_Swordsman_Chest",
+   "pivot": [
+    0.0,
+    0.0,
+    0.9125
+   ],
+   "parent": "Body"
+  },
+  "Head": {
+   "mesh": "SM_Swordsman_Head",
+   "pivot": [
+    0.0,
+    0.0,
+    1.3
+   ],
+   "parent": "Chest"
+  },
+  "ArmL": {
+   "mesh": "SM_Swordsman_ArmL",
+   "pivot": [
+    0.3125,
+    0.0,
+    1.25
+   ],
+   "parent": "Chest"
+  },
+  "ForeL": {
+   "mesh": "SM_Swordsman_ForeL",
+   "pivot": [
+    0.34906,
+    0.0,
+    0.95224
+   ],
+   "parent": "ArmL"
+  },
+  "ArmR": {
+   "mesh": "SM_Swordsman_ArmR",
+   "pivot": [
+    -0.3125,
+    0.0,
+    1.25
+   ],
+   "parent": "Chest"
+  },
+  "ForeR": {
+   "mesh": "SM_Swordsman_ForeR",
+   "pivot": [
+    -0.34386,
+    0.0,
+    0.95164
+   ],
+   "parent": "ArmR"
+  },
+  "HandR": {
+   "mesh": "SM_Swordsman_HandR",
+   "pivot": [
+    -0.3698,
+    -0.16863,
+    0.70481
+   ],
+   "parent": "ForeR"
+  },
+  "LegL": {
+   "mesh": "SM_Swordsman_LegL",
+   "pivot": [
+    0.15,
+    0.0,
+    0.675
+   ],
+   "parent": ""
+  },
+  "ShinL": {
+   "mesh": "SM_Swordsman_ShinL",
+   "pivot": [
+    0.15,
+    0.0,
+    0.35
+   ],
+   "parent": "LegL"
+  },
+  "LegR": {
+   "mesh": "SM_Swordsman_LegR",
+   "pivot": [
+    -0.15,
+    0.0,
+    0.675
+   ],
+   "parent": ""
+  },
+  "ShinR": {
+   "mesh": "SM_Swordsman_ShinR",
+   "pivot": [
+    -0.15,
+    0.0,
+    0.35
+   ],
+   "parent": "LegR"
+  },
+  "Cape": {
+   "mesh": "SM_Swordsman_Cape",
+   "pivot": [
+    0.0,
+    0.2,
+    1.3
+   ],
+   "parent": "Chest"
+  },
+  "Cape00": {
+   "mesh": "SM_Swordsman_Cape00",
+   "pivot": [
+    -0.46071,
+    0.21071,
+    1.1
+   ],
+   "parent": "Cape"
+  },
+  "Cape01": {
+   "mesh": "SM_Swordsman_Cape01",
+   "pivot": [
+    -0.51875,
+    0.225,
+    0.85
+   ],
+   "parent": "Cape00"
+  },
+  "Cape02": {
+   "mesh": "SM_Swordsman_Cape02",
+   "pivot": [
+    -0.575,
+    0.25278,
+    0.6
+   ],
+   "parent": "Cape01"
+  },
+  "Cape03": {
+   "mesh": "SM_Swordsman_Cape03",
+   "pivot": [
+    -0.61667,
+    0.2625,
+    0.35
+   ],
+   "parent": "Cape02"
+  },
+  "Cape10": {
+   "mesh": "SM_Swordsman_Cape10",
+   "pivot": [
+    -0.265,
+    0.265,
+    1.05
+   ],
+   "parent": "Cape"
+  },
+  "Cape11": {
+   "mesh": "SM_Swordsman_Cape11",
+   "pivot": [
+    -0.29643,
+    0.31071,
+    0.8
+   ],
+   "parent": "Cape10"
+  },
+  "Cape12": {
+   "mesh": "SM_Swordsman_Cape12",
+   "pivot": [
+    -0.30278,
+    0.35278,
+    0.55
+   ],
+   "parent": "Cape11"
+  },
+  "Cape13": {
+   "mesh": "SM_Swordsman_Cape13",
+   "pivot": [
+    -0.3375,
+    0.3875,
+    0.3
+   ],
+   "parent": "Cape12"
+  },
+  "Cape20": {
+   "mesh": "SM_Swordsman_Cape20",
+   "pivot": [
+    0.0,
+    0.255,
+    1.1
+   ],
+   "parent": "Cape"
+  },
+  "Cape21": {
+   "mesh": "SM_Swordsman_Cape21",
+   "pivot": [
+    0.0,
+    0.3,
+    0.85
+   ],
+   "parent": "Cape20"
+  },
+  "Cape22": {
+   "mesh": "SM_Swordsman_Cape22",
+   "pivot": [
+    0.0,
+    0.35,
+    0.6
+   ],
+   "parent": "Cape21"
+  },
+  "Cape23": {
+   "mesh": "SM_Swordsman_Cape23",
+   "pivot": [
+    0.0,
+    0.385,
+    0.35
+   ],
+   "parent": "Cape22"
+  },
+  "Cape30": {
+   "mesh": "SM_Swordsman_Cape30",
+   "pivot": [
+    0.265,
+    0.265,
+    1.05
+   ],
+   "parent": "Cape"
+  },
+  "Cape31": {
+   "mesh": "SM_Swordsman_Cape31",
+   "pivot": [
+    0.29643,
+    0.31071,
+    0.8
+   ],
+   "parent": "Cape30"
+  },
+  "Cape32": {
+   "mesh": "SM_Swordsman_Cape32",
+   "pivot": [
+    0.30278,
+    0.35278,
+    0.55
+   ],
+   "parent": "Cape31"
+  },
+  "Cape33": {
+   "mesh": "SM_Swordsman_Cape33",
+   "pivot": [
+    0.3375,
+    0.3875,
+    0.3
+   ],
+   "parent": "Cape32"
+  },
+  "Cape40": {
+   "mesh": "SM_Swordsman_Cape40",
+   "pivot": [
+    0.46071,
+    0.21071,
+    1.1
+   ],
+   "parent": "Cape"
+  },
+  "Cape41": {
+   "mesh": "SM_Swordsman_Cape41",
+   "pivot": [
+    0.51875,
+    0.225,
+    0.85
+   ],
+   "parent": "Cape40"
+  },
+  "Cape42": {
+   "mesh": "SM_Swordsman_Cape42",
+   "pivot": [
+    0.575,
+    0.25278,
+    0.6
+   ],
+   "parent": "Cape41"
+  },
+  "Cape43": {
+   "mesh": "SM_Swordsman_Cape43",
+   "pivot": [
+    0.61667,
+    0.2625,
+    0.35
+   ],
+   "parent": "Cape42"
+  },
+  "Sword": {
+   "mesh": "SM_Swordsman_Sword",
+   "pivot": [
+    -0.37198,
+    -0.24229,
+    0.66022
+   ],
+   "parent": ""
+  }
+ },
+ "sword": {
+  "blade_dir": [
+   0.05693,
+   -0.83867,
+   0.54166
+  ],
+  "has_sheath": false,
+  "length": 0.6,
+  "grip": [
+   -0.37198,
+   -0.24229,
+   0.66022
+  ],
+  "tip": [
+   -0.33782,
+   -0.7455,
+   0.98521
+  ],
+  "sheath_dir": [
+   0.05693,
+   -0.83867,
+   0.54166
+  ],
+  "sheath_pos": [
+   -0.37198,
+   -0.24229,
+   0.66022
+  ],
+  "delta": [
+   [
+    1.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    1.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    1.0
+   ]
+  ]
+ }
+}

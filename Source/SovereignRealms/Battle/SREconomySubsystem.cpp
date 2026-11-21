@@ -154,7 +154,9 @@ float USREconomySubsystem::GetIncomePerMinute(ESRTeam Team, ESRResource Resource
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	if (Resource == ESRResource::Food)
 	{
-		return CountFinished(ESRBuildingType::Farm, Team) * F.FarmFoodPerPayout * 60.f / FMath::Max(F.FarmPayoutInterval, 0.2f);
+		int32 PerHarvest = 0;   // each farm at its level
+		for (const ASRBuilding* B : Buildings) { if (B && B->Team == Team && B->BuildingType == ESRBuildingType::Farm && B->IsFinished()) { PerHarvest += B->GetPayoutAmount(); } }
+		return PerHarvest * 60.f / FMath::Max(F.FarmPayoutInterval, 0.2f);
 	}
 	int32 PerRound = 0;   // each mine at its level
 	for (const ASRBuilding* B : Buildings) { if (B && B->Team == Team && B->BuildingType == ESRBuildingType::Mine && B->IsFinished()) { PerRound += B->GetPayoutAmount(); } }
@@ -292,7 +294,7 @@ void USREconomySubsystem::LogStatus() const
 	{
 		if (!Building) { continue; }
 		FString Queue;
-		for (ESRUnitType Type : Building->GetQueue()) { Queue += TEXT("SAHCBO")[FMath::Clamp(int32(Type), 0, SRNumUnitTypes - 1)]; }   // (O: scOut)
+		for (ESRUnitType Type : Building->GetQueue()) { Queue += TEXT("SAHCBOM")[FMath::Clamp(int32(Type), 0, SRNumUnitTypes - 1)]; }   // (O: scOut, M: Medic)
 		UE_LOG(LogSovereign, Log, TEXT("  %-16s %-9s team=%d pos=(%6.0f,%6.0f) payout=%.2f queue=[%s] build=%.2f rally=(%.0f,%.0f) sel=%d site=%.2f%s builders=%d hp=%.0f"),
 			*Building->GetActorNameOrLabel(), *Building->GetDisplayName(), int32(Building->Team), Building->GetActorLocation().X, Building->GetActorLocation().Y,
 			Building->GetPayoutFraction(), *Queue, Building->GetBuildFraction(), Building->GetRallyPoint().X, Building->GetRallyPoint().Y, Building->IsSelected() ? 1 : 0,
@@ -352,6 +354,43 @@ int32 USREconomySubsystem::GetPopulationCeiling(ESRTeam Team) const
 	return GetCastle(Team) ? F.CastleLevel(GetCastleLevel(Team)).PopulationCeiling : F.MaxPopulation;
 }
 
+int32 USREconomySubsystem::GetMaxFarms(ESRTeam Team) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	return F.FarmLimitBase + F.FarmLimitPerCastleLevel * FMath::Max(0, GetCastleLevel(Team) - 1);
+}
+
+int32 USREconomySubsystem::GetBuildLimit(ESRBuildingType Type, ESRTeam Team) const
+{
+	switch (Type)
+	{
+	case ESRBuildingType::Tower: return GetMaxTowers(Team);
+	case ESRBuildingType::SiegeTower: return USRFeelSettings::Get().SiegeTowerLimitBase + FMath::Max(0, GetCastleLevel(Team) - 1) / 2;
+	case ESRBuildingType::Farm: return GetMaxFarms(Team);
+	case ESRBuildingType::Granary: case ESRBuildingType::Treasury: return GetMaxStores(Team);
+	default: return INDEX_NONE;
+	}
+}
+
+bool USREconomySubsystem::IsAtBuildLimit(ESRBuildingType Type, ESRTeam Team) const
+{
+	const int32 Limit = GetBuildLimit(Type, Team);
+	return Limit != INDEX_NONE && CountStanding(Type, Team) >= Limit;
+}
+
+FText USREconomySubsystem::GetBuildLimitReason(ESRBuildingType Type, ESRTeam Team) const
+{
+	if (!IsAtBuildLimit(Type, Team)) { return FText::GetEmpty(); }
+	const FText Name = FText::FromString(USRFeelSettings::Get().BuildingStatsFor(Type).DisplayName);
+	const FText Limit = FText::AsNumber(GetBuildLimit(Type, Team));
+	// storehouses do not grow in number: the one you have is upgraded instead
+	if ((Type == ESRBuildingType::Granary || Type == ESRBuildingType::Treasury) && USRFeelSettings::Get().StoreLimitCastleLevels <= 0)
+	{
+		return FText::Format(NSLOCTEXT("SREconomy", "StoreOnly", "{0} limit {1} reached: upgrade the one you have"), Name, Limit);
+	}
+	return FText::Format(NSLOCTEXT("SREconomy", "BuildLimit", "{0} limit {1} reached: raise the Citadel for another"), Name, Limit);
+}
+
 int32 USREconomySubsystem::GetMaxTowers(ESRTeam Team) const
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
@@ -383,7 +422,7 @@ int32 USREconomySubsystem::GetStoreCapacity(ESRTeam Team, ESRResource Resource) 
 int32 USREconomySubsystem::GetMaxStores(ESRTeam Team) const
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
-	return F.StoreLimitBase + FMath::Max(0, GetCastleLevel(Team) - 1) / FMath::Max(1, F.StoreLimitCastleLevels);
+	return F.StoreLimitCastleLevels <= 0 ? F.StoreLimitBase : F.StoreLimitBase + FMath::Max(0, GetCastleLevel(Team) - 1) / F.StoreLimitCastleLevels;
 }
 
 int32 USREconomySubsystem::CountStanding(ESRBuildingType Type, ESRTeam Team) const
@@ -502,15 +541,17 @@ ASRBuilding* USREconomySubsystem::PlaceBuilding(ESRBuildingType Type, ESRTeam Te
 		if (OutReason) { *OutReason = Placement.Reason; }
 		return nullptr;
 	}
-	if ((Type == ESRBuildingType::Granary || Type == ESRBuildingType::Treasury) && CountStanding(Type, Team) >= GetMaxStores(Team))
+	if (IsAtBuildLimit(Type, Team))
 	{
-		if (OutReason)
-		{
-			*OutReason = FText::Format(NSLOCTEXT("SREconomy", "StoreCap", "You can have at most {0} of these (raise the Citadel for more)"), FText::AsNumber(GetMaxStores(Team)));
-		}
+		if (OutReason) { *OutReason = GetBuildLimitReason(Type, Team); }
 		return nullptr;
 	}
-	const FSRCost& Cost = F.BuildingStatsFor(Type).Cost;
+	FSRCost Cost = F.BuildingStatsFor(Type).Cost;
+	if (Type == ESRBuildingType::Tower && Placement.RelicIndex != INDEX_NONE)
+	{
+		// raised on an old ruined tower: cheaper
+		Cost = FSRCost(FMath::RoundToInt(Cost.Gold * F.RuinRepairCost), FMath::RoundToInt(Cost.Food * F.RuinRepairCost));
+	}
 	if (!TrySpend(Team, Cost))
 	{
 		if (OutReason) { *OutReason = FText::Format(NSLOCTEXT("SREconomy", "NeedGold", "Not enough gold ({0} needed)"), FText::AsNumber(Cost.Gold)); }
@@ -519,6 +560,7 @@ ASRBuilding* USREconomySubsystem::PlaceBuilding(ESRBuildingType Type, ESRTeam Te
 	ASRBuilding* B = ASRBuilding::SpawnBuilding(GetWorld(), Type, Team, Placement.Location, true);
 	if (B) { B->SetNeedsBuilder(Placement.bNeedsBuilder); }
 	if (B && Type == ESRBuildingType::Mine && Placement.VeinIndex != INDEX_NONE) { Grid->ClaimVein(Placement.VeinIndex, B); }
+	if (B && (Type == ESRBuildingType::RelicTower || Type == ESRBuildingType::Tower) && Placement.RelicIndex != INDEX_NONE) { Grid->ClaimRelic(Placement.RelicIndex, B); }
 	return B;
 }
 
@@ -599,6 +641,15 @@ void USREconomySubsystem::NotifyBuildingDestroyed(ASRBuilding* Building)
 		PushAlert(ESRAlertKind::BuildingLost, FText::Format(NSLOCTEXT("SREconomy", "Lost", "{0} destroyed"), FText::FromString(Building->GetDisplayName())), &At);
 	}
 	if (USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this)) { Battle->NotifyBuildingDestroyed(Building); }
+}
+
+void USREconomySubsystem::ClampToStorage(ESRTeam Team)
+{
+	for (int32 r = 0; r < 2; ++r)
+	{
+		int32& Value = Stock[int32(Team)][r];
+		Value = FMath::Min(Value, FMath::Max(GetStorage(Team, ESRResource(r)), 0));
+	}
 }
 
 void USREconomySubsystem::PushAlert(ESRAlertKind Kind, const FText& Text, const FVector2D* Location)

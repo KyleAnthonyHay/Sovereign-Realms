@@ -38,6 +38,13 @@ public:
 	UPROPERTY(Config) bool bEdgePan = true;
 	UPROPERTY(Config) bool bWASDPansCamera = true;
 	UPROPERTY(Config) int32 AIDifficulty = 1;
+	/** Frames per second while playing (0 = no limit). */
+	UPROPERTY(Config) int32 FrameRateCap = 60;
+	/** 0 off, 1 on battery power, 2 always. */
+	UPROPERTY(Config) int32 BatterySaver = 1;
 	/** The platoon panel folded away. */
 	UPROPERTY(Config) bool bPlatoonsCollapsed = false;
+	UPROPERTY(Config) bool bFogOfWar = true;
+	UPROPERTY(Config) bool bTrackpadScrollZooms = false;
+	UPROPERTY(Config) int32 CameraAngle = 0;
 };

@@ -19,8 +19,7 @@ namespace
 
 	float DistanceForZoom(const USRFeelSettings& F, float Zoom01)
 	{
-		// Geometric interpolation: every wheel notch changes apparent size by the same ratio.
-		return F.ZoomDistanceMin * FMath::Pow(F.ZoomDistanceMax / F.ZoomDistanceMin, FMath::Clamp(Zoom01, 0.f, 1.f));
+		return F.ZoomDistance(Zoom01);
 	}
 }
 
@@ -44,12 +43,12 @@ void ASRCameraPawn::BeginPlay()
 	Super::BeginPlay();
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	Zoom = ZoomTarget = F.ZoomDefault;
-	Focus = F.PlayerStart;
 	if (TActorIterator<AExponentialHeightFog> It(GetWorld()); It)
 	{
 		Haze = It->GetComponent();
 	}
-	ApplyView(0.f);
+	// on the ground at the player's start (the map's own: ASRMapInfo), not at height 0, which may be inside a hill
+	FocusOn(F.PlayerStart, true);
 }
 
 FRotator ASRCameraPawn::GetViewRotation() const
@@ -98,6 +97,20 @@ void ASRCameraPawn::FocusOn(const FVector2D& WorldXY, bool bSnap)
 	}
 }
 
+void ASRCameraPawn::AddPanOffset(const FVector2D& WorldDelta)
+{
+	Focus += WorldDelta;
+	bRecentering = false;
+	PanVelocity = FVector2D::ZeroVector;
+}
+
+float ASRCameraPawn::GetGroundPerPixel(float ViewportWidthPixels) const
+{
+	// the horizontal field of view spans the screen's width at the focus distance
+	const float Width = 2.f * GetZoomDistance() * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(USRFeelSettings::Get().CameraFOV, 5.f, 170.f) * 0.5f));
+	return Width / FMath::Max(ViewportWidthPixels, 1.f);
+}
+
 void ASRCameraPawn::SetZoom(float Zoom01, bool bSnap)
 {
 	ZoomTarget = FMath::Clamp(Zoom01, 0.f, 1.f);
@@ -136,6 +149,7 @@ void ASRCameraPawn::EndDragPan()
 void ASRCameraPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (bFilm) { return; }      // the film places the view itself (FilmView)
 	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
 	const USRFeelSettings& F = USRFeelSettings::Get();
 
@@ -199,13 +213,77 @@ void ASRCameraPawn::Tick(float DeltaSeconds)
 	ApplyView(Dt);
 }
 
+void ASRCameraPawn::FilmView(const FVector2D& WorldXY, float Zoom01, float Pitch, bool bCut, float DeltaSeconds)
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	bFilm = true;
+	FilmPitch = FMath::Clamp(Pitch, -89.f, -5.f);
+	Focus = WorldXY;
+	PanVelocity = FVector2D::ZeroVector;
+	bRecentering = false;
+	bDragging = false;
+	Zoom = ZoomTarget = FMath::Clamp(Zoom01, 0.f, 1.f);
+	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
+	if (const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this))
+	{
+		float GroundZ = FocusZ;
+		if (Battle->SampleGround(Focus, 20000.f, GroundZ))
+		{
+			// the ground under a moving shot is followed slowly: a bank or a boulder passing under the focus must not bob the frame
+			const float Goal = FMath::Min(GroundZ, F.FocusHeightMax);
+			FocusZ = bCut ? Goal : FMath::Lerp(FocusZ, Goal, SmoothAlpha(Dt, 1.2f));
+		}
+	}
+	Trauma = FMath::Max(0.f, Trauma - F.ShakeDecay * Dt);
+	ShakeClock += Dt;
+	ApplyView(bCut ? 0.f : Dt);
+}
+
+float ASRCameraPawn::ClearancePitch(const FVector& FocusPoint, float BasePitch, float Distance) const
+{
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle || F.CameraGroundClearance <= 0.f) { return 0.f; }
+	// The camera hangs back from the focus along the view direction, and nothing else keeps it out of a hill: with
+	// real terrain the slope behind the focus can stand in the line of sight, or swallow the camera whole. So the
+	// line is walked from the focus back to the camera, and wherever the ground comes within the clearance of it the
+	// view tilts down a few degrees more and the line is walked again, until it is clear (or the view is all but
+	// straight down). The clearance asked for grows along the line: nothing at the focus, which is on the ground,
+	// all of it at the camera. A clear line costs its eight ground samples and no more.
+	constexpr int32 Samples = 8;
+	constexpr float PitchStep = 4.f, SteepestPitch = -85.f;
+	float Pitch = BasePitch;
+	for (;;)
+	{
+		const FVector Back = -FRotator(Pitch, F.CameraYaw, 0.f).Vector();   // from the focus toward the camera
+		bool bClear = true;
+		for (int32 i = 1; i <= Samples && bClear; ++i)
+		{
+			const float T = float(i) / float(Samples);
+			const FVector P = FocusPoint + Back * (Distance * T);
+			float GroundZ = 0.f;
+			// (no ground there: past the edge of the terrain, nothing to clear)
+			if (Battle->SampleGround(FVector2D(P), 20000.f, GroundZ) && GroundZ + F.CameraGroundClearance * T > P.Z) { bClear = false; }
+		}
+		if (bClear || Pitch <= SteepestPitch) { break; }
+		Pitch = FMath::Max(Pitch - PitchStep, SteepestPitch);
+	}
+	return FMath::Min(Pitch - BasePitch, 0.f);
+}
+
 void ASRCameraPawn::ApplyView(float DeltaSeconds)
 {
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	const float Distance = DistanceForZoom(F, Zoom);
-	// Tilt: lower, more side-on when close; steeper, more map-like when far.
-	const FRotator ViewRot(FMath::Lerp(F.PitchZoomedIn, F.PitchZoomedOut, Zoom), F.CameraYaw, 0.f);
 	const FVector FocusPoint(Focus.X, Focus.Y, FocusZ);
+	// Tilt: lower, more side-on when close; steeper, more map-like when far (it holds past ZoomTiltDistance). And
+	// steeper still where the ground would otherwise stand between the camera and its focus: that extra tilt eases in
+	// and out, so the view never snaps as a hill comes between (a snap of the view itself takes it at once).
+	const float BasePitch = bFilm ? FilmPitch : F.PitchAtDistance(Distance);
+	const float Lift = ClearancePitch(FocusPoint, BasePitch, Distance);
+	PitchLift = DeltaSeconds > 0.f ? FMath::Lerp(PitchLift, Lift, SmoothAlpha(DeltaSeconds, F.CameraClearanceSmoothTime)) : Lift;
+	// (everything that reads the view follows from here: the sprite cards and the HUD ask GetViewRotation)
+	const FRotator ViewRot(FMath::Max(BasePitch + PitchLift, -89.f), F.CameraYaw, 0.f);
 	FVector CameraPos = FocusPoint - ViewRot.Vector() * Distance;
 
 	if (F.bCameraShake && Trauma > 0.f)
@@ -236,7 +314,7 @@ void ASRCameraPawn::ApplyView(float DeltaSeconds)
 
 	// Tilt-shift: physical depth of field focused on the focus point. The virtual sensor is scaled with the
 	// focus distance so the blur gradient looks the same at every zoom (a real lens would lose it when far).
-	const float Blur = FMath::Lerp(F.TiltShiftBlurZoomedIn, F.TiltShiftBlur, Zoom);
+	const float Blur = FMath::Lerp(F.TiltShiftBlurZoomedIn, F.TiltShiftBlur, F.ZoomTilt(Distance));
 	const bool bDof = F.bTiltShift && Blur > 0.f;
 	PP.bOverride_DepthOfFieldFocalDistance = bDof;
 	PP.bOverride_DepthOfFieldFstop = bDof;

@@ -16,6 +16,11 @@ void USRUserSettings::Apply() const
 	F->bEdgePan = bEdgePan;
 	F->bWASDPansCamera = bWASDPansCamera;
 	F->AIDifficulty = FMath::Clamp(AIDifficulty, 0, 2);
+	F->FrameRateCap = FMath::Clamp(FrameRateCap, 0, 240);
+	F->BatterySaver = FMath::Clamp(BatterySaver, 0, 2);
+	F->bFogOfWar = bFogOfWar;
+	F->bTrackpadScrollZooms = bTrackpadScrollZooms;
+	F->CameraAngle = FMath::Clamp(CameraAngle, 0, 2);
 }
 
 void USRUserSettings::CaptureAndSave()
@@ -31,5 +36,10 @@ void USRUserSettings::CaptureAndSave()
 	bEdgePan = F.bEdgePan;
 	bWASDPansCamera = F.bWASDPansCamera;
 	AIDifficulty = F.AIDifficulty;
+	FrameRateCap = F.FrameRateCap;
+	BatterySaver = F.BatterySaver;
+	bFogOfWar = F.bFogOfWar;
+	bTrackpadScrollZooms = F.bTrackpadScrollZooms;
+	CameraAngle = F.CameraAngle;
 	SaveConfig();
 }

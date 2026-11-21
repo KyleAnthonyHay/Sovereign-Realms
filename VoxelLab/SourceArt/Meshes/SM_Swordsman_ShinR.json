@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_ShinR",
+ "faces": 614,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1325,
+   -0.1975,
+   -0.35
+  ],
+  [
+   0.1213,
+   0.1125,
+   0.075
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.35
+ ],
+ "part": "ShinR",
+ "triangles": 1228,
+ "blocks": 66
+}

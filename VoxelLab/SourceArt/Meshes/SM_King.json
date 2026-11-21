@@ -1,0 +1,63 @@
+{
+ "height": 1.7,
+ "radius": 0.42,
+ "voxel": 0.03125,
+ "parts": {
+  "Body": {
+   "mesh": "SM_King_Body",
+   "pivot": [
+    0.0,
+    0.0,
+    0.6875
+   ]
+  },
+  "Head": {
+   "mesh": "SM_King_Head",
+   "pivot": [
+    0.0,
+    0.0,
+    1.34375
+   ]
+  },
+  "ArmL": {
+   "mesh": "SM_King_ArmL",
+   "pivot": [
+    0.375,
+    0.0,
+    1.125
+   ]
+  },
+  "ArmR": {
+   "mesh": "SM_King_ArmR",
+   "pivot": [
+    -0.375,
+    0.0,
+    1.125
+   ]
+  },
+  "LegL": {
+   "mesh": "SM_King_LegL",
+   "pivot": [
+    0.15625,
+    0.0,
+    0.625
+   ]
+  },
+  "LegR": {
+   "mesh": "SM_King_LegR",
+   "pivot": [
+    -0.15625,
+    0.0,
+    0.625
+   ]
+  },
+  "Cape": {
+   "mesh": "SM_King_Cape",
+   "pivot": [
+    0.0,
+    0.15625,
+    1.25
+   ]
+  }
+ }
+}

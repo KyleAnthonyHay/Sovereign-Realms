@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_Head",
+ "faces": 3150,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2253,
+   -0.2193,
+   -0.0076
+  ],
+  [
+   0.1876,
+   0.1911,
+   0.4256
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  1.3
+ ],
+ "part": "Head",
+ "triangles": 6300,
+ "blocks": 290
+}

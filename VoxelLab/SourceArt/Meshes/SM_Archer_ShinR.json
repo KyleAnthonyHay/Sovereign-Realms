@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_ShinR",
+ "faces": 389,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1088,
+   -0.16,
+   -0.35
+  ],
+  [
+   0.1075,
+   0.1075,
+   0.0534
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.1125,
+  0.0,
+  0.35
+ ],
+ "part": "ShinR",
+ "parent": "LegR",
+ "triangles": 779,
+ "blocks": 48
+}

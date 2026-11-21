@@ -19,5 +19,7 @@ class SOVEREIGNREALMS_API ASRGameMode : public AGameModeBase
 public:
 	ASRGameMode();
 
+	/** Before any actor begins play: the level's ASRMapInfo is copied over the per-map Sovereign Feel settings. */
+	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	virtual void StartPlay() override;
 };

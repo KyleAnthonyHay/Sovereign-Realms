@@ -232,6 +232,7 @@ FSRPlatoonInfo USRPlatoonSubsystem::GetInfo(int32 Index) const
 		case ESRUnitType::Catapult: ++I.Catapults; break;
 		case ESRUnitType::Builder: ++I.Builders; break;
 		case ESRUnitType::Scout: ++I.Scouts; break;
+		case ESRUnitType::Medic: ++I.Medics; break;
 		default: ++I.Shieldbearers; break;
 		}
 		HealthSum += M->GetHealthFrac();

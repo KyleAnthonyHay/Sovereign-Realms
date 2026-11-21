@@ -1,32 +1,46 @@
-"""Dresses /Game/Maps/L_Battlefield from the generated world: terraced terrain, rocks, conifers,
-grass, the ruin, water, then lighting, fog and post-process. Deterministic and re-runnable:
-everything it owns lives in the outliner folders Terrain / Props / Water / Lighting and is rebuilt.
+"""Dresses a battle map's level from the generated world: the land, rocks, conifers, grass, the ruins and
+landmarks, water, then lighting, fog and post-process. Deterministic and re-runnable: everything it owns lives in
+the outliner folders Terrain / Props / Water / Buildings / Lighting / Atmosphere / Map and is rebuilt.
+
+  MAP = "two"  (default)  /Game/Maps/L_Battlefield    from SourceArt/World/layout.json,  meshes /Game/SR/Meshes
+  MAP = "four"            /Game/Maps/L_Battlefield4   from SourceArt/World/layout4.json, meshes /Game/SR/Meshes4
+  Tools/ue_py.py -c "MAP='four'; exec(open('<abs path to this file>').read())"
+The level is opened (made, if it does not exist yet) before it is dressed, and saved after. Each level carries one
+ASRMapInfo (folder Map) with the map's own numbers from the layout's "map": the game reads its bounds, starts,
+camera height and minimap from it (Source/SovereignRealms/Battle/SRMapInfo.h).
 
 Pipeline (see Docs/VISUAL_CONTRACT.md):
   Tools/.venv/bin/python Tools/textures/gen_world_textures.py     # pixel-art textures  -> SourceArt/Textures
   Tools/.venv/bin/python Tools/world/gen_battlefield.py           # meshes, splat map, layout -> SourceArt
-  Tools/ue_py.py Tools/import_world_assets.py                     # into /Game/SR/Textures, /Game/SR/Meshes
+  Tools/ue_py.py Tools/import_world_assets.py                     # into /Game/SR/Textures, /Game/SR/Meshes (Meshes4)
   Tools/ue_py.py Tools/build_visual_materials.py                  # /Game/SR/Materials
   Tools/ue_py.py Tools/build_battlefield_visuals.py               # this file: the level
 One part only:  Tools/ue_py.py -c "PARTS=['lighting']; exec(open('<abs path to this file>').read())"
-Parts: world (terrain + props + water + buildings), buildings (only re-place the buildings), lighting, atmosphere
-(valley mist and cloud shadows: the outliner folder Atmosphere; the birds are ASRBirds, spawned at run time).
+Parts: materials (only put the materials back on the generated meshes: needed after every mesh re-import, which resets
+them to the default grey), world (terrain + props + water + buildings), buildings (only re-place the buildings), lighting, atmosphere
+(river, valley and ground mist, the falls' spray, the haze over the meres, cloud shadows: the outliner folder
+Atmosphere; the birds are ASRBirds, spawned at run time).
 
-Gameplay rules honoured (enforced by the generator): the +/-12000 cm play area keeps both kingdoms' aprons,
-the spawn areas, the roads, the fords and the island flat; walkable terraces step <= 40 cm (the ridges, knolls and
-tors are taller on purpose: they block); blocking rocks, trunks, the fir-wood belts and ruin pieces are single
-convex boxes (tag SRBlocker); the river blocks by its bed being below -30 cm, its fords and bridges are ground;
-foliage and dressing have no collision.
+Gameplay rules honoured (enforced by the generator, Tools/world/gen_battlefield.py): the land is one smooth surface;
+ground troops walk is no steeper than about 1 in 5, a barrier is a mountainside; the kingdoms' tables, the benches
+and the pads under veins and ruins are level; blocking rocks, trunks and ruin pieces are single convex boxes (tag
+SRBlocker); water sheets carry the tag SRWater (the grid measures the depth under them: deeper than 14 cm is a
+wall, a ford's bed lies 8 cm under); relics carry SRRelic and old towers SRRuinTower; foliage and dressing have no
+collision.
 """
 import json
 import os
 import unreal
 
 PARTS = globals().get("PARTS", ["world", "lighting", "atmosphere"])
-MAP = "/Game/Maps/L_Battlefield"
+MAP_ID = globals().get("MAP", "two")
+SFX = {"two": "", "four": "4"}[MAP_ID]
+MAP = "/Game/Maps/L_Battlefield" + SFX
 MAT = "/Game/SR/Materials/"
-MESH = "/Game/SR/Meshes/"
+MESH = "/Game/SR/Meshes%s/" % SFX
+TEXTURES = "/Game/SR/Textures/"
 ROOT = os.path.abspath(unreal.Paths.project_dir())
+LAYOUT = os.path.join(ROOT, "SourceArt", "World", "layout%s.json" % SFX)
 
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
@@ -35,12 +49,20 @@ eal = unreal.EditorAssetLibrary
 load = eal.load_asset
 CUBE = load("/Engine/BasicShapes/Cube")
 
-MATERIAL_FOR = [            # first matching mesh-name prefix wins
-    ("SM_T_", "M_Terrain"), ("SM_Water", "M_Water"), ("SM_Conifer_", "M_Foliage"), ("SM_Tuft_", "M_Card"),
+MATERIAL_FOR = [            # first matching mesh-name prefix wins. (The second map has its own terrain and water instances:
+    # its splat map and water map, and the world squares they cover.)
+    ("SM_T_", "MI_Terrain4" if SFX else "M_Terrain"), ("SM_Waterfall", "M_Waterfall"), ("SM_Water", "MI_Water4" if SFX else "M_Water"),
+    ("SM_Conifer_", "M_Foliage"), ("SM_Tuft_", "M_Card"),
+    # the woods: broadleaves and shrubs (the firs' material with a leafy clump), the forest floor's cards, mossed timber
+    ("SM_Tree_Birch", "MI_Foliage_Birch"), ("SM_Tree_Maple", "MI_Foliage_Maple"), ("SM_Tree_", "MI_Foliage_Oak"), ("SM_Bush_", "MI_Foliage_Oak"),
+    ("SM_Under_", "MI_Card_Under"), ("SM_Log_", "MI_Prop_LogMossy"),
+    ("SM_Bones_", "MI_Prop_Bone"), ("SM_Relic_", "MI_Prop_Rock"), ("SM_Barrow_", "MI_Prop_Rock"), ("SM_Aqueduct", "MI_Prop_Sandstone"),
+    ("SM_Spear", "MI_Prop_Wood"), ("SM_Shield", "MI_Prop_Wood"), ("SM_Cart_", "MI_Prop_Wood"), ("SM_Jetty", "MI_Prop_Wood"),
     ("SM_BannerCloth", "MI_Card_Banner"), ("SM_BannerPole", "MI_Prop_Wood"), ("SM_Fence_", "MI_Prop_Wood"),
     ("SM_Log", "MI_Prop_Log"), ("SM_Stump", "MI_Prop_Log"), ("SM_Ruin_", "MI_Prop_Sandstone"),
-    ("SM_Rock_", "MI_Prop_Rock"), ("SM_Menhir_", "MI_Prop_Rock"), ("SM_GoldVein", "MI_Bld_Ore"),
-    ("SM_WatchPost", "MI_Prop_Wood"), ("SM_Dolmen", "MI_Prop_Rock"), ("SM_Cairn", "MI_Prop_Rock"),
+    # boulders, scree and standing stones are the mountains' own rock (M_Rock: photographic, world-aligned, lichened)
+    ("SM_Rock_", "M_Rock"), ("SM_Menhir_", "MI_Rock_Ruin"), ("SM_GoldVein", "MI_Bld_Ore"),
+    ("SM_WatchPost", "MI_Prop_Wood"), ("SM_Dolmen", "MI_Rock_Ruin"), ("SM_Cairn", "M_Rock"),
 ]
 
 
@@ -71,6 +93,9 @@ def assign_materials():
 
 
 def mesh_actor(mesh, loc, yaw, label, folder, collide, shadow=True, scale=1.0):
+    if mesh is None:
+        print("missing mesh for", label, "(run Tools/import_world_assets.py for this map)")
+        return None
     a = eas.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(*loc), unreal.Rotator(0, 0, yaw))
     a.set_actor_label(label)
     a.set_folder_path(folder)
@@ -84,10 +109,12 @@ def mesh_actor(mesh, loc, yaw, label, folder, collide, shadow=True, scale=1.0):
     return a
 
 
-def add_ism(owner, mesh, name, shadow=True, hism=False, cull=0.0, sway=False):
+def add_ism(owner, mesh, name, shadow=True, hism=False, cull=0.0, sway=False, lit_scene=True):
     """One instanced component. hism: hierarchical (per-cluster culling, for the big families). cull: fade instances out
     beyond this distance (cm, 0 = never). sway: the material moves vertices (wind): keep its shadow cached rigidly (no
-    per-frame virtual shadow map invalidation, which flickers) and stop evaluating the sway far from the camera."""
+    per-frame virtual shadow map invalidation, which flickers) and stop evaluating the sway far from the camera.
+    lit_scene=False: keep the instances out of Lumen's scene and the distance fields (the grass: 160 thousand cards
+    that cast no shadow and occlude nothing worth tracing)."""
     root = sds.k2_gather_subobject_data_for_instance(owner)[0]
     p = unreal.AddNewSubobjectParams()
     p.set_editor_property("parent_handle", root)
@@ -102,6 +129,9 @@ def add_ism(owner, mesh, name, shadow=True, hism=False, cull=0.0, sway=False):
     if sway:
         comp.set_editor_property("shadow_cache_invalidation_behavior", unreal.ShadowCacheInvalidationBehavior.RIGID)
         comp.set_editor_property("world_position_offset_disable_distance", 9000)
+    if not lit_scene:
+        comp.set_editor_property("affect_distance_field_lighting", False)
+        comp.set_editor_property("affect_dynamic_indirect_lighting", False)
     comp.set_static_mesh(mesh)
     comp.set_collision_profile_name("NoCollision")
     comp.set_editor_property("cast_shadow", shadow)
@@ -167,24 +197,55 @@ def build_buildings(layout):
 
 
 # ------------------------------------------------------------------ world
+def build_map_info(layout):
+    """The level's ASRMapInfo: the map's own numbers (the game copies them over the global settings when the map
+    starts: ASRMapInfo::ApplyToSettings)."""
+    clear_folder("Map")
+    m = layout["map"]
+    cls = unreal.load_class(None, "/Script/SovereignRealms.SRMapInfo")
+    a = eas.spawn_actor_from_class(cls, unreal.Vector(0, 0, 0))
+    a.set_actor_label("MapInfo")
+    a.set_folder_path("Map")
+    a.set_editor_property("map_id", m["id"])
+    a.set_editor_property("display_name", m["name"])
+    a.set_editor_property("half_extent", unreal.Vector2D(m["half_extent"], m["half_extent"]))
+    a.set_editor_property("player_start", unreal.Vector2D(*m["starts"]["player"]))
+    a.set_editor_property("enemy_start", unreal.Vector2D(*m["starts"]["enemy"]))
+    a.set_editor_property("focus_height_max", m["focus_height_max"])
+    a.set_editor_property("ground_trace_top", m["trace_top"])
+    a.set_editor_property("ground_trace_bottom", m["trace_bottom"])
+    a.set_editor_property("minimap_base", load(TEXTURES + m["minimap"]))
+    print("map info: %s, +/-%.0f cm, camera rides the ground up to %.0f, traces from %.0f" % (m["id"], m["half_extent"], m["focus_height_max"], m["trace_top"]))
+
+
 def build_world():
-    with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
+    with open(LAYOUT) as f:
         layout = json.load(f)
     assign_materials()
     for folder in ("Greybox", "Terrain", "Props", "Water", "Buildings", "Atmosphere/Birds"):   # (Atmosphere/Birds: clears the old static flocks)
         clear_folder(folder)
+    build_map_info(layout)
 
     # terrain: WorldStatic, complex-as-simple collision set on the assets at import
     for t in layout["terrain"]:
         mesh_actor(load(MESH + t["mesh"]), t["pos"], 0.0, t["mesh"][5:], t["folder"], collide=True)
     w = layout["water"]
-    # one sheet for the river, its channels and the far lake. No collision: the grid's ground trace must pass through it
-    # to the bed (deep: below -30 cm = water, blocked; a ford's bed is at -24 cm = wet but walkable).
-    mesh_actor(load(MESH + w["mesh"]), w["pos"], 0.0, "River", "Water", collide=False, shadow=False)
+    # One sheet for the rivers and the lakes they run into, one for each tarn and mere at its own height. No collision
+    # in the level: every ground trace must pass through water to its bed. The tag SRWater is how the walkability grid
+    # finds them: it traces each sheet by itself and calls the water under it deep (a wall) past 14 cm, a ford under.
+    for i, e in enumerate([w] + w.get("extra", [])):
+        a = mesh_actor(load(MESH + e["mesh"]), e["pos"], 0.0, "River" if i == 0 else "%s_%d" % (e.get("name", "water").title(), i), "Water", collide=False, shadow=False)
+        if a is not None:
+            a.tags = ["SRWater"]
+    for i, e in enumerate(w.get("falls", [])):                  # the falls off the tarns' rims
+        mesh_actor(load(MESH + e["mesh"]), e["pos"], 0.0, "Waterfall_%d" % i, "Water", collide=False, shadow=False)
 
-    # single actors: rocks over their collision boxes, the ruin, fences, logs
+    # single actors: rocks over their collision boxes, the ruins and landmarks, fences, logs. "tags": SRRelic (a relic:
+    # a Relic Tower can be raised on it) and SRRuinTower (an old tower: a Watchtower), read by USRGridSubsystem::Build.
     for a in layout["actors"]:
-        mesh_actor(load(MESH + a["mesh"]), a["pos"], a["yaw"], a["label"], a["folder"], collide=False, shadow=a["mesh"] != "SM_BannerCloth")
+        actor = mesh_actor(load(MESH + a["mesh"]), a["pos"], a["yaw"], a["label"], a["folder"], collide=False, shadow=a["mesh"] != "SM_BannerCloth", scale=a.get("scale", 1.0))
+        if actor is not None and a.get("tags"):
+            actor.tags = a["tags"]
     # blockers: one hidden, colliding cube instance per obstacle (rock, trunk, ruin piece), all in one actor so a large
     # map does not need thousands of actors. WorldStatic + BlockAll: the units' wall traces see them.
     owner = eas.spawn_actor_from_class(unreal.Actor, unreal.Vector(0, 0, 0))
@@ -202,17 +263,20 @@ def build_world():
     # instanced dressing, one actor per family
     # name: (mesh prefix, casts shadow, cull distance cm, sways). The camera tops out about 7800 cm from its focus; grass and
     # pebbles past ~2/3 of the far view are lost in haze and blur, trees stay to the horizon.
-    families = {"Conifers": ("SM_Conifer_", True, 0.0, True), "Grass": ("SM_Tuft_", False, 13000.0, True),
+    families = {"Conifers": ("SM_Conifer_", True, 0.0, True), "Broadleaves": ("SM_Tree_", True, 0.0, True), "Shrubs": ("SM_Bush_", True, 20000.0, True),
+                "Grass": ("SM_Tuft_", False, 13000.0, True), "Undergrowth": ("SM_Under_", False, 13000.0, True),
                 "Stones": ("SM_Rock_", True, 18000.0, False), "Deadwood": ("SM_Log", True, 18000.0, False)}
     total = 0
     for label, (prefix, shadow, cull, sway) in families.items():
         owner = eas.spawn_actor_from_class(unreal.Actor, unreal.Vector(0, 0, 0))
         owner.set_actor_label(label)
-        owner.set_folder_path("Props/Foliage" if label in ("Conifers", "Grass") else "Props/Rocks")
+        owner.set_folder_path("Props/Foliage" if label in ("Conifers", "Broadleaves", "Shrubs", "Grass", "Undergrowth") else "Props/Rocks")
+        if label in ("Conifers", "Broadleaves"):
+            owner.tags = ["SRTrees"]                            # ASRLeaves reads the trees it sheds leaves from off these
         for mesh_name, items in sorted(layout["instances"].items()):
             if not mesh_name.startswith(prefix):
                 continue
-            comp = add_ism(owner, load(MESH + mesh_name), mesh_name[3:], shadow, hism=True, cull=cull, sway=sway)
+            comp = add_ism(owner, load(MESH + mesh_name), mesh_name[3:], shadow, hism=True, cull=cull, sway=sway, lit_scene=label not in ("Grass", "Undergrowth"))
             xfs = [unreal.Transform(unreal.Vector(x, y, z), unreal.Rotator(0, 0, yaw), unreal.Vector(s, s, s)) for x, y, z, yaw, s in items]
             comp.add_instances(xfs, False, True)
             total += len(xfs)
@@ -247,9 +311,11 @@ def set_pp(volume, **values):
 # ground sits near 35-40% of lit ground and blue troops stay readable in it; the sun is a touch lower in lux and the
 # exposure bias a touch lower because the higher sun puts more light on flat ground (sin 42 / sin 33 = 1.23). The warm
 # sun colour, the haze and the grade are unchanged: still late afternoon, just not the last ten minutes of it.
+# Natural-world pass: the ground now carries real colour variation, so the grade lets it through (saturation 0.9 ->
+# 0.98, contrast 1.0 -> 1.05), the sun is a shade more golden and the vignette lighter.
 LOOK = dict(
     sun_pitch=-42.0, sun_yaw=75.0,              # light travels toward screen right and a little up-screen
-    sun_lux=10.5, sun_color=(255, 214, 165), sun_source_angle=1.8, sun_shafts=11.0,
+    sun_lux=11.0, sun_color=(255, 209, 154), sun_source_angle=1.8, sun_shafts=11.0,
     sky_intensity=9.5, sky_color=(208, 226, 255), sky_fog=0.3,
     fog_density=0.2, fog_falloff=0.3, fog_albedo=(255, 242, 224), fog_phase=0.35, fog_extinction=0.55,
     exposure_bias=-0.7,
@@ -315,12 +381,12 @@ def build_lighting():
            bloom_intensity=1.3, bloom_threshold=-1.0, bloom_size_scale=6.0,
            bloom_dirt_mask=dirt, bloom_dirt_mask_intensity=6.0, bloom_dirt_mask_tint=unreal.LinearColor(1.0, 0.9, 0.75),
            lens_flare_intensity=0.25, lens_flare_bokeh_size=4.0, lens_flare_threshold=6.0,
-           vignette_intensity=0.5,
+           vignette_intensity=0.42,
            # grade: warm highlights, teal-cool shadows, blacks a touch lifted, saturation held back, gentle contrast
-           color_saturation=V4(0.9, 0.9, 0.9, 1.0),
-           color_contrast=V4(1.0, 1.0, 1.0, 1.0),
+           color_saturation=V4(0.98, 0.98, 0.98, 1.0),
+           color_contrast=V4(1.05, 1.05, 1.05, 1.0),
            color_gain_shadows=V4(0.88, 1.0, 1.12, 1.0),
-           color_gain_highlights=V4(1.08, 1.0, 0.88, 1.0),
+           color_gain_highlights=V4(1.1, 1.01, 0.87, 1.0),
            color_offset_shadows=V4(0.0, 0.004, 0.008, 0.0),
            color_saturation_shadows=V4(0.9, 0.9, 0.9, 1.0),
            film_toe=0.4, film_slope=0.84, film_shoulder=0.3,
@@ -335,14 +401,36 @@ def build_lighting():
 PLANE = load("/Engine/BasicShapes/Plane")
 
 
+def local_fog(label, loc, radius, radial, height, falloff, albedo):
+    """A Local Fog Volume (analytic, cheap, lit by the sun and the sky): a ball of haze `radius` cm across its middle,
+    thickest low down. A volume is a 5 m sphere at scale 1."""
+    cls = getattr(unreal, "LocalFogVolume", None)
+    if cls is None:
+        return None
+    a = eas.spawn_actor_from_class(cls, unreal.Vector(*loc))
+    a.set_actor_label(label)
+    a.set_folder_path("Atmosphere/Mist/Haze")
+    a.set_actor_scale3d(unreal.Vector(radius / 500.0, radius / 500.0, radius / 500.0 * 0.45))
+    c = a.get_component_by_class(unreal.LocalFogVolumeComponent)
+    for k, v in (("radial_fog_extinction", radial), ("height_fog_extinction", height), ("height_fog_falloff", falloff), ("height_fog_offset", -0.3),
+                 ("fog_phase_g", 0.35), ("fog_albedo", unreal.LinearColor(*albedo)), ("fog_emissive", unreal.LinearColor(0.0, 0.0, 0.0))):
+        try:
+            c.set_editor_property(k, v)
+        except Exception as ex:
+            print("local fog:", k, ex)
+    return a
+
+
 def build_atmosphere():
     """Mist and the sun's cloud shadows (folder Atmosphere/Mist; the birds are ASRBirds, spawned at run time).
     River mist is the water mesh again, a hand above the surface, in M_Mist (it thins out at the banks by T_WaterMap).
-    Valley mist is a level sheet per entry of layout "atmosphere" > "mist" [x, y, z, radius, height] in MI_Mist_Valley."""
+    Valley mist is a level sheet per entry of layout "atmosphere" > "mist" [x, y, z, radius, height] in MI_Mist_Valley.
+    Ground mist is the land's chunks again in MI_Mist_Ground (Atmosphere/Mist/Ground); spray sheets and a Local Fog
+    Volume stand at each fall's foot (layout "water" > "falls" > "foot"), a Local Fog Volume over each mere."""
     clear_folder("Atmosphere/Mist")
-    with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
+    with open(LAYOUT) as f:
         layout = json.load(f)
-    mist, valley = load(MAT + "M_Mist"), load(MAT + "MI_Mist_Valley")
+    mist, valley = load(MAT + ("MI_Mist4" if SFX else "M_Mist")), load(MAT + "MI_Mist_Valley")
     n = 0
     if mist is not None:
         w = layout["water"]
@@ -356,6 +444,36 @@ def build_atmosphere():
             a.set_actor_scale3d(unreal.Vector(radius * 2.0 / 100.0, radius * 2.0 / 100.0, 1.0))
             a.static_mesh_component.set_material(0, valley)
             n += 1
+        # ground mist: the land's own meshes again in MI_Mist_Ground, which lifts them a hand and shows them only
+        # where mist pools (the hollows, the water's margins: T_WaterMap.a), so it lies in the dips and follows the slopes
+        ground = load(MAT + "MI_Mist_Ground" + SFX)
+        for t in (layout["terrain"] if ground is not None else []):
+            if t["folder"] != "Terrain/Land" or not t.get("mist", True):      # (only the chunks with somewhere for it to lie)
+                continue
+            a = mesh_actor(load(MESH + t["mesh"]), t["pos"], 0.0, "GroundMist_" + t["mesh"][10:], "Atmosphere/Mist/Ground", collide=False, shadow=False)
+            c = a.static_mesh_component
+            c.set_material(0, ground)
+            c.set_editor_property("affect_distance_field_lighting", False)
+            c.set_editor_property("affect_dynamic_indirect_lighting", False)
+            c.set_editor_property("visible_in_ray_tracing", False)
+            c.set_editor_property("translucency_sort_priority", -1)
+            n += 1
+        # the falls: spray standing at the foot (three sheets of fast, fine mist) in a soft ball of lit haze
+        spray = load(MAT + "MI_Mist_Spray")
+        for i, f in enumerate(w.get("falls", [])):
+            fx, fy, fz = f["foot"]
+            width = f.get("width", 240.0)
+            for k, (lift, rad) in enumerate(((35.0, 2.6), (120.0, 2.0), (230.0, 1.4))):
+                a = mesh_actor(PLANE, (fx, fy, fz + lift), float(k * 47), "FallSpray_%d_%d" % (i, k), "Atmosphere/Mist/Falls", collide=False, shadow=False)
+                a.set_actor_scale3d(unreal.Vector(width * rad * 2.0 / 100.0, width * rad * 2.0 / 100.0, 1.0))
+                a.static_mesh_component.set_material(0, spray)
+                a.static_mesh_component.set_editor_property("translucency_sort_priority", 2 + k)
+                n += 1
+            local_fog("FallHaze_%d" % i, (fx, fy, fz + 150.0), width * 3.4, radial=0.06, height=0.22, falloff=600.0, albedo=(0.86, 0.9, 0.93))
+        # the meres in their hollows: a real depth of haze over each
+        for i, e in enumerate(w.get("extra", [])):
+            if e.get("name") == "mere":
+                local_fog("MereHaze_%d" % i, (e["pos"][0], e["pos"][1], e["surface"] + 120.0), 2100.0, radial=0.02, height=0.14, falloff=420.0, albedo=(0.8, 0.86, 0.9))
     else:
         print("no M_Mist (run Tools/build_visual_materials.py)")
     sun = find_or_spawn(unreal.DirectionalLight, "Sun")
@@ -369,11 +487,25 @@ def build_atmosphere():
 
 
 # ------------------------------------------------------------------ run
+# open the map's level (make it the first time)
+if not eal.does_asset_exist(MAP):
+    if not les.new_level(MAP):
+        raise RuntimeError("could not create " + MAP)
+    print("created", MAP)
+else:
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    if world is None or world.get_path_name().split(".")[0] != MAP:
+        les.load_level(MAP)
+if "materials" in PARTS:          # after a mesh re-import alone (it resets the meshes' material slots): put the materials back
+    assign_materials()
 if "world" in PARTS:
     build_world()
 elif "buildings" in PARTS:
-    with open(os.path.join(ROOT, "SourceArt", "World", "layout.json")) as f:
+    with open(LAYOUT) as f:
         build_buildings(json.load(f))
+elif "mapinfo" in PARTS:
+    with open(LAYOUT) as f:
+        build_map_info(json.load(f))
 if "lighting" in PARTS:
     build_lighting()
 if "atmosphere" in PARTS:

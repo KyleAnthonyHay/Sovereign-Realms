@@ -17,6 +17,8 @@
 #include "Common/SRFeelSettings.h"
 #include "Battle/SRGameFlowSubsystem.h"
 #include "EnhancedInputComponent.h"
+#include "HAL/PlatformApplicationMisc.h"
+#include "GenericPlatform/GenericApplication.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -85,6 +87,7 @@ void ASRPlayerController::BuildInput()
 	BuildTabAction = MakeAction(TEXT("IA_BuildTab"), EInputActionValueType::Boolean);
 	PatrolAction = MakeAction(TEXT("IA_Patrol"), EInputActionValueType::Boolean);
 	GuardAction = MakeAction(TEXT("IA_Guard"), EInputActionValueType::Boolean);
+	RoamAction = MakeAction(TEXT("IA_Roam"), EInputActionValueType::Boolean);
 	HoldAction = MakeAction(TEXT("IA_Hold"), EInputActionValueType::Boolean);
 	FormationAction = MakeAction(TEXT("IA_Formation"), EInputActionValueType::Boolean);
 	StanceAction = MakeAction(TEXT("IA_Stance"), EInputActionValueType::Boolean);
@@ -96,6 +99,7 @@ void ASRPlayerController::BuildInput()
 	RecruitActions[3] = MakeAction(TEXT("IA_RecruitCatapult"), EInputActionValueType::Boolean);
 	RecruitActions[4] = MakeAction(TEXT("IA_RecruitBuilder"), EInputActionValueType::Boolean);
 	RecruitActions[5] = MakeAction(TEXT("IA_RecruitScout"), EInputActionValueType::Boolean);
+	RecruitActions[6] = MakeAction(TEXT("IA_RecruitMedic"), EInputActionValueType::Boolean);
 	RepairAction = MakeAction(TEXT("IA_Repair"), EInputActionValueType::Boolean);
 	DismissAction = MakeAction(TEXT("IA_Dismiss"), EInputActionValueType::Boolean);
 	MarchAction = MakeAction(TEXT("IA_March"), EInputActionValueType::Boolean);
@@ -137,6 +141,7 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(BuildTabAction, EKeys::Tab);
 	MappingContext->MapKey(PatrolAction, EKeys::P);
 	MappingContext->MapKey(GuardAction, EKeys::V);
+	MappingContext->MapKey(RoamAction, EKeys::O);
 	MappingContext->MapKey(HoldAction, EKeys::H);
 	MappingContext->MapKey(FormationAction, EKeys::F);
 	MappingContext->MapKey(StanceAction, EKeys::G);
@@ -149,6 +154,7 @@ void ASRPlayerController::BuildInput()
 	MappingContext->MapKey(RecruitActions[3], EKeys::T);
 	MappingContext->MapKey(RecruitActions[4], EKeys::Y);
 	MappingContext->MapKey(RecruitActions[5], EKeys::J);
+	MappingContext->MapKey(RecruitActions[6], EKeys::N);
 	MappingContext->MapKey(RepairAction, EKeys::X);
 	MappingContext->MapKey(DismissAction, EKeys::K);
 	MappingContext->MapKey(MarchAction, EKeys::M);
@@ -190,6 +196,7 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(BuildTabAction, ETriggerEvent::Started, this, &ASRPlayerController::OnNextBuildTab);
 	Input->BindAction(PatrolAction, ETriggerEvent::Started, this, &ASRPlayerController::OnPatrol);
 	Input->BindAction(GuardAction, ETriggerEvent::Started, this, &ASRPlayerController::ArmGuardCommand);
+	Input->BindAction(RoamAction, ETriggerEvent::Started, this, &ASRPlayerController::RoamCommand);
 	Input->BindAction(HoldAction, ETriggerEvent::Started, this, &ASRPlayerController::OnHold);
 	Input->BindAction(FormationAction, ETriggerEvent::Started, this, &ASRPlayerController::ToggleFormationCommand);
 	Input->BindAction(StanceAction, ETriggerEvent::Started, this, &ASRPlayerController::OnCycleStance);
@@ -201,6 +208,7 @@ void ASRPlayerController::SetupInputComponent()
 	Input->BindAction(RecruitActions[3], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitCatapult);
 	Input->BindAction(RecruitActions[4], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitBuilder);
 	Input->BindAction(RecruitActions[5], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitScout);
+	Input->BindAction(RecruitActions[6], ETriggerEvent::Started, this, &ASRPlayerController::OnRecruitMedic);
 	Input->BindAction(RepairAction, ETriggerEvent::Started, this, &ASRPlayerController::RepairCommand);
 	Input->BindAction(DismissAction, ETriggerEvent::Started, this, &ASRPlayerController::DismissCommand);
 	Input->BindAction(MarchAction, ETriggerEvent::Started, this, &ASRPlayerController::ToggleMarchCommand);
@@ -298,6 +306,52 @@ FVector2D ASRPlayerController::ComputePanInput()
 	return Pan.ClampAxes(-1.f, 1.f);
 }
 
+bool ASRPlayerController::InputGesture(const FInputDeviceId DeviceId, EGestureEvent GestureType, EGesturePhase GesturePhase, const FVector2D& GestureDelta,
+	bool bIsDirectionInvertedFromDevice, const uint64 Timestamp)
+{
+	// The Mac reports a trackpad's two-finger scroll as a Scroll gesture (only a real wheel comes as MouseWheelAxis)
+	// and a pinch as Magnify; the engine passes neither on to Enhanced Input, so they are read here.
+	const USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
+	ASRCameraPawn* Camera = GetCameraPawn();
+	const bool bPlaying = Flow && !Flow->IsModal();
+	if (!Camera || !bPlaying || (GestureType != EGestureEvent::Scroll && GestureType != EGestureEvent::Magnify))
+	{
+		return Super::InputGesture(DeviceId, GestureType, GesturePhase, GestureDelta, bIsDirectionInvertedFromDevice, Timestamp);
+	}
+	const USRFeelSettings& F = USRFeelSettings::Get();
+	auto ZoomBy = [&](float Notches)
+	{
+		FVector Origin, Dir;
+		if (GetCursorRay(Origin, Dir)) { const FVector Ground = Battle->RayToGround(Origin, Dir); Camera->AddZoomInput(Notches, &Ground); }
+		else { Camera->AddZoomInput(Notches, nullptr); }
+	};
+	if (GestureType == EGestureEvent::Magnify)
+	{
+		// pinch out (fingers apart) zooms in
+		ZoomBy(FMath::Clamp(float(GestureDelta.X) * F.TrackpadPinchZoom, -2.f, 2.f));
+		return true;
+	}
+	// Option held, or the setting: the scroll zooms (trackpad and Magic Mouse alike: both send scroll gestures)
+	if (F.bTrackpadScrollZooms || IsInputKeyDown(EKeys::LeftAlt) || IsInputKeyDown(EKeys::RightAlt))
+	{
+		ZoomBy(FMath::Clamp(float(GestureDelta.Y) * 0.06f, -1.5f, 1.5f));
+		return true;
+	}
+	// Two-finger scroll pans: the ground follows the fingers, whichever way the system's scroll direction is set
+	// (the delta already says which way the content moves). Deltas are in points; on a Retina screen a point is two
+	// pixels, so the 1:1 scale is taken against the viewport's width in points.
+	int32 VX = 0, VY = 0;
+	GetViewportSize(VX, VY);
+	const float Dpi = FMath::Max(FPlatformApplicationMisc::GetDPIScaleFactorAtPoint(0.f, 0.f), 1.f);
+	const float PerPoint = Camera->GetGroundPerPixel(float(VX) / Dpi) * F.TrackpadPanSpeed;
+	const float YawRad = FMath::DegreesToRadians(F.CameraYaw);
+	const FVector2D Fwd(FMath::Cos(YawRad), FMath::Sin(YawRad));
+	const FVector2D Right(-Fwd.Y, Fwd.X);
+	// content moving down the screen (+Y) means the view moves up it (forward); content moving right, the view left
+	Camera->AddPanOffset((Fwd * float(GestureDelta.Y) - Right * float(GestureDelta.X)) * PerPoint);
+	return true;
+}
+
 void ASRPlayerController::OnZoom(const FInputActionValue& Value)
 {
 	if (ASRCameraPawn* Camera = GetCameraPawn())
@@ -363,6 +417,23 @@ void ASRPlayerController::ArmAttackMove()
 	bPatrolArmed = bGuardArmed = false;
 }
 
+void ASRPlayerController::RoamCommand()
+{
+	TArray<ASRUnit*> Units;
+	GatherCommandable(Units);
+	int32 N = 0;
+	for (ASRUnit* U : Units)
+	{
+		if (U && U->GetUnitType() == ESRUnitType::Scout) { Battle->ClearPatrol({ U }); U->OrderRoam(); U->Acknowledge(0.f); ++N; }
+	}
+	if (N == 0)
+	{
+		if (USREconomySubsystem* Eco = USREconomySubsystem::Get(this); Eco && Units.Num() > 0) { Eco->PushAlert(ESRAlertKind::Info, NSLOCTEXT("SRPC", "RoamScouts", "Only Scouts roam")); }
+		return;
+	}
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); }
+}
+
 void ASRPlayerController::ArmGuardCommand()
 {
 	TArray<ASRUnit*> Commandable;
@@ -417,6 +488,66 @@ bool ASRPlayerController::IssueGuard(ASRUnit* Ward, ASRBuilding* WardBuilding)
 	}
 	Battle->ClearPatrol(Guards);
 	UE_LOG(LogSovereign, Log, TEXT("GUARD %d troops guard %s"), Guards.Num(), Ward ? *Ward->GetLabel() : *WardBuilding->GetDisplayName());
+	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); }
+	return true;
+}
+
+int32 ASRPlayerController::RuinUnderCursor() const
+{
+	const USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	FVector Origin, Dir;
+	if (!Grid || !GetCursorRay(Origin, Dir)) { return INDEX_NONE; }
+	const FVector Ground = Battle->RayToGround(Origin, Dir);
+	return Grid->FindFreeRuin(FVector2D(Ground.X, Ground.Y), 380.f);
+}
+
+bool ASRPlayerController::IssueRepairRuin(int32 Index)
+{
+	USRGridSubsystem* Grid = USRGridSubsystem::Get(this);
+	USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
+	if (!Grid || !Eco || !Grid->GetRelics().IsValidIndex(Index)) { return false; }
+	const ESRBuildingType Type = Grid->RuinBuildsInto(Index);
+	FText Why;
+	ASRBuilding* B = Eco->PlaceBuilding(Type, ESRTeam::Player, Grid->GetRelics()[Index].Pos, &Why);
+	if (!B)
+	{
+		Eco->PushAlert(ESRAlertKind::Info, Why.IsEmpty() ? NSLOCTEXT("SRPC", "RuinNo", "That ruin cannot be repaired now") : Why);
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
+		return false;
+	}
+	B->SetNeedsBuilder(true);   // a ruin is repaired by hand, wherever it stands
+	IssueBuild(B);
+	const FVector2D At = B->GetFootprintCentre();
+	Eco->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "RuinRepair", "Repairing the ruin: it will stand again as a {0}"), FText::FromString(B->GetDisplayName())), &At);
+	UE_LOG(LogSovereign, Log, TEXT("RUIN %d repair begun: %s at (%.0f, %.0f)"), Index, *B->GetDisplayName(), At.X, At.Y);
+	return true;
+}
+
+bool ASRPlayerController::IsPathModifierDown() const
+{
+	return IsShiftDown();   // Shift: points of a pathway / patrol (Option is zoom on a trackpad)
+}
+
+bool ASRPlayerController::IssueHeal(ASRUnit* Ward)
+{
+	if (!Ward || Ward->GetTeam() != ESRTeam::Player || !Ward->IsAlive()) { return false; }
+	TArray<ASRUnit*> Units, Medics, Others;
+	GatherCommandable(Units);
+	for (ASRUnit* U : Units) { (U->IsMedic() ? Medics : Others).Add(U); }
+	if (Medics.Num() == 0) { return false; }
+	Battle->ClearPatrol(Medics);
+	for (ASRUnit* M : Medics) { M->OrderHeal(Ward); M->Acknowledge(FMath::FRandRange(0.f, USRFeelSettings::Get().AckMaxDelay)); }
+	Ward->FlashTargeted();
+	// the rest of the selection goes there too (a Builder ward: they guard it, as a right-click on it always did)
+	if (Others.Num() > 0)
+	{
+		Battle->ClearPatrol(Others);
+		if (!(ASRUnit::CanBeGuarded(Ward) && IssueGuard(Ward, nullptr)))
+		{
+			Battle->CommandMove(Others, Ward->GetPos2D(), false, GetSelectionFormation(), true, nullptr, GetSelectionMarchTogether());
+		}
+	}
+	UE_LOG(LogSovereign, Log, TEXT("HEAL %d medic(s) look after %s"), Medics.Num(), *Ward->GetLabel());
 	if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); }
 	return true;
 }
@@ -483,6 +614,14 @@ void ASRPlayerController::OnSelectPressed()
 	// The interface sits over the world: a press on a panel (or anywhere, while a menu is up) is for it alone.
 	if (ASRHUD* HUD = Cast<ASRHUD>(GetHUD()); HUD && HUD->OnMousePress(Mouse, false)) { return; }
 
+	// Control+click on the battlefield is a right-click (the Mac habit). (On the interface it stays a click with Control:
+	// a Ctrl+click on a recruit button still queues a batch.)
+	if (USRFeelSettings::Get().bControlClickIsRightClick && (IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl)))
+	{
+		OnCommandPressed();
+		return;
+	}
+
 	if (bPlacing)
 	{
 		TryPlace();
@@ -516,10 +655,27 @@ void ASRPlayerController::OnSelectPressed()
 
 	if (bPatrolArmed)
 	{
-		// P, then click: patrol between where they are and there.
+		// P, then click: patrol between where they are and there. With Shift held, each click adds a point to the
+		// patrol (it loops through them all and back to the start) and P stays armed for the next.
 		FVector Origin, Dir;
-		if (GetCursorRay(Origin, Dir)) { IssuePatrol(Battle->RayToGround(Origin, Dir)); }
-		bPatrolArmed = false;
+		const bool bMore = IsPathModifierDown();
+		if (GetCursorRay(Origin, Dir))
+		{
+			const FVector Ground = Battle->RayToGround(Origin, Dir);
+			if (bMore)
+			{
+				TArray<ASRUnit*> Units;
+				GatherCommandable(Units);
+				if (Units.Num() > 0)
+				{
+					Battle->ExtendPatrol(Units, FVector2D(Ground.X, Ground.Y), GetSelectionFormation());
+					ASROrderMarker::SpawnMarker(GetWorld(), Ground, USRFeelSettings::Get().AttackMarkerColor);
+					if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::AttackOrder); }
+				}
+			}
+			else { IssuePatrol(Ground); }
+		}
+		bPatrolArmed = bMore;
 		return;
 	}
 
@@ -642,12 +798,35 @@ void ASRPlayerController::OnCommandPressed()
 		return;
 	}
 
+	// Shift held: a point on the selection's pathway (they walk the points in order and stop at the last)
+	if (IsPathModifierDown())
+	{
+		TArray<ASRUnit*> Units;
+		GatherCommandable(Units);
+		if (Units.Num() > 0)
+		{
+			const FVector Ground = Battle->RayToGround(Origin, Dir);
+			Battle->ExtendPath(Units, FVector2D(Ground.X, Ground.Y), false, GetSelectionFormation());
+			ASROrderMarker::SpawnMarker(GetWorld(), Ground, USRFeelSettings::Get().MoveMarkerColor);
+			if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::Acknowledge); }
+		}
+		return;
+	}
+
 	ASRUnit* Unit = Battle->PickUnit(Origin, Dir, USRFeelSettings::Get().PickPadding);
 	if (Unit && Unit->GetTeam() == ESRTeam::Enemy)
 	{
 		IssueAttack(Unit);
 		return;
 	}
+	// an old ruin, with Builders selected: they repair it (into a Relic Tower on a relic, a Watchtower on an old tower)
+	if (SelectionHasBuilders())
+	{
+		const int32 Ruin = RuinUnderCursor();
+		if (Ruin != INDEX_NONE) { IssueRepairRuin(Ruin); return; }
+	}
+	// one of our own troops, with Medics selected: they look after it
+	if (Unit && Unit->GetTeam() == ESRTeam::Player && !Unit->IsSelected() && IssueHeal(Unit)) { return; }
 	// one of our Builders: the selected troops guard it
 	if (Unit && Unit->GetTeam() == ESRTeam::Player && ASRUnit::CanBeGuarded(Unit) && !Unit->IsSelected() && IssueGuard(Unit, nullptr)) { return; }
 	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
@@ -1022,6 +1201,8 @@ void ASRPlayerController::ToggleFormationCommand()
 
 bool ASRPlayerController::GetSelectionMarchTogether() const
 {
+	// in formation, a group always keeps the slowest troop's pace, so the formation holds together on the march
+	if (GetSelectionFormationOn()) { return true; }
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
 	if (const USRPlatoonSubsystem* Platoons = USRPlatoonSubsystem::Get(this))
@@ -1436,6 +1617,16 @@ void ASRPlayerController::OnCycleStance()
 	TArray<ASRUnit*> Units;
 	GatherCommandable(Units);
 	if (Units.Num() == 0) { return; }
+	// Medics only: Passive (runs from foes) <-> Assertive (goes into the fight to heal)
+	bool bAllMedics = true;
+	for (const ASRUnit* U : Units) { bAllMedics &= U->IsMedic(); }
+	if (bAllMedics)
+	{
+		const ESRStance To = Units[0]->GetStance() == ESRStance::Aggressive ? ESRStance::Defensive : ESRStance::Aggressive;
+		for (ASRUnit* U : Units) { U->SetStance(To); }
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+		return;
+	}
 	const ESRStance Next = ESRStance((uint8(Units[0]->GetStance()) + 1) % 3);
 	for (ASRUnit* U : Units) { U->SetStance(Next); if (Next == ESRStance::HoldGround && !U->IsEngaged()) { U->OrderHold(); } }
 }
@@ -1447,17 +1638,9 @@ void ASRPlayerController::BeginPlacement(ESRBuildingType Type)
 	const USRFeelSettings& F = USRFeelSettings::Get();
 	if (!F.BuildingStatsFor(Type).bPlayerBuildable) { return; }
 	const USREconomySubsystem* Eco = USREconomySubsystem::Get(this);
-	if (Eco && Type == ESRBuildingType::Tower && Eco->CountBuildings(Type, ESRTeam::Player) >= Eco->GetMaxTowers(ESRTeam::Player))
+	if (Eco && Eco->IsAtBuildLimit(Type, ESRTeam::Player))
 	{
-		const_cast<USREconomySubsystem*>(Eco)->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "TowerLimit", "You can have at most {0} Watchtowers (raise the Citadel for another)"),
-			FText::AsNumber(Eco->GetMaxTowers(ESRTeam::Player))));
-		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
-		return;
-	}
-	if (Eco && (Type == ESRBuildingType::Granary || Type == ESRBuildingType::Treasury) && Eco->CountStanding(Type, ESRTeam::Player) >= Eco->GetMaxStores(ESRTeam::Player))
-	{
-		const_cast<USREconomySubsystem*>(Eco)->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "StoreLimit", "You can have at most {0} of each storehouse (raise the Citadel for another; upgrade the ones you have)"),
-			FText::AsNumber(Eco->GetMaxStores(ESRTeam::Player))));
+		const_cast<USREconomySubsystem*>(Eco)->PushAlert(ESRAlertKind::Info, Eco->GetBuildLimitReason(Type, ESRTeam::Player));
 		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIError); }
 		return;
 	}
@@ -1498,6 +1681,7 @@ void ASRPlayerController::UpdatePlacement()
 	const FSRPlacement P = Grid->CheckPlacement(PlacingType, ESRTeam::Player, FVector2D(Ground));
 	bPlacementValid = P.bValid;
 	bPlacementNeedsBuilder = P.bNeedsBuilder;
+	bPlacementOnRuin = P.RelicIndex != INDEX_NONE;
 	PlacementReason = P.Reason;
 	PlacementLocation = P.Location;
 	if (Preview) { Preview->Show(PlacingType, P); }
@@ -1515,7 +1699,7 @@ void ASRPlayerController::TryPlace()
 		SendBuildersTo(Placed);
 		const USRFeelSettings& F = USRFeelSettings::Get();
 		// Shift keeps the building in hand for another (if there is gold for it).
-		const bool bStoreCap = (PlacingType == ESRBuildingType::Granary || PlacingType == ESRBuildingType::Treasury) && Eco->CountStanding(PlacingType, ESRTeam::Player) >= Eco->GetMaxStores(ESRTeam::Player);
+		const bool bStoreCap = Eco->IsAtBuildLimit(PlacingType, ESRTeam::Player);
 		if (!IsShiftDown() || bStoreCap || !Eco->CanAfford(ESRTeam::Player, F.BuildingStatsFor(PlacingType).Cost)) { CancelPlacement(); }
 	}
 	else
@@ -1545,5 +1729,39 @@ void ASRPlayerController::OnDeleteBuilding()
 		B->CancelConstruction();
 		return;
 	}
+	if (ASRBuilding* B = SelectedBuilding.Get(); B && B->Team == ESRTeam::Player && B->CanDemolish())
+	{
+		DemolishCommand();
+		return;
+	}
 	DisbandPlatoonCommand();
+}
+
+bool ASRPlayerController::IsDemolishArmed() const
+{
+	return GetWorld() && DemolishArmedFor.IsValid() && DemolishArmedFor.Get() == SelectedBuilding.Get() && GetWorld()->GetRealTimeSeconds() - DemolishArmedTime < 2.5;
+}
+
+void ASRPlayerController::DemolishCommand()
+{
+	ASRBuilding* B = SelectedBuilding.Get();
+	if (!B || B->Team != ESRTeam::Player || !B->CanDemolish()) { return; }
+	if (!IsDemolishArmed())
+	{
+		// first press: ask (a second press within a moment does it)
+		DemolishArmedFor = B;
+		DemolishArmedTime = GetWorld()->GetRealTimeSeconds();
+		if (USREconomySubsystem* Eco = USREconomySubsystem::Get(this))
+		{
+			const FSRCost Back = B->GetDemolishRefund();
+			Eco->PushAlert(ESRAlertKind::Info, FText::Format(NSLOCTEXT("SRPC", "DemolishAsk", "Demolish the {0}? Press again: {1} gold and {2} food back"),
+				FText::FromString(B->GetDisplayName()), FText::AsNumber(Back.Gold), FText::AsNumber(Back.Food)));
+		}
+		if (USRAudioSubsystem* Audio = USRAudioSubsystem::Get(this)) { Audio->Play2D(ESRSound::UIClick); }
+		return;
+	}
+	DemolishArmedTime = -100.0;
+	DemolishArmedFor = nullptr;
+	SelectBuilding(nullptr);
+	B->Demolish();
 }

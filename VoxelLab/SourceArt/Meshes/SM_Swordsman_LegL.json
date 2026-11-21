@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_LegL",
+ "faces": 988,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0904,
+   -0.1404,
+   -0.375
+  ],
+  [
+   0.1412,
+   0.1412,
+   0.125
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegL",
+ "triangles": 1977,
+ "blocks": 110
+}

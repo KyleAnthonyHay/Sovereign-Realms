@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_ArmR",
+ "faces": 832,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1381,
+   -0.1277,
+   -0.2857
+  ],
+  [
+   0.1079,
+   0.1293,
+   0.0852
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.2875,
+  0.0,
+  1.175
+ ],
+ "part": "ArmR",
+ "parent": "Chest",
+ "triangles": 1664,
+ "blocks": 100
+}

@@ -8,19 +8,30 @@ striped awning and the pile of shaped stone shot. A fenced yard with a wide gate
 
 States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
 damage(); `site` and `ruin` are small meshes of their own on the same footprint.
+
+Levels 1-3 (k.level), each adding to the last (medieval and weathered: slate, dark stone, iron; no gold; towers
+end flat under a crenellated crown, as the castle's do):
+  2  built up: the tiles give way to dark slate, the corner posts stand in stone piers, the back wall is ashlar, a
+     stone yard wall replaces the fence, and a square store tower rises at the back left: its head oversails on a
+     corbel course over a glazed frieze, crow-stepped merlons round a flat roof, a standard on a pole
+  3  fortified: a second tower at the back right, both a storey taller on dark stone with a timber hoarding under
+     the head; the yard wall is higher and of dark stone, iron finials on the shed's ridge, fires at the gateway,
+     creeper on the old tower
+The level banner (kit.level_flag) stands inside the yard's front-left corner.
 """
 import math
 
 from mathutils import Vector
 
 from bld_farm import fence
-from bldkit import STATES, rect  # noqa: F401
+from bldkit import MATERIALS, STATES, inset_ring, rect  # noqa: F401
 
 NAME = "workshop"
 MESH = "SM_Bld_Workshop"
 SEED = 83
 FOOTPRINT = [-500.0, -500.0, 500.0, 500.0]
 RING_RADIUS = 730.0
+LEVELS = 3
 PREVIEW_FIGURES = [(-610, -70), (-660, 60)]
 
 CX = 210.0                                               # the shed's centre (x); it is built turned 90 deg, gable to the front
@@ -32,6 +43,7 @@ SFX = CX - D                                             # the shed's front (x)
 F = 484.0                                                # the fence line
 GATE = 140.0                                             # half width of the gateway
 CAT = (125.0, -10.0, -28.0)                              # the catapult: x, y, yaw
+TOWER_X, TOWER_Y, TOWER_HALF = 414.0, 400.0, 62.0             # the store towers (levels 2 and 3): back corners of the yard
 HOLES = ((-1, 70.0, 130.0, 74.0), (1, -80.0, 96.0, 60.0), (1, 150.0, 200.0, 50.0))       # burnt through the tiles (damaged)
 
 
@@ -133,6 +145,83 @@ def catapult(k, wreck=False):
         k.crate((100, 62, 0), (40, 40, 38), yaw=20)                               # the corner still on a block
 
 
+def mat(slot, fallback):
+    """A slot of the medieval set, or its stand-in while the kit does not have it yet."""
+    return slot if slot in MATERIALS else fallback
+
+
+SLATE, IRON, DARK, TIMBER = (mat("Bld_Slate", "Bld_RoofTile"), mat("Bld_Iron", "Bld_Bronze"), mat("Bld_StoneDark", "Bld_AshlarLarge"),
+                             mat("Bld_Timber", "Bld_Plaster"))
+
+
+def roof_slot(k):
+    """Terracotta tiles at level 1, then dark slate."""
+    return SLATE if k.level >= 2 else "Bld_RoofTile"
+
+
+def tower_h(k):
+    """The top of a store tower's parapet."""
+    return 570.0 if k.level >= 3 else 470.0
+
+
+def tower(k, sy):
+    """Level 2 on: a square store tower in a back corner of the yard (sy -1 = left), topped as the castle's are: the
+    head oversails on a corbel course over the glazed frieze, crow-stepped merlons round a flat roof, a standard on a
+    pole. Level 3: taller, on dark stone, a timber hoarding under the head. Returns its top."""
+    lv = k.level
+    cx, cy, half, h = TOWER_X, sy * TOWER_Y, TOWER_HALF, tower_h(k)
+    u0 = 60.0 + sy * 40
+    top = h - 76
+    r1 = k.wall(DARK if lv >= 3 else "Bld_AshlarLarge", rect(cx - half, cy - half, cx + half, cy + half), 0, 110, inset=10, u0=u0, bleach=False)
+    k.band("Bld_Trim", r1, 110, 122, out=4, u0=u0)
+    ops = {2: k.breach(18, 84, 126, 236)} if sy < 0 else {}
+    r2 = k.wall("Bld_Ashlar", r1, 122, top, inset=4, u0=u0, openings=ops)
+    zb = top - 16                                                                # where the standard hangs from
+    if lv >= 3:                                                                  # the hoarding: a timber gallery jettied out under the head
+        hr = inset_ring(r2, -20)
+        z0, z1 = top - 120, top - 6
+        k.cap("Bld_Planks", hr, z0, down=True, shade=0.55)
+        k.band("Bld_Beam", hr, z0, z0 + 12, out=2, u0=u0)
+        k.wall(TIMBER, hr, z0 + 12, z1, u0=0.0, bleach=False)
+        k.cap("Bld_Planks", hr, z1)
+        zb = z0 - 6
+    k.band("Bld_Trim", r2, top, top + 12, out=9, u0=u0)
+    r3 = inset_ring(r2, -10)                                                     # the head oversails on the corbel course
+    k.cap("Bld_AshlarLarge", r3, top + 12, down=True, shade=0.55)
+    k.wall("Bld_Frieze", r3, top + 12, top + 76, v0=0.0, bleach=False, u0=u0)
+    k.parapet("Bld_Ashlar", r3, h - 36, h, thick=20, top="Bld_Trim")
+    k.stepped_merlons("Bld_Ashlar", r3, h, width=40, gap=24, thick=20, h1=24, h2=20, cap="Bld_Trim")
+    pole = 150.0
+    k.pole_banner((cx, cy, h - 36), height=pole, cloth_w=52.0, cloth_h=110.0)
+    fx = cx - half + 14 - 7                                                      # a long standard down its face
+    k.cyl(IRON, (fx, cy - 40, zb), (fx, cy + 40, zb), 2.6, sides=4)
+    k.hang_cloth((fx, cy - 32, zb - 2), (fx, cy + 32, zb - 2), 190.0)
+    if lv >= 3 and sy < 0 and not k.damaged:                                     # creeper up the old tower's face
+        k.patch("Bld_Leaves", (cx - half + 13, cy - 26, 0), (0, -1, 0), (0, 0, 1), 64, 250, cells=12, fill=0.6, out=3)
+    return h - 36 + pole + 14
+
+
+def wall_h(k):
+    return 84.0 if k.level >= 3 else 62.0
+
+
+def yard_wall(k):
+    """Level 2 on: the fence becomes a low stone wall (higher and of dark stone at level 3); breached where the fence was broken."""
+    d, t, h = k.damaged, 11.0, wall_h(k)
+    stone = DARK if k.level >= 3 else "Bld_Ashlar"
+    runs = [(-F - t, -F - t, -F + t, -GATE - 16), (-F - t, GATE + 16, -F + t, F + t)]
+    for (sy, gap) in ((-1, (-260.0, -30.0)), (1, (-124.0, 76.0))):
+        y0, y1 = sy * F - t, sy * F + t
+        if d:
+            runs += [(-F + t, y0, gap[0], y1), (gap[1], y0, CX, y1)]
+            k.rubble(((gap[0] + gap[1]) / 2, sy * F, 0), (gap[1] - gap[0], 70), 16, slot=stone, blocks=5, beams=0, block=(36, 24, 18))
+        else:
+            runs.append((-F + t, y0, CX, y1))
+    for i, (x0, y0, x1, y1) in enumerate(runs):
+        k.box(stone, (x0, y0, 0), (x1, y1, h), u0=40.0 * i)
+        k.box("Bld_Trim", (x0 - 3, y0 - 3, h), (x1 + 3, y1 + 3, h + 12), top="Bld_Trim", bottom=True, u0=40.0 * i)
+
+
 def shed(k):
     """Built in its own frame, turned 90 degrees: local +Y is the building's front (-X), local +X is +Y."""
     zr = EAVE + RISE
@@ -146,6 +235,9 @@ def shed(k):
                     k.charred((x - 10, y + 10, 8), (x - 150, y + 60, 16), size=20)
                 else:
                     k.obox("Bld_Beam", (x, y, 22 + (EAVE - 22) / 2), (22, 22, EAVE - 22), grain="z")
+                if k.level >= 2 and i in (0, 3):                                 # the corner posts stand in stone piers
+                    k.box("Bld_Ashlar", (x - 28, y - 28, 22), (x + 28, y + 28, EAVE - 96), top="Bld_Trim", u0=k.U(0, 200))
+                    k.box("Bld_Trim", (x - 32, y - 32, EAVE - 96), (x + 32, y + 32, EAVE - 84), top="Bld_Trim", bottom=True)
                 for dy in (-1, 1):                                               # knee braces up to the plate
                     if -D < y + dy * 60 < D and (i in (0, 3) or dy > 0):
                         k.cyl("Bld_Beam", (x, y, EAVE - 78), (x, y + dy * 62, EAVE - 10), 4.6, sides=4, caps=False)
@@ -161,8 +253,9 @@ def shed(k):
             k.obox("Bld_Beam", (s * PX, 0, EAVE + 2), (18, 2 * D + 16, 16), grain="y")                           # wall plates
         # the back wall and its frieze, seen through the shed
         r0 = rect(-W, -D, W, -D + 26)
-        k.wall("Bld_Mudbrick", r0, 0, EAVE - 64, u0=40.0, bleach=False)
-        k.cap("Bld_Mudbrick", r0, 0.5, down=True)
+        back = "Bld_Ashlar" if k.level >= 2 else "Bld_Mudbrick"
+        k.wall(back, r0, 0, EAVE - 64, u0=40.0, bleach=False)
+        k.cap(back, r0, 0.5, down=True)
         k.wall("Bld_Frieze", r0, EAVE - 64, EAVE, v0=0.0, bleach=False, u0=40.0)
         k.gable_end("Bld_Planks", -W, W, -D + 26, EAVE, RISE, facing=1)
         k.gable_end("Bld_Planks", -W, W, -D, EAVE, RISE, facing=-1)
@@ -173,15 +266,19 @@ def shed(k):
         k.poly("Bld_Planks", facing([(-hw, D - 2, zp), (hw, D - 2, zp), (0, D - 2, zr)], (0, -1, 0)), shade=0.6)
         k.obox("Bld_Beam", (0, D + 2, zp), (2 * hw + 10, 10, 12))
         k.cyl("Bld_Bronze", (0, D + 1, zp + 30), (0, D + 7, zp + 30), 15.0, sides=8, grain="ring")
-        k.gable_roof("Bld_RoofTile", -W, W, -D, D, EAVE, RISE, over=OVER, verge=VERGE, ridge="Bld_RoofTile", holes=HOLES, ceiling=False)
+        k.gable_roof(roof_slot(k), -W, W, -D, D, EAVE, RISE, over=OVER, verge=VERGE, ridge=roof_slot(k), holes=HOLES, ceiling=False)
+        if k.level >= 3:                                                         # iron on the ridge's ends
+            for y in (-D - VERGE + 14, D + VERGE - 14):
+                k.finial((0, y, zr - 2), slot=IRON, h=74, r=15)
         ze = EAVE - OVER * RISE / W
         for s in (-1, 1):                                                        # the roof's underside: boards
             pts = [(0, -D - VERGE, zr - 6), (0, D + VERGE, zr - 6), (s * (W + OVER), D + VERGE, ze - 6), (s * (W + OVER), -D - VERGE, ze - 6)]
             k.poly("Bld_Planks", facing(pts, (0, 0, -1)), shade=0.62)
         # the standards, hung down the front posts
         for s in (-1, 1):
-            k.cyl("Bld_Bronze", (s * PX - 40, D + 4, 300), (s * PX + 40, D + 4, 300), 2.6, sides=4)
-            k.hang_cloth((s * PX - 32, D + 5, 298), (s * PX + 32, D + 5, 298), 192.0)
+            fy = D + (16 if k.level >= 2 else 4)                                 # clear of the stone piers
+            k.cyl("Bld_Bronze", (s * PX - 40, fy, 300), (s * PX + 40, fy, 300), 2.6, sides=4)
+            k.hang_cloth((s * PX - 32, fy + 1, 298), (s * PX + 32, fy + 1, 298), 192.0)
         # stores along the back wall
         k.crate((-170, -D + 62, 0), (64, 56, 46), yaw=4)
         k.crate((-166, -D + 60, 46), (48, 46, 36), yaw=-10)
@@ -194,8 +291,11 @@ def shed(k):
 def yard(k):
     d = k.damaged
     k.box("Bld_Dirt", (-F + 8, -F + 8, -2), (F - 8, F - 8, 3), u0=0.0)           # packed earth
-    fence(k, [(CX, -F), (-F, -F), (-F, -GATE)], gaps=((0, 240, 470),) if d else (), step=116)
-    fence(k, [(-F, GATE), (-F, F), (CX, F)], gaps=((1, 360, 560),) if d else (), step=116)
+    if k.level >= 2:
+        yard_wall(k)
+    else:
+        fence(k, [(CX, -F), (-F, -F), (-F, -GATE)], gaps=((0, 240, 470),) if d else (), step=116)
+        fence(k, [(-F, GATE), (-F, F), (CX, F)], gaps=((1, 360, 560),) if d else (), step=116)
     for s in (-1, 1):                                        # the gateway: stout posts with bronze caps, the standards
         k.cyl("Bld_Bark", (-F, s * GATE, -4), (-F, s * GATE, 190), 11.0, 9.0, sides=7, grain="ring", cap_slot="Bld_Beam")
         k.lathe("Bld_Bronze", (-F, s * GATE, 190), [(11, 0), (9, 6), (1, 20)], sides=7)
@@ -240,17 +340,25 @@ def complete(k):
     shed(k)
     catapult(k)
     yard(k)
+    top = EAVE + RISE
+    if k.level >= 2:
+        top = tower(k, -1)
+    if k.level >= 3:
+        tower(k, 1)
+        for s in (-1, 1):                                    # fires on the wall either side of the gateway
+            k.brazier((-F, s * (GATE + 96), wall_h(k) + 12), h=64)
+    k.level_flag((-448, -340, 0), height=300.0)
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 360))
     k.sockets["gate"] = (-570.0, 0.0, 0.0)           # where a catapult appears: just outside the gateway
     k.sockets["rally"] = (-870.0, 0.0, 0.0)          # default rally point, straight out from it
-    k.sockets["label"] = (200.0, 0.0, 680.0)
+    k.sockets["label"] = (200.0, 0.0, max(680.0, top + 50.0))
     k.sockets["popup"] = (0.0, 0.0, 460.0)
 
 
 def damage(k):
     """Added to the finished build on the damaged mesh: soot, what fell, what burnt."""
-    k.rubble((SFX - 70, -90, 3), (120, 240), 0, slot="Bld_RoofTile", blocks=10, beams=2, mound=False, block=(34, 26, 6))      # slid tiles
-    k.rubble((120, -150, 3), (150, 150), 0, slot="Bld_RoofTile", blocks=6, beams=1, mound=False, block=(34, 26, 6))
+    k.rubble((SFX - 70, -90, 3), (120, 240), 0, slot=roof_slot(k), blocks=10, beams=2, mound=False, block=(34, 26, 6))      # slid tiles
+    k.rubble((120, -150, 3), (150, 150), 0, slot=roof_slot(k), blocks=6, beams=1, mound=False, block=(34, 26, 6))
     k.scorch("blot_l", (-250, -350, 3), "up", out=1.5)       # where the pole stack burnt
     for (y, a) in ((-420, 4), (-392, -8), (-350, 8)):
         k.charred((-360, y, 8), (-360 + math.cos(math.radians(a)) * 230, y + math.sin(math.radians(a)) * 230, 12), size=14)
@@ -258,6 +366,12 @@ def damage(k):
     k.scorch("plume_m", (SFX - 12, -PX, 60), out=14)
     k.scorch("blot_w", (-380, 60, 3), "up", out=1.5)
     k.charred((300, 470, 6), (420, 440, 10), size=7)
+    if k.level >= 2:                                         # the left tower: soot over its breach, what fell from it
+        fx = TOWER_X - TOWER_HALF + 14
+        k.scorch("plume_m", (fx, -TOWER_Y + 10, 236))
+        k.rubble((fx - 50, -TOWER_Y + 10, 3), (90, 110), 22, blocks=5, beams=0)
+    if k.level >= 3:
+        k.scorch("smear", (TOWER_X - TOWER_HALF + 4, TOWER_Y - 10, tower_h(k) - 66), flip=True)       # the right tower's frieze
 
 
 def site(k):

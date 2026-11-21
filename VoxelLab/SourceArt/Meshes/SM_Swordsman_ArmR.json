@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_ArmR",
+ "faces": 1036,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.133,
+   -0.1363,
+   -0.3804
+  ],
+  [
+   0.0856,
+   0.1296,
+   0.0879
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.3125,
+  0.0,
+  1.25
+ ],
+ "part": "ArmR",
+ "triangles": 2073,
+ "blocks": 114
+}

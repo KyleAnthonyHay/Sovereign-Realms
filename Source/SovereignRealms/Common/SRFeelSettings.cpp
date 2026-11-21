@@ -10,7 +10,7 @@ USRFeelSettings::USRFeelSettings()
 	Shieldbearer.MaxHealth = 280.f;
 	Shieldbearer.Radius = 44.f;
 	Shieldbearer.Mass = 1.6f;
-	Shieldbearer.MaxSpeed = 390.f;
+	Shieldbearer.MaxSpeed = 450.f;
 	Shieldbearer.Acceleration = 2400.f;
 	Shieldbearer.Deceleration = 3000.f;
 	Shieldbearer.TurnRateDeg = 520.f;
@@ -31,7 +31,7 @@ USRFeelSettings::USRFeelSettings()
 	Archer.MaxHealth = 125.f;
 	Archer.Radius = 36.f;
 	Archer.Mass = 0.8f;
-	Archer.MaxSpeed = 440.f;
+	Archer.MaxSpeed = 505.f;
 	Archer.Acceleration = 2800.f;
 	Archer.Deceleration = 3200.f;
 	Archer.TurnRateDeg = 640.f;
@@ -55,7 +55,7 @@ USRFeelSettings::USRFeelSettings()
 	Horseman.MaxHealth = 230.f;
 	Horseman.Radius = 70.f;
 	Horseman.Mass = 2.4f;
-	Horseman.MaxSpeed = 640.f;
+	Horseman.MaxSpeed = 735.f;
 	Horseman.Acceleration = 2600.f;
 	Horseman.Deceleration = 3200.f;
 	Horseman.TurnRateDeg = 420.f;
@@ -75,10 +75,10 @@ USRFeelSettings::USRFeelSettings()
 
 	// Catapult: slow, fragile up close, deadly at range; wrecks buildings and scatters packed troops.
 	Catapult.DisplayName = TEXT("Catapult");
-	Catapult.MaxHealth = 260.f;
+	Catapult.MaxHealth = 500.f;   // sturdy timbers: it must live long enough to reach the walls
 	Catapult.Radius = 110.f;
 	Catapult.Mass = 4.f;
-	Catapult.MaxSpeed = 280.f;
+	Catapult.MaxSpeed = 360.f;
 	Catapult.Acceleration = 1300.f;
 	Catapult.Deceleration = 1900.f;
 	Catapult.TurnRateDeg = 170.f;
@@ -105,7 +105,7 @@ USRFeelSettings::USRFeelSettings()
 	Builder.MaxHealth = 110.f;
 	Builder.Radius = 34.f;
 	Builder.Mass = 0.9f;
-	Builder.MaxSpeed = 380.f;
+	Builder.MaxSpeed = 435.f;
 	Builder.Acceleration = 2600.f;
 	Builder.Deceleration = 3000.f;
 	Builder.TurnRateDeg = 600.f;
@@ -129,7 +129,7 @@ USRFeelSettings::USRFeelSettings()
 	Scout.MaxHealth = 90.f;
 	Scout.Radius = 34.f;
 	Scout.Mass = 0.7f;
-	Scout.MaxSpeed = 820.f;          // the Horse Rider does 640
+	Scout.MaxSpeed = 875.f;          // the Horse Rider does 735
 	Scout.Acceleration = 3600.f;
 	Scout.Deceleration = 3800.f;
 	Scout.TurnRateDeg = 720.f;
@@ -147,6 +147,29 @@ USRFeelSettings::USRFeelSettings()
 	Scout.NoticeScale = 0.45f;       // foes notice it at under half their usual distance
 	Scout.WalkCycleDistance = 192.f; // a sprinter's stride (Tools/blender/char_worker.py, scout)
 
+	// Medic: a field medic with a bag of bandages. Runs to a wounded troop of its side, kneels and bandages it, then on
+	// to the next (Sovereign Feel > Medics); never strikes anyone. Passive (Defensive): runs from foes; Assertive
+	// (Aggressive): goes into the fight to heal. Trained at the Barracks.
+	Medic.DisplayName = TEXT("Medic");
+	Medic.MaxHealth = 120.f;
+	Medic.Radius = 34.f;
+	Medic.Mass = 0.8f;
+	Medic.MaxSpeed = 620.f;          // quick: Shieldbearers do 450, a Horse Rider 735
+	Medic.Acceleration = 3200.f;
+	Medic.Deceleration = 3400.f;
+	Medic.TurnRateDeg = 600.f;
+	Medic.bRanged = false;
+	Medic.AttackRange = 30.f;
+	Medic.AcquireRange = 0.f;        // picks no fights
+	Medic.SightRange = 1400.f;
+	Medic.Damage = 0.f;
+	Medic.AttackInterval = 1.5f;     // a bandaging every 1.5 s
+	Medic.WindupTime = 0.45f;        // down on one knee, bandage out (the heal lands as it is pressed on)...
+	Medic.RecoveryTime = 0.45f;      // ...and up again
+	Medic.KnockbackImpulse = 0.f;
+	Medic.BuildingDamageScale = 0.f;
+	Medic.PopCost = 1;
+
 	// ---- buildings (shapes from SourceArt/Buildings/<type>.json; the tower is SM_Bld_Tower) ----
 	auto Mesh = [](const TCHAR* Name) { return TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(FString::Printf(TEXT("/Game/SR/Buildings/%s.%s"), Name, Name))); };
 
@@ -158,7 +181,7 @@ USRFeelSettings::USRFeelSettings()
 	CastleStats.TerritoryRadius = 4200.f;   // the building zone: beyond it a Builder must go and build
 	CastleStats.bPlayerBuildable = false;
 	CastleStats.Category = ESRBuildCategory::Defence;
-	CastleStats.Blurb = TEXT("The seat of your kingdom: houses troops, shoots from its walls, trains Builders and (from level 3) a Scout. If it falls, you lose.");
+	CastleStats.Blurb = TEXT("The seat of your kingdom: houses troops, has archers on its corner pillars (more as it rises), trains Builders and (from level 3) a Scout. If it falls, you lose.");
 	CastleStats.bRecruits = true;
 	CastleStats.RecruitType = ESRUnitType::Builder;
 	CastleStats.Mesh = Mesh(TEXT("SM_Bld_Castle"));
@@ -221,6 +244,54 @@ USRFeelSettings::USRFeelSettings()
 	TowerStats.AttackDamage = 50.f;   // (level 1 of TowerLevels below)
 	TowerStats.AttackInterval = 1.2f;
 	TowerStats.MuzzleHeight = 860.f;
+
+	// Relic Tower: raised on a relic, one of the map's ancient ruins (a broken tower, a stone circle; the level's
+	// actors tagged SRRelic). Built only there (it snaps on, like a mine onto a vein), outside every castle's zone,
+	// so a Builder raises it. Two archers, a very long reach (a Watchtower's is 24-30 m) and the sight to match.
+	// Its model: Tools/blender/bld_relictower.py.
+	RelicTowerStats = TowerStats;
+	RelicTowerStats.DisplayName = TEXT("Relic Tower");
+	RelicTowerStats.Mesh = Mesh(TEXT("SM_Bld_RelicTower"));
+	RelicTowerStats.FootprintMin = FVector2D(-250.f, -250.f);
+	RelicTowerStats.FootprintMax = FVector2D(250.f, 250.f);
+	RelicTowerStats.BlockHeight = 1190.f;                       // (SourceArt/Buildings/relictower.json)
+	RelicTowerStats.GateOffset = FVector(-310.f, 0.f, 0.f);
+	RelicTowerStats.LabelOffset = FVector(0.f, 0.f, 1504.f);
+	RelicTowerStats.PopupOffset = FVector(0.f, 0.f, 1000.f);
+	RelicTowerStats.MuzzleHeight = 1150.f;                      // the fighting top
+	RelicTowerStats.SecondMuzzleHeight = 400.f;                 // the gallery round the foot of the shaft
+	RelicTowerStats.MaxHealth = 4500.f;
+	RelicTowerStats.Cost = FSRCost(900, 300);
+	RelicTowerStats.BuildTime = 75.f;
+	RelicTowerStats.Blurb = TEXT("An ancient tower raised again from its relic ruin: two archers, a very long reach, and a view far over the field.");
+	RelicTowerStats.AttackRange = 4200.f;
+	RelicTowerStats.AttackDamage = 85.f;
+	RelicTowerStats.AttackInterval = 1.1f;
+	RelicTowerStats.Archers = 2;
+	RelicTowerStats.bPlayerBuildable = false;   // not in the build menu: Builders repair a relic ruin into one
+
+	// Siege Tower: a squat stone tower with a stone-thrower on top. Slow heavy shots that land on the target's spot and
+	// hurt every foe round it; it cannot reach what is right under it. Its model: Tools/blender/bld_siegetower.py.
+	SiegeTowerStats = TowerStats;
+	SiegeTowerStats.DisplayName = TEXT("Siege Tower");
+	SiegeTowerStats.Mesh = Mesh(TEXT("SM_Bld_SiegeTower"));
+	SiegeTowerStats.MaxHealth = 2600.f;
+	SiegeTowerStats.Cost = FSRCost(380, 120);
+	SiegeTowerStats.BuildTime = 40.f;
+	SiegeTowerStats.Blurb = TEXT("A stone-thrower on a squat tower: slow, heavy shots that hurt every foe where they land. It cannot hit what is right under it.");
+	SiegeTowerStats.FootprintMin = FVector2D(-240.f, -240.f);
+	SiegeTowerStats.FootprintMax = FVector2D(240.f, 240.f);
+	SiegeTowerStats.BlockHeight = 800.f;
+	SiegeTowerStats.GateOffset = FVector(-300.f, 0.f, 0.f);
+	SiegeTowerStats.LabelOffset = FVector(0.f, 0.f, 1240.f);   // (SourceArt/Buildings/siegetower.json sockets)
+	SiegeTowerStats.PopupOffset = FVector(0.f, 0.f, 640.f);
+	SiegeTowerStats.MuzzleHeight = 1110.f;                     // the cup at the end of the arm
+	SiegeTowerStats.AttackRange = 3000.f;
+	SiegeTowerStats.MinRange = 500.f;
+	SiegeTowerStats.AttackDamage = 70.f;
+	SiegeTowerStats.AttackInterval = 4.2f;
+	SiegeTowerStats.SplashRadius = 260.f;
+	SiegeTowerStats.Archers = 1;
 
 	// Barracks and range: shapes from SourceArt/Buildings/barracks.json and range.json (Tools/blender/bld_barracks.py, bld_range.py).
 	BarracksStats.DisplayName = TEXT("Barracks");
@@ -318,13 +389,22 @@ USRFeelSettings::USRFeelSettings()
 
 	// Storehouse levels: price, time, what it holds, health. One at level 3 holds as much again as a level-3 castle;
 	// a kingdom may have one of each, plus one for every two castle levels (StoreLimitBase / StoreLimitCastleLevels).
-	auto SL = [](int32 G, int32 Fd, float Time, int32 Cap, float Hp)
+	// (one of each; raising one to level 2 needs the Citadel at level 2, to level 3 the Citadel at level 3)
+	auto SL = [](int32 G, int32 Fd, float Time, int32 Cap, float Hp, int32 Castle)
 	{
-		FSRStoreLevel L; L.UpgradeCost = FSRCost(G, Fd); L.UpgradeTime = Time; L.Capacity = Cap; L.Health = Hp;
+		FSRStoreLevel L; L.UpgradeCost = FSRCost(G, Fd); L.UpgradeTime = Time; L.Capacity = Cap; L.Health = Hp; L.RequiredCastleLevel = Castle;
 		return L;
 	};
-	GranaryLevels = { SL(0, 0, 0.f, 400, 900.f), SL(180, 0, 30.f, 900, 1200.f), SL(320, 80, 40.f, 1600, 1500.f) };
-	TreasuryLevels = { SL(0, 0, 0.f, 400, 1100.f), SL(200, 0, 30.f, 900, 1450.f), SL(340, 80, 40.f, 1600, 1800.f) };
+	GranaryLevels = { SL(0, 0, 0.f, 400, 900.f, 0), SL(180, 0, 30.f, 900, 1200.f, 2), SL(320, 80, 40.f, 1600, 1500.f, 3) };
+	TreasuryLevels = { SL(0, 0, 0.f, 400, 1100.f, 0), SL(200, 0, 30.f, 900, 1450.f, 2), SL(340, 80, 40.f, 1600, 1800.f, 3) };
+
+	// farms: three to start (one more per Citadel level), each raised for more food and more housing
+	auto FL = [](int32 G, int32 Fd, float Time, int32 Food, int32 House, float Hp)
+	{
+		FSRFarmLevel L; L.UpgradeCost = FSRCost(G, Fd); L.UpgradeTime = Time; L.FoodPerPayout = Food; L.Housing = House; L.Health = Hp;
+		return L;
+	};
+	FarmLevels = { FL(0, 0, 0.f, 14, 4, 1000.f), FL(200, 0, 30.f, 20, 6, 1300.f), FL(340, 60, 40.f, 27, 8, 1600.f) };
 
 	// Castle levels. Level 1 matches CastleStats above. Each level: price, time, castle housing, troop ceiling,
 	// builders, building zone (cm), health, storage (gold, food). The stores always hold the next level's price; the
@@ -345,6 +425,12 @@ USRFeelSettings::USRFeelSettings()
 		Lv(1650, 650, 75.f, 52, 105, 5, 6700.f, 27000.f, 4000, 4000),
 		Lv(2200, 900, 90.f, 64, 120, 6, 7200.f, 30000.f, 5500, 5500),
 	};
+	// archers on the corner pillars and their arrows' damage, by castle level (1 at level 1 up to all four pillars at 7)
+	{
+		const int32 Arch[7] = { 1, 2, 2, 3, 3, 4, 4 };
+		const float Dmg[7] = { 36.f, 36.f, 40.f, 40.f, 44.f, 44.f, 48.f };
+		for (int32 i = 0; i < CastleLevels.Num() && i < 7; ++i) { CastleLevels[i].Archers = Arch[i]; CastleLevels[i].ArrowDamage = Dmg[i]; }
+	}
 
 	// Watchtower levels (after Kingdom Rush's archer towers: by level 3 about 3.5x the damage per second and a quarter
 	// more reach; each upgrade dearer than the last).
@@ -370,6 +456,21 @@ USRFeelSettings::USRFeelSettings()
 		return L;
 	};
 	TrainerLevels = { TrL(0, 0, 0.f, 1.f, 1.f), TrL(200, 100, 30.f, 1.35f, 1.2f), TrL(380, 180, 40.f, 1.8f, 1.4f) };
+
+	// The battle maps. (The four-cornered one is played by two kingdoms for now.)
+	{
+		FSRMapEntry Two;
+		Two.Id = TEXT("two");
+		Two.Level = TEXT("/Game/Maps/L_Battlefield");
+		Two.Name = TEXT("THE RIVERLANDS");
+		Two.Note = TEXT("Two kingdoms across the river. 480 m square.");
+		FSRMapEntry Four;
+		Four.Id = TEXT("four");
+		Four.Level = TEXT("/Game/Maps/L_Battlefield4");
+		Four.Name = TEXT("THE FOUR MARCHES");
+		Four.Note = TEXT("Four corners round the High Moor (you against one rival for now). 720 m square.");
+		Maps = { Two, Four };
+	}
 
 	AIBuildOrder = { ESRBuildingType::Barracks, ESRBuildingType::Farm, ESRBuildingType::Range, ESRBuildingType::Mine, ESRBuildingType::Farm,
 		ESRBuildingType::Tower, ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Farm };

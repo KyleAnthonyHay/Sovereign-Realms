@@ -7,8 +7,10 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRAISubsystem.h"
+#include "Battle/SRFogSubsystem.h"
 #include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
+#include "Common/SRPowerSubsystem.h"
 #include "Common/SRUserSettings.h"
 #include "Engine/Canvas.h"
 #include "Engine/Texture2D.h"
@@ -34,12 +36,16 @@ namespace
 		{ TEXT("S"), TEXT("Stop") },
 		{ TEXT("H"), TEXT("Hold ground: fight only what is in reach") },
 		{ TEXT("P, then LMB"), TEXT("Patrol between here and there") },
+		{ TEXT("P, Shift + LMB"), TEXT("Patrol round several points (each click adds one)") },
+		{ TEXT("Shift + RMB"), TEXT("Pathway: add a point; they walk them in order") },
 		{ TEXT("F / G"), TEXT("Formation on / off (RMB its button: shape) / stance") },
 		{ nullptr, TEXT("CAMERA") },
 		{ TEXT("WASD / Arrows"), TEXT("Pan (hold A or S: a tap is the order)") },
 		{ TEXT("Screen edge"), TEXT("Pan") },
 		{ TEXT("MMB drag"), TEXT("Grab the ground and drag") },
 		{ TEXT("Mouse wheel"), TEXT("Zoom") },
+		{ TEXT("Trackpad"), TEXT("Two fingers pan, pinch zooms, Ctrl+click = RMB") },
+		{ TEXT("Option + scroll"), TEXT("Zoom (trackpad or Magic Mouse)") },
 		{ TEXT("Space / Home"), TEXT("Centre on the selection") },
 		{ TEXT("Minimap"), TEXT("LMB look there (drag), RMB send troops") },
 	};
@@ -53,16 +59,20 @@ namespace
 		{ TEXT("B, then 1-6"), TEXT("Build menu (Tab: next tab), pick a building") },
 		{ TEXT("LMB / RMB"), TEXT("Place it (Shift: keep placing) / cancel") },
 		{ TEXT("Delete"), TEXT("Cancel construction (75% refund)") },
+		{ TEXT("Delete  Delete"), TEXT("Demolish a finished building (30% back; press twice)") },
 		{ TEXT("Y"), TEXT("Train a Builder at the Citadel (more per castle level)") },
 		{ TEXT("RMB on a site"), TEXT("Builders selected: build / repair it") },
 		{ TEXT("X"), TEXT("Builders: repair the nearest damaged building") },
 		{ TEXT("K  K"), TEXT("Dismiss the selected troops (press twice)") },
 		{ TEXT("V, then click"), TEXT("Guard one of your Builders or buildings (or RMB it)") },
+		{ TEXT("O"), TEXT("Scouts: roam on their own (attacked: run home)") },
 		{ TEXT("U"), TEXT("Upgrade the selected building, else the Citadel") },
 		{ TEXT("M"), TEXT("March together (slowest sets the pace) on / off") },
 		{ nullptr, TEXT("TROOPS") },
 		{ TEXT("Q / E / R / T"), TEXT("Train Shieldbearer / Archer / Rider / Catapult") },
 		{ TEXT("J"), TEXT("Train the Scout (Citadel level 3; one at a time)") },
+		{ TEXT("N"), TEXT("Train a Medic at the Barracks (heals; never fights)") },
+		{ TEXT("RMB on a troop"), TEXT("Medics selected: look after that troop") },
 		{ TEXT("RMB"), TEXT("Rally point (Barracks or Range selected)") },
 		{ nullptr, TEXT("GAME") },
 		{ TEXT("Esc"), TEXT("Cancel, then deselect, then pause") },
@@ -90,8 +100,14 @@ void ASRHUD::OpenScreen(EScreen NewScreen)
 		bSettingsDirty = false;
 	}
 	Screen = NewScreen;
+	bActAfterSave = false;
 	if (NewScreen == EScreen::Settings) { PendingScale = USRFeelSettings::Get().HUDScale; }
-	if (NewScreen == EScreen::NewGame) { MenuDifficulty = USRFeelSettings::Get().AIDifficulty; }
+	if (NewScreen == EScreen::NewGame)
+	{
+		// as things stand: the difficulty last played, the map being looked at
+		MenuDifficulty = USRFeelSettings::Get().AIDifficulty;
+		if (const USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this)) { MenuMap = Flow->GetCurrentMapId(); }
+	}
 }
 
 void ASRHUD::AskConfirm(EConfirm What)
@@ -125,7 +141,21 @@ void ASRHUD::DrawMainMenu()
 {
 	USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
 	const float In = FMath::Clamp(Flow->GetStateTime() / 0.5f, 0.f, 1.f);
-	// The realm stays the picture: only the left third is darkened (in soft steps) to carry the title and the menu.
+	// The picture is the film of the battle, looping (DrawMenuFilm), or the live realm while it is not up. A soft
+	// vignette (top, bottom, and a light veil over all of it) keeps the lettering readable over fire and bright water,
+	// and the left third is darkened (in soft steps) to carry the title and the menu.
+	if (DrawMenuFilm(1.f))
+	{
+		Fill(0.f, 0.f, View.X, View.Y, FLinearColor(0.008f, 0.012f, 0.026f, 0.16f));
+		const int32 Rows = 18;
+		const float RowH = FMath::CeilToFloat(View.Y * 0.2f / Rows);
+		for (int32 i = 0; i < Rows; ++i)
+		{
+			const float A0 = 0.5f * FMath::Pow(1.f - float(i) / Rows, 1.8f);
+			Fill(0.f, i * RowH, View.X, RowH, FLinearColor(0.008f, 0.012f, 0.026f, A0));
+			Fill(0.f, View.Y - (i + 1) * RowH, View.X, RowH, FLinearColor(0.008f, 0.012f, 0.026f, A0));
+		}
+	}
 	const int32 Bands = 28;
 	const float BandW = FMath::CeilToFloat(View.X * 0.62f / Bands);
 	for (int32 i = 0; i < Bands; ++i)
@@ -150,7 +180,7 @@ void ASRHUD::DrawMainMenu()
 
 	// entries
 	const float BW = U(340.f), BH = U(56.f), Gap = U(12.f);
-	// a saved game: CONTINUE comes first
+	// a saved game: CONTINUE comes first (the newest that can be loaded; on whichever map it was played)
 	const FString Latest = Flow->LatestSlot();
 	if (!Latest.IsEmpty())
 	{
@@ -158,6 +188,14 @@ void ASRHUD::DrawMainMenu()
 		if (MenuButton(Box, SRId::Menu + 8, TEXT("CONTINUE"), true, false)) { Flow->LoadMatch(Latest); }
 		Text(Flow->DescribeSave(Latest), X + U(4.f), Y + BH + U(3.f), U(13.f), A(Dim, In));
 		Y += BH + Gap + U(16.f);
+	}
+	if (Flow->GetSaves().Num() > 0)
+	{
+		// every saved game, to pick one (or delete some: the ones from the old map can only be deleted)
+		const FBox2D LoadBox(FVector2D(X, Y), FVector2D(X + BW, Y + BH));
+		const bool bOpen = Screen == EScreen::Saves;
+		if (MenuButton(LoadBox, SRId::Menu + 9, TEXT("LOAD GAME"), true, bOpen)) { if (bOpen) { OpenScreen(EScreen::None); } else { OpenSaves(false); } }
+		Y += BH + Gap;
 	}
 	const TCHAR* Labels[4] = { TEXT("NEW GAME"), TEXT("HOW TO PLAY"), TEXT("SETTINGS"), TEXT("QUIT") };
 	const EScreen Opens[4] = { EScreen::NewGame, EScreen::Controls, EScreen::Settings, EScreen::Confirm };
@@ -188,7 +226,7 @@ void ASRHUD::DrawPauseMenu()
 	if (Screen != EScreen::None) { DrawScreen(View.X * 0.5f); return; }
 
 	const float W = U(420.f), BH = U(54.f), Gap = U(10.f);
-	const float H = U(104.f) + 7.f * (BH + Gap) + U(46.f);
+	const float H = U(104.f) + 7.f * (BH + Gap) + U(56.f);
 	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = FMath::RoundToFloat((View.Y - H) * 0.5f - (1.f - In) * U(12.f));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("PAUSED"), X + W * 0.5f, Y + U(26.f), U(32.f), GoldBright, AlignCentre, Bold, U(6.f));
@@ -199,13 +237,13 @@ void ASRHUD::DrawPauseMenu()
 	for (int32 i = 0; i < 7; ++i, BY += BH + Gap)
 	{
 		const FBox2D Box(FVector2D(X + U(34.f), BY), FVector2D(X + W - U(34.f), BY + BH));
-		const bool bEnabled = i != 2 || !Latest.IsEmpty();
+		const bool bEnabled = i != 2 || Flow->GetSaves().Num() > 0;
 		if (!MenuButton(Box, SRId::Menu + 10 + i, Labels[i], bEnabled)) { continue; }
 		switch (i)
 		{
 		case 0: Flow->SetPaused(false); break;
-		case 1: Flow->SaveMatch(USRGameFlowSubsystem::QuickSlot()); break;
-		case 2: Flow->LoadMatch(Latest); break;
+		case 1: OpenSaves(true); break;
+		case 2: OpenSaves(false); break;
 		case 3: AskConfirm(EConfirm::Restart); break;
 		case 4: OpenScreen(EScreen::Controls); break;
 		case 5: OpenScreen(EScreen::Settings); break;
@@ -214,9 +252,13 @@ void ASRHUD::DrawPauseMenu()
 	}
 	// what the save / load buttons did, or what LOAD would bring back
 	const bool bFresh = FPlatformTime::Seconds() - Flow->GetSaveMessageTime() < 4.0;
-	const FString Note = bFresh ? Flow->GetSaveMessage() : (Latest.IsEmpty() ? FString(TEXT("No saved game yet.")) : FString::Printf(TEXT("Load: %s%s"),
-		Latest == USRGameFlowSubsystem::AutoSlot() ? TEXT("autosave, ") : TEXT(""), *Flow->DescribeSave(Latest)));
-	Text(Note, X + W * 0.5f, BY + U(4.f), U(14.f), bFresh ? GoldBright : Dim, AlignCentre);
+	const int32 NumSaves = Flow->GetSaves().Num();
+	// (two short lines: one long one ran out past the panel's edges)
+	// (Latest is empty when every save is from the old map: nothing LOAD could bring back)
+	const FString Note = bFresh ? Flow->GetSaveMessage() : (NumSaves == 0 ? FString(TEXT("No saved game yet.")) : FString::Printf(TEXT("%d saved game%s  ·  %s"),
+		NumSaves, NumSaves == 1 ? TEXT("") : TEXT("s"), Latest.IsEmpty() ? TEXT("from the old map") : (Latest == USRGameFlowSubsystem::AutoSlot() ? TEXT("newest: the autosave") : TEXT("newest: your save"))));
+	Text(Note, X + W * 0.5f, BY - U(4.f), U(14.f), bFresh ? GoldBright : Dim, AlignCentre);
+	if (!bFresh && !Latest.IsEmpty()) { Text(Flow->DescribeSave(Latest), X + W * 0.5f, BY + U(14.f), U(13.f), Dim, AlignCentre); }
 }
 
 // ---------------------------------------------------------------------------- victory / defeat
@@ -281,6 +323,7 @@ void ASRHUD::DrawScreen(float CentreX)
 	case EScreen::Controls: DrawControlsPanel(CentreX, true); break;
 	case EScreen::Settings: DrawSettingsPanel(CentreX); break;
 	case EScreen::Confirm: DrawConfirmPanel(CentreX); break;
+	case EScreen::Saves: DrawSavesPanel(CentreX); break;
 	default: break;
 	}
 }
@@ -329,7 +372,7 @@ void ASRHUD::DrawSettingsPanel(float CentreX)
 {
 	USRFeelSettings* F = GetMutableDefault<USRFeelSettings>();
 	const float W = U(600.f), RowH = U(46.f);
-	const float H = U(92.f) + 8.f * RowH + U(96.f);
+	const float H = U(92.f) + 14.f * RowH + U(96.f);
 	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("SETTINGS"), X + W * 0.5f, Y + U(22.f), U(26.f), GoldBright, AlignCentre, Bold, U(5.f));
@@ -367,13 +410,57 @@ void ASRHUD::DrawSettingsPanel(float CentreX)
 	RY += RowH;
 
 	struct FSwitch { const TCHAR* Name; bool* Value; };
-	const FSwitch Switches[2] = { { TEXT("Pan at the screen edge"), &F->bEdgePan }, { TEXT("WASD pans the camera"), &F->bWASDPansCamera } };
-	for (int32 i = 0; i < 2; ++i, RY += RowH)
+	const FSwitch Switches[3] = { { TEXT("Pan at the screen edge"), &F->bEdgePan }, { TEXT("WASD pans the camera"), &F->bWASDPansCamera },
+		{ TEXT("Fog of war"), &F->bFogOfWar } };
+	const uint32 SwitchIds[3] = { SRId::Setting + 6, SRId::Setting + 7, SRId::Setting + 10 };
+	for (int32 i = 0; i < 3; ++i, RY += RowH)
 	{
 		Label(Switches[i].Name);
-		if (Toggle(FBox2D(FVector2D(SX, RY + U(7.f)), FVector2D(SX + U(32.f), RY + U(39.f))), SRId::Setting + 6 + i, *Switches[i].Value)) { bSettingsDirty = true; }
+		if (Toggle(FBox2D(FVector2D(SX, RY + U(7.f)), FVector2D(SX + U(32.f), RY + U(39.f))), SwitchIds[i], *Switches[i].Value))
+		{
+			bSettingsDirty = true;
+			// the fog follows at once (whatever an sr.Fog test command last said)
+			if (Switches[i].Value == &F->bFogOfWar) { if (USRFogSubsystem* Fog = USRFogSubsystem::Get(this)) { Fog->SetEnabled(true); } }
+		}
 		TextIn(FBox2D(FVector2D(SX + U(44.f), RY), FVector2D(VX, RY + RowH)), *Switches[i].Value ? TEXT("On") : TEXT("Off"), U(16.f), *Switches[i].Value ? GoldBright : Dim, AlignLeft, Bold);
 	}
+
+	// Power (USRPowerSubsystem): each click steps to the next choice.
+	auto Choice = [&](uint32 Id, const FString& Current)
+	{
+		const FBox2D Box(FVector2D(SX, RY + U(6.f)), FVector2D(SX + SW, RY + RowH - U(6.f)));
+		const FBtn B = Button(Box, Id);
+		ButtonFrame(Box, B, true);
+		TextIn(FBox2D(Box.Min + FVector2D(0.f, B.bHeld ? U(1.f) : 0.f), Box.Max), Current, U(16.f), FMath::Lerp(Parchment, GoldBright, B.Hot), AlignCentre, Bold);
+		if (B.bClicked) { Click(); bSettingsDirty = true; }
+		return B.bClicked;
+	};
+	const int32 Caps[4] = { 30, 60, 120, 0 };
+	int32 CapIndex = 1;
+	for (int32 i = 0; i < 4; ++i) { if (Caps[i] == F->FrameRateCap) { CapIndex = i; } }
+	Label(TEXT("Frame rate limit"));
+	if (Choice(SRId::Setting + 8, Caps[CapIndex] > 0 ? FString::Printf(TEXT("%d fps"), Caps[CapIndex]) : FString(TEXT("Unlimited")))) { F->FrameRateCap = Caps[(CapIndex + 1) % 4]; }
+	RY += RowH;
+
+	static const TCHAR* AngleNames[3] = { TEXT("Classic (steep)"), TEXT("Low"), TEXT("Battlefield (shallow)") };
+	Label(TEXT("Camera angle"));
+	if (Choice(SRId::Setting + 12, AngleNames[FMath::Clamp(F->CameraAngle, 0, 2)])) { F->CameraAngle = (FMath::Clamp(F->CameraAngle, 0, 2) + 1) % 3; }
+	RY += RowH;
+
+	Label(TEXT("Trackpad scroll"));
+	if (Choice(SRId::Setting + 11, F->bTrackpadScrollZooms ? FString(TEXT("Zooms")) : FString(TEXT("Pans the map")))) { F->bTrackpadScrollZooms = !F->bTrackpadScrollZooms; }
+	RY += RowH;
+
+	static const TCHAR* SaverNames[3] = { TEXT("Off"), TEXT("On battery power"), TEXT("Always") };
+	Label(TEXT("Battery saver"));
+	if (Choice(SRId::Setting + 9, SaverNames[FMath::Clamp(F->BatterySaver, 0, 2)])) { F->BatterySaver = (FMath::Clamp(F->BatterySaver, 0, 2) + 1) % 3; }
+	if (const USRPowerSubsystem* Power = USRPowerSubsystem::Get(this); Power && Power->IsSaverActive()) { Value(TEXT("Active")); }
+	RY += RowH;
+
+	// Sandbox: a testing ground on the chosen map (both kingdoms built up, armies of every kind, an enemy that never attacks)
+	Label(TEXT("Sandbox (testing)"));
+	if (Choice(SRId::Setting + 13, FString(TEXT("Start sandbox")))) { USRGameFlowSubsystem::Get(this)->StartMatch(MenuDifficulty, MenuMap, true); }
+	RY += RowH;
 
 	const float BW = U(220.f);
 	if (MenuButton(FBox2D(FVector2D(X + (W - BW) * 0.5f, Y + H - U(74.f)), FVector2D(X + (W + BW) * 0.5f, Y + H - U(24.f))), SRId::Screen, TEXT("DONE"))) { OpenScreen(EScreen::None); }
@@ -382,13 +469,53 @@ void ASRHUD::DrawSettingsPanel(float CentreX)
 void ASRHUD::DrawNewGamePanel(float CentreX)
 {
 	USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
-	const float W = U(560.f), RowH = U(76.f);
-	const float H = U(92.f) + 3.f * (RowH + U(10.f)) + U(98.f);
+	const TArray<FSRMapEntry>& Maps = USRFeelSettings::Get().Maps;
+	// the maps side by side above the difficulties (wide enough that two notes fit in two or three lines each)
+	const float W = U(680.f), RowH = U(76.f), MapH = Maps.Num() > 0 ? U(104.f) : 0.f;
+	const float H = U(92.f) + (MapH > 0.f ? MapH + U(16.f) : 0.f) + 3.f * (RowH + U(10.f)) + U(52.f) + U(98.f);
 	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("NEW GAME"), X + W * 0.5f, Y + U(22.f), U(26.f), GoldBright, AlignCentre, Bold, U(5.f));
 	Rule(X + U(40.f), Y + U(66.f), W - U(80.f));
 	float RY = Y + U(88.f);
+	if (MapH > 0.f)
+	{
+		const float Gap = U(12.f), MW = FMath::FloorToFloat((W - U(80.f) - Gap * (Maps.Num() - 1)) / Maps.Num());
+		for (int32 i = 0; i < Maps.Num() && i < 8; ++i)
+		{
+			const float MX = X + U(40.f) + i * (MW + Gap);
+			const FBox2D Box(FVector2D(MX, RY), FVector2D(MX + MW, RY + MapH));
+			// (a map whose level has not been built yet is shown, but cannot be chosen)
+			const bool bThere = Flow->IsMapAvailable(Maps[i].Id);
+			const FBtn B = Button(Box, SRId::Screen + 11 + i, bThere);
+			const bool bChosen = MenuMap == Maps[i].Id;
+			ButtonFrame(Box, B, bThere, bChosen);
+			const float Pad = U(14.f);
+			Text(Maps[i].Name, Box.Min.X + Pad, Box.Min.Y + U(11.f), U(18.f), bChosen ? GoldBright : (bThere ? Parchment : Dim), AlignLeft, Bold, U(1.f));
+			if (bChosen) { Icon(ESRIcon::Check, Box.Max.X - U(34.f), Box.Min.Y + U(9.f), U(24.f)); }
+			// the note, wrapped to the button: up to three lines
+			TArray<FString> Words;
+			(bThere ? Maps[i].Note : FString(TEXT("Not in this game yet."))).ParseIntoArray(Words, TEXT(" "));
+			FString Line;
+			float LY = Box.Min.Y + U(39.f);
+			int32 LinesLeft = 3;
+			for (int32 w = 0; w < Words.Num() && LinesLeft > 0; ++w)
+			{
+				const FString Longer = Line.IsEmpty() ? Words[w] : Line + TEXT(" ") + Words[w];
+				if (!Line.IsEmpty() && TextSize(Longer, U(13.f)).X > MW - 2.f * Pad)
+				{
+					Text(Line, Box.Min.X + Pad, LY, U(13.f), Dim);
+					LY += U(18.f);
+					--LinesLeft;
+					Line = Words[w];
+				}
+				else { Line = Longer; }
+			}
+			if (LinesLeft > 0) { Text(Line, Box.Min.X + Pad, LY, U(13.f), Dim); }
+			if (B.bClicked) { Click(); MenuMap = Maps[i].Id; }
+		}
+		RY += MapH + U(16.f);
+	}
 	for (int32 i = 0; i < 3; ++i, RY += RowH + U(10.f))
 	{
 		const FBox2D Box(FVector2D(X + U(40.f), RY), FVector2D(X + W - U(40.f), RY + RowH));
@@ -402,34 +529,177 @@ void ASRHUD::DrawNewGamePanel(float CentreX)
 		if (bChosen) { Icon(ESRIcon::Check, Box.Max.X - U(46.f), Box.Min.Y + U(24.f), U(28.f)); }
 		if (B.bClicked) { Click(); MenuDifficulty = i; }
 	}
+	{
+		// Sandbox: a testing ground (both kingdoms built up, armies of every kind, an enemy that never attacks)
+		const FBox2D Box(FVector2D(X + U(40.f), RY), FVector2D(X + W - U(40.f), RY + U(42.f)));
+		const FBtn B = Button(Box, SRId::Screen + 50);
+		ButtonFrame(Box, B, true, bMenuSandbox);
+		Text(TEXT("Sandbox"), Box.Min.X + U(18.f), Box.Min.Y + U(10.f), U(18.f), bMenuSandbox ? GoldBright : Parchment, AlignLeft, Bold);
+		Text(TEXT("both kingdoms built up, armies of every kind, the enemy never attacks"), Box.Min.X + U(120.f), Box.Min.Y + U(13.f), U(14.f), Dim);
+		if (bMenuSandbox) { Icon(ESRIcon::Check, Box.Max.X - U(40.f), Box.Min.Y + U(9.f), U(24.f)); }
+		if (B.bClicked) { Click(); bMenuSandbox = !bMenuSandbox; }
+	}
 	const float BW = (W - U(80.f) - U(14.f)) * 0.5f, BY = Y + H - U(78.f);
 	if (MenuButton(FBox2D(FVector2D(X + U(40.f), BY), FVector2D(X + U(40.f) + BW, BY + U(54.f))), SRId::Screen + 5, TEXT("BACK"))) { OpenScreen(EScreen::None); }
-	if (MenuButton(FBox2D(FVector2D(X + W - U(40.f) - BW, BY), FVector2D(X + W - U(40.f), BY + U(54.f))), SRId::Screen + 6, TEXT("BEGIN"), true, true)) { Flow->StartMatch(MenuDifficulty); }
+	if (MenuButton(FBox2D(FVector2D(X + W - U(40.f) - BW, BY), FVector2D(X + W - U(40.f), BY + U(54.f))), SRId::Screen + 6, TEXT("BEGIN"), true, true)) { Flow->StartMatch(MenuDifficulty, MenuMap, bMenuSandbox); }
+}
+
+void ASRHUD::DrawSavesPanel(float CentreX)
+{
+	USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
+	const TArray<FSRSaveInfo>& Saves = Flow->GetSaves();
+	const double RealNow = FPlatformTime::Seconds();
+	if (RealNow - PendingDeleteTime > 4.0) { PendingDelete.Reset(); }
+	if (RealNow - PendingOverwriteTime > 4.0) { PendingOverwrite.Reset(); }
+	// the player's three saved games and the autosave fit without paging (older installs may hold more: they page)
+	const int32 Rows = USRGameFlowSubsystem::MaxPlayerSaves + 1;
+	const int32 MaxScroll = FMath::Max(0, Saves.Num() - Rows);
+	SavesScroll = FMath::Clamp(SavesScroll, 0, MaxScroll);
+	const int32 Mine = Flow->CountPlayerSaves();
+	const bool bRoom = Flow->CanAddSave();
+
+	const float W = U(860.f), RowH = U(58.f), Pad = U(30.f);   // (wide enough for the save's line, which names its map, beside the two buttons)
+	const float TopH = U(92.f) + (bSavesToSave ? U(66.f) : 0.f);
+	const float H = TopH + Rows * RowH + U(96.f);
+	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
+	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
+	static const TCHAR* ThenTitles[3] = { TEXT("SAVE, THEN RESTART"), TEXT("SAVE, THEN QUIT"), TEXT("SAVE, THEN QUIT") };
+	Text(!bSavesToSave ? TEXT("LOAD GAME") : (bActAfterSave ? ThenTitles[int32(Confirm)] : TEXT("SAVE GAME")), X + W * 0.5f, Y + U(22.f), U(26.f), GoldBright, AlignCentre, Bold, U(5.f));
+	Text(FString::Printf(TEXT("%d of %d slots used"), FMath::Min(Mine, USRGameFlowSubsystem::MaxPlayerSaves), USRGameFlowSubsystem::MaxPlayerSaves), X + W - Pad, Y + U(30.f), U(13.f), Dim, AlignRight);
+	Rule(X + U(40.f), Y + U(66.f), W - U(80.f));
+	float RY = Y + U(84.f);
+	bool bSaved = false;
+	if (bSavesToSave)
+	{
+		// a new save never touches the old ones; with every slot in use the next save goes over one of them
+		const FString Label = bRoom ? FString::Printf(TEXT("NEW SAVE   ·   SLOT %d OF %d"), Mine + 1, USRGameFlowSubsystem::MaxPlayerSaves)
+			: FString::Printf(TEXT("ALL %d SLOTS IN USE   ·   OVERWRITE ONE BELOW"), USRGameFlowSubsystem::MaxPlayerSaves);
+		if (MenuButton(FBox2D(FVector2D(X + Pad, RY), FVector2D(X + W - Pad, RY + U(52.f))), SRId::Screen + 20, Label, bRoom))
+		{
+			bSaved = !Flow->SaveNewMatch().IsEmpty();
+			SavesScroll = 0;
+		}
+		RY += U(66.f);
+	}
+	if (Saves.Num() == 0)
+	{
+		Text(TEXT("No saved games yet."), X + W * 0.5f, RY + U(20.f), U(17.f), Dim, AlignCentre);
+	}
+	FString ToLoad, ToSaveOver, ToDelete;
+	for (int32 r = 0; r < Rows && SavesScroll + r < Saves.Num(); ++r)
+	{
+		const FSRSaveInfo& Info = Saves[SavesScroll + r];
+		const float Y0 = RY + r * RowH;
+		const bool bThisMatch = !Info.bAuto && Info.Slot == Flow->GetActiveSlot();
+		Fill(X + Pad, Y0 + U(2.f), W - 2.f * Pad, RowH - U(6.f), FLinearColor(0.f, 0.f, 0.f, r % 2 == 0 ? 0.22f : 0.12f));
+		Text(Info.bAuto ? TEXT("Autosave") : (bThisMatch ? TEXT("Saved game   ·   this match") : TEXT("Saved game")), X + Pad + U(14.f), Y0 + U(7.f), U(16.f), Info.bAuto ? Gold : GoldBright, AlignLeft, Bold);
+		Text(Info.Line, X + Pad + U(14.f), Y0 + U(29.f), U(14.f), Info.bOldMap ? Dim : Parchment);
+		// right: load (or save over it), then delete
+		const float BW = U(156.f), BH2 = U(40.f), BY = Y0 + (RowH - U(6.f) - BH2) * 0.5f + U(2.f);
+		const float DX = X + W - Pad - U(8.f) - BW, AX = DX - U(8.f) - BW;
+		const bool bAskDelete = PendingDelete == Info.Slot;
+		const bool bAskOver = PendingOverwrite == Info.Slot;
+		if (bSavesToSave)
+		{
+			// over this match's own save at once; over another game's only on a second click (it cannot be undone)
+			if (!Info.bAuto && MenuButton(FBox2D(FVector2D(AX, BY), FVector2D(AX + BW, BY + BH2)), SRId::Screen + 24 + r * 2, bAskOver ? TEXT("SURE?") : TEXT("OVERWRITE"), true, bAskOver))
+			{
+				if (bThisMatch || bAskOver) { ToSaveOver = Info.Slot; }
+				else { PendingOverwrite = Info.Slot; PendingOverwriteTime = RealNow; }
+			}
+		}
+		// (a save from the old map is listed, and can be deleted, but not loaded)
+		else if (MenuButton(FBox2D(FVector2D(AX, BY), FVector2D(AX + BW, BY + BH2)), SRId::Screen + 24 + r * 2, TEXT("LOAD"), !Info.bOldMap)) { ToLoad = Info.Slot; }
+		if (MenuButton(FBox2D(FVector2D(DX, BY), FVector2D(DX + BW, BY + BH2)), SRId::Screen + 25 + r * 2, bAskDelete ? TEXT("SURE?") : TEXT("DELETE"), true, bAskDelete))
+		{
+			if (bAskDelete) { ToDelete = Info.Slot; }
+			else { PendingDelete = Info.Slot; PendingDeleteTime = RealNow; }
+		}
+	}
+	// more than fit: page through them
+	const float FY = RY + Rows * RowH + U(14.f);
+	if (MaxScroll > 0)
+	{
+		if (MenuButton(FBox2D(FVector2D(X + Pad, FY), FVector2D(X + Pad + U(110.f), FY + U(48.f))), SRId::Screen + 22, TEXT("UP"), SavesScroll > 0)) { SavesScroll = FMath::Max(0, SavesScroll - Rows); }
+		if (MenuButton(FBox2D(FVector2D(X + Pad + U(122.f), FY), FVector2D(X + Pad + U(232.f), FY + U(48.f))), SRId::Screen + 23, TEXT("DOWN"), SavesScroll < MaxScroll)) { SavesScroll = FMath::Min(MaxScroll, SavesScroll + Rows); }
+		Text(FString::Printf(TEXT("%d-%d of %d"), SavesScroll + 1, FMath::Min(Saves.Num(), SavesScroll + Rows), Saves.Num()), X + Pad + U(246.f), FY + U(14.f), U(14.f), Dim);
+	}
+	const bool bFresh = RealNow - Flow->GetSaveMessageTime() < 3.0;
+	if (bFresh) { Text(Flow->GetSaveMessage(), X + W * 0.5f, FY + U(14.f), U(15.f), GoldBright, AlignCentre); }
+	else if (bActAfterSave) { Text(TEXT("Choose where to save: the match is saved there first."), X + W * 0.5f, FY + U(14.f), U(15.f), Parchment, AlignCentre); }
+	if (MenuButton(FBox2D(FVector2D(X + W - Pad - U(180.f), FY), FVector2D(X + W - Pad, FY + U(48.f))), SRId::Screen + 21, bActAfterSave ? TEXT("CANCEL") : TEXT("CLOSE"))) { OpenScreen(EScreen::None); }
+
+	// act after drawing (the list must not change under the loop)
+	if (!ToDelete.IsEmpty()) { Flow->DeleteSave(ToDelete); PendingDelete.Reset(); }
+	if (!ToSaveOver.IsEmpty()) { bSaved = Flow->SaveMatch(ToSaveOver); PendingOverwrite.Reset(); }
+	if (!ToLoad.IsEmpty()) { OpenScreen(EScreen::None); Flow->LoadMatch(ToLoad); }
+	// "save, then quit": the save went through, so now the quit
+	if (bSaved && bActAfterSave && Screen == EScreen::Saves) { DoConfirmed(); }
+}
+
+void ASRHUD::DoConfirmed()
+{
+	USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
+	OpenScreen(EScreen::None);
+	switch (Confirm)
+	{
+	case EConfirm::Restart: Flow->StartMatch(); break;
+	case EConfirm::MainMenu: Flow->EnterMainMenu(); break;
+	default: UKismetSystemLibrary::QuitGame(this, PlayerOwner, EQuitPreference::Quit, false); break;
+	}
 }
 
 void ASRHUD::DrawConfirmPanel(float CentreX)
 {
 	USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
 	static const TCHAR* Titles[3] = { TEXT("RESTART THE MATCH?"), TEXT("QUIT TO THE MAIN MENU?"), TEXT("QUIT THE GAME?") };
-	static const TCHAR* Notes[3] = { TEXT("The battle starts over. This match is lost."), TEXT("This match will be lost."), TEXT("Until next time, sovereign.") };
 	static const TCHAR* Yes[3] = { TEXT("RESTART"), TEXT("QUIT"), TEXT("QUIT") };
+	static const TCHAR* SaveYes[3] = { TEXT("SAVE & RESTART"), TEXT("SAVE & QUIT"), TEXT("SAVE & QUIT") };
 	const int32 K = int32(Confirm);
-	const float W = U(520.f), H = U(236.f);
+
+	// Is there a match that would be lost? Only one being played (paused) that has moved on since it was last saved.
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	const bool bInMatch = Flow->GetState() == ESRGameState::Paused && Battle && Battle->GetResult() == ESRBattleResult::Ongoing;
+	const bool bUnsaved = bInMatch && !Flow->IsMatchSaved();
+	FString Note, Detail;
+	if (!bInMatch) { Note = TEXT("Until next time, sovereign."); }
+	else if (!bUnsaved)
+	{
+		Note = Confirm == EConfirm::Restart ? TEXT("The battle starts over.") : TEXT("Your game is saved.");
+		Detail = Confirm == EConfirm::Restart ? TEXT("This match is saved: you can load it again.") : TEXT("Nothing will be lost.");
+	}
+	else
+	{
+		bool bAuto = false;
+		const float Since = Flow->GetUnsavedTime(&bAuto);
+		Note = Confirm == EConfirm::Restart ? TEXT("The battle starts over: unsaved progress will be lost.") : TEXT("Unsaved progress will be lost.");
+		Detail = Since < 0.f ? FString(TEXT("This match has not been saved."))
+			: FString::Printf(TEXT("Last %s %s of play ago."), bAuto ? TEXT("autosave") : TEXT("saved"), *SRStyle::Countdown(Since));
+	}
+
+	const float W = bUnsaved ? U(700.f) : U(520.f), H = U(250.f);
 	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat((View.Y - H) * 0.5f);
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(Titles[K], X + W * 0.5f, Y + U(30.f), U(23.f), GoldBright, AlignCentre, Bold, U(3.f));
 	Rule(X + U(40.f), Y + U(72.f), W - U(80.f));
-	Text(Notes[K], X + W * 0.5f, Y + U(92.f), U(17.f), Parchment, AlignCentre);
-	const float BW = (W - U(80.f) - U(14.f)) * 0.5f, BY = Y + H - U(84.f);
-	if (MenuButton(FBox2D(FVector2D(X + U(40.f), BY), FVector2D(X + U(40.f) + BW, BY + U(54.f))), SRId::Screen + 8, TEXT("CANCEL"))) { OpenScreen(EScreen::None); }
-	if (MenuButton(FBox2D(FVector2D(X + W - U(40.f) - BW, BY), FVector2D(X + W - U(40.f), BY + U(54.f))), SRId::Screen + 9, Yes[K]))
+	Text(Note, X + W * 0.5f, Y + U(90.f), U(17.f), bUnsaved ? Amber : Parchment, AlignCentre);
+	if (!Detail.IsEmpty()) { Text(Detail, X + W * 0.5f, Y + U(116.f), U(14.f), Dim, AlignCentre); }
+
+	const int32 N = bUnsaved ? 3 : 2;
+	const float Gap = U(14.f), BW = (W - U(80.f) - Gap * (N - 1)) / N, BY = Y + H - U(84.f);
+	auto Btn = [&](int32 i) { const float BX = X + U(40.f) + i * (BW + Gap); return FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + U(54.f))); };
+	if (MenuButton(Btn(0), SRId::Screen + 8, TEXT("CANCEL"))) { OpenScreen(EScreen::None); return; }
+	if (bUnsaved)
 	{
-		Screen = EScreen::None;
-		switch (Confirm)
+		if (MenuButton(Btn(1), SRId::Screen + 9, TEXT("DON'T SAVE"))) { DoConfirmed(); return; }
+		if (MenuButton(Btn(2), SRId::Screen + 10, SaveYes[K], true, true))
 		{
-		case EConfirm::Restart: Flow->StartMatch(); break;
-		case EConfirm::MainMenu: Flow->EnterMainMenu(); break;
-		default: UKismetSystemLibrary::QuitGame(this, PlayerOwner, EQuitPreference::Quit, false); break;
+			// over this match's own saved game, else a new slot; with every slot in another game's use, the list comes
+			// up to choose which one goes, and the quit follows that save
+			if (!Flow->SaveCurrentMatch().IsEmpty()) { DoConfirmed(); }
+			else if (!Flow->CanAddSave()) { OpenSaves(true, true); }
 		}
+		return;
 	}
+	if (MenuButton(Btn(1), SRId::Screen + 9, Yes[K])) { DoConfirmed(); }
 }

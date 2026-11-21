@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_LegL",
+ "faces": 544,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0779,
+   -0.1036,
+   -0.4
+  ],
+  [
+   0.1041,
+   0.1035,
+   0.1041
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.1125,
+  0.0,
+  0.7
+ ],
+ "part": "LegL",
+ "parent": "",
+ "triangles": 1088,
+ "blocks": 61
+}

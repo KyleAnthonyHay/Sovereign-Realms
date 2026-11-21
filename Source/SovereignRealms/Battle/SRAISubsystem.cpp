@@ -451,7 +451,7 @@ bool USRAISubsystem::TryBuild(FSRCommander& C, ESRBuildingType Type)
 	case ESRBuildingType::Range:
 	case ESRBuildingType::Stable:
 	case ESRBuildingType::Workshop: Near = Base + Fwd * 300.f + Side * (FMath::RandBool() ? 1.f : -1.f) * FMath::FRandRange(1300.f, 1900.f); Radius = 2400.f; break;
-	case ESRBuildingType::Mine: Near = Base; Radius = 16000.f; break; // the nearest free vein, wherever it is
+	case ESRBuildingType::Mine: Near = Base; Radius = 26000.f; break; // the nearest free vein, wherever it is (map 3: the meadow's and the highland's are 170 to 250 m out)
 	case ESRBuildingType::Granary:
 	case ESRBuildingType::Treasury: Near = Base - Fwd * 500.f + Side * FMath::FRandRange(-1500.f, 1500.f); Radius = 2600.f; break; // tucked in behind the castle
 	default: break;
@@ -514,8 +514,7 @@ void USRAISubsystem::ManageEconomy(FSRCommander& C, const TArray<ASRUnit*>& Mine
 		auto Want = [&](ESRBuildingType T, bool bOrder = false)
 		{
 			const float* Until = C.BuildBlockedUntil.Find(T);
-			if (T == ESRBuildingType::Tower && Towers >= Eco->GetMaxTowers(C.Team)) { return; }   // the castle's level allows no more
-			if ((T == ESRBuildingType::Granary || T == ESRBuildingType::Treasury) && Eco->CountStanding(T, C.Team) >= Eco->GetMaxStores(C.Team)) { return; }
+			if (Eco->IsAtBuildLimit(T, C.Team)) { return; }   // the castle's level allows no more (farms, towers, storehouses)
 			if (!Until || *Until <= Clock) { Wants.Add({ T, bOrder }); }
 		};
 		const float Food = Eco->GetResource(C.Team, ESRResource::Food);
@@ -628,7 +627,8 @@ void USRAISubsystem::Recruit(FSRCommander& C, const TArray<ASRUnit*>& Mine)
 	if (Builders < FMath::Min(Prof.Builders, Eco->GetMaxBuilders(C.Team)) && (Builders > 0 || Total >= 4 || Eco->CountBuildings(ESRBuildingType::Barracks, C.Team) > 0)) { Order.Add(ESRUnitType::Builder); }
 	// its one Scout (Normal and Hard), once the army has a core: when the castle's level, the one-at-a-time rule and the
 	// wait between two all allow it (the same rules as the player's: USREconomySubsystem::GetScoutRefusal)
-	if (Prof.AdaptWeight > 0.f && Total >= 6 && Eco->GetScoutRefusal(C.Team).IsEmpty()
+	// (it is dear: wanted only once it can already be paid for, so saving up never stalls the troops)
+	if (Prof.AdaptWeight > 0.f && Total >= 6 && Eco->GetScoutRefusal(C.Team).IsEmpty() && Eco->CanAfford(C.Team, F.CostFor(ESRUnitType::Scout))
 		&& Eco->GetPopulation(C.Team) + Eco->GetQueuedPopulation(C.Team) + F.StatsFor(ESRUnitType::Scout).PopCost <= Eco->GetPopulationCap(C.Team)) { Order.Add(ESRUnitType::Scout); }
 	if (Count[3] < WantCatapults) { Order.Add(ESRUnitType::Catapult); }
 	if (Count[2] < WantRiders) { Order.Add(ESRUnitType::Horseman); }

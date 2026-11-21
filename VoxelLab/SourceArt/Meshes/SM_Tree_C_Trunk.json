@@ -1,0 +1,18 @@
+{
+ "name": "SM_Tree_C_Trunk",
+ "faces": 3774,
+ "collision": "complex",
+ "bounds": [
+  [
+   -1.875,
+   -1.625,
+   -0.25
+  ],
+  [
+   1.375,
+   1.375,
+   6.625
+  ]
+ ],
+ "lights": []
+}

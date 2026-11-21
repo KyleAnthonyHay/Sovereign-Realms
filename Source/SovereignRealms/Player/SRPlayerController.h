@@ -63,6 +63,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+	/** Trackpad gestures (Mac): two-finger scroll pans the map (or zooms: Settings), pinch zooms toward the pointer. */
+	virtual bool InputGesture(const FInputDeviceId DeviceId, EGestureEvent GestureType, EGesturePhase GesturePhase, const FVector2D& GestureDelta,
+		bool bIsDirectionInvertedFromDevice, const uint64 Timestamp) override;
 
 	// ---- Selection (also used by the sr.* debug commands) ----
 	void SelectUnits(const TArray<ASRUnit*>& Units, bool bAdditive);
@@ -105,7 +108,16 @@ public:
 	void ArmPatrolCommand() { ArmPatrol(); }
 	/** V: the next click picks what the selected troops guard (one of your Builders or buildings). */
 	void ArmGuardCommand();
+	/** O: the selected Scouts roam on their own (struck, they run home). */
+	void RoamCommand();
 	bool IsGuardArmed() const { return bGuardArmed; }
+	/** The selected Medics look after Ward (follow it, heal everyone round it). False if none were selected. */
+	bool IssueHeal(ASRUnit* Ward);
+	/** The selected Builders repair the old ruin at Index: it is paid for and laid as a site (a Relic Tower on a
+	 * relic, a Watchtower on an old tower) and they go and raise it. False (with a message) if it cannot be. */
+	bool IssueRepairRuin(int32 Index);
+	/** The free ruin under the cursor, or INDEX_NONE. */
+	int32 RuinUnderCursor() const;
 	bool IsPatrolArmed() const { return bPatrolArmed; }
 	void IssuePatrol(const FVector& GroundPoint);
 	/** Disband the selected platoon (its troops stay selected). */
@@ -133,6 +145,10 @@ public:
 	static void GetBuildMenuEntries(ESRBuildCategory Tab, TArray<ESRBuildingType>& Out);
 	void CycleStanceCommand() { OnCycleStance(); }
 	void CancelConstructionCommand() { OnDeleteBuilding(); }
+	/** Delete / the Demolish button on a finished building of ours: asks first; a second press within a moment pulls
+	 * it down (USRFeelSettings::DemolishRefund of what it cost comes back). */
+	void DemolishCommand();
+	bool IsDemolishArmed() const;
 
 	// ---- Building placement ----
 	void BeginPlacement(ESRBuildingType Type);
@@ -143,6 +159,8 @@ public:
 	const FText& GetPlacementReason() const { return PlacementReason; }
 	bool IsPlacementValid() const { return bPlacementValid; }
 	bool PlacementNeedsBuilder() const { return bPlacementNeedsBuilder; }
+	/** The spot is an old ruined tower (a Watchtower raised on it costs less) or a relic. */
+	bool PlacementOnRuin() const { return bPlacementOnRuin; }
 	/** Where the building in hand would stand (its origin), while placing. */
 	FVector GetPlacementLocation() const { return PlacementLocation; }
 
@@ -246,6 +264,9 @@ private:
 	void OnRecruitCatapult() { RecruitHotkey(ESRUnitType::Catapult); }
 	void OnRecruitBuilder() { RecruitHotkey(ESRUnitType::Builder); }
 	void OnRecruitScout() { RecruitHotkey(ESRUnitType::Scout); }
+	void OnRecruitMedic() { RecruitHotkey(ESRUnitType::Medic); }
+	/** Shift held: a click adds a point to a pathway (right-click) or, with P armed, to a patrol. */
+	bool IsPathModifierDown() const;
 	void RecruitHotkey(ESRUnitType Type);
 
 	UPROPERTY(Transient) TObjectPtr<UInputMappingContext> MappingContext;
@@ -266,16 +287,19 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> BuildTabAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> PatrolAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> GuardAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> RoamAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> HoldAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> FormationAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> StanceAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> CancelAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DeleteAction;
 	UPROPERTY(Transient) TObjectPtr<ASRPlacementPreview> Preview;
-	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[6];   // one per ESRUnitType
+	UPROPERTY(Transient) TObjectPtr<UInputAction> RecruitActions[7];   // one per ESRUnitType
 	UPROPERTY(Transient) TObjectPtr<UInputAction> RepairAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> DismissAction;
 	double DismissArmedTime = -100.0;
+	double DemolishArmedTime = -100.0;
+	TWeakObjectPtr<ASRBuilding> DemolishArmedFor;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> UpgradeAction;
 
 	UPROPERTY(Transient) TObjectPtr<USRBattleSubsystem> Battle;
@@ -285,6 +309,7 @@ private:
 	ESRBuildingType PlacingType = ESRBuildingType::Farm;
 	FText PlacementReason;
 	bool bPlacementNeedsBuilder = false;
+	bool bPlacementOnRuin = false;
 	bool bPlacementValid = false;
 	FVector PlacementLocation = FVector::ZeroVector;
 	TWeakObjectPtr<ASRUnit> Hovered;

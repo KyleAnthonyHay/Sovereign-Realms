@@ -1,0 +1,18 @@
+{
+ "name": "SM_WeaponRack",
+ "faces": 1018,
+ "collision": "complex",
+ "bounds": [
+  [
+   -0.75,
+   -0.375,
+   0.0
+  ],
+  [
+   0.75,
+   0.375,
+   1.8125
+  ]
+ ],
+ "lights": []
+}

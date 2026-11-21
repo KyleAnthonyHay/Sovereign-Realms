@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_ForeL",
+ "faces": 523,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0868,
+   -0.1941,
+   -0.4406
+  ],
+  [
+   0.127,
+   0.0826,
+   0.0726
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.34906,
+  0.0,
+  0.95224
+ ],
+ "part": "ForeL",
+ "triangles": 1047,
+ "blocks": 62
+}

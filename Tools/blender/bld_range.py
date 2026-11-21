@@ -7,11 +7,21 @@ team's standard at the gate.
 
 States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
 damage(); `site` and `ruin` are small meshes of their own on the same footprint.
+
+Levels 1-3 (k.level), the training buildings' shared progression (built up under slate, then fortified):
+  2  the lodge is rebuilt in stone with a jettied half-timbered storey under a steep dark slate roof; a stone butts
+     wall stands behind the targets
+  3  fortified: an archers' tower at the lodge's front-left corner, flat-topped like the castle's (frieze under an
+     oversailing head, crow-stepped merlons, a standard on its roof); dark stone at the foot, the butts wall
+     crenellated with fires on its end piers, a second standard, creeper
+The level banner (kit.level_flag) stands on the front fence line just right of the gate and its standard (the olive
+overhangs the front-left corner).
 """
 import math
 
+from bld_barracks import rook_head
 from bld_farm import fence
-from bldkit import STATES, rect  # noqa: F401
+from bldkit import STATES, inset_ring, rect  # noqa: F401
 
 NAME = "range"
 MESH = "SM_Bld_Range"
@@ -19,14 +29,22 @@ SEED = 59
 FOOTPRINT = [-400.0, -400.0, 400.0, 400.0]
 RING_RADIUS = 560.0
 PREVIEW_FIGURES = [(-500, -240), (-540, -130)]
+LEVELS = 3
 
 LX0, LX1, LY0, LY1 = 120.0, 384.0, -384.0, -96.0         # the lodge
 EAVE, RISE = 240.0, 140.0
 SX0, SX1, SY0, SY1 = -262.0, -128.0, 14.0, 372.0         # the shooting line's roof (low front edge, high back edge)
 BUTTS = ((276.0, 52.0), (276.0, 190.0), (276.0, 326.0))
 GATE = (-256.0, -124.0)                                  # the gap in the front fence (y)
+JETTY = 16.0                                             # level 2 on: the upper storey's overhang
+TWR, TWR_TOP = (92.0, 222.0, -398.0, -268.0), 470.0      # level 3: the archers' tower (x0, x1, y0, y1), its parapet top
 F = 386.0                                                # the fence line
 HOLES = ((-1, -300.0, 84.0, 58.0), (1, -180.0, 70.0, 54.0))
+
+
+def eave(k):
+    """The lodge's wall head: level 2 adds a storey."""
+    return EAVE + (84.0 if k.level >= 2 else 0.0)
 
 
 def front(ya, yb, **kw):
@@ -90,20 +108,45 @@ def quiver(k, pos, scale=0.7):
 def lodge(k):
     u0 = 36.0
     r0 = rect(LX0, LY0, LX1, LY1)
-    r1 = k.wall("Bld_Mudbrick", r0, 0, 30, inset=6, u0=u0, bleach=False)
-    k.cap("Bld_Mudbrick", r0, 0.5, down=True)
+    stone = k.level >= 2                                     # level 2 on: stone for mudbrick and plaster
+    base, body = ("Bld_StoneDark" if k.level >= 3 else "Bld_AshlarLarge", "Bld_Ashlar") if stone else ("Bld_Mudbrick", "Bld_Plaster")
+    E = eave(k)
+    r1 = k.wall(base, r0, 0, 30, inset=6, u0=u0, bleach=False)
+    k.cap(base, r0, 0.5, down=True)
     fx = LX0 + 6
-    win = dict(z0=92, z1=146, depth=12, back="Bld_Shutter", reveal="Bld_Mudbrick", shade=0.7)
-    ops = {2: [front(-222, -150, z0=30, z1=156, depth=18, back="Bld_Planks", reveal="Bld_Mudbrick", shade=0.7, back_shade=0.75, no_sill=True)]
+    win = dict(z0=92, z1=146, depth=12, back="Bld_Shutter", reveal="Bld_Trim" if stone else "Bld_Mudbrick", shade=0.7)
+    ops = {2: [front(-222, -150, z0=30, z1=156, depth=18, back="Bld_Planks", reveal="Bld_Trim" if stone else "Bld_Mudbrick", shade=0.7, back_shade=0.75,
+                     no_sill=True)]
            + ([front(-330, -282, **win)] if not k.damaged else []) + k.breach((LY1 - 6) + 244, (LY1 - 6) + 352, 44, 150, depth=20),
            3: [dict(a=110, b=158, **win)]}
-    k.wall("Bld_Plaster", r1, 30, EAVE - 60, u0=u0, openings=ops)
+    k.wall(body, r1, 30, EAVE - 60, u0=u0, openings=ops)
     k.wall("Bld_Frieze", r1, EAVE - 60, EAVE, v0=0.0, bleach=False, u0=u0)
+    if stone:                                                # the upper storey: half-timbered, jettied out on beam ends
+        k.band("Bld_Beam", r1, EAVE, EAVE + 10, out=4, u0=u0)
+        k.beam_ends("Bld_Beam", (fx, LY1 - 30), (fx, LY0 + 30), EAVE - 2, 6, size=(12, 12), out=JETTY + 4)
+        k.beam_ends("Bld_Beam", (LX1 - 30, LY1 - 6), (fx + 24, LY1 - 6), EAVE - 2, 5, size=(12, 12), out=JETTY + 4)
+        rj = inset_ring(r1, -JETTY)
+        k.cap("Bld_Beam", rj, EAVE + 10, down=True, shade=0.6)
+        light = dict(z0=EAVE + 26, z1=EAVE + 62, depth=10, back="Bld_Dark", reveal="Bld_Beam", shade=0.6)
+        k.wall("Bld_Timber", rj, EAVE + 10, E, u0=u0, v0=0.0, openings={2: [front(y - 14, y + 14, **light) for y in (-304, -176)],
+                                                                        1: [dict(a=s - 14, b=s + 14, **light) for s in (80, 208)]})
+        k.band("Bld_Beam", rj, E - 10, E + 2, out=4, u0=u0)
     k.steps("Bld_Trim", LX0 - 34, LX0 + 8, -226, -146, 0, 30, 2)
     k.obox("Bld_Beam", (fx - 3, -186, 164), (14, 100, 14), grain="y")
-    for y, facing in ((LY0 + 6, -1), (LY1 - 6, 1)):
-        k.gable_end("Bld_Plaster", fx, LX1 - 6, y, EAVE, RISE, facing=facing)
-    k.gable_roof("Bld_Thatch", fx, LX1 - 6, LY0 + 6, LY1 - 6, EAVE, RISE, over=38, verge=24, holes=HOLES)
+    if not stone:
+        for y, facing in ((LY0 + 6, -1), (LY1 - 6, 1)):
+            k.gable_end("Bld_Plaster", fx, LX1 - 6, y, EAVE, RISE, facing=facing)
+        k.gable_roof("Bld_Thatch", fx, LX1 - 6, LY0 + 6, LY1 - 6, EAVE, RISE, over=38, verge=24, holes=HOLES)
+    else:
+        for y, facing in ((LY0 + 6 - JETTY, -1), (LY1 - 6 + JETTY, 1)):
+            k.gable_end("Bld_Timber", fx - JETTY, LX1 - 6 + JETTY, y, E, RISE, facing=facing)
+        k.gable_roof("Bld_Slate", fx - JETTY, LX1 - 6 + JETTY, LY0 + 6 - JETTY, LY1 - 6 + JETTY, E, RISE, over=24, verge=18, ridge="Bld_Slate",
+                     holes=HOLES)
+        for z in (62, 118):                                  # the door bound in iron
+            k.obox("Bld_Iron", (fx + 14, -186, z), (4, 66, 8))
+        if k.level >= 3:
+            watchtower(k)
+            k.patch("Bld_Leaves", (LX0 + 150, LY1, 0), (-1, 0, 0), (0, 0, 1), 150, 200, cells=12, fill=0.55, out=9)
     # the fletching bench by the door: shafts, a basket of feathers, a glue pot, a stool
     with k.at((36, -300, 0), yaw=8):
         k.obox("Bld_Planks", (0, 0, 74), (64, 150, 6), grain="y")
@@ -117,6 +160,40 @@ def lodge(k):
         k.cyl("Bld_Bark", (-60, 10, 0), (-60, 10, 40), 15.0, sides=7, grain="ring", cap_slot="Bld_Beam")
     k.pot((LX0 - 24, -116, 0), 0.95)
     k.pole_banner((LX0 - 30, -60, 0), height=400.0)
+
+
+def watchtower(k):
+    """Level 3: an archers' tower at the lodge's front-left corner: dark stone below, the castle's flat top (rook_head),
+    a standard on the roof and the company's banner down its face."""
+    x0, x1, y0, y1 = TWR
+    cx, cy, hw = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2
+    top = TWR_TOP
+    r0 = rect(x0, y0, x1, y1)
+    r1 = k.wall("Bld_StoneDark", r0, 0, 96, inset=8, u0=210.0, bleach=False)
+    k.band("Bld_Trim", r1, 96, 104, out=3, u0=210.0)
+    side = 2 * (hw - 8)
+    slit = lambda z: dict(a=side / 2 - 6, b=side / 2 + 6, z0=z, z1=z + 56, depth=12, back="Bld_Dark", shade=0.5)
+    r2 = k.wall("Bld_Ashlar", r1, 104, top - 76, u0=210.0, openings={2: [slit(150), slit(290)] + k.breach(22, 84, 180, 280), 3: [slit(210), slit(330)]})
+    rook_head(k, r2, top - 76, top, u0=210.0, width=36.0, gap=20.0, thick=20.0)
+    k.pole_banner((cx + 8, cy, top - 34), height=180.0)
+    k.cyl("Bld_Iron", (x0 + 2, cy - 34, top - 96), (x0 + 2, cy + 34, top - 96), 2.4, sides=4)      # the company's banner down its face
+    k.hang_cloth((x0 + 2, cy - 28, top - 98), (x0 + 2, cy + 28, top - 98), 150.0)
+
+
+def butts_wall(k):
+    """Level 2 on: a stone wall behind the butts; level 3 crenellates it between two end piers with fires."""
+    x0, x1, y0, y1, h = 384.0, 410.0, -4.0, 396.0, 190.0
+    r = rect(x0, y0, x1, y1)
+    k.wall("Bld_StoneDark" if k.level >= 3 else "Bld_AshlarLarge", r, 0, 60, u0=90.0, bleach=False)
+    k.wall("Bld_Ashlar", r, 60, h, u0=90.0)
+    k.band("Bld_Trim", r, h, h + 10, out=4, u0=90.0)
+    k.cap("Bld_Trim", r, h + 10)
+    if k.level >= 3:
+        k.crenels("Bld_Ashlar", r, h + 10, height=40, width=44, gap=34, thick=26, cap="Bld_Trim", edges=(2,))
+        for y in (y0 + 16, y1 - 16):
+            k.obox_wall("Bld_AshlarLarge", (x0 + 13, y, 0), (46, 46, h + 62), 0.0, cap="Bld_Trim")
+            k.brazier((x0 + 13, y, h + 62), h=56)
+        k.patch("Bld_Leaves", (x0, 300, 0), (0, -1, 0), (0, 0, 1), 130, 170, cells=12, fill=0.55, out=4)
 
 
 def shooting_line(k):
@@ -176,11 +253,16 @@ def complete(k):
     if not k.damaged:
         k.pole_banner((-F + 26, GATE[1] + 60, 0), height=300.0)
     k.tree((-316, -326, 0), height=290, spread=140, lean=(-8, 10), blobs=5)
+    if k.level >= 2:                                         # level parts last: they must not shift the kit's dice for level 1
+        butts_wall(k)
+    if k.level >= 3:
+        k.pole_banner((-F + 26, 330.0, 0), height=300.0)
+    k.level_flag((-F - 8, 34.0, 0), height=240.0)            # right of the gate: the olive overhangs the corner
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 280))
     gate_y = (GATE[0] + GATE[1]) / 2
     k.sockets["gate"] = (-460.0, gate_y, 0.0)        # where a recruit appears: just outside the gate
     k.sockets["rally"] = (-760.0, gate_y, 0.0)       # default rally point, straight out from it
-    k.sockets["label"] = (120.0, 0.0, 520.0)
+    k.sockets["label"] = (120.0, 0.0, (520.0, 590.0, 790.0)[k.level - 1])
     k.sockets["popup"] = (0.0, 0.0, 320.0)
 
 
@@ -197,6 +279,11 @@ def damage(k):
     k.charred((-F + 26, GATE[1] + 60, 0), (-F + 150, GATE[1] + 150, 12), size=9)             # the standard's pole
     k.scorch("blot_w", (-262, -290, 0), "up", out=2.0)
     k.charred((-386, -210, 6), (-330, -60, 12), size=7)
+    if k.level >= 2:                                         # the butts wall, blackened behind the burnt bales
+        k.scorch("plume_s", (384, 190, 40))
+        k.rubble((330, 380, 0), (70, 60), 0, slot="Bld_Ashlar", blocks=4, beams=0, mound=False)
+    if k.level >= 3:
+        k.scorch("plume_s", (TWR[0] + 8, (TWR[2] + TWR[3]) / 2 + 16, 230))      # the tower, over its breach
 
 
 def site(k):

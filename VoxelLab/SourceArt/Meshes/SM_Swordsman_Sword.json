@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_Sword",
+ "faces": 430,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0538,
+   -0.5155,
+   -0.1232
+  ],
+  [
+   0.0541,
+   0.1637,
+   0.3454
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.37198,
+  -0.24229,
+  0.66022
+ ],
+ "part": "Sword",
+ "triangles": 860,
+ "blocks": 20
+}

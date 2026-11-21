@@ -1,7 +1,7 @@
 {
  "name": "granary",
  "mesh": "SM_Bld_Granary",
- "triangles": 2192,
+ "triangles": 2270,
  "bounds": {
   "min": [
    -307.7,
@@ -58,6 +58,7 @@
   "Bld_Beam",
   "Bld_Bronze",
   "Bld_Dark",
+  "Bld_LevelFlag",
   "Bld_Planks",
   "Bld_Pot",
   "Bld_Thatch",
@@ -89,12 +90,12 @@
   },
   "damaged": {
    "mesh": "SM_Bld_Granary_Damaged",
-   "triangles": 2690,
+   "triangles": 2766,
    "bounds": {
     "min": [
      -346.0,
      -328.9,
-     -8.8
+     -8.4
     ],
     "max": [
      242.7,
@@ -108,6 +109,7 @@
     "Bld_Bronze",
     "Bld_Char",
     "Bld_Dark",
+    "Bld_LevelFlag",
     "Bld_Planks",
     "Bld_Pot",
     "Bld_Scorch",
@@ -136,6 +138,185 @@
     "Bld_Thatch",
     "Bld_Trim"
    ]
+  }
+ },
+ "levels": {
+  "2": {
+   "complete": {
+    "mesh": "SM_Bld_Granary_L2",
+    "triangles": 2396,
+    "bounds": {
+     "min": [
+      -306.4,
+      -328.9,
+      -4.0
+     ],
+     "max": [
+      242.7,
+      335.0,
+      515.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_Banner",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Dark",
+     "Bld_Iron",
+     "Bld_LevelFlag",
+     "Bld_Planks",
+     "Bld_Pot",
+     "Bld_Slate",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ],
+    "sockets": {
+     "gate": [
+      -380.0,
+      0.0,
+      0.0
+     ],
+     "label": [
+      0.0,
+      0.0,
+      658.0
+     ],
+     "popup": [
+      -200.0,
+      0.0,
+      260.0
+     ]
+    }
+   },
+   "damaged": {
+    "mesh": "SM_Bld_Granary_L2_Damaged",
+    "triangles": 2856,
+    "bounds": {
+     "min": [
+      -346.0,
+      -328.9,
+      -6.0
+     ],
+     "max": [
+      242.7,
+      335.0,
+      515.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_Banner",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Char",
+     "Bld_Dark",
+     "Bld_Iron",
+     "Bld_LevelFlag",
+     "Bld_Planks",
+     "Bld_Pot",
+     "Bld_Scorch",
+     "Bld_Slate",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ]
+   }
+  },
+  "3": {
+   "complete": {
+    "mesh": "SM_Bld_Granary_L3",
+    "triangles": 3260,
+    "bounds": {
+     "min": [
+      -338.0,
+      -328.9,
+      -4.0
+     ],
+     "max": [
+      242.7,
+      336.7,
+      714.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_AshlarLarge",
+     "Bld_Banner",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Dark",
+     "Bld_Flame",
+     "Bld_Frieze",
+     "Bld_Iron",
+     "Bld_Leaves",
+     "Bld_LevelFlag",
+     "Bld_Planks",
+     "Bld_Pot",
+     "Bld_RoofClay",
+     "Bld_Slate",
+     "Bld_StoneDark",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ],
+    "sockets": {
+     "gate": [
+      -380.0,
+      0.0,
+      0.0
+     ],
+     "label": [
+      0.0,
+      0.0,
+      774.0
+     ],
+     "popup": [
+      -200.0,
+      0.0,
+      260.0
+     ]
+    }
+   },
+   "damaged": {
+    "mesh": "SM_Bld_Granary_L3_Damaged",
+    "triangles": 3535,
+    "bounds": {
+     "min": [
+      -346.0,
+      -328.9,
+      -8.9
+     ],
+     "max": [
+      242.7,
+      335.0,
+      714.0
+     ]
+    },
+    "slots": [
+     "Bld_Ashlar",
+     "Bld_AshlarLarge",
+     "Bld_Banner",
+     "Bld_Beam",
+     "Bld_Bronze",
+     "Bld_Char",
+     "Bld_Dark",
+     "Bld_Flame",
+     "Bld_Frieze",
+     "Bld_Iron",
+     "Bld_LevelFlag",
+     "Bld_Planks",
+     "Bld_Pot",
+     "Bld_RoofClay",
+     "Bld_Scorch",
+     "Bld_Slate",
+     "Bld_StoneDark",
+     "Bld_Thatch",
+     "Bld_Timber",
+     "Bld_Trim"
+    ]
+   }
   }
  }
 }

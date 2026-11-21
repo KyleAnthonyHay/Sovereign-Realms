@@ -7,20 +7,47 @@ finial on the flat roof. Before the door: iron-bound chests, one open on its coi
 
 States (bldkit.STATES): `complete`; `damaged` is the same build with the hooks below switched on (k.damaged) plus
 damage(); `site` and `ruin` are small meshes of their own on the same footprint.
+
+Levels 1-3 (k.level), each adding to the last (medieval and weathered: dark stone, iron; no gold; everything
+ends flat under a crenellated crown, as the castle's towers do; the granary, its pair, climbs the same way):
+  2  built up: in place of the dome an upper strongroom stands on the roof, set back behind crow-stepped merlons and
+     bound in iron: its head oversails on a corbel course over a glazed frieze, merlons round a flat roof, the
+     standard on a pole; the vault's own bands are iron
+  3  fortified: the upper strongroom is a storey taller and of dark stone, four square corner turrets with their
+     own merlons stand on the roof, the footing is dark stone, long banners hang down the front, creeper climbs
+     the side
+The level banner (kit.level_flag) stands at the forecourt's front-left corner.
 """
-from bldkit import STATES, inset_ring, ngon, rect  # noqa: F401  (STATES: which meshes build_building.py exports)
+from bldkit import MATERIALS, STATES, inset_ring, ngon, rect  # noqa: F401  (STATES: which meshes build_building.py exports)
 
 NAME = "treasury"
 MESH = "SM_Bld_Treasury"
 SEED = 53
 FOOTPRINT = [-300.0, -300.0, 300.0, 300.0]
 RING_RADIUS = 420.0
+LEVELS = 3
 PREVIEW_FIGURES = [(-400, 130), (-440, -30)]
 
 X0, X1, Y0, Y1 = -160.0, 230.0, -200.0, 200.0     # the vault's footing
 FOOT = 54.0                                       # top of the footing
 WALL = 292.0                                      # top of the walls
 ROOF = 352.0                                      # top of the coping
+
+
+def mat(slot, fallback):
+    """A slot of the medieval set, or its stand-in while the kit does not have it yet."""
+    return slot if slot in MATERIALS else fallback
+
+
+IRON, DARK = mat("Bld_Iron", "Bld_Bronze"), mat("Bld_StoneDark", "Bld_AshlarLarge")
+
+
+def upper_h(k):
+    """The upper strongroom's height over the roof, to the top of its parapet (level 2 on)."""
+    return 270.0 if k.level >= 3 else 190.0
+
+
+POLE = 200.0                                      # the standard on the upper strongroom's roof
 
 
 def chest(k, pos, size=(66, 46, 36), yaw=0.0, open_=False):
@@ -41,7 +68,7 @@ def chest(k, pos, size=(66, 46, 36), yaw=0.0, open_=False):
 def vault(k):
     u0 = 20.0
     r0 = rect(X0, Y0, X1, Y1)
-    r1 = k.wall("Bld_AshlarLarge", r0, 0, FOOT, inset=16, u0=u0, bleach=False)       # battered footing
+    r1 = k.wall(DARK if k.level >= 3 else "Bld_AshlarLarge", r0, 0, FOOT, inset=16, u0=u0, bleach=False)       # battered footing
     k.band("Bld_Trim", r1, FOOT, FOOT + 8, out=4, u0=u0)
     side = (Y1 - Y0) - 32
     depth = (X1 - X0) - 32
@@ -56,12 +83,13 @@ def vault(k):
     }
     r2 = k.wall("Bld_AshlarLarge", r1, FOOT + 8, WALL, inset=8, u0=u0, openings=ops)
     # bound like a strongbox: two bronze bands right round it; the lower one runs across the door as its bar
+    metal = IRON if k.level >= 2 else "Bld_Bronze"
     for z in (FOOT + 76, FOOT + 186):
         f = (z - FOOT - 8) / (WALL - FOOT - 8)
-        k.band("Bld_Bronze", inset_ring(r1, 8 * f), z, z + 14, out=5, u0=u0)
+        k.band(metal, inset_ring(r1, 8 * f), z, z + 14, out=5, u0=u0)
     fx = X0 + 16                                                                      # the front face at the footing's head
     for y in (-66, 66):                                                               # the bar's keeps, either side of the door
-        k.obox("Bld_Bronze", (fx - 8, y, FOOT + 83), (16, 16, 30))
+        k.obox(metal, (fx - 8, y, FOOT + 83), (16, 16, 30))
     k.obox("Bld_Trim", (fx - 2, 0, FOOT + 176), (26, 132, 16), grain="y")             # lintel
     k.steps("Bld_AshlarLarge", X0 - 96, X0 + 14, -78, 78, 0, FOOT + 8, 3, top="Bld_Trim")
     # coping, the team's frieze, a low parapet
@@ -71,8 +99,10 @@ def vault(k):
     k.wall("Bld_Frieze", r3, WALL + 12, ROOF - 12, v0=0.0, bleach=False, u0=u0)
     k.band("Bld_Trim", r3, ROOF - 12, ROOF, out=6, u0=u0)
     k.cap("Bld_Trim", r3, ROOF)
-    # the dome: bronze, on a low stone drum, a gold finial at its crown
     cx, cy = (X0 + X1) / 2, 0.0
+    if k.level >= 2:
+        return upper(k, r3, cx)
+    # the dome: bronze, on a low stone drum, a gold finial at its crown
     k.lathe("Bld_Ashlar", (cx, cy, ROOF), [(132, 0), (132, 26), (124, 30)], sides=12, rot=15)
     if not k.damaged:
         k.lathe("Bld_Bronze", (cx, cy, ROOF + 30), [(124, 0), (116, 34), (92, 68), (56, 94), (18, 108), (8, 112)], sides=12, rot=15)
@@ -81,6 +111,54 @@ def vault(k):
         k.lathe("Bld_Bronze", (cx, cy, ROOF + 30), [(124, 0), (116, 34), (96, 62)], sides=12, rot=15, top="Bld_Dark")
         k.scorch("blot_m", (cx + 20, cy - 30, ROOF + 94), "up", out=1.5)
     k.pole_banner((X1 - 40, Y0 + 40, ROOF), height=250.0, cloth_w=56.0, cloth_h=150.0)
+
+
+def upper(k, r3, cx):
+    """Level 2 on: the upper strongroom on the roof behind crow-stepped merlons, iron-bound, flat-topped like the
+    castle's towers (corbel course, glazed frieze, merlons, a standard on a pole); level 3 makes it taller and of
+    dark stone and adds the corner turrets, the long banners and the creeper."""
+    lv = k.level
+    k.stepped_merlons("Bld_Ashlar", r3, ROOF, width=46, gap=26, thick=24, h1=24, h2=20, broken=0.1, cap="Bld_Trim")
+    hx, hy, h = 132.0, 140.0, ROOF + upper_h(k)
+    top = h - 70
+    u0 = 140.0
+    t0 = rect(cx - hx, -hy, cx + hx, hy)
+    slit = lambda a, z: dict(a=a - 5, b=a + 5, z0=z, z1=z + 50, depth=12, back="Bld_Dark", shade=0.5)
+    zs = [ROOF + 26] + ([ROOF + 118] if lv >= 3 else [])
+    ops = {2: [slit(hy + s * 70, z) for s in (-1, 1) for z in zs] + k.breach(2 * hy - 110, 2 * hy - 30, ROOF + 50, top - 8),
+           3: [slit(hx, z) for z in zs]}
+    t1 = k.wall(DARK if lv >= 3 else "Bld_AshlarLarge", t0, ROOF, top, inset=6, u0=u0, openings=ops)
+    for z in ((ROOF + 86, top - 22) if lv >= 3 else (ROOF + 86,)):
+        k.band(IRON, inset_ring(t0, 4), z, z + 12, out=5, u0=u0)
+    k.band("Bld_Trim", t1, top, top + 12, out=9, u0=u0)
+    t2 = inset_ring(t1, -10)                                                          # the head oversails on the corbel course
+    k.cap("Bld_AshlarLarge", t2, top + 12, down=True, shade=0.55)
+    k.wall("Bld_Frieze", t2, top + 12, h, v0=0.0, bleach=False, u0=u0)
+    k.parapet("Bld_Ashlar", t2, h - 36, h, thick=24, top="Bld_Trim")
+    k.stepped_merlons("Bld_Ashlar", t2, h, width=46, gap=26, thick=24, h1=26, h2=22, cap="Bld_Trim")
+    k.pole_banner((cx + 30, 0, h - 36), height=POLE, cloth_w=56.0, cloth_h=150.0)
+    if k.damaged:
+        k.scorch("smear", (cx - hx - 4, 0, top - 30))
+        k.burn_hole((cx - 20, 40, h - 36), (110, 90), yaw=15, soot="blot_m")
+    if lv >= 3:
+        xs, ys = [p[0] for p in r3], [p[1] for p in r3]
+        for x in (min(xs) + 34, max(xs) - 34):                                        # the corner turrets
+            for y in (min(ys) + 34, max(ys) - 34):
+                q = rect(x - 30, y - 30, x + 30, y + 30)
+                k.wall(DARK, q, ROOF, ROOF + 92, u0=k.U(0, 200), bleach=False)
+                k.band("Bld_Trim", q, ROOF + 92, ROOF + 100, out=6)
+                q1 = inset_ring(q, -6)
+                k.cap("Bld_AshlarLarge", q1, ROOF + 100, down=True, shade=0.55)
+                k.wall("Bld_Ashlar", q1, ROOF + 100, ROOF + 132, bleach=False)
+                k.parapet("Bld_Ashlar", q1, ROOF + 116, ROOF + 132, thick=14, top="Bld_Trim")
+                k.stepped_merlons("Bld_Ashlar", q1, ROOF + 132, width=26, gap=20, thick=14, h1=18, h2=14, cap="Bld_Trim")
+        fx = X0 + 16 + 8 - 14 - 8                                                     # long banners down the front, clear of the door
+        for y in (-128, 128):
+            k.cyl(IRON, (fx, y - 36, WALL + 6), (fx, y + 36, WALL + 6), 2.6, sides=4)
+            k.hang_cloth((fx, y - 30, WALL + 4), (fx, y + 30, WALL + 4), 190.0)
+        if not k.damaged:
+            k.patch("Bld_Leaves", (40, Y0 + 20, 0), (1, 0, 0), (0, 0, 1), 150, 230, cells=12, fill=0.6, out=8)
+            k.patch("Bld_Leaves", (X0 + 22, 160, FOOT), (0, -1, 0), (0, 0, 1), 60, 150, cells=12, fill=0.55, out=4)
 
 
 def forecourt(k):
@@ -114,9 +192,11 @@ def build(k, state="complete"):
 def complete(k):
     vault(k)
     forecourt(k)
+    k.level_flag((-284, -262, 0), height=240.0)
+    grow = 0.0 if k.level < 2 else upper_h(k) - 36 + POLE + 14 + 50 - 250          # the label clears the standard on the upper roof
     k.collider((FOOTPRINT[0], FOOTPRINT[1], 0), (FOOTPRINT[2], FOOTPRINT[3], 380))
     k.sockets["gate"] = (-360.0, 0.0, 0.0)
-    k.sockets["label"] = (0.0, 0.0, ROOF + 250.0)
+    k.sockets["label"] = (0.0, 0.0, ROOF + 250.0 + grow)
     k.sockets["popup"] = (-200.0, 0.0, 240.0)
 
 

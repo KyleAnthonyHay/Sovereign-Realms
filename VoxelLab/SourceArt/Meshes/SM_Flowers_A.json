@@ -1,0 +1,18 @@
+{
+ "name": "SM_Flowers_A",
+ "faces": 742,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.375,
+   -0.4375,
+   0.0
+  ],
+  [
+   0.5,
+   0.5,
+   0.625
+  ]
+ ],
+ "lights": []
+}

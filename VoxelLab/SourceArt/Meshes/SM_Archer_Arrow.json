@@ -1,0 +1,27 @@
+{
+ "name": "SM_Archer_Arrow",
+ "faces": 220,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0458,
+   -0.4565,
+   -0.1261
+  ],
+  [
+   0.0313,
+   0.2295,
+   0.2195
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.34285,
+  -0.17806,
+  0.62444
+ ],
+ "part": "Arrow",
+ "parent": "HandR",
+ "triangles": 440,
+ "blocks": 10
+}

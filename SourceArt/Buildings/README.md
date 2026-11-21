@@ -15,7 +15,7 @@ by hand: change the scripts and rebuild. Contract and parameters: `Docs/VISUAL_C
 
 ```sh
 Tools/.venv/bin/python Tools/textures/gen_building_textures.py
-for n in castle farm mine tower barracks range stable workshop granary treasury rallyflag; do
+for n in castle farm mine tower barracks range stable workshop granary treasury rallyflag; do     # every level too (LEVELS)
   /Applications/Blender.app/Contents/MacOS/Blender -b -P Tools/blender/build_building.py -- $n   # all states; --state damaged for one, --no-render to skip previews
 done
 Tools/.venv/bin/python Tools/world/gen_battlefield.py      # only if a footprint, socket or the BUILDINGS table changed
@@ -52,3 +52,30 @@ camera; the site is shown round the half-risen building).
 
 A new surface needs three entries: a texture in the generator, a slot in `MATERIALS` (`bldkit.py`) and the same
 slot in `BUILDING_SLOTS` (`Tools/build_visual_materials.py`).
+
+## Levels
+
+A module with `LEVELS = n` (the castle 7; tower, mine, farm, the four training buildings, granary and treasury 3)
+builds each level above the first as its own finished and damaged mesh: `SM_Bld_<Name>_L<k>` and
+`SM_Bld_<Name>_L<k>_Damaged`. Level 1 keeps the plain names; the site and the ruin are shared by every level.
+`complete(k)` reads `k.level`; `<name>.json` lists them under `levels` (mesh, triangles, bounds, slots; sockets for
+the finished one). Build one level with `--level 3`; `--levels-only` renders just `<name>_L<k>.png` (game camera,
+far zoom, aimed 40% up the level-1 building), and a full build also renders `<name>_L<k>_damaged.png`.
+
+Every level reads the same way across buildings: level 1 as built; level 2 built up in stone with a slate roof or a
+timber-framed storey; level 3 fortified (a tower or turret under a steep slate cap, hoardings, iron, darker stone).
+The surfaces for it: `Bld_Slate`, `Bld_Iron`, `Bld_StoneDark`, `Bld_Timber`.
+
+**The level banner** (`k.level_flag(pos, height)`): a pole with a 92 x 192 cm team-coloured banner carrying the
+level's numeral, cell `level` of `T_Bld_LevelFlag` (eight 32 x 64 texel cells, numerals 1-7, drawn by
+`level_flag()` in the texture generator). It is part of each level's mesh, stands at the building's front-left where
+the game camera always sees it, below the label socket (the HUD's bars), and is never torn on the damaged mesh.
+
+In the game `ASRBuilding` loads the level meshes next to the state meshes (`LoadStateMeshes`) and shows the one for
+its level whenever its state changes (`SetState`, `GetLevelMesh`; a missing level keeps the one below). When an
+upgrade finishes the new look goes up with a burst of dust (`ApplyLevelLook`), and the label (the HUD's bars) rises
+by as much as the mesh grew. Saved games restore it through `SetLevelForLoad`. Testing: `sr.SetLevel <type|all> <n>
+[enemy]`, `sr.PutBuilding <type> X Y [level] [enemy]`.
+
+Import only some meshes: `ONLY=['castle']` takes every mesh of a module (states and levels), exact names such as
+`ONLY=['castle_l3', 'castle_l3_damaged']` only those.

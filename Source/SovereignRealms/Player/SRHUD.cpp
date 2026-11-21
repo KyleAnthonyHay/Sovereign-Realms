@@ -9,6 +9,7 @@
 #include "Battle/SRBattleSubsystem.h"
 #include "Battle/SREconomySubsystem.h"
 #include "Battle/SRFogSubsystem.h"
+#include "Battle/SRMapInfo.h"
 #include "Battle/SRPlatoonSubsystem.h"
 #include "Common/SRAudioSubsystem.h"
 #include "Common/SRFeelSettings.h"
@@ -22,6 +23,11 @@
 #include "Rendering/SlateRenderer.h"
 #include "Styling/CoreStyle.h"
 #include "Misc/App.h"
+#include "Misc/Paths.h"
+#include "MediaPlayer.h"
+#include "MediaTexture.h"
+#include "FileMediaSource.h"
+#include "Engine/GameViewportClient.h"
 
 using namespace SRStyle;
 
@@ -40,8 +46,11 @@ void ASRHUD::BeginPlay()
 	UIFont = LoadObject<UFont>(nullptr, TEXT("/Engine/EngineFonts/Roboto.Roboto"));
 	IconAtlas = LoadObject<UTexture2D>(nullptr, TEXT("/Game/SR/UI/T_UI_Icons.T_UI_Icons"));
 	TitleArt = LoadObject<UTexture2D>(nullptr, TEXT("/Game/SR/UI/T_UI_Title.T_UI_Title"));
-	MinimapBase = LoadObject<UTexture2D>(nullptr, TEXT("/Game/SR/Textures/T_MinimapBase.T_MinimapBase"));
+	// the minimap's picture: the map's own (its ASRMapInfo), else the one the first map always had
+	const ASRMapInfo* Map = ASRMapInfo::Get(this);
+	MinimapBase = (Map && Map->MinimapBase) ? Map->MinimapBase.Get() : LoadObject<UTexture2D>(nullptr, TEXT("/Game/SR/Textures/T_MinimapBase.T_MinimapBase"));
 	MenuDifficulty = USRFeelSettings::Get().AIDifficulty;
+	if (const USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this)) { MenuMap = Flow->GetCurrentMapId(); }
 }
 
 // ============================================================================ frame
@@ -71,6 +80,88 @@ void ASRHUD::BeginFrame()
 	bInputOpen = true;
 }
 
+void ASRHUD::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	// (also from DrawHUD; here as well because a hidden HUD, as in sr.Film, is not drawn and must still let go of the film)
+	const USRGameFlowSubsystem* Flow = USRGameFlowSubsystem::Get(this);
+	UpdateMenuFilm(Flow && Flow->GetState() == ESRGameState::MainMenu);
+}
+
+void ASRHUD::EndPlay(const EEndPlayReason::Type Reason)
+{
+	UpdateMenuFilm(false);      // the next level must not inherit a world that is not drawn
+	Super::EndPlay(Reason);
+}
+
+void ASRHUD::UpdateMenuFilm(bool bMenu)
+{
+	UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	if (!bMenu)
+	{
+		// a match: stop, let go of the player and its decoder, and give the world its rendering back
+		if (MenuFilmPlayer) { MenuFilmPlayer->Close(); }
+		if (MenuFilmTexture) { MenuFilmTexture->SetMediaPlayer(nullptr); }
+		MenuFilmPlayer = nullptr;
+		MenuFilmTexture = nullptr;
+		MenuFilmSource = nullptr;
+		if (bMenuFilmHidWorld && Viewport) { Viewport->bDisableWorldRendering = false; }
+		bMenuFilmHidWorld = false;
+		return;
+	}
+	if (bMenuFilmFailed) { return; }
+	const double Clock = FPlatformTime::Seconds();
+	if (!MenuFilmPlayer)
+	{
+		const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir() / TEXT("Movies/LoadingBattle.mp4"));
+		if (!FPaths::FileExists(Path)) { bMenuFilmFailed = true; UE_LOG(LogTemp, Warning, TEXT("Menu film: %s is missing; the live realm is the backdrop"), *Path); return; }
+		MenuFilmPlayer = NewObject<UMediaPlayer>(this);
+		MenuFilmPlayer->PlayOnOpen = true;
+		MenuFilmPlayer->SetLooping(true);
+		MenuFilmPlayer->SetNativeVolume(0.f);
+		MenuFilmTexture = NewObject<UMediaTexture>(this);
+		MenuFilmTexture->AutoClear = true;
+		MenuFilmTexture->ClearColor = FLinearColor::Black;
+		MenuFilmTexture->SetMediaPlayer(MenuFilmPlayer);
+		MenuFilmTexture->UpdateResource();
+		MenuFilmSource = NewObject<UFileMediaSource>(this);
+		MenuFilmSource->SetFilePath(Path);
+		MenuFilmOpened = Clock;
+		MenuFilmShown = 0.0;
+		if (!MenuFilmPlayer->OpenSource(MenuFilmSource)) { bMenuFilmFailed = true; }
+	}
+	else if (MenuFilmPlayer->HasError() || (!MenuFilmPlayer->IsPlaying() && !MenuFilmPlayer->IsPreparing() && Clock - MenuFilmOpened > 6.0))
+	{
+		bMenuFilmFailed = true;
+	}
+	if (bMenuFilmFailed)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Menu film: could not be played; the live realm is the backdrop"));
+		UpdateMenuFilm(false);
+		return;
+	}
+	// The film has the whole screen once its first frames are up: the realm behind it need not be drawn.
+	const bool bPicture = MenuFilmPlayer->IsPlaying() && MenuFilmTexture && MenuFilmTexture->GetResource() && MenuFilmTexture->GetWidth() > 16
+		&& MenuFilmPlayer->GetTime() > FTimespan::FromSeconds(0.1);
+	if (bPicture && MenuFilmShown <= 0.0) { MenuFilmShown = Clock; }
+	if (Viewport && MenuFilmShown > 0.0 && Clock - MenuFilmShown > 0.6 && !bMenuFilmHidWorld) { Viewport->bDisableWorldRendering = true; bMenuFilmHidWorld = true; }
+}
+
+bool ASRHUD::DrawMenuFilm(float Alpha)
+{
+	if (!MenuFilmPlayer || !MenuFilmTexture || MenuFilmShown <= 0.0 || !MenuFilmTexture->GetResource()) { return false; }
+	const float W = float(MenuFilmTexture->GetWidth()), H = float(MenuFilmTexture->GetHeight());
+	if (W < 16.f || H < 16.f || View.X < 1.f || View.Y < 1.f) { return false; }
+	// cover fit: the picture fills the view and the overhang is cropped evenly, never a bar
+	float U0 = 0.f, V0 = 0.f, UL = 1.f, VL = 1.f;
+	const float ViewAspect = View.X / View.Y, FilmAspect = W / H;
+	if (ViewAspect > FilmAspect) { VL = FilmAspect / ViewAspect; V0 = (1.f - VL) * 0.5f; }
+	else { UL = ViewAspect / FilmAspect; U0 = (1.f - UL) * 0.5f; }
+	const float In = FMath::Clamp(float(FPlatformTime::Seconds() - MenuFilmShown) / 0.6f, 0.f, 1.f) * Alpha;      // eases in over the realm
+	DrawTexture(MenuFilmTexture, 0.f, 0.f, View.X, View.Y, U0, V0, UL, VL, FLinearColor(1.f, 1.f, 1.f, In), In >= 1.f ? BLEND_Opaque : BLEND_Translucent);
+	return true;
+}
+
 void ASRHUD::EndFrame()
 {
 	DrawTooltip();
@@ -86,6 +177,7 @@ void ASRHUD::DrawHUD()
 	BeginFrame();
 
 	State = Flow->GetState();
+	UpdateMenuFilm(State == ESRGameState::MainMenu);
 	if (State != LastState)
 	{
 		// every state starts on its own first screen
@@ -106,6 +198,7 @@ void ASRHUD::DrawHUD()
 		DrawRangeCircles();
 		DrawRouteLines();
 		DrawPayoutPopups();
+		DrawHealPopups();
 		DrawSelectionBox();
 		DrawGameHUD();
 		bInputOpen = true;
@@ -271,6 +364,7 @@ void ASRHUD::Icon(ESRIcon Which, float X, float Y, float Size, const FLinearColo
 		if (Which == ESRIcon::Granary) { Which = ESRIcon::Food; }
 		else if (Which == ESRIcon::Treasury) { Which = ESRIcon::Coin; }
 		else if (Which == ESRIcon::PortraitScout) { Which = ESRIcon::PortraitBuilder; }
+		else if (Which == ESRIcon::PortraitMedic) { Which = ESRIcon::PortraitBuilder; }
 	}
 	const int32 N = int32(Which);
 	const float Col = float(N % 8), Row = float(N / 8 + (bEnemy ? HalfRows : 0));
@@ -555,6 +649,23 @@ void ASRHUD::DrawPayoutPopups()
 	}
 }
 
+void ASRHUD::DrawHealPopups()
+{
+	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
+	if (!Battle) { return; }
+	const FLinearColor Green(0.45f, 1.f, 0.42f, 1.f);
+	for (const USRBattleSubsystem::FHealPopup& H : Battle->GetHealPopups())
+	{
+		const float T = FMath::Clamp(H.Age / 1.1f, 0.f, 1.f);
+		const FVector S = Canvas->Project(H.Origin + FVector(0.f, 0.f, 70.f * (1.f - FMath::Square(1.f - T))));
+		if (S.Z <= 0.f) { continue; }
+		const float Alpha = T > 0.6f ? 1.f - (T - 0.6f) / 0.4f : 1.f;
+		const FString Label = FString::Printf(TEXT("+%d"), H.Amount);
+		const float P = U(21.f);
+		Text(Label, S.X - TextSize(Label, P, Bold).X * 0.5f, S.Y - P, P, A(Green, Alpha), AlignLeft, Bold);
+	}
+}
+
 void ASRHUD::DrawFarPips()
 {
 	const USRBattleSubsystem* Battle = USRBattleSubsystem::Get(this);
@@ -766,12 +877,21 @@ void ASRHUD::DrawRangeCircles()
 	{
 		FRangeCircle& C = RangeCircles.FindOrAdd(Unit);
 		const FVector2D P = Unit->GetPos2D();
-		if (FVector2D::DistSquared(P, C.At) > FMath::Square(60.f))
+		if (FVector2D::DistSquared(P, C.At) > FMath::Square(60.f) || C.Stance != uint8(Unit->GetStance()))   // (a Medic's ring follows its stance)
 		{
 			C.At = P;
+			C.Stance = uint8(Unit->GetStance());
 			const FSRUnitStats& S = Unit->Stats();
 			Ring(P, S.Sight(), Unit->GetSimPos().Z, C.Sight);
-			if (S.bRanged) { Ring(P, S.AttackRange, Unit->GetSimPos().Z, C.Reach); } else { C.Reach.Reset(); }
+			// the solid ring: a bow's (or a catapult's) reach; a Medic's: how far its heals go
+			if (S.bRanged) { Ring(P, S.AttackRange, Unit->GetSimPos().Z, C.Reach); }
+			else if (Unit->IsMedic())
+			{
+				// how far it goes to the wounded on its own (Assertive far, Passive near)
+				const float Seek = Unit->GetStance() == ESRStance::Aggressive ? F.MedicSeekRange : (Unit->GetStance() == ESRStance::Defensive ? F.MedicSeekRangePassive : 0.f);
+				if (Seek > 0.f) { Ring(P, Seek, Unit->GetSimPos().Z, C.Reach); } else { C.Reach.Reset(); }
+			}
+			else { C.Reach.Reset(); }
 		}
 		const bool bEnemy = Unit->GetTeam() == ESRTeam::Enemy;
 		Draw(C.Sight, P, SightDiscs, bEnemy ? FLinearColor(1.f, 0.4f, 0.35f, 0.45f) : F.SightCircleColor, true, W);
@@ -806,15 +926,33 @@ void ASRHUD::DrawRouteLines()
 			if (S.Z > 0.f) { Fill(S.X - U(4.f), S.Y - U(4.f), U(8.f), U(8.f), Color); }
 		}
 	};
-	TArray<FVector4> Drawn;
+	// each route once (a group shares one): a patrol's whole loop in orange, a pathway's legs still to walk in blue
+	TArray<FVector2D> Drawn;
 	for (const TWeakObjectPtr<ASRUnit>& U2 : PC->GetSelection())
 	{
-		FVector2D A, B;
-		if (!U2.IsValid() || !Battle->GetPatrolRoute(U2.Get(), A, B)) { continue; }
-		const FVector4 Key(A.X, A.Y, B.X, B.Y);
+		TArray<FVector2D> Points;
+		bool bLoop = false;
+		int32 Next = 0;
+		if (!U2.IsValid() || !Battle->GetRoute(U2.Get(), Points, bLoop, Next) || Points.Num() == 0) { continue; }
+		const FVector2D Key(Points.Last().X + Points.Num() * 0.001, Points[0].Y);
 		if (Drawn.Contains(Key)) { continue; }
 		Drawn.Add(Key);
-		Dashed(Ground(A), Ground(B), FLinearColor(1.f, 0.62f, 0.25f, 0.85f));
+		if (bLoop)
+		{
+			const FLinearColor Col(1.f, 0.62f, 0.25f, 0.85f);
+			for (int32 k = 0; k < Points.Num(); ++k)
+			{
+				if (Points.Num() == 2 && k == 1) { break; }   // two points: one line, walked both ways
+				Dashed(Ground(Points[k]), Ground(Points[(k + 1) % Points.Num()]), Col);
+			}
+		}
+		else
+		{
+			const FLinearColor Col(0.55f, 0.8f, 1.f, 0.85f);
+			// from the troop to the point it is heading for, then the legs after it
+			Dashed(Ground(U2->GetPos2D()), Ground(Points[FMath::Clamp(Next, 0, Points.Num() - 1)]), Col);
+			for (int32 k = FMath::Max(Next, 0); k + 1 < Points.Num(); ++k) { Dashed(Ground(Points[k]), Ground(Points[k + 1]), Col); }
+		}
 	}
 	if (const ASRBuilding* Trainer = PC->GetSelectedBuilding(); Trainer && Trainer->IsRecruiter() && Trainer->IsAlive() && Trainer->Team == ESRTeam::Player)
 	{
@@ -837,12 +975,13 @@ void ASRHUD::DrawTrainingBars()
 		if (Building->IsUnderConstruction())
 		{
 			const bool bWaiting = Building->NeedsBuilder() && Building->GetBuildersWorking() == 0;
+			// the clock: how long until it stands, at the rate it is rising now
 			Rows.Add({ ESRIcon::Hammer, Building->GetBuildProgress(), bWaiting ? Refuse : Amber,
-				bWaiting ? FString(TEXT("needs a Builder")) : FString::Printf(TEXT("%d%%"), FMath::RoundToInt(Building->GetBuildProgress() * 100.f)) });
+				bWaiting ? FString(TEXT("needs a Builder")) : SRStyle::Countdown(Building->GetBuildSecondsLeft()) });
 		}
 		if (Building->IsUpgrading())
 		{
-			Rows.Add({ ESRIcon::Crown, Building->GetUpgradeFraction(), GoldBright, FString::Printf(TEXT("level %d"), Building->GetLevel() + 1) });
+			Rows.Add({ ESRIcon::Crown, Building->GetUpgradeFraction(), GoldBright, FString::Printf(TEXT("level %d  %s"), Building->GetLevel() + 1, *SRStyle::Countdown(Building->GetUpgradeSecondsLeft())) });
 		}
 		if (!Building->IsUnderConstruction() && Building->GetBuildersWorking() > 0 && Building->NeedsWork())
 		{

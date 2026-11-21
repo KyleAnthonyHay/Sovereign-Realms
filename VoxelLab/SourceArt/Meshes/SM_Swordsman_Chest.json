@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_Chest",
+ "faces": 5216,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2806,
+   -0.2325,
+   -0.0166
+  ],
+  [
+   0.2783,
+   0.2944,
+   0.4915
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.9125
+ ],
+ "part": "Chest",
+ "triangles": 10432,
+ "blocks": 523
+}

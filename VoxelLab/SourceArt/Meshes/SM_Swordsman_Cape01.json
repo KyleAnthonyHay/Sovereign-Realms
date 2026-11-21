@@ -1,0 +1,26 @@
+{
+ "name": "SM_Swordsman_Cape01",
+ "faces": 360,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1364,
+   -0.1802,
+   -0.2552
+  ],
+  [
+   0.1187,
+   0.175,
+   0.0071
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.51875,
+  0.225,
+  0.85
+ ],
+ "part": "Cape01",
+ "triangles": 720,
+ "blocks": 33
+}

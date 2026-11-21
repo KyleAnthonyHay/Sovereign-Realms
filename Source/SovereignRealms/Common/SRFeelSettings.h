@@ -7,6 +7,29 @@
 #include "Common/SRTypes.h"
 #include "SRFeelSettings.generated.h"
 
+/** One battle map the player can choose (USRFeelSettings::Maps). */
+USTRUCT()
+struct FSRMapEntry
+{
+	GENERATED_BODY()
+
+	/** The id its level's ASRMapInfo carries, and saved games remember ("two", "four"). */
+	UPROPERTY(EditAnywhere, Config, Category = "Map")
+	FName Id;
+
+	/** The level, as a long package name ("/Game/Maps/L_Battlefield"). */
+	UPROPERTY(EditAnywhere, Config, Category = "Map")
+	FString Level;
+
+	/** Its name on the New Game screen and in the saved-game list. */
+	UPROPERTY(EditAnywhere, Config, Category = "Map")
+	FString Name;
+
+	/** One line under the name. */
+	UPROPERTY(EditAnywhere, Config, Category = "Map")
+	FString Note;
+};
+
 /**
  * Every tuning knob for the command & combat slice.
  * Project Settings > Game > Sovereign Feel. Saved to Config/DefaultGame.ini.
@@ -34,6 +57,7 @@ public:
 		case ESRUnitType::Catapult: return Catapult;
 		case ESRUnitType::Builder: return Builder;
 		case ESRUnitType::Scout: return Scout;
+		case ESRUnitType::Medic: return Medic;
 		default: return Shieldbearer;
 		}
 	}
@@ -53,15 +77,52 @@ public:
 
 	/** Camera distance from the focus point when fully zoomed out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "200"))
-	float ZoomDistanceMax = 11000.f;
+	float ZoomDistanceMax = 14000.f;
 
 	/** 0 = fully in, 1 = fully out. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
 	float ZoomDefault = 0.5f;
 
-	/** Zoom fraction per mouse-wheel notch. */
+	/** Zoom fraction per mouse-wheel notch (of the whole range, which is geometric: 0.09 of 950..14000 is x1.27 a notch). */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0.01", ClampMax = "1"))
-	float ZoomStep = 0.11f;
+	float ZoomStep = 0.09f;
+
+	/** How far out a match opens (0..1 of the zoom range; never closer than ZoomDefault): wide enough to take in the
+	 * castle and the troops. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
+	float ZoomMatchStart = 0.41f;
+
+	/** How far out the main menu's view of the realm sits (0..1 of the zoom range). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "1"))
+	float ZoomMainMenu = 0.65f;
+
+	/** The tilt goes from PitchZoomedIn (at ZoomDistanceMin) to PitchZoomedOut at this camera distance (cm) and holds
+	 * there: zooming out farther than this lifts the camera straight back without tipping it further over. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "200"))
+	float ZoomTiltDistance = 8500.f;
+
+	/** Camera distance (cm) for a zoom fraction. Geometric: every wheel notch changes apparent size by the same ratio. */
+	float ZoomDistance(float Zoom01) const { return ZoomDistanceMin * FMath::Pow(ZoomDistanceMax / ZoomDistanceMin, FMath::Clamp(Zoom01, 0.f, 1.f)); }
+	/** 0 at ZoomDistanceMin, 1 at ZoomTiltDistance and beyond: how far the view has gone from its close-in look (low
+	 * tilt, strong blur) to its far-out look. */
+	float ZoomTilt(float Distance) const
+	{
+		const float Span = FMath::Loge(FMath::Max(ZoomTiltDistance, ZoomDistanceMin * 1.01f) / ZoomDistanceMin);
+		return FMath::Clamp(FMath::Loge(FMath::Max(Distance, ZoomDistanceMin) / ZoomDistanceMin) / Span, 0.f, 1.f);
+	}
+	/** The camera's pitch (degrees, negative = looking down) at a distance. */
+	float PitchAtDistance(float Distance) const
+	{
+		// Camera angle setting: 0 Classic (the tuned pitches below), 1 Low, 2 Battlefield (shallow, more of the land ahead).
+		static const float Low[2][2] = { { -25.f, -44.f }, { -19.f, -32.f } };
+		const int32 A = FMath::Clamp(CameraAngle, 0, 2);
+		const float In = A == 0 ? PitchZoomedIn : Low[A - 1][0];
+		const float Out = A == 0 ? PitchZoomedOut : Low[A - 1][1];
+		return FMath::Lerp(In, Out, ZoomTilt(Distance));
+	}
+	/** Player setting: 0 Classic (steep), 1 Low, 2 Battlefield (shallow). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0", ClampMax = "2"))
+	int32 CameraAngle = 0;
 
 	/** Time constant of the zoom ease. Smaller = snappier. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Zoom", meta = (ClampMin = "0.001"))
@@ -94,6 +155,22 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Pan")
 	bool bEdgePan = true;
 
+	/** Trackpad (Mac): two-finger scroll zooms instead of panning the map (pinch always zooms). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Trackpad")
+	bool bTrackpadScrollZooms = false;
+
+	/** Trackpad: how far a two-finger scroll moves the map (1 = the ground under the fingers follows them). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Trackpad", meta = (ClampMin = "0.1", ClampMax = "4"))
+	float TrackpadPanSpeed = 1.f;
+
+	/** Trackpad: wheel notches of zoom per unit of pinch (a full pinch is about 1). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Trackpad", meta = (ClampMin = "0.5", ClampMax = "30"))
+	float TrackpadPinchZoom = 7.f;
+
+	/** Control+click is a right-click (the Mac habit on a one-button trackpad or mouse). */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Trackpad")
+	bool bControlClickIsRightClick = true;
+
 	/** Screen-edge band (pixels) that triggers edge panning. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Pan", meta = (ClampMin = "1"))
 	float EdgePanMargin = 12.f;
@@ -110,13 +187,26 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Pan", meta = (ClampMin = "0.001"))
 	float RecenterSmoothTime = 0.16f;
 
-	/** Camera focus is clamped to +/- this (cm) around the world origin. Also clamps move orders. */
+	/** Camera focus is clamped to +/- this (cm) around the world origin. Also clamps move orders. Per map: overwritten
+	 * from the level's ASRMapInfo (HalfExtent) when a map starts; this value serves a level without one. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds")
-	FVector2D MapHalfExtent = FVector2D(14000.f, 14000.f);
+	FVector2D MapHalfExtent = FVector2D(21000.f, 21000.f);
 
-	/** The camera rides the ground under its focus (hills, terraces, the heights) but never higher than this (cm): panning across a mountain must not lift the view off the field. */
+	/** The camera rides the ground under its focus (hills, valleys, the heights) but never higher than this (cm): panning
+	 * across a mountain must not lift the view off the field. Per map: overwritten from the level's ASRMapInfo when a
+	 * map starts; this value serves a level without one. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds", meta = (ClampMin = "0.0"))
-	float FocusHeightMax = 560.f;
+	float FocusHeightMax = 900.f;
+
+	/** The camera keeps its line of sight to the focus point this far (cm) above the ground: where a hill would stand
+	 * between the two (or the camera would sit inside one) it tilts down more steeply until the line is clear. The
+	 * margin is full at the camera and tapers to nothing at the focus, which is on the ground. 0 = off. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds", meta = (ClampMin = "0.0"))
+	float CameraGroundClearance = 150.f;
+
+	/** Time constant of that extra tilt easing in and out, so the view never snaps as a hill comes between. */
+	UPROPERTY(EditAnywhere, Config, Category = "Camera|Bounds", meta = (ClampMin = "0.001"))
+	float CameraClearanceSmoothTime = 0.25f;
 
 	/** Guarding (V, or RMB on your Builder / building): a guard fights only foes within this distance (cm) of what it
 	 * guards, and gives up a chase that takes it further. */
@@ -152,7 +242,55 @@ public:
 
 	/** Each flock's loop round the map: its mean radius (cm) is in this range. */
 	UPROPERTY(EditAnywhere, Config, Category = "World|Birds")
-	FVector2D BirdLoopRadius = FVector2D(4500.f, 12000.f);
+	FVector2D BirdLoopRadius = FVector2D(6500.f, 18500.f);
+
+	/** Leaves falling from the trees in view, thick in the woods (ASRLeaves). */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Leaves")
+	bool bLeaves = true;
+
+	/** The most leaves in the air and on the ground at once (in a wood; a lone tree sheds a few). */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Leaves", meta = (ClampMin = "0", ClampMax = "1200"))
+	int32 LeafCount = 800;
+
+	/** A leaf's length (cm; a little larger than life so it reads from the camera's height). */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Leaves", meta = (ClampMin = "2"))
+	float LeafSize = 30.f;
+
+	/** Leaves in the air per tree in view (broadleaves; a fir sheds a fifth as much), until LeafCount is reached. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Leaves", meta = (ClampMin = "0"))
+	float LeavesPerTree = 30.f;
+
+	/** Herds of deer on the open ground away from the kingdoms (ASRWildlife): they graze and wander, and bolt from troops. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife")
+	bool bWildlife = true;
+
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "0", ClampMax = "40"))
+	int32 WildlifeHerds = 14;
+
+	/** Deer in a herd: each herd picks a size in this range (the first is a stag). */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "1", ClampMax = "12"))
+	FIntPoint WildlifeHerdSize = FIntPoint(3, 6);
+
+	/** A troop this close (cm) to a deer frightens it; the whole herd bolts and keeps going until nobody is within about twice this. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "100"))
+	float WildlifeFleeRadius = 1000.f;
+
+	/** Speeds (cm/s): strolling between grazing spots, and bolting (a Shieldbearer does 390, a Horse Rider 640). */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "10"))
+	float WildlifeWalkSpeed = 95.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "10"))
+	float WildlifeRunSpeed = 620.f;
+
+	/** Herds make their homes no nearer than this (cm) to a castle / to any other building, and this far from each other. */
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "0"))
+	float WildlifeKeepFromCastle = 5200.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "0"))
+	float WildlifeKeepFromBuildings = 2200.f;
+
+	UPROPERTY(EditAnywhere, Config, Category = "World|Wildlife", meta = (ClampMin = "0"))
+	float WildlifeHerdSpacing = 5500.f;
 
 	/** Motion blur smears units while panning and hides fast attack animation, so the game camera turns it off. Untick to let post-process volumes decide. */
 	UPROPERTY(EditAnywhere, Config, Category = "Camera")
@@ -385,6 +523,13 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0.1"))
 	float IdleFps = 6.f;
 
+	/** Archers seen standing on towers and the castle's pillars, drawing and loosing with each shot. */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation") bool bPostArchers = true;
+	/** Lifts them off the roofs they stand on (cm), if they sink into or float over a building's floor. */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation") float PostArcherFeetLift = 0.f;
+	/** Their size against a troop on the ground (a little larger reads better up high). */
+	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "0.3")) float PostArcherScale = 1.f;
+
 	/** Ground distance (cm) covered by one eight-frame run cycle (two steps). The frames were authored for 124; any other value makes the feet slide. */
 	UPROPERTY(EditAnywhere, Config, Category = "Animation", meta = (ClampMin = "10"))
 	float WalkCycleDistance = 124.f;
@@ -420,6 +565,42 @@ public:
 	/** The Scout: very fast, sees far, hard to notice (Notice Scale), weak in a fight. */
 	UPROPERTY(EditAnywhere, Config, Category = "Units")
 	FSRUnitStats Scout;
+
+	/** The Medic: heals one troop at a time by touch; never fights. Its Attack Interval is the time between two
+	 * bandagings, its Wind-up + Recovery the bandaging itself (it kneels for it). */
+	UPROPERTY(EditAnywhere, Config, Category = "Units")
+	FSRUnitStats Medic;
+
+	// ---------------------------------------------------------------- Medics
+	/** A Medic treats one troop at a time, and must touch it: it heals when the gap between the two bodies is at most
+	 * this (cm). It runs to the wounded, kneels, bandages, and goes on to the next. (Friends keep a hand's breadth
+	 * apart, Separation Padding, so standing side by side is a gap of about 30.) */
+	UPROPERTY(EditAnywhere, Config, Category = "Medics", meta = (ClampMin = "0"))
+	float MedicContactReach = 60.f;
+
+	/** Health the troop being treated gets back per bandaging (one comes every Medic Attack Interval). */
+	UPROPERTY(EditAnywhere, Config, Category = "Medics", meta = (ClampMin = "0"))
+	float MedicHealAmount = 30.f;
+
+	/** A Passive Medic with nothing else to do goes to wounded troops this far off (cm), as long as no foe is near them. */
+	UPROPERTY(EditAnywhere, Config, Category = "Medics", meta = (ClampMin = "0"))
+	float MedicSeekRangePassive = 900.f;
+
+	/** A Medic told to look after a troop also treats the wounded within this distance (cm) of it, then goes back to it. */
+	UPROPERTY(EditAnywhere, Config, Category = "Medics", meta = (ClampMin = "0"))
+	float MedicWardRadius = 700.f;
+
+	/** A Passive Medic runs from any foe that comes within this distance (cm), even while it follows a troop. */
+	UPROPERTY(EditAnywhere, Config, Category = "Medics", meta = (ClampMin = "0"))
+	float MedicFleeRange = 850.f;
+
+	/** An Assertive Medic with nothing else to do goes to wounded troops this far off (cm), into the fight if need be. */
+	UPROPERTY(EditAnywhere, Config, Category = "Medics", meta = (ClampMin = "0"))
+	float MedicSeekRange = 1400.f;
+
+	/** How close (cm) a Medic keeps to the troop it was told to heal. */
+	UPROPERTY(EditAnywhere, Config, Category = "Medics", meta = (ClampMin = "50"))
+	float MedicFollowDistance = 220.f;
 
 	// ---------------------------------------------------------------- Scouts
 	/** The castle level a kingdom needs before it can train its Scout. */
@@ -477,9 +658,10 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Store Levels", meta = (ClampMin = "0"))
 	int32 StoreLimitBase = 1;
 
-	/** ...and one more of each for every this many castle levels above 1 (2: a second at level 3, a third at 5, a fourth at 7). */
-	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Store Levels", meta = (ClampMin = "1"))
-	int32 StoreLimitCastleLevels = 2;
+	/** ...and one more of each for every this many castle levels above 1 (0: never more; the ones you have are upgraded
+	 * instead, from the Citadel level in FSRStoreLevel::RequiredCastleLevel). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Store Levels", meta = (ClampMin = "0"))
+	int32 StoreLimitCastleLevels = 0;
 
 	/** Level L (1-based, clamped) of a Granary (bGranary) or a Treasury. */
 	const FSRStoreLevel& StoreLevel(bool bGranary, int32 L) const
@@ -488,6 +670,24 @@ public:
 		const TArray<FSRStoreLevel>& Levels = bGranary ? GranaryLevels : TreasuryLevels;
 		return Levels.Num() > 0 ? Levels[FMath::Clamp(L, 1, Levels.Num()) - 1] : Default;
 	}
+
+	/** Farm levels, 1 first: more food and more housing. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Farm Levels")
+	TArray<FSRFarmLevel> FarmLevels;
+
+	const FSRFarmLevel& FarmLevel(int32 L) const
+	{
+		static const FSRFarmLevel Default;
+		return FarmLevels.Num() > 0 ? FarmLevels[FMath::Clamp(L, 1, FarmLevels.Num()) - 1] : Default;
+	}
+
+	/** Farms a kingdom may have (standing or going up) with its castle at level 1... */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Farm Levels", meta = (ClampMin = "0"))
+	int32 FarmLimitBase = 3;
+
+	/** ...and this many more for each castle level above 1. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Farm Levels", meta = (ClampMin = "0"))
+	int32 FarmLimitPerCastleLevel = 1;
 
 	/** Watchtowers a kingdom may have (standing or going up) with its castle at level 1... */
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Tower Levels", meta = (ClampMin = "0"))
@@ -555,11 +755,13 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario", meta = (ClampMin = "0"))
 	int32 EnemyArchers = 2;
 
-	/** Centre of the player's starting formation (world XY, cm). */
+	/** Centre of the player's starting formation (world XY, cm). Per map: overwritten from the level's ASRMapInfo when
+	 * a map starts; this value serves a level without one. */
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
 	FVector2D PlayerStart = FVector2D(-5500.f, -5000.f);
 
-	/** Centre of the hostile group (world XY, cm). */
+	/** Centre of the hostile group (world XY, cm). Per map: overwritten from the level's ASRMapInfo when a map starts;
+	 * this value serves a level without one. */
 	UPROPERTY(EditAnywhere, Config, Category = "Scenario")
 	FVector2D EnemyStart = FVector2D(5500.f, 5000.f);
 
@@ -609,12 +811,19 @@ public:
 	/** Builders are dear: gold as well as food, and slow to train. */
 	FSRCost BuilderCost = FSRCost(120, 80);
 
-	/** The Scout: a little gold, mostly food. */
+	/** The Scout: dear, gold above all (a set of eyes on the enemy is worth a lot). */
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
-	FSRCost ScoutCost = FSRCost(60, 90);
+	FSRCost ScoutCost = FSRCost(350, 200);
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
 	float ScoutBuildTime = 12.f;
+
+	/** The Medic: dear (a Shieldbearer is 100 food, no gold). Trained at the Barracks. */
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment")
+	FSRCost MedicCost = FSRCost(220, 140);
+
+	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
+	float MedicBuildTime = 18.f;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Economy|Recruitment", meta = (ClampMin = "0.1"))
 	float BuilderBuildTime = 14.f;
@@ -685,6 +894,23 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
 	FSRBuildingStats TowerStats;
 
+	/** A relic (one of the map's ancient ruins: a broken tower, a stone circle; the actors tagged SRRelic) raised
+	 * again as a tower: dear, built only on a relic, by a Builder. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats RelicTowerStats;
+
+	/** A stone-throwing tower: area damage. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
+	FSRBuildingStats SiegeTowerStats;
+
+	/** Siege Towers a kingdom may have: this many, +1 for every two Citadel levels above the first. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0"))
+	int32 SiegeTowerLimitBase = 1;
+
+	/** Raising a Watchtower on an old ruined tower (snaps onto it): this share of the price. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
+	float RuinRepairCost = 0.6f;
+
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings")
 	FSRBuildingStats BarracksStats;
 
@@ -715,6 +941,11 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
 	float CancelRefund = 0.75f;
 
+	/** What comes back when a finished building of yours is demolished (fraction of everything paid for it: its price
+	 * and every level it was raised to). Recruits still in its queue are refunded in full. The Citadel cannot be. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "1"))
+	float DemolishRefund = 0.3f;
+
 	/** A building under construction starts with this fraction of its health and gains the rest as it goes up. */
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0.05", ClampMax = "1"))
 	float ConstructionStartHealth = 0.15f;
@@ -722,6 +953,19 @@ public:
 	/** Seconds a destroyed building takes to collapse into rubble (and the rubble lingers twice as long). */
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0.1"))
 	float CollapseTime = 1.6f;
+
+	/** Buildings burn as they are hurt (ASRBuildingFire: flames on the roofs, embers, a column of smoke, a warm light). */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Fire")
+	bool bBuildingFire = true;
+
+	/** A finished building starts to burn below this fraction of its health (one small fire); the fire spreads from
+	 * seat to seat as it falls further and is ablaze from end to end near a tenth. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Fire", meta = (ClampMin = "0.1", ClampMax = "1"))
+	float FireStartFraction = 0.8f;
+
+	/** Seconds a fallen building's ruin goes on smouldering. */
+	UPROPERTY(EditAnywhere, Config, Category = "Buildings|Fire", meta = (ClampMin = "1"))
+	float RuinSmoulderTime = 32.f;
 
 	/** Workers (miners at a mine, farmhands at a farm) shown going about their work. Cosmetic; payouts land when they deliver. */
 	UPROPERTY(EditAnywhere, Config, Category = "Buildings", meta = (ClampMin = "0", ClampMax = "6"))
@@ -740,6 +984,8 @@ public:
 		case ESRBuildingType::Workshop: return WorkshopStats;
 		case ESRBuildingType::Granary: return GranaryStats;
 		case ESRBuildingType::Treasury: return TreasuryStats;
+		case ESRBuildingType::RelicTower: return RelicTowerStats;
+		case ESRBuildingType::SiegeTower: return SiegeTowerStats;
 		default: return TowerStats;
 		}
 	}
@@ -749,7 +995,7 @@ public:
 	{
 		static const TArray<ESRBuildingType> Types = { ESRBuildingType::Farm, ESRBuildingType::Mine, ESRBuildingType::Granary, ESRBuildingType::Treasury,
 			ESRBuildingType::Barracks, ESRBuildingType::Range,
-			ESRBuildingType::Stable, ESRBuildingType::Workshop, ESRBuildingType::Tower, ESRBuildingType::Castle };
+			ESRBuildingType::Stable, ESRBuildingType::Workshop, ESRBuildingType::Tower, ESRBuildingType::SiegeTower, ESRBuildingType::RelicTower, ESRBuildingType::Castle };
 		return Types;
 	}
 
@@ -763,6 +1009,7 @@ public:
 		case ESRUnitType::Catapult: return ESRBuildingType::Workshop;
 		case ESRUnitType::Builder: return ESRBuildingType::Castle;
 		case ESRUnitType::Scout: return ESRBuildingType::Castle;
+		case ESRUnitType::Medic: return ESRBuildingType::Barracks;
 		default: return ESRBuildingType::Barracks;
 		}
 	}
@@ -783,6 +1030,11 @@ public:
 	/** A mine must be placed with its centre within this distance (cm) of a free gold vein; it snaps onto the vein. */
 	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "50"))
 	float VeinSnapRadius = 900.f;
+
+	/** Water deeper than this (cm, from its surface down to the ground under it) is deep water, a wall; shallower is a
+	 * ford, and troops wade it. (Water is the level's SRWater sheets, at whatever height each one lies.) */
+	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "0"))
+	float WadeDepth = 14.f;
 
 	/** Extra path cost for walking next to an obstacle: keeps routes off walls and out of tight gaps. */
 	UPROPERTY(EditAnywhere, Config, Category = "Grid", meta = (ClampMin = "0"))
@@ -875,7 +1127,7 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "Fog")
 	bool bFogOfWar = true;
 
-	/** Fog grid cell (cm). */
+	/** Fog grid cell (cm). A map too big for the fog texture (512 cells across) at this size gets bigger cells. */
 	UPROPERTY(EditAnywhere, Config, Category = "Fog", meta = (ClampMin = "25"))
 	float FogCellSize = 125.f;
 
@@ -901,6 +1153,38 @@ public:
 	/** Defensive stance: how far (cm) units chase before returning to where they were posted. */
 	UPROPERTY(EditAnywhere, Config, Category = "Platoons", meta = (ClampMin = "100"))
 	float DefensiveChaseDistance = 900.f;
+
+	// ----------------------------------------------------------- Performance
+	// Applied by USRPowerSubsystem. Nothing else limits the frame rate, so without a cap the GPU draws the whole
+	// scene (Lumen, virtual shadow maps, volumetric fog, depth of field) as often as it can: the main power draw.
+
+	/** Frames per second while playing (0 = no limit). The player's own choice is on the Settings screen. */
+	UPROPERTY(EditAnywhere, Config, Category = "Performance", meta = (ClampMin = "0", ClampMax = "240"))
+	int32 FrameRateCap = 60;
+
+	/** Frames per second while a menu is up (main menu, pause, result); 0 = same as playing. */
+	UPROPERTY(EditAnywhere, Config, Category = "Performance", meta = (ClampMin = "0", ClampMax = "240"))
+	int32 MenuFrameRateCap = 30;
+
+	/** Frames per second while the game is not the front window; 0 = same as playing. Not used inside the editor,
+	 * which throttles itself in the background. */
+	UPROPERTY(EditAnywhere, Config, Category = "Performance", meta = (ClampMin = "0", ClampMax = "240"))
+	int32 BackgroundFrameRateCap = 10;
+
+	/** Battery saver: 0 off, 1 while the computer runs on its battery, 2 always. The player's own choice is on the
+	 * Settings screen. */
+	UPROPERTY(EditAnywhere, Config, Category = "Performance", meta = (ClampMin = "0", ClampMax = "2"))
+	int32 BatterySaver = 1;
+
+	/** Frames per second while the battery saver is on (0 = it does not limit the frame rate). */
+	UPROPERTY(EditAnywhere, Config, Category = "Performance", meta = (ClampMin = "0", ClampMax = "240"))
+	int32 BatterySaverFrameRateCap = 30;
+
+	/** The battery saver also takes lighting, reflections, shadows and anti-aliasing from Epic down to High (coarser
+	 * Lumen, softer shadow maps, a coarser fog grid, 100% instead of 200% anti-aliasing history). Never inside the
+	 * editor, where the look is judged. */
+	UPROPERTY(EditAnywhere, Config, Category = "Performance")
+	bool bBatterySaverLowersQuality = true;
 
 	// ----------------------------------------------------------------- Audio
 	UPROPERTY(EditAnywhere, Config, Category = "Audio", meta = (ClampMin = "0", ClampMax = "1"))
@@ -937,6 +1221,7 @@ public:
 		case ESRUnitType::Catapult: return CatapultCost;
 		case ESRUnitType::Builder: return BuilderCost;
 		case ESRUnitType::Scout: return ScoutCost;
+		case ESRUnitType::Medic: return MedicCost;
 		default: return ShieldbearerCost;
 		}
 	}
@@ -949,6 +1234,7 @@ public:
 		case ESRUnitType::Catapult: return CatapultBuildTime;
 		case ESRUnitType::Builder: return BuilderBuildTime;
 		case ESRUnitType::Scout: return ScoutBuildTime;
+		case ESRUnitType::Medic: return MedicBuildTime;
 		default: return ShieldbearerBuildTime;
 		}
 	}
@@ -1022,6 +1308,17 @@ public:
 	/** Distance over which the haze fades in past its start, as a fraction of the camera-to-focus distance. */
 	UPROPERTY(EditAnywhere, Config, Category = "Visuals|Haze", meta = (ClampMin = "0", ClampMax = "4"))
 	float HazeFadeFraction = 0.7f;
+
+	// ------------------------------------------------------------------ Maps
+	/** The battle maps the New Game screen offers, in order. Each level carries an ASRMapInfo with the same Id. */
+	UPROPERTY(EditAnywhere, Config, Category = "Maps")
+	TArray<FSRMapEntry> Maps;
+
+	/** The entry for a map id (null if it is not in the list). */
+	const FSRMapEntry* FindMap(FName Id) const
+	{
+		return Maps.FindByPredicate([Id](const FSRMapEntry& M) { return M.Id == Id; });
+	}
 
 	// ----------------------------------------------------------------- Debug
 	/** Log every hit to LogSovereign (deaths and battle results are always logged). */

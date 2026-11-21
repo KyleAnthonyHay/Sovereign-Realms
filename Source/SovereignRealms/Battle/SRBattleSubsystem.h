@@ -78,7 +78,8 @@ public:
 
 	/** The nearest active enemy within Range. A hard-to-notice one (the Scout: FSRUnitStats::NoticeScale) only counts
 	 * within that fraction of Range. */
-	ASRUnit* FindNearestEnemy(const ASRUnit* For, float Range) const;
+	/** MinRange: skip anything closer than this (a catapult cannot lob at what is under it; it takes the next one). */
+	ASRUnit* FindNearestEnemy(const ASRUnit* For, float Range, float MinRange = 0.f) const;
 	/**
 	 * Living units within Radius of Pos, from a bucket grid rebuilt each simulation step (so neighbour searches
 	 * cost O(nearby) instead of O(all units): avoidance, overlap resolution, targeting, alerts).
@@ -96,20 +97,38 @@ public:
 		bool bAcknowledge = true, const FVector2D* Facing = nullptr, bool bKeepPace = true);
 	/** Deep water at a point (a hard wall for everyone without water privileges). */
 	bool IsDeepWater(const FVector2D& Point) const;
+	/** Ground too steep to walk at a point: a mountainside, a bank, a crag's edge (a grid edge cell). The terrain is a
+	 * smooth heightfield, so nothing physical stops a troop there: steering treats it as it treats deep water. */
+	bool IsSteep(const FVector2D& Point) const;
 	void CommandAttack(const TArray<ASRUnit*>& Group, ASRUnit* Target);
 	void CommandAttackBuilding(const TArray<ASRUnit*>& Group, ASRBuilding* Target);
 
 	/**
-	 * Patrol: the group walks (attack-moving, in formation) between where it stands now and To, back and forth, until
-	 * one of its members is given another order (ClearPatrol). Fights on the way are fought, then the patrol resumes.
+	 * Routes: a group walks through a list of points in formation, one leg at a time (the next leg starts once
+	 * everyone has arrived, or given up, and nobody is fighting), until one of its members is given another order
+	 * (ClearPatrol).
+	 *  - Patrol: attack-moving from where the group stands to To and back, round and round (CommandPatrol), or through
+	 *    several points and back to the start (ExtendPatrol: P, then Option+click each point).
+	 *  - Pathway: through the points once and stop at the last (ExtendPath: Option+right-click each point).
 	 */
 	void CommandPatrol(const TArray<ASRUnit*>& Group, const FVector2D& To, ESRFormationShape Shape);
-	/** Takes these units off any patrol (a patrol left with nobody ends). */
+	/** One more point on the patrol these units are on (they start one from where they stand if they are on none). */
+	void ExtendPatrol(const TArray<ASRUnit*>& Group, const FVector2D& Point, ESRFormationShape Shape);
+	/** One more point on the pathway these units are walking (a new pathway if they are on none). */
+	void ExtendPath(const TArray<ASRUnit*>& Group, const FVector2D& Point, bool bAttackMove, ESRFormationShape Shape);
+	/** Takes these units off any patrol or pathway (one left with nobody ends). */
 	void ClearPatrol(const TArray<ASRUnit*>& Group);
 	/** Fog of war: may the player see this unit right now (USRFogSubsystem)? */
 	bool IsVisibleToPlayer(const ASRUnit* Unit) const;
-	/** The patrol route a unit is on, if any (the HUD draws it). */
-	bool GetPatrolRoute(const ASRUnit* Unit, FVector2D& OutA, FVector2D& OutB) const;
+	/** The route a unit is on, if any (the HUD draws it): its points, whether it loops (a patrol), the point it is
+	 * heading for now. */
+	bool GetRoute(const ASRUnit* Unit, TArray<FVector2D>& OutPoints, bool& bOutLoop, int32& OutNext) const;
+
+	// ---- heals (the Medic) ----
+	struct FHealPopup { FVector Origin = FVector::ZeroVector; int32 Amount = 0; float Age = 0.f; };
+	/** A green "+N" over a troop that was just healed (drawn by ASRHUD). */
+	void AddHealPopup(const FVector& Origin, int32 Amount);
+	const TArray<FHealPopup>& GetHealPopups() const { return HealPopups; }
 
 	/** A building fell; if it was a castle the match is decided. */
 	void NotifyBuildingDestroyed(ASRBuilding* Building);
@@ -186,9 +205,9 @@ public:
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> UnitCardMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> ArrowCardMesh;
 	/** Index = ESRUnitType. A type whose sheet is not imported yet borrows the Shieldbearer's. */
-	static constexpr int32 SRSpriteTypes = 6;   // one per ESRUnitType (UHT wants the literal below, not this)
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[6];
-	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[6];
+	static constexpr int32 SRSpriteTypes = 7;   // one per ESRUnitType (UHT wants the literal below, not this)
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> SpriteMaterials[7];
+	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> SpriteShadowMaterials[7];
 	/** Catapult stones (an arrow card with the stone sheet). */
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> StoneMaterial;
 	/** Workers (cosmetic miners and farmhands): 0 miner, 1 farmhand. */
@@ -231,12 +250,37 @@ private:
 	struct FPatrol
 	{
 		TArray<TWeakObjectPtr<ASRUnit>> Members;
-		FVector2D A = FVector2D::ZeroVector, B = FVector2D::ZeroVector;
-		bool bTowardB = true;
+		TArray<FVector2D> Points;   // a patrol's first point is where the group stood when it was given
+		int32 Next = 0;             // the point the group is walking to now
+		bool bLoop = true;          // patrol: round and round; pathway: stop at the last point
+		bool bAttackMove = true;
 		ESRFormationShape Shape = ESRFormationShape::Line;
 		float Settle = 0.f;
 	};
 	TArray<FPatrol> Patrols;
+
+	/** A group in formation on the march: the formation's centre walks one route and each member keeps its place in
+	 * the shape round it, turned to the way the route goes. A member whose place the ground does not allow (a narrow
+	 * ramp, a gap) files along the route instead and takes its place again once there is room. At the end each
+	 * member walks to its slot as usual. */
+	struct FMarch
+	{
+		TArray<TWeakObjectPtr<ASRUnit>> Members;
+		TArray<FVector2D> Offsets;          // place in the shape: x forward, y right (cm)
+		TArray<FVector2D> FinalSlots;
+		TArray<float> RouteTimer;           // a member off its place and off the route: its own way back, re-planned now and then
+		TArray<FVector2D> Route;            // the centre's route, from where the group stood to the goal
+		TArray<float> RouteS;               // distance along it at each point
+		float S = 0.f, Pace = 0.f, Stalled = 0.f;
+		bool bAttackMove = false;
+	};
+	TArray<FMarch> Marches;
+	void StepMarches(float Dt);
+	void EndMarchesOf(const TArray<ASRUnit*>& Group);
+	FVector2D RouteAt(const FMarch& M, float S) const;
+	/** The route all of Group (and nobody else) is on, or INDEX_NONE. */
+	int32 FindRouteOf(const TArray<ASRUnit*>& Group) const;
+	TArray<FHealPopup> HealPopups;
 	static constexpr float BucketSize = 400.f;
 	TMap<FIntPoint, TArray<ASRUnit*>> Buckets;
 

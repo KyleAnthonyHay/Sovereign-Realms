@@ -1,0 +1,19 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "",
+	"Description": "Sovereign Realms - voxel style sandbox (village scene, King David walking around)",
+	"Modules": [
+		{
+			"Name": "VoxelLab",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [ "Engine" ]
+		}
+	],
+	"Plugins": [
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "ModelContextProtocol", "Enabled": true },
+		{ "Name": "EditorToolset", "Enabled": true }
+	]
+}

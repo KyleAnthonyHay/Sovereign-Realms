@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_ForeR",
+ "faces": 418,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.124,
+   -0.2312,
+   -0.2943
+  ],
+  [
+   0.0955,
+   0.0822,
+   0.0846
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.34386,
+  0.0,
+  0.95164
+ ],
+ "part": "ForeR",
+ "triangles": 836,
+ "blocks": 53
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_KingB_Chest",
+ "faces": 7237,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.6056,
+   -0.2892,
+   -0.0175
+  ],
+  [
+   0.6114,
+   0.386,
+   0.5452
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.9125
+ ],
+ "part": "Chest",
+ "triangles": 14475,
+ "blocks": 555
+}
