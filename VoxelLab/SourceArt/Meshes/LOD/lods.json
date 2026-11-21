@@ -4154,5 +4154,33 @@
     ]
    }
   ]
+ },
+ "SM_Treasury": {
+  "set": "buildings",
+  "triangles": 85260,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Treasury_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 14692,
+    "slots": [
+     "stone",
+     "brick",
+     "plank",
+     "beam",
+     "roof",
+     "leaves",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
  }
 }

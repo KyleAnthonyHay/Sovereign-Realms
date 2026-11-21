@@ -32,6 +32,7 @@ namespace
 		case EVLBuilding::Tower: return EVLIcon::Tower;
 		case EVLBuilding::Barracks: return EVLIcon::Barracks;
 		case EVLBuilding::Range: return EVLIcon::Range;
+		case EVLBuilding::Treasury: return EVLIcon::Treasury;
 		default: return EVLIcon::Castle;
 		}
 	}

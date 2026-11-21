@@ -1,0 +1,21 @@
+{
+ "name": "SM_Treasury_L1",
+ "faces": 7346,
+ "collision": "none",
+ "bounds": [
+  [
+   -6.5,
+   -4.5,
+   0.0
+  ],
+  [
+   6.5,
+   5.0,
+   9.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Treasury",
+ "voxel": 0.25,
+ "triangles": 14692
+}
