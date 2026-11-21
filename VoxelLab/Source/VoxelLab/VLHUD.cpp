@@ -46,7 +46,7 @@ namespace
 	// ...and a colour that is already linear (the world-space colours) is taken back out first.
 	FLinearColor FromLinear(const FLinearColor& C) { return FLinearColor(FMath::Pow(C.R, 1.f / 2.2f), FMath::Pow(C.G, 1.f / 2.2f), FMath::Pow(C.B, 1.f / 2.2f), C.A); }
 
-	const int32 Caps[4] = { 30, 60, 120, 0 };
+	const int32 Caps[5] = { 30, 40, 60, 120, 0 };
 
 	TAutoConsoleVariable<int32> CVarOptHud(TEXT("vl.Opt.Hud"), 1,
 		TEXT("1: the HUD looks at the units once a frame, puts the pips' and bars' rectangles into the canvas batch directly, and asks what the pointer is over only when it or the camera moved; 0: as before (to compare)"));
@@ -81,12 +81,18 @@ void AVLHUD::BeginPlay()
 		{
 			UVLBattle::EffectsVolume = FMath::Clamp(Effects, 0.f, 1.f);
 		}
-		GConfig->GetInt(TEXT("VoxelLab.Video"), TEXT("FrameCap"), FrameCap, GGameUserSettingsIni);
+		int32 OldCap = -1;
+		if (!GConfig->GetInt(TEXT("VoxelLab.Video"), TEXT("FrameCapV2"), FrameCap, GGameUserSettingsIni)
+			&& GConfig->GetInt(TEXT("VoxelLab.Video"), TEXT("FrameCap"), OldCap, GGameUserSettingsIni))
+		{
+			static const int32 MapOld[4] = { 0, 2, 3, 4 };      // 30->30, 60->60, 120->120, Unlimited->Unlimited
+			FrameCap = MapOld[FMath::Clamp(OldCap, 0, 3)];
+		}
 		GConfig->GetInt(TEXT("VoxelLab.Game"), TEXT("Difficulty"), PickDifficulty, GGameUserSettingsIni);
 		GConfig->GetBool(TEXT("VoxelLab.Interface"), TEXT("PlatoonsCollapsed"), bPlatoonsCollapsed, GGameUserSettingsIni);
 	}
 	MasterVolume = FMath::Clamp(MasterVolume, 0.f, 1.f);
-	FrameCap = FMath::Clamp(FrameCap, 0, 3);
+	FrameCap = FMath::Clamp(FrameCap, 0, 4);
 	PickDifficulty = FMath::Clamp(PickDifficulty, 0, 2);
 	PickMap = 1;
 	PendingScale = InterfaceScale;
@@ -102,11 +108,8 @@ void AVLHUD::ApplySettings()
 			Device->SetTransientPrimaryVolume(MasterVolume);
 		}
 	}
-	if (IConsoleVariable* Max = IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS")))
-	{
-		Max->Set(float(Caps[FrameCap]), ECVF_SetByGameSetting);
-	}
-	UVLGraphics::Apply(GetWorld());         // the quality preset and the render scale
+	UVLGraphics::SetUserFrameCap(Caps[FrameCap]);
+	UVLGraphics::Apply(GetWorld());         // quality preset, render scale, dynamic resolution and frame cap
 }
 
 void AVLHUD::SaveSettings()
@@ -119,7 +122,7 @@ void AVLHUD::SaveSettings()
 	GConfig->SetFloat(TEXT("VoxelLab.Interface"), TEXT("Scale"), InterfaceScale, GGameUserSettingsIni);
 	GConfig->SetFloat(TEXT("VoxelLab.Audio"), TEXT("MasterVolume"), MasterVolume, GGameUserSettingsIni);
 	GConfig->SetFloat(TEXT("VoxelLab.Audio"), TEXT("Effects"), UVLBattle::EffectsVolume, GGameUserSettingsIni);
-	GConfig->SetInt(TEXT("VoxelLab.Video"), TEXT("FrameCap"), FrameCap, GGameUserSettingsIni);
+	GConfig->SetInt(TEXT("VoxelLab.Video"), TEXT("FrameCapV2"), FrameCap, GGameUserSettingsIni);
 	UVLGraphics::Save();
 	GConfig->SetInt(TEXT("VoxelLab.Game"), TEXT("Difficulty"), PickDifficulty, GGameUserSettingsIni);
 	GConfig->SetBool(TEXT("VoxelLab.Interface"), TEXT("PlatoonsCollapsed"), bPlatoonsCollapsed, GGameUserSettingsIni);
@@ -203,6 +206,7 @@ void AVLHUD::SetScreen(EVLScreen InScreen)
 		bLegend = false;
 	}
 	bMenu = Base != EVLScreen::None;
+	UVLGraphics::SetMenuThrottle(GetWorld(), bMenu);
 	Press.bPending = false;
 	// the pause menu (and what opens from it) pauses the match: troops, buildings, the commander, the clock
 	const bool bPause = Base != EVLScreen::None && Base != EVLScreen::End && Battle && Battle->IsPlaying();

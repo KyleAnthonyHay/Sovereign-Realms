@@ -98,7 +98,7 @@ namespace
 		TEXT("Sandbox: the voxel village. No enemy."),
 		TEXT("The bigger battle: bluffs, a gorge, the Crown.") };
 
-	const int32 Caps[4] = { 30, 60, 120, 0 };
+	const int32 Caps[5] = { 30, 40, 60, 120, 0 };
 
 	FString ClockText(float Seconds)
 	{
@@ -339,7 +339,7 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 {
 	AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
 	AVLKing* Me = King;
-	const int32 NumRows = 10;
+	const int32 NumRows = 11;
 	const float W = U(600.f), RowH = U(46.f), HeadH = U(34.f);
 	const float H = U(92.f) + NumRows * RowH + 2.f * HeadH + U(96.f) + U(24.f);
 	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
@@ -416,8 +416,11 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 	Label(TEXT("Render scale"));
 	if (Choice(VLId::Setting + 9, FString::Printf(TEXT("%d%%"), UVLGraphics::GetRenderScale()), nullptr)) { UVLGraphics::CycleRenderScale(GetWorld()); }
 	RY += RowH;
+	Label(TEXT("Dynamic resolution"));
+	if (Choice(VLId::Setting + 10, UVLGraphics::DynamicResName(UVLGraphics::GetDynamicRes()), nullptr)) { UVLGraphics::CycleDynamicRes(GetWorld()); }
+	RY += RowH;
 	Label(TEXT("Frame rate limit"));
-	if (Choice(VLId::Setting + 4, Caps[FrameCap] > 0 ? FString::Printf(TEXT("%d fps"), Caps[FrameCap]) : FString(TEXT("Unlimited")), nullptr)) { FrameCap = (FrameCap + 1) % 4; ApplySettings(); }
+	if (Choice(VLId::Setting + 4, Caps[FrameCap] > 0 ? FString::Printf(TEXT("%d fps"), Caps[FrameCap]) : FString(TEXT("Unlimited")), nullptr)) { FrameCap = (FrameCap + 1) % 5; ApplySettings(); }
 	RY += RowH;
 	Head(TEXT("CAMERA"));
 	Label(TEXT("Camera angle"));

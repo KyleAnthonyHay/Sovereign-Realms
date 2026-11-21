@@ -3585,12 +3585,13 @@ void AVLKing::PoseFigure(float AnimDt)
 	// (a longer stride, StrideScale: the feet reach further, so the pelvis drops further for the legs to reach them;
 	// the reach stays Stride / 2 pi, which keeps a planted foot still on the ground)
 	P[P_Drop] = W * ((0.5f + 1.5f * R) + (3.4f + 1.6f * R) * StrideScale * StrideScale * StrideScale * Sw * Sw);     // (~ what a 67 cm leg needs at that reach)
+	const float LiftCos = FMath::Cos(Phase + 0.3f);
 	{
 		const float Reach = W * (23.f + 7.f * R) * StrideScale, Lift = W * (6.f + 10.f * R) * FMath::Sqrt(StrideScale);
 		P[P_FootLX] = Reach * Sw;
-		P[P_FootLZ] = Lift * FMath::Pow(FMath::Max(0.f, FMath::Cos(Phase + 0.3f)), 1.2f);
+		P[P_FootLZ] = (Lift > 0.f && LiftCos > 0.f) ? Lift * FMath::Pow(LiftCos, 1.2f) : 0.f;
 		P[P_FootRX] = -Reach * Sw;
-		P[P_FootRZ] = Lift * FMath::Pow(FMath::Max(0.f, -FMath::Cos(Phase + 0.3f)), 1.2f);
+		P[P_FootRZ] = (Lift > 0.f && LiftCos < 0.f) ? Lift * FMath::Pow(-LiftCos, 1.2f) : 0.f;
 	}
 	P[P_PelvLean] = W * (2.f + 4.f * R);
 	P[P_PelvTwist] = Sw * (5.f + 3.f * R) * W;                 // the hip goes forward with its leg ..
@@ -3775,7 +3776,6 @@ void AVLKing::PoseFigure(float AnimDt)
 	// lifts the feet). Two steps a cycle: one every Stride / (2 Speed) seconds.
 	if (((bFootDust && Dust) || bFootsteps) && AnimDt > 0.f)
 	{
-		const float LiftCos = FMath::Cos(Phase + 0.3f);
 		const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 		const FVector Back = Speed > 1.f ? -FVector(Velocity.X, Velocity.Y, 0.f).GetSafeNormal() : -GetActorForwardVector();
 		for (int32 Side = 0; Side < 2; ++Side)
@@ -3946,6 +3946,9 @@ void AVLKing::UpdateCape(float AnimDt)
 		CapeBackLower = Lower < CapeBackLower ? Lower : FMath::Min(Lower, CapeBackLower + 90.f * AnimDt);
 	}
 	const float SpeedShare = FMath::Clamp(GetVelocity().Size() / FMath::Max(RunSpeed, 1.f), 0.f, 1.2f);
+	const float InvDt = bStep ? (1.f / AnimDt) : 0.f;
+	const float VelAlpha = bStep ? (1.f - FMath::Exp(-AnimDt * 18.f)) : 0.f;
+	const float AccAlpha = bStep ? (1.f - FMath::Exp(-AnimDt * 10.f)) : 0.f;
 	for (int32 C = 0; C < CapeCols; ++C)
 	{
 		float YawAbove = ChestYaw;
@@ -3960,10 +3963,10 @@ void AVLKing::UpdateCape(float AnimDt)
 			if (bStep)
 			{
 				const float Deep = float(Row + 1) / float(CapeRows);
-				const FVector V = (Hinge - N.Prev) / AnimDt;
+				const FVector V = (Hinge - N.Prev) * InvDt;
 				const FVector Was = N.Vel;
-				N.Vel = FMath::Lerp(N.Vel, V, 1.f - FMath::Exp(-AnimDt * 18.f));
-				N.Acc = FMath::Lerp(N.Acc, (N.Vel - Was) / AnimDt, 1.f - FMath::Exp(-AnimDt * 10.f));
+				N.Vel = FMath::Lerp(N.Vel, V, VelAlpha);
+				N.Acc = FMath::Lerp(N.Acc, (N.Vel - Was) * InvDt, AccAlpha);
 				const float Vf = FVector::DotProduct(N.Vel, Fwd), Vr = FVector::DotProduct(N.Vel, Right), Vz = N.Vel.Z;
 				const float Af = FVector::DotProduct(N.Acc, Fwd), Ar = FVector::DotProduct(N.Acc, Right);
 				// where it wants to hang: streamed back by his speed, thrown by his acceleration, lifted by a fall,

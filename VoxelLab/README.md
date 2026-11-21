@@ -970,6 +970,20 @@ The optimization pass of 2026-11-21 (plan, decisions and before/after numbers: `
   the HUD and the commander instead of scanning every actor.
 - **Load**: the path grid samples its rows in parallel (Realm 1.06 s -> 0.18 s, Highlands 1.96 s -> 0.30 s); the
   placement ghost reuses its ground samples per cell; a building laid among trees rebuilds the grid once.
+- **Apple Silicon pass** (merged 2026-11-21 from `t3/apple-silicon-optimization`, `Docs/Optimization/AppleSilicon/` on
+  that branch): `Config/Mac/MacDeviceProfiles.ini` (runtime `r.Nanite=0`, which no mesh here uses, so the forced depth
+  prepass goes; `r.TranslucencyLightingVolume=0`, our two translucent materials being unlit; VSM pool 2048 pages),
+  `r.DBuffer=False`, `r.MegaLights.Supported=False`, no ray-tracing shaders, Metal 3.0, stripped metallibs, PSO
+  precaching for METAL_SM6, a 256 MB streaming pool, arm64-only builds, Shipping ThinLTO; P/E-core worker sizing
+  (`vl.Opt.MacWorkers`: 4 -> 12 workers on an M5 Pro, packaged only) and user-interactive QoS on the game, render and
+  RHI threads (`vl.Opt.MacQoS`); a 40 fps frame-rate choice and Settings > Dynamic resolution (Off / 60 / 40 / 30 fps,
+  `vl.Gfx.DynRes`); packaged only: 30 fps in menus and 15 fps while the window is not in front (`vl.Opt.IdleThrottle`),
+  40 fps under Serious heat or Low Power Mode and 30 fps + dynamic resolution under Critical heat (`vl.Opt.ThermalGuard`).
+  The branch's `r.Lumen.Reflections.MaxRoughnessToTrace=0.55` was left out: the engine's default here is 0.4, so it
+  would trace more surfaces, not fewer. Measured (packaged Development, L_Realm, Hard, AI against AI, overview 0.45,
+  10 min each, M5 Pro on mains, window uncapped): before 61.8 fps (GPU 15.5 ms, game thread 1.6 ms), after 61.3 fps
+  (GPU 15.7, 1.6): the same within the battles' variation; the runtime GPU settings flipped in one scene: within
+  0.2 ms. No thermal or performance warning in either run, no drift beyond the battle growing. Content 861 -> 806 MB.
 - **Music** is not loaded at all while its setting is 0; above 0 one song at a time is loaded in the background.
 - **Packaging**: `sh Tools/package.sh` builds Shipping (no console, no log, no command inbox, symbols stripped);
   `sh Tools/package.sh Development` for tests. Only Metal SM6 shaders are cooked (`Config/Mac/MacEngine.ini`); the NNE
