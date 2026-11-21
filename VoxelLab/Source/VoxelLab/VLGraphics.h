@@ -35,6 +35,7 @@ class VOXELLAB_API UVLGraphics : public UTickableWorldSubsystem
 
 public:
 	enum { Low = 0, Medium = 1, High = 2, NumQualities = 3 };
+	enum { DynOff = 0, Dyn60 = 1, Dyn40 = 2, Dyn30 = 3, NumDynRes = 4 };
 
 	// ---- the settings (one set for the whole game; AVLHUD's settings screen shows and changes them)
 	static int32 GetQuality() { LoadOnce(); return Quality; }
@@ -46,11 +47,20 @@ public:
 	static void SetRenderScale(UWorld* World, int32 Percent);
 	/** The next choice of the settings row (100, 85, 75, 67, 60, 50). */
 	static void CycleRenderScale(UWorld* World);
+	/** Dynamic resolution target (0 Off, 1 Target 60 fps, 2 Target 40 fps, 3 Target 30 fps) using MetalRHI + TSR. */
+	static int32 GetDynamicRes() { LoadOnce(); return DynamicRes; }
+	static const TCHAR* DynamicResName(int32 Mode);
+	static void SetDynamicRes(UWorld* World, int32 Mode);
+	static void CycleDynamicRes(UWorld* World);
+	/** User frame-rate limit from Settings (0 = Unlimited) and menu-active hint for ProMotion / thermal pacing. */
+	static void SetUserFrameCap(int32 InFps);
+	static void SetMenuThrottle(UWorld* World, bool bInMenu);
 	static void Save();
 	/** Everything, to the engine and to this world's look actors. */
 	static void Apply(UWorld* World);
 
 	virtual bool DoesSupportWorldType(const EWorldType::Type WorldType) const override { return WorldType == EWorldType::Game || WorldType == EWorldType::PIE; }
+	virtual bool IsTickableWhenPaused() const override { return true; }
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 	virtual void Deinitialize() override;
 	virtual void Tick(float DeltaTime) override;
@@ -63,9 +73,13 @@ private:
 	void ApplyToWorld();
 	void UpdateScreenPercentage(bool bForce);
 	void UpdateFarFog();
+	void UpdateThermalAndFrameCap(bool bForce);
 
 	static int32 Quality;
 	static int32 RenderScale;
+	static int32 DynamicRes;
+	static int32 UserFrameCap;
+	static bool bMenuThrottle;
 	static bool bLoaded;
 
 	// the level's unbound post-process volume and what it asked of Lumen (kept for High)
@@ -81,4 +95,9 @@ private:
 
 	FIntPoint LastViewSize = FIntPoint::ZeroValue;
 	float LastScreenPercentage = -1.f;
+	int32 LastAppliedDynRes = -1;
+	int32 LastEffectiveFrameCap = -1;
+	int32 ThermalLevel = 0;              // macOS NSProcessInfoThermalState (0 Nominal .. 3 Critical)
+	bool bLowPowerMode = false;          // macOS Low Power Mode
+	float ThermalCheckIn = 0.f;
 };

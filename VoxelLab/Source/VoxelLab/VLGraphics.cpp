@@ -13,12 +13,19 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformApplicationMisc.h"
 #include "LegacyScreenPercentageDriver.h"
 #include "Misc/ConfigCacheIni.h"
 #include "UnrealClient.h"
+#if PLATFORM_MAC
+#import <Foundation/NSProcessInfo.h>
+#endif
 
 int32 UVLGraphics::Quality = UVLGraphics::High;
 int32 UVLGraphics::RenderScale = 100;
+int32 UVLGraphics::DynamicRes = UVLGraphics::DynOff;
+int32 UVLGraphics::UserFrameCap = 60;
+bool UVLGraphics::bMenuThrottle = false;
 bool UVLGraphics::bLoaded = false;
 bool UVLGraphics::bFarFog = false;
 
@@ -50,12 +57,30 @@ namespace
 		{ TEXT("r.Shadow.Virtual.ResolutionLodBiasDirectionalMoving"), TEXT("-0.5"), TEXT("0.5") },
 		{ TEXT("r.Shadow.Virtual.SMRT.RayCountDirectional"), nullptr, TEXT("4") },
 		{ TEXT("r.Shadow.Virtual.SMRT.SamplesPerRayDirectional"), nullptr, TEXT("2") },
+		// half-res Lumen reflections and smaller VSM page pool on Medium/Low (High keeps startup values untouched)
+		{ TEXT("r.Lumen.Reflections.DownsampleFactor"), TEXT("2"), TEXT("2") },
+		{ TEXT("r.Shadow.Virtual.MaxPhysicalPages"), TEXT("1024"), TEXT("1024") },
 		// the lamps' point lights fade out at MaxDrawDistance (Tools/ue/build_level.py lamps()): sooner on the lower presets
 		{ TEXT("r.LightMaxDrawDistanceScale"), TEXT("0.75"), TEXT("0.5") },
 	};
 	bool bVarsCaptured = false;
 	IConsoleVariable* ScreenPercentageVar = nullptr;
+	IConsoleVariable* MaxFpsVar = nullptr;
+	IConsoleVariable* DynOpModeVar = nullptr;
+	IConsoleVariable* DynBudgetVar = nullptr;
+	IConsoleVariable* DynMinVar = nullptr;
+	IConsoleVariable* DynMaxVar = nullptr;
 	FString ScreenPercentageStart;
+	FString MaxFpsStart;
+	FString DynOpModeStart;
+	FString DynBudgetStart;
+	FString DynMinStart;
+	FString DynMaxStart;
+
+	TAutoConsoleVariable<int32> CVarThermalGuard(TEXT("vl.Opt.ThermalGuard"), 1,
+		TEXT("1: on macOS, cap frame rate (and engage dynamic resolution under Critical heat) when Low Power Mode or Serious/Critical thermal state is reported. 0: off."));
+	TAutoConsoleVariable<int32> CVarIdleThrottle(TEXT("vl.Opt.IdleThrottle"), 1,
+		TEXT("1: lower the frame-rate cap in menus (30 fps) and while unfocused (15 fps) to cut laptop heat and battery draw. 0: off."));
 
 	const int32 Scales[] = { 100, 85, 75, 67, 60, 50 };
 	const int32 PresetScale[UVLGraphics::NumQualities] = { 70, 85, 100 };
@@ -82,11 +107,20 @@ namespace
 				UE_LOG(LogVoxelLab, Warning, TEXT("graphics: no console variable %s"), V.Name);
 			}
 		}
-		ScreenPercentageVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
-		if (ScreenPercentageVar)
+		auto Capture = [](const TCHAR* Name, IConsoleVariable*& OutVar, FString& OutStart)
 		{
-			ScreenPercentageStart = ScreenPercentageVar->GetString();
-		}
+			OutVar = IConsoleManager::Get().FindConsoleVariable(Name);
+			if (OutVar)
+			{
+				OutStart = OutVar->GetString();
+			}
+		};
+		Capture(TEXT("r.ScreenPercentage"), ScreenPercentageVar, ScreenPercentageStart);
+		Capture(TEXT("t.MaxFPS"), MaxFpsVar, MaxFpsStart);
+		Capture(TEXT("r.DynamicRes.OperationMode"), DynOpModeVar, DynOpModeStart);
+		Capture(TEXT("r.DynamicRes.FrameTimeBudget"), DynBudgetVar, DynBudgetStart);
+		Capture(TEXT("r.DynamicRes.MinScreenPercentage"), DynMinVar, DynMinStart);
+		Capture(TEXT("r.DynamicRes.MaxScreenPercentage"), DynMaxVar, DynMaxStart);
 	}
 
 	/** The share of the window's resolution the engine renders at by itself (r.ScreenPercentage 0), for a view of this size. */
@@ -144,6 +178,16 @@ namespace
 			}
 			UE_LOG(LogVoxelLab, Log, TEXT("graphics: quality %s, render scale %d%%"), UVLGraphics::QualityName(UVLGraphics::GetQuality()), UVLGraphics::GetRenderScale());
 		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdDynRes(TEXT("vl.Gfx.DynRes"), TEXT("0 Off, 1 Target 60 fps, 2 Target 40 fps, 3 Target 30 fps (not saved)"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (Args.Num() > 0)
+			{
+				UVLGraphics::SetDynamicRes(World, FCString::Atoi(*Args[0]));
+			}
+			UE_LOG(LogVoxelLab, Log, TEXT("graphics: dynamic resolution %s"), UVLGraphics::DynamicResName(UVLGraphics::GetDynamicRes()));
+		}));
 }
 
 // ------------------------------------------------------------------------------------------------ the settings
@@ -162,6 +206,8 @@ void UVLGraphics::LoadOnce()
 		RenderScale = PresetScale[Quality];
 		GConfig->GetInt(TEXT("VoxelLab.Video"), TEXT("RenderScale"), RenderScale, GGameUserSettingsIni);
 		RenderScale = FMath::Clamp(RenderScale, 50, 100);
+		GConfig->GetInt(TEXT("VoxelLab.Video"), TEXT("DynamicRes"), DynamicRes, GGameUserSettingsIni);
+		DynamicRes = FMath::Clamp(DynamicRes, 0, NumDynRes - 1);
 	}
 }
 
@@ -172,6 +218,7 @@ void UVLGraphics::Save()
 	{
 		GConfig->SetInt(TEXT("VoxelLab.Video"), TEXT("Quality"), Quality, GGameUserSettingsIni);
 		GConfig->SetInt(TEXT("VoxelLab.Video"), TEXT("RenderScale"), RenderScale, GGameUserSettingsIni);
+		GConfig->SetInt(TEXT("VoxelLab.Video"), TEXT("DynamicRes"), DynamicRes, GGameUserSettingsIni);
 	}
 }
 
@@ -211,6 +258,42 @@ void UVLGraphics::CycleRenderScale(UWorld* World)
 	SetRenderScale(World, Scales[Next]);
 }
 
+const TCHAR* UVLGraphics::DynamicResName(int32 Mode)
+{
+	static const TCHAR* Names[NumDynRes] = { TEXT("Off"), TEXT("Target 60 fps"), TEXT("Target 40 fps"), TEXT("Target 30 fps") };
+	return Names[FMath::Clamp(Mode, 0, NumDynRes - 1)];
+}
+
+void UVLGraphics::SetDynamicRes(UWorld* World, int32 Mode)
+{
+	LoadOnce();
+	DynamicRes = FMath::Clamp(Mode, 0, NumDynRes - 1);
+	Apply(World);
+}
+
+void UVLGraphics::CycleDynamicRes(UWorld* World)
+{
+	LoadOnce();
+	SetDynamicRes(World, (DynamicRes + 1) % NumDynRes);
+}
+
+void UVLGraphics::SetUserFrameCap(int32 InFps)
+{
+	UserFrameCap = FMath::Max(InFps, 0);
+}
+
+void UVLGraphics::SetMenuThrottle(UWorld* World, bool bInMenu)
+{
+	if (bMenuThrottle != bInMenu)
+	{
+		bMenuThrottle = bInMenu;
+		if (UVLGraphics* Self = World ? World->GetSubsystem<UVLGraphics>() : nullptr)
+		{
+			Self->UpdateThermalAndFrameCap(false);
+		}
+	}
+}
+
 void UVLGraphics::ApplyConsoleVariables()
 {
 	CaptureVars();
@@ -247,10 +330,19 @@ void UVLGraphics::RestoreConsoleVariables()
 			V.Var->Set(*V.Start, ECVF_SetByCode);
 		}
 	}
-	if (ScreenPercentageVar && ScreenPercentageVar->GetString() != ScreenPercentageStart)
+	auto Restore = [](IConsoleVariable* Var, const FString& Start)
 	{
-		ScreenPercentageVar->Set(*ScreenPercentageStart, ECVF_SetByCode);
-	}
+		if (Var && Var->GetString() != Start)
+		{
+			Var->Set(*Start, ECVF_SetByCode);
+		}
+	};
+	Restore(ScreenPercentageVar, ScreenPercentageStart);
+	Restore(MaxFpsVar, MaxFpsStart);
+	Restore(DynOpModeVar, DynOpModeStart);
+	Restore(DynBudgetVar, DynBudgetStart);
+	Restore(DynMinVar, DynMinStart);
+	Restore(DynMaxVar, DynMaxStart);
 }
 
 void UVLGraphics::Apply(UWorld* World)
@@ -282,6 +374,7 @@ void UVLGraphics::Deinitialize()
 	}
 #endif
 	bFarFog = false;
+	bMenuThrottle = false;
 	Super::Deinitialize();
 }
 
@@ -331,6 +424,7 @@ void UVLGraphics::ApplyToWorld()
 		}
 	}
 	UpdateScreenPercentage(true);
+	UpdateThermalAndFrameCap(true);
 }
 
 void UVLGraphics::UpdateScreenPercentage(bool bForce)
@@ -340,14 +434,48 @@ void UVLGraphics::UpdateScreenPercentage(bool bForce)
 	{
 		return;
 	}
-	// 100 %: the engine's own choice (r.ScreenPercentage as the game started, 0: from the size of the window). Less:
-	// that share of what the engine would have chosen, so the scale means the same on every display.
-	float Wanted = FCString::Atof(*ScreenPercentageStart);
 	FIntPoint ViewSize = LastViewSize;
 	if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
 	{
 		ViewSize = GEngine->GameViewport->Viewport->GetSizeXY();
 	}
+	// Engage Dyn30 automatically only under Critical macOS thermal state when ThermalGuard is enabled.
+	const bool bThermalDyn = !GIsEditor && CVarThermalGuard.GetValueOnGameThread() != 0 && ThermalLevel >= 3;
+	const int32 EffectiveDyn = DynamicRes != DynOff ? DynamicRes : (bThermalDyn ? Dyn30 : DynOff);
+	if (EffectiveDyn != DynOff && DynOpModeVar && DynBudgetVar && DynMinVar && DynMaxVar)
+	{
+		if (ViewSize.X <= 0 || ViewSize.Y <= 0)
+		{
+			return;
+		}
+		const float StartVal = FCString::Atof(*ScreenPercentageStart);
+		const float Base = StartVal > 0.f ? StartVal / 100.f : AutoResolutionFraction(ViewSize);
+		const float MaxPct = FMath::Clamp(FMath::RoundToFloat(Base * RenderScale * 10.f) / 10.f, 50.f, 100.f);
+		const float MinPct = FMath::Min(50.f, MaxPct);
+		static const float Budgets[NumDynRes] = { 0.f, 16.6f, 25.0f, 33.3f };
+		const float Budget = Budgets[FMath::Clamp(EffectiveDyn, 1, NumDynRes - 1)];
+		if (bForce || ViewSize != LastViewSize || EffectiveDyn != LastAppliedDynRes || !FMath::IsNearlyEqual(MaxPct, LastScreenPercentage, 0.01f))
+		{
+			LastViewSize = ViewSize;
+			LastAppliedDynRes = EffectiveDyn;
+			LastScreenPercentage = MaxPct;
+			DynBudgetVar->Set(Budget, ECVF_SetByCode);
+			DynMinVar->Set(MinPct, ECVF_SetByCode);
+			DynMaxVar->Set(MaxPct, ECVF_SetByCode);
+			DynOpModeVar->Set(2, ECVF_SetByCode);
+			UE_LOG(LogVoxelLab, Log, TEXT("graphics: dynamic resolution %s (budget %.1f ms, range %.1f%%..%.1f%%)"), DynamicResName(EffectiveDyn), Budget, MinPct, MaxPct);
+		}
+		return;
+	}
+	if (DynOpModeVar && LastAppliedDynRes != DynOff)
+	{
+		DynOpModeVar->Set(0, ECVF_SetByCode);
+		LastAppliedDynRes = DynOff;
+		bForce = true;
+	}
+	// 100 %: the engine's own choice (r.ScreenPercentage as the game started, 0: from the size of the window). Less:
+	// that share of what the engine would have chosen, so the scale means the same on every display.
+	float Wanted = FCString::Atof(*ScreenPercentageStart);
 	if (RenderScale < 100)
 	{
 		if (ViewSize.X <= 0 || ViewSize.Y <= 0)
@@ -370,6 +498,71 @@ void UVLGraphics::UpdateScreenPercentage(bool bForce)
 				ViewSize.X, ViewSize.Y, ViewSize.X > 0 && ViewSize.Y > 0 ? AutoResolutionFraction(ViewSize) * 100.f : 0.f);
 		}
 		LastScreenPercentage = Wanted;
+	}
+}
+
+void UVLGraphics::UpdateThermalAndFrameCap(bool bForce)
+{
+	CaptureVars();
+#if PLATFORM_MAC
+	if (!GIsEditor && CVarThermalGuard.GetValueOnGameThread() != 0)
+	{
+		@autoreleasepool
+		{
+			NSProcessInfo* Info = [NSProcessInfo processInfo];
+			const int32 NewThermal = static_cast<int32>([Info thermalState]);
+			const bool NewLowPower = [Info isLowPowerModeEnabled] ? true : false;
+			if (NewThermal != ThermalLevel || NewLowPower != bLowPowerMode)
+			{
+				ThermalLevel = NewThermal;
+				bLowPowerMode = NewLowPower;
+				UE_LOG(LogVoxelLab, Log, TEXT("graphics: macOS thermal=%d lowPower=%d"), ThermalLevel, bLowPowerMode ? 1 : 0);
+				UpdateScreenPercentage(true);
+			}
+		}
+	}
+#endif
+	if (!MaxFpsVar)
+	{
+		return;
+	}
+	int32 Cap = UserFrameCap;
+	auto LimitTo = [&Cap](int32 Ceiling)
+	{
+		if (Ceiling > 0 && (Cap <= 0 || Ceiling < Cap))
+		{
+			Cap = Ceiling;
+		}
+	};
+	if (!GIsEditor)
+	{
+		if (CVarIdleThrottle.GetValueOnGameThread() != 0)
+		{
+			if (!FPlatformApplicationMisc::IsThisApplicationForeground())
+			{
+				LimitTo(15);
+			}
+			else if (bMenuThrottle)
+			{
+				LimitTo(30);
+			}
+		}
+		if (CVarThermalGuard.GetValueOnGameThread() != 0)
+		{
+			if (ThermalLevel >= 3)
+			{
+				LimitTo(30);
+			}
+			else if (ThermalLevel >= 2 || bLowPowerMode)
+			{
+				LimitTo(40);
+			}
+		}
+	}
+	if (bForce || Cap != LastEffectiveFrameCap)
+	{
+		LastEffectiveFrameCap = Cap;
+		MaxFpsVar->Set(float(Cap), ECVF_SetByCode);
 	}
 }
 
@@ -419,10 +612,19 @@ void UVLGraphics::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	UpdateScreenPercentage(false);
-	FogCheckIn -= DeltaTime;
-	if (FogCheckIn <= 0.f)
+	if (UWorld* World = GetWorld(); World && !World->IsPaused())
 	{
-		FogCheckIn = 0.2f;
-		UpdateFarFog();
+		FogCheckIn -= DeltaTime;
+		if (FogCheckIn <= 0.f)
+		{
+			FogCheckIn = 0.2f;
+			UpdateFarFog();
+		}
+	}
+	ThermalCheckIn -= DeltaTime;
+	if (ThermalCheckIn <= 0.f)
+	{
+		ThermalCheckIn = 2.f;
+		UpdateThermalAndFrameCap(false);
 	}
 }

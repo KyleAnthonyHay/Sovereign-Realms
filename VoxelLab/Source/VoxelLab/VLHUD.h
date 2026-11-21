@@ -337,7 +337,7 @@ private:
 	float PendingScale = 1.f;
 	bool bSettingsDirty = false;
 	float MasterVolume = 1.f;
-	int32 FrameCap = 1;                // 30, 60, 120, unlimited
+	int32 FrameCap = 2;                // 30, 40, 60, 120, unlimited
 	bool bPlatoonsCollapsed = false;
 	double RecruitFlashTime = -10.0;
 	bool bRecruitAccepted = false;
