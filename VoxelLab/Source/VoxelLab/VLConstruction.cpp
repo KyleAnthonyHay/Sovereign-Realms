@@ -210,6 +210,7 @@ namespace VLBuild
 				L.Add(X);
 			};
 			Add(EVLBuilding::Farm, TEXT("SM_Farmstead"), 90, 14.f, 0, TEXT("Grows food for troops and houses them."));
+			Add(EVLBuilding::Treasury, TEXT("SM_Treasury"), 140, 16.f, 0, TEXT("Holds gold on top of the castle's stores."));
 			// (not in the menu, Tab -1: a mine is never built. A free one of the map is claimed, at this price and in this
 			// time: UVLConstruction::ClaimMine)
 			Add(EVLBuilding::Mine, TEXT("SM_MineCliff"), 140, 16.f, -1, TEXT("Digs gold. Claimed, not built: order Builders onto a free mine."));
@@ -317,7 +318,48 @@ void UVLBuilderWork::Stop()
 	Job = nullptr;
 	bWorking = false;
 	HammerAt = -1.f;
-	SetComponentTickEnabled(false);
+	SetComponentTickEnabled(Tasks.Num() > 0);      // (a queue: its next order starts in the next tick)
+}
+
+void UVLBuilderWork::QueueTask(const FTask& Task)
+{
+	Tasks.Add(Task);
+	SetComponentTickEnabled(true);
+}
+
+bool UVLBuilderWork::StartNextTask(AVLKing* Unit)
+{
+	if (Unit->IsOnOrder())
+	{
+		return true;                // a walk under way (one of the queue's, or before it): the next once it is over
+	}
+	UVLBattle* Battle = UVLBattle::Get(this);
+	while (Tasks.Num() > 0 && Battle)
+	{
+		const FTask T = Tasks[0];
+		Tasks.RemoveAt(0);
+		if (T.bMove)
+		{
+			TArray<FVector> Path;
+			UVLGrid* Grid = UVLGrid::Get(this);
+			if (!Grid || !Grid->EnsureBuilt() || !Grid->FindPath(Unit->GetFeet(), T.Point, Path) || Path.Num() == 0)
+			{
+				Path = { T.Point };
+			}
+			Unit->FollowPath(Path, T.bRun);
+			return true;
+		}
+		AActor* B = T.Building.Get();
+		const FVLBuildingState* S = B ? Battle->FindBuilding(B) : nullptr;
+		if (S && S->Team == Unit->Team && NeedsWork(*S))
+		{
+			Begin(B, true);
+			return true;
+		}
+		// (lapsed: the site was cancelled or fell, the building is whole again, ...)
+		UE_LOG(LogVoxelLab, Log, TEXT("%s passes over a queued order on %s: nothing to do there now"), *Unit->GetDisplayName(), *GetNameSafe(B));
+	}
+	return false;
 }
 
 void UVLBuilderWork::WalkToWork(AVLKing* Unit)
@@ -356,9 +398,19 @@ void UVLBuilderWork::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 	AVLKing* Unit = Cast<AVLKing>(GetOwner());
 	AActor* B = Job.Get();
 	UVLBattle* Battle = UVLBattle::Get(this);
-	if (!Unit || Unit->IsDead() || !B || !Battle || InPlayersHands(Unit))
+	if (!Unit || Unit->IsDead() || !Battle || InPlayersHands(Unit))
 	{
+		ClearTasks();
 		Stop();
+		return;
+	}
+	if (!B)
+	{
+		// between jobs: the next order of its queue
+		if (!StartNextTask(Unit))
+		{
+			Stop();
+		}
 		return;
 	}
 	const FVLBuildingState* S = Battle->FindBuilding(B);
@@ -965,7 +1017,7 @@ bool UVLConstruction::FindPlacementNear(EVLBuilding Kind, int32 Team, const FVec
 	return false;
 }
 
-AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<AVLKing*>& InBuilders, FString* OutWhy, bool bQuiet)
+AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<AVLKing*>& InBuilders, FString* OutWhy, bool bQuiet, bool bQueue)
 {
 	UWorld* World = GetWorld();
 	UVLBattle* Battle = UVLBattle::Get(this);
@@ -1105,10 +1157,27 @@ AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<A
 		{
 			if (It->IsAlive() && It->Team == Where.Team && !It->IsGarrisoned() && Inside(FVector2D(It->GetFeet()), BC, BH + FVector2D(60.f, 60.f), BY) && !InPlayersHands(*It))
 			{
+				// (a Builder with a queue keeps it: the job it was on goes back on its front, after the step aside)
+				UVLBuilderWork* Queued = UVLBuilderWork::For(*It, false);
+				TArray<UVLBuilderWork::FTask> Keep;
+				if (Queued && Queued->HasTasks())
+				{
+					if (AActor* OnJob = Queued->GetJob())
+					{
+						UVLBuilderWork::FTask T;
+						T.Building = OnJob;
+						Keep.Add(T);
+					}
+					Keep.Append(Queued->GetTasks());
+				}
 				const FVector2D L = (FVector2D(It->GetFeet()) - BC).GetRotated(-BY);
 				const FVector2D Push = FMath::Abs(L.X) / BH.X > FMath::Abs(L.Y) / BH.Y ? FVector2D(FMath::Sign(L.X) * (BH.X + 150.f), L.Y) : FVector2D(L.X, FMath::Sign(L.Y) * (BH.Y + 150.f));
 				const FVector2D To = BC + Push.GetRotated(BY);
 				Command->OrderMove({ *It }, FVector(To.X, To.Y, It->GetFeet().Z), false, EVLFormation::Line);
+				for (const UVLBuilderWork::FTask& T : Keep)
+				{
+					Queued->QueueTask(T);
+				}
 			}
 		}
 	}
@@ -1122,6 +1191,7 @@ AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<A
 			Crew.Add(U);
 		}
 	}
+	const bool bQueueCrew = bQueue && Crew.Num() > 0;      // (Shift: on the end of the given Builders' queues)
 	if (Crew.Num() == 0)
 	{
 		TArray<AVLKing*> All;
@@ -1133,9 +1203,9 @@ AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<A
 			const UVLBuilderWork* Work = UVLBuilderWork::For(U, false);
 			const AActor* OnJob = Work ? Work->GetJob() : nullptr;
 			const FVLBuildingState* JobState = OnJob ? Battle->FindBuilding(OnJob) : nullptr;
-			if (InPlayersHands(U) || (JobState && JobState->IsSite()))
+			if (InPlayersHands(U) || (JobState && JobState->IsSite()) || (Work && Work->HasTasks()))
 			{
-				continue;           // (busy raising another)
+				continue;           // (busy raising another, or with orders of its own queued)
 			}
 			const float Score = FVector::Dist2D(U->GetFeet(), A->GetActorLocation()) + (OnJob ? 5000.f : 0.f) + (U->HasOrder() ? 1500.f : 0.f);
 			if (Score < BestScore)
@@ -1153,7 +1223,17 @@ AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<A
 	{
 		if (UVLBuilderWork* Work = UVLBuilderWork::For(U))
 		{
-			Work->Begin(A, true);
+			if (bQueueCrew)
+			{
+				UVLBuilderWork::FTask T;
+				T.Building = A;
+				Work->QueueTask(T);         // built in its turn
+			}
+			else
+			{
+				Work->ClearTasks();         // a plain order: the queue goes
+				Work->Begin(A, true);
+			}
 		}
 	}
 	UE_LOG(LogVoxelLab, Log, TEXT("BUILD team %d lays a %s (%s) at %.0f %.0f %.0f yaw %.0f for %s: %d tree(s) cleared, %d builder(s) sent"), Where.Team, VLRules::Name(Where.Kind), *MeshName,
@@ -1531,7 +1611,7 @@ FString UVLConstruction::ClaimRefusal(const AActor* Mine, int32 Team) const
 	return W.bValid && W.Vein.Get() == Mine ? FString() : (W.Reason.IsEmpty() ? FString(TEXT("It cannot be claimed now")) : W.Reason);
 }
 
-AActor* UVLConstruction::ClaimMine(AActor* Mine, int32 Team, const TArray<AVLKing*>& Builders, FString* OutWhy, bool bQuiet)
+AActor* UVLConstruction::ClaimMine(AActor* Mine, int32 Team, const TArray<AVLKing*>& Builders, FString* OutWhy, bool bQuiet, bool bQueue)
 {
 	UVLBattle* Battle = UVLBattle::Get(this);
 	if (!Battle || !IsFreeMine(Mine))
@@ -1559,7 +1639,7 @@ AActor* UVLConstruction::ClaimMine(AActor* Mine, int32 Team, const TArray<AVLKin
 		return nullptr;
 	}
 	// (the price, the Builders and the site are PlaceBuilding's, as for anything a Builder raises)
-	AActor* A = PlaceBuilding(W, Builders, OutWhy, bQuiet);
+	AActor* A = PlaceBuilding(W, Builders, OutWhy, bQuiet, bQueue);
 	if (A)
 	{
 		UE_LOG(LogVoxelLab, Log, TEXT("CLAIM team %d claims the %s at %.0f %.0f"), Team, VLRules::Name(EVLBuilding::Mine), A->GetActorLocation().X, A->GetActorLocation().Y);
@@ -1857,7 +1937,7 @@ bool UVLConstruction::Rotate(AActor* Building, FString* OutWhy, bool bQuiet)
 	return true;
 }
 
-bool UVLConstruction::OrderWork(const TArray<AVLKing*>& Units, AActor* Building, bool bOrdered)
+bool UVLConstruction::OrderWork(const TArray<AVLKing*>& Units, AActor* Building, bool bOrdered, bool bQueue)
 {
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const FVLBuildingState* St = Battle ? Battle->FindBuilding(Building) : nullptr;
@@ -1868,7 +1948,14 @@ bool UVLConstruction::OrderWork(const TArray<AVLKing*>& Units, AActor* Building,
 	int32 N = 0;
 	for (AVLKing* U : Units)
 	{
-		if (UVLBuilderWork::IsBuilder(U) && U->IsAlive() && U->Team == St->Team)
+		if (UVLBuilderWork::IsBuilder(U) && U->IsAlive() && U->Team == St->Team && bQueue)
+		{
+			UVLBuilderWork::FTask T;
+			T.Building = Building;
+			UVLBuilderWork::For(U)->QueueTask(T);      // Shift: on the end of its queue
+			++N;
+		}
+		else if (UVLBuilderWork::IsBuilder(U) && U->IsAlive() && U->Team == St->Team)
 		{
 			if (UVLCommand* Command = UVLCommand::Get(this))
 			{
@@ -1880,6 +1967,62 @@ bool UVLConstruction::OrderWork(const TArray<AVLKing*>& Units, AActor* Building,
 		}
 	}
 	return N > 0;
+}
+
+bool UVLConstruction::QueueMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun)
+{
+	TArray<AVLKing*> Builders = Units.FilterByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U) && U->IsAlive(); });
+	if (Builders.Num() == 0)
+	{
+		return false;
+	}
+	// a point on open ground near the one clicked (as UVLCommand::OrderMove finds it), each its place in a line there
+	FVector Dest = Ground;
+	TArray<FVector> Slots;
+	UVLGrid* Grid = UVLGrid::Get(this);
+	if (Grid && Grid->EnsureBuilt())
+	{
+		const int32 Node = Grid->NearestNode(Ground, 60);
+		if (Node != INDEX_NONE)
+		{
+			const FVector P = Grid->NodePos(Node);
+			if (FMath::Abs(Ground.X - P.X) > Grid->GetCellSize() * 0.5f || FMath::Abs(Ground.Y - P.Y) > Grid->GetCellSize() * 0.5f)
+			{
+				Dest = P;
+			}
+		}
+		TArray<FVector2D> Slots2D;
+		VLFormation::ComputeSlots(Builders, FVector2D(Dest), Slots2D, EVLFormation::Line);
+		Grid->FitSlots(Dest, Slots2D, Slots);
+	}
+	for (int32 i = 0; i < Builders.Num(); ++i)
+	{
+		UVLBuilderWork::FTask T;
+		T.bMove = true;
+		T.Point = Slots.IsValidIndex(i) ? Slots[i] : Dest;
+		T.bRun = bRun;
+		UVLBuilderWork::For(Builders[i])->QueueTask(T);
+	}
+	if (UVLCommand* Command = UVLCommand::Get(this))
+	{
+		Command->ShowMarker(Dest);
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("queue: %d Builder(s) walk to %s after their orders"), Builders.Num(), *Dest.ToCompactString());
+	return true;
+}
+
+bool UVLConstruction::ClearQueues(const TArray<AVLKing*>& Units)
+{
+	bool bAny = false;
+	for (AVLKing* U : Units)
+	{
+		if (UVLBuilderWork* W = UVLBuilderWork::For(U, false); W && W->HasTasks())
+		{
+			W->ClearTasks();
+			bAny = true;
+		}
+	}
+	return bAny;
 }
 
 bool UVLConstruction::OrderRepair(const TArray<AVLKing*>& Units)
@@ -2115,9 +2258,9 @@ void UVLConstruction::TickJobs(float Dt)
 			continue;
 		}
 		UVLBuilderWork* W = UVLBuilderWork::For(U);
-		if (!W || W->GetJob())
+		if (!W || W->GetJob() || W->HasTasks())
 		{
-			continue;
+			continue;               // (at work, or with the player's orders queued: not taken for work nearby)
 		}
 		W->JobSearch -= Step;
 		if (W->JobSearch > 0.f)
@@ -2539,7 +2682,7 @@ bool UVLConstruction::OverviewInput(APlayerController* PC, AVLHUD* HUD, AVLKing*
 		{
 			const TArray<AVLKing*> Builders = Units.FilterByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
 			FString Why;
-			if (PlaceBuilding(Current, Builders, &Why))
+			if (PlaceBuilding(Current, Builders, &Why, false, bShift))     // (Shift: on the end of their queues)
 			{
 				AVLGameMode::PlayOrderSound(Me);
 				// Shift: another of the same (as long as it can be had)
@@ -2727,7 +2870,7 @@ namespace
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs CmdBuild(TEXT("vl.Build"),
-		TEXT("vl.Build barracks|range|farm|mine|tower X Y [yaw] [enemy] [near]: lay a site there (paid; the nearest free Builder goes); near: the nearest good spot within 40 m"),
+		TEXT("vl.Build barracks|range|farm|mine|tower X Y [yaw] [enemy] [near] [queue]: lay a site there (paid; the nearest free Builder goes); near: the nearest good spot within 40 m; queue: on the end of every Builder's queue (Shift)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVLConstruction* C = UVLConstruction::Get(World);
@@ -2745,7 +2888,13 @@ namespace
 			FVLPlacement Where;
 			const bool bOk = Args.Contains(TEXT("near")) ? C->FindPlacementNear(Kind, Team, P, 4000.f, Yaw, Where) : C->CheckPlacement(Kind, Team, P, Yaw, Where);
 			FString Why = Where.Reason;
-			AActor* A = bOk ? C->PlaceBuilding(Where, {}, &Why, true) : nullptr;
+			// queue: on the end of the player's Builders' queues, as a Shift + click of the placing does
+			TArray<AVLKing*> Crew;
+			if (Args.Contains(TEXT("queue")))
+			{
+				C->GetBuilders(Team, Crew);
+			}
+			AActor* A = bOk ? C->PlaceBuilding(Where, Crew, &Why, true, Args.Contains(TEXT("queue"))) : nullptr;
 			UE_LOG(LogVoxelLab, Log, TEXT("vl.Build %s at %.0f %.0f: %s (%d trees)"), VLRules::Name(Kind), Where.Location.X, Where.Location.Y, A ? *A->GetName() : *(TEXT("refused: ") + Why), Where.Trees);
 		}));
 

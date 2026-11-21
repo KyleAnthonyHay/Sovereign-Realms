@@ -18,6 +18,16 @@
 
 namespace
 {
+	/** Alt / Option, Ctrl or Cmd held: a left click is a command to the selection, not the bow's. */
+	bool CommandModifier(const APlayerController* PC)
+	{
+		return PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt) || PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl)
+			|| PC->IsInputKeyDown(EKeys::LeftCommand) || PC->IsInputKeyDown(EKeys::RightCommand);
+	}
+}
+
+namespace
+{
 	bool ArcherLogOn()
 	{
 		static const IConsoleVariable* Log = IConsoleManager::Get().FindConsoleVariable(TEXT("vl.ArcherLog"));
@@ -501,9 +511,9 @@ void UVLArcherCombat::TickHands(AVLKing* Unit, float Dt)
 			bLocked = false;
 			bLetDown = true;
 		}
-		else if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) || PC->WasInputKeyJustPressed(EKeys::Gamepad_LeftShoulder))
+		else if ((PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) && !CommandModifier(PC) && !Unit->HeroClickTaken()) || PC->WasInputKeyJustPressed(EKeys::Gamepad_LeftShoulder))
 		{
-			LeftButton();
+			LeftButton();           // (a click that selected or ordered, AVLKing::HeroCommands, is not the bow's)
 		}
 	}
 	const bool bHeld = bRight && !bLetDown && BashTime < 0.f;

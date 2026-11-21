@@ -128,6 +128,14 @@ public:
 	int32 OrderRoam(const TArray<AVLKing*>& Units);
 	/** Troops gone for good, quietly (no refund; the king cannot be dismissed). Returns how many. */
 	int32 Dismiss(const TArray<AVLKing*>& Units);
+	/** Units (Leader left out) fall in behind Leader in their formation and keep with it wherever it goes, re-sent
+	 *  as it moves; they fight what they meet on the way and let go of a chase FollowLeash from it. Ends with any
+	 *  other order, or when Leader falls. If the followers and Leader share a platoon, Leader becomes its leader.
+	 *  Returns how many follow. */
+	int32 OrderFollow(const TArray<AVLKing*>& Units, AVLKing* Leader);
+	/** The unit it follows (OrderFollow), if any. */
+	AVLKing* FollowedBy(const AVLKing* Unit) const;
+	static constexpr float FollowLeash = 2400.f;
 	/** Ends whatever standing order these units are on (patrol, attack-move route, guard, hold, roam). */
 	void ClearStanding(const TArray<AVLKing*>& Units);
 	/** Walks the patrols and attack-moves, keeps guards at their posts, moves the roamers on (UVLBattle::Tick). */
@@ -192,6 +200,19 @@ public:
 	/** "Swordsmen", "Archers", "Mixed host", ... from who is in it. */
 	FString PlatoonName(int32 Index) const;
 	FVector PlatoonCentre(int32 Index) const;
+	/**
+	 * Platoon leaders. A platoon gets one when it is formed (Ctrl + N, the starting army, the first recruit into an
+	 * empty one): King David if he is in it, else its longest-serving troop that is not a Builder; a leader re-formed
+	 * into the same platoon keeps the post. If the leader falls (or leaves the platoon, or it is disbanded) the
+	 * platoon has none: there is no succession, and it carries on as a plain group. A member becomes leader when the
+	 * player takes control of it (MakeLeader) or when platoon members are ordered to follow it (OrderFollow). A
+	 * leader takes the front-middle slot of its formation on a move, so the platoon forms up on it.
+	 */
+	AVLKing* GetPlatoonLeader(int32 Index) const;
+	bool IsPlatoonLeader(const AVLKing* Unit) const;
+	/** Unit becomes its platoon's leader (false: it is in none). bRally: the platoon's idle members fall in behind
+	 *  it (OrderFollow) as well. */
+	bool MakeLeader(AVLKing* Unit, bool bRally = false);
 
 	// ---- the watch tower
 	/** Does this building have a lookout archers can man (tag Lookout:..., from SM_WatchTower.json)? */
@@ -213,6 +234,8 @@ public:
 		double Time;
 	};
 	const TArray<FMarker>& GetMarkers() const { return Markers; }
+	/** An order's marker there (one given outside the calls here: a Builder's queued walk). */
+	void ShowMarker(const FVector& At) { AddMarker(At); }
 	static constexpr float MarkerSeconds = 0.7f;
 
 private:
@@ -222,7 +245,20 @@ private:
 		EVLFormation Formation = EVLFormation::Line;
 		EVLStance Stance = EVLStance::Aggressive;
 		bool bMarchTogether = true;
+		TWeakObjectPtr<AVLKing> Leader;     // (none: no leader; see GetPlatoonLeader)
 	};
+	/** One unit keeping with the one it follows (OrderFollow). */
+	struct FFollower
+	{
+		TWeakObjectPtr<AVLKing> Unit;
+		TWeakObjectPtr<AVLKing> Leader;
+		FVector2D SentFor = FVector2D(1e9f, 1e9f);  // where the leader was when it was last sent after it
+		double SentAt = -100.0;
+	};
+	TArray<FFollower> Followers;
+	void TickFollowers();
+	/** The most senior of Units to lead them (see GetPlatoonLeader), or null. */
+	static AVLKing* PickLeader(const TArray<AVLKing*>& Units);
 	/** A group's way through points: a patrol (loops) or an attack-move (stops at the last). */
 	struct FRoute
 	{
@@ -290,6 +326,8 @@ private:
 
 namespace VLFormation
 {
-	/** The main game's SRFormation::ComputeSlots: a destination slot for every unit, in the same order as Units. */
-	void ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots, EVLFormation Shape);
+	/** The main game's SRFormation::ComputeSlots: a destination slot for every unit, in the same order as Units.
+	 *  Leader (one of Units, or null): it takes the front-middle slot of its ranks (melee or archers), the formation's
+	 *  anchor (not for Loose). */
+	void ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots, EVLFormation Shape, const AVLKing* Leader = nullptr);
 }

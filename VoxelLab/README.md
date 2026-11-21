@@ -35,6 +35,8 @@ There are two ways to play, switched with **Tab**.
 | Shift, or double-tap a direction | run (after a double tap he runs until the keys are let go) |
 | Space | jump |
 | F | draw / sheathe the sword |
+| Left click on one of your units (the crosshair on it) | select it (Shift: add it / take it out; twice quickly: take control of it). Not while a foe is within 4 m of you or a bow is drawn: then the click is your own blow. Alt / Option + click: always a selection (on the ground: let the selection go). The crosshair says what a click does there (gold "Click: select ...", red "Right click: attack ...") and the mode box top left whom you command |
+| Right click (Ctrl / Cmd + click; an archer or spy played: Ctrl / Cmd + click only) | the selected troops (never the unit you play) go where the crosshair points, or attack the foe's unit or building under it, with the overview's order marker and click; twice quickly: at a run; Shift: on their pathway (Builders: their queue). On one of your troops: the others follow it. 1..6 select platoon N; **G**: follow me (the selection, or else your platoon, falls in behind you) |
 | Left click | attack (draws first if need be): the training dummies by the barracks rock when hit. He drops into a battle stance (`References/king_stance.png`: a lunge, the sword across his body) for the swing and holds it 1 s after the last one, then carries the sword low at his side; 4 s later he sheathes it. Clicks while he is in the stance go through a combo: a side slash, a diagonal cut, then an up-down-up (three blows); a click during a swing queues the next. Once the stance has lapsed the next click starts at the side slash again |
 
 **Overview** (a bird's-eye camera that roams freely)
@@ -47,6 +49,7 @@ There are two ways to play, switched with **Tab**.
 | Drag a box | select every unit in it (Shift: add them) |
 | Left click on a training dummy | the swordsmen of the selection attack it (Shift: they go at a run): each takes a place on a ring round it, walks there by the usual routes, turns to it and swings, each on its own beat, until given another order. A unit standing in front of the dummy is still selected by the click; with no fighter selected the click is the usual one |
 | Right click (or Ctrl / Cmd + click) | the selection goes there: by a route round fences, buildings, cliffs and water, through gates, over the bridge, up and down steps, and forms up in its formation. A double right click: at a run |
+| Right click on one of your troops | the rest of the selection follows it (falls in behind it in its formation, re-sent as it moves, fights what it meets, lets go of a chase 24 m from it); its platoon's members following it make it the platoon's leader |
 | Shift + right click | a point on the selection's pathway (as in the main game): units already on an order walk there after it, in order; idle ones start at once. A plain right click replaces the pathway |
 | Right click on the Watch Tower | the archers of the selection walk to its door and appear on the lookout (8 posts); anyone else waits by the door |
 | Select the Watch Tower | its panel (the selection panel, bottom middle) shows who mans it; its **Lookout** button brings them down. An archer on the lookout can also be selected and sent somewhere: it comes down first |
@@ -65,9 +68,18 @@ There are two ways to play, switched with **Tab**.
 | Ctrl / Cmd / Alt + 1..6 | make the selection platoon N (a platoon keeps its own formation; they are listed in the platoon panel, bottom right) |
 | 1..6 | select platoon N (twice quickly: look at it). Shift + 1..6 adds the selection to it |
 | Delete | disband the selected platoon (the troops stay selected) |
+| (platoon leaders) | a platoon gets a leader when it is formed (King David if he is in it, else its longest-serving troop that is not a Builder); the platoon's tag floats over the leader with a crown, the platoon panel's row and the selection panel show it ("led by ..." / "no leader"). The leader takes the front-middle slot of its ranks on every move, so the formation forms up on it. **If it falls the platoon has no leader** ("The leader of platoon N has fallen"): nobody steps up. A member becomes leader when you take control of it (the platoon's idle members then fall in behind it) or when the platoon's members are ordered to follow it. Re-forming with Ctrl + N gives the new platoon its senior member |
 | U | upgrade the selected building (nothing selected: the castle) |
 | F1 | the controls overlay (every key; also the **?** button top right) |
 | Enter / double click on a unit | take control of it (back to hero) |
+
+**Making way for the unit you play** (`AVLKing::MakeWay` / `YieldTo` / `TickYield`): your own units in its path, or
+about to be, step aside smoothly as it comes (its moves pass through them meanwhile), then go back to where they
+stood once it has passed (one on an order is nudged off its line and walks on); one in a fight gives way at half the
+push. A foe that is not fighting is shouldered aside at half the push and stays solid; a foe in a fight (attacking, or
+struck in the last 3 s) does not give way at all. They step only onto ground the path grid can walk, of their own
+region, never into water; terrain, buildings and walls still stop the unit you play. Units are found through the
+battle's spatial hash. Logs: "X makes way", "X is back at its spot", "X stays where it made way".
 
 **Playing an archer** (Enter / double click on her; `UVLArcherCombat`, `VLArcherCombat.*`)
 
@@ -214,6 +226,15 @@ Treasury have no voxel model, and the main game never built a town hall, so they
   to 4. A site does nothing (no training, housing, payouts, shots, upgrades). When done: its props (the barracks'
   training dummies, a farm's wheat, sheep, chickens or pigs: `VLBuildingProps.inl`, written by
   `python3 Tools/ue/gen_building_specs.py` from the jsons), an alert and the main game's bell.
+- **The Builders' queue (Shift)**: with Builders selected, Shift + right click on the ground (or the minimap) queues a
+  walk, on a site or a damaged building of yours queues work on it, on a free mine queues its claim (paid at once),
+  and Shift + click while placing lays the site at once and queues it (the ghost stays up for the next). The selected
+  Builders all get the same queue and work through it together (two on a site: twice as fast); an item that has
+  lapsed by its turn (the site cancelled or fallen, the building mended) is passed over. A plain order replaces the
+  queue, **Esc** (after a placing or an armed click) or **Stop** clears it; a Builder with a queue is never taken for
+  an idle Builder's own work or as "the nearest free Builder". While they are selected a numbered chain of markers
+  shows it (walks blue, buildings gold); the panel says "N orders queued (Esc clears)". A site laid over a queued
+  Builder steps him aside and keeps his queue.
 - **Builders at work**: right click one of your sites or damaged buildings with Builders selected (the rest of the
   selection takes the order as usual); **X**: the nearest damaged building. An idle Builder goes to work by himself on a
   site or a building below 90% health within 26 m (the enemy's: anywhere), but not on one hit in the last 10 s. A
@@ -821,6 +842,11 @@ doings on one (a fight it picks up, an archer walking into range, a defensive un
 | `Dismiss(Units)` | troops gone for good, quietly, not counted as lost (never King David) |
 | `MarchTogether(Units, Shape)`, `ToggleMarchTogether()` | in a formation the slowest always sets the pace (`AVLKing::PaceCap`); Loose: per platoon / loose-selection setting, on by default; fights are at full speed |
 | `GuardWardOf`, `GetGuards`, `IsRoaming`, `GetRoute`, `DescribeOrders`, `ClearStanding` | what a unit is on; ends it |
+
+Console (the four of 2026-11-21's second pass): `vl.Leaders` (each platoon's leader and who follows whom),
+`vl.Follow <who> <unit name | king>`, `vl.HeroAim <unit name> | X Y [Z] [seconds]` (the hero view's crosshair taken to
+be there), `vl.HeroOrder [run] [queue] | click [add] | select [add]` (the hero view's right click / plain left click /
+Alt + click at the crosshair), `vl.Queue <who> X Y | work <building name> | clear | log`, `vl.Build ... queue`.
 
 Console: `vl.Stop [who]`, `vl.Hold [who]`, `vl.Patrol <who> X Y [X Y ...] [run]`, `vl.AttackMove <who> X Y [queue]
 [run]`, `vl.Guard <who> <building name | unit name>`, `vl.Roam [who]`, `vl.Dismiss [who]`, `vl.March`, `vl.Orders`

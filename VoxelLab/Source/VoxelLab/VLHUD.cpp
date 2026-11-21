@@ -272,6 +272,21 @@ void AVLHUD::OnEscape()
 			Command->Arm(EVLArm::None);
 			return;
 		}
+		// then the selected Builders' queued orders (the job each is on goes on)
+		if (UVLCommand* Command = UVLCommand::Get(this))
+		{
+			TArray<AVLKing*> Units;
+			Command->GetSelection(Units);
+			if (UVLConstruction* Construction = UVLConstruction::Get(this); Construction && Construction->ClearQueues(Units))
+			{
+				if (UVLBattle* Battle = UVLBattle::Get(this))
+				{
+					Battle->PushAlert(TEXT("The Builders' queued orders are cleared"));
+					Battle->Play2D(TEXT("S_UIClick"), 0.4f);
+				}
+				return;
+			}
+		}
 		SetScreen(EVLScreen::Pause);
 		return;
 	}
@@ -1178,7 +1193,8 @@ void AVLHUD::DrawHealthBars()
 		else if (!FMath::IsNearlyEqual(Seen.Health, Frac, 0.0005f)) { Seen.Health = Frac; Seen.ChangedAt = Now; }
 		const float Since = float(Now - Seen.ChangedAt);
 		const bool bRed = Frac < HealthBarRed;
-		const bool bSelected = !bHero && ((Command && (bFast ? Frame.Selected.Contains(Unit) : Command->IsSelected(Unit))) || Sel == Unit);
+		// (the hero view's selection too: it is commanded from there with the crosshair)
+		const bool bSelected = (Command && (bFast ? Frame.Selected.Contains(Unit) : Command->IsSelected(Unit))) || (!bHero && Sel == Unit);
 		const float Alpha = (bSelected || bRed) ? 1.f : FMath::Clamp(1.f - (Since - HealthBarLinger) / HealthBarFade, 0.f, 1.f);
 		if (Alpha <= 0.f)
 		{
@@ -1207,12 +1223,15 @@ void AVLHUD::DrawHealthBars()
 
 void AVLHUD::DrawPlatoonTags()
 {
-	// A numbered tag in the platoon's colour floats over each platoon, so it can be told apart at a glance.
+	// A numbered tag in the platoon's colour floats over each platoon, so it can be told apart at a glance: over its
+	// leader, crowned, if it has one. In the hero view only the platoons of the selection (and never over the head
+	// of the unit played).
 	const UVLCommand* Command = UVLCommand::Get(this);
-	if (!Command || !King || King->IsHeroMode())
+	if (!Command || !King)
 	{
 		return;
 	}
+	const bool bHero = King->IsHeroMode();
 	TArray<AVLKing*> Sel;
 	Command->GetSelection(Sel);
 	const int32 SelectedPlatoon = Command->PlatoonOf(Sel);
@@ -1220,20 +1239,29 @@ void AVLHUD::DrawPlatoonTags()
 	{
 		TArray<AVLKing*> Members;
 		Command->GetPlatoon(i, Members);
-		if (Members.Num() == 0)
+		if (Members.Num() == 0 || (bHero && !Members.ContainsByPredicate([&Sel](const AVLKing* M) { return Sel.Contains(M); })))
 		{
 			continue;
 		}
-		// over the member nearest the platoon's middle, a little above the heads
+		const AVLKing* Leader = Command->GetPlatoonLeader(i);
+		if (bHero && Leader == King)
+		{
+			Leader = nullptr;
+		}
+		// over the leader, or the member nearest the platoon's middle, a little above the heads
 		FVector2D Mid = FVector2D::ZeroVector;
 		for (const AVLKing* M : Members) { Mid += FVector2D(M->GetActorLocation()); }
 		Mid /= Members.Num();
-		const AVLKing* Anchor = nullptr;
+		const AVLKing* Anchor = Leader;
 		float Best = TNumericLimits<float>::Max();
 		for (const AVLKing* M : Members)
 		{
 			const float D = FVector2D::DistSquared(FVector2D(M->GetActorLocation()), Mid);
-			if (D < Best) { Best = D; Anchor = M; }
+			if (!Leader && !(bHero && M == King) && D < Best) { Best = D; Anchor = M; }
+		}
+		if (!Anchor)
+		{
+			continue;
 		}
 		const FVector S = Project(Anchor->GetActorLocation() + FVector(0.f, 0.f, 190.f));
 		if (S.Z <= 0.f || S.X < -50.f || S.Y < -50.f || S.X > View.X + 50.f || S.Y > View.Y + 50.f)
@@ -1254,6 +1282,12 @@ void AVLHUD::DrawPlatoonTags()
 			Fill(FMath::RoundToFloat(S.X - w), Y + H + k, FMath::Max(1.f, 2.f * w), 1.f, Col);
 		}
 		TextIn(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), FString::FromInt(i + 1), H * 0.8f, Col, AlignCentre, Black);
+		if (Anchor == Leader)
+		{
+			// the leader's crown on its tag
+			const float CS = U(bSel ? 22.f : 19.f);
+			Icon(EVLIcon::Crown, FMath::RoundToFloat(S.X - CS * 0.5f), FMath::RoundToFloat(Y - CS * 0.82f), CS);
+		}
 	}
 }
 
@@ -1502,9 +1536,9 @@ void AVLHUD::DrawRouteLines()
 	// selected barracks' or range's rally point.
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const UVLCommand* Command = UVLCommand::Get(this);
-	if (!Battle || !Command || !King || King->IsHeroMode())
+	if (!Battle || !Command || !King)
 	{
-		return;
+		return;         // (in the hero view too: the selection there is commanded with the crosshair)
 	}
 	auto Dashed = [this](const FVector& A0, const FVector& B0, const FLinearColor& Color, bool bEnds)
 	{
@@ -1583,6 +1617,59 @@ void AVLHUD::DrawRouteLines()
 		Dashed(From, Legs[0], Blue, true);
 		for (int32 k = 1; k < Legs.Num(); ++k) { Dashed(Legs[k - 1], Legs[k], Blue, true); }
 	}
+	// a Builder's queue (Shift orders): from what it is on now, a numbered chain of its walks (blue) and the
+	// buildings it is to raise or mend (gold); a crew sharing one queue draws it once
+	{
+		const FLinearColor Work(1.f, 0.82f, 0.3f, 0.9f);
+		auto Ground = [this](const FVector& P) { return FVector(P.X, P.Y, GroundZ(FVector2D(P), P.Z)); };
+		TSet<const AActor*> FirstDrawn;
+		TArray<FVector2D> MovesDrawn;
+		for (AVLKing* Un : Units)
+		{
+			const UVLBuilderWork* W = UVLBuilderWork::For(Un, false);
+			if (!W || !W->HasTasks())
+			{
+				continue;
+			}
+			const TArray<UVLBuilderWork::FTask>& Tasks = W->GetTasks();
+			// (the crew's shared queue: the same first building, or a first walk to nearly the same point)
+			const UVLBuilderWork::FTask& T0 = Tasks[0];
+			if (!T0.bMove && T0.Building.IsValid() && FirstDrawn.Contains(T0.Building.Get()))
+			{
+				continue;
+			}
+			if (T0.bMove && MovesDrawn.ContainsByPredicate([&T0](const FVector2D& P) { return FVector2D::Distance(P, FVector2D(T0.Point)) < 450.f; }))
+			{
+				continue;
+			}
+			if (!T0.bMove) { FirstDrawn.Add(T0.Building.Get()); } else { MovesDrawn.Add(FVector2D(T0.Point)); }
+			FVector From = W->GetJob() ? Ground(W->GetJob()->GetActorLocation()) : (Un->HasOrder() && Un->GetWaypoints().Num() > 0 ? Ground(Un->GetWaypoints().Last()) : Ground(Un->GetFeet()));
+			if (W->GetJob())
+			{
+				Dashed(Ground(Un->GetFeet()), From, Work, false);      // (to the job it is on now)
+			}
+			for (int32 k = 0; k < Tasks.Num(); ++k)
+			{
+				const UVLBuilderWork::FTask& T = Tasks[k];
+				const AActor* B = T.Building.Get();
+				if (!T.bMove && !B)
+				{
+					continue;       // (lapsed: passed over in its turn)
+				}
+				const FVector To = T.bMove ? Ground(T.Point) : Ground(B->GetActorLocation());
+				const FLinearColor C = T.bMove ? Blue : Work;
+				Dashed(From, To, C, true);
+				const FVector S = Project(To + FVector(0.f, 0.f, 20.f));
+				if (S.Z > 0.f)
+				{
+					const float R = U(9.f);
+					Fill(S.X - R, S.Y - R - U(14.f), 2.f * R, 2.f * R, FLinearColor(0.02f, 0.03f, 0.06f, 0.85f));
+					TextIn(FBox2D(FVector2D(S.X - R, S.Y - R - U(14.f)), FVector2D(S.X + R, S.Y + R - U(14.f))), FString::FromInt(k + 1), U(14.f), C, AlignCentre, Bold);
+				}
+				From = To;
+			}
+		}
+	}
 	if (const FVLBuildingState* St = Battle->FindBuilding(SelectedBuilding()); St && St->Trains() && St->Team == UVLBattle::Player)
 	{
 		FVector Door, Rally, Front;
@@ -1596,9 +1683,9 @@ void AVLHUD::DrawOrderMarkers()
 {
 	// where the last orders went: a ring closing on the spot
 	const UVLCommand* Command = UVLCommand::Get(this);
-	if (!Command || !King || King->IsHeroMode())
+	if (!Command || !King)
 	{
-		return;
+		return;         // (the hero view's orders show theirs too)
 	}
 	for (const UVLCommand::FMarker& M : Command->GetMarkers())
 	{

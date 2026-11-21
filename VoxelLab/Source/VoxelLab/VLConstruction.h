@@ -102,14 +102,36 @@ public:
 	/** Go and work on Building (a site or a damaged building of its side). bOrdered: the player's order (a repair starts
 	 *  even on a building hit a moment ago). */
 	void Begin(AActor* Building, bool bOrdered);
+	/** Ends the job it is on (its queue goes on: the next order of it starts). */
 	void Stop();
 	AActor* GetJob() const { return Job.Get(); }
 	bool IsWorking() const { return bWorking && Job.IsValid(); }
 	/** Seconds until it may look for a job of its own again. */
 	float JobSearch = 0.f;
 
+	/**
+	 * Its queue of the player's Shift orders (UVLConstruction::QueueMove / OrderWork / PlaceBuilding / ClaimMine
+	 * with bQueue): walks, and work on a building (a site laid, a claimed mine, a repair), done in turn once the job
+	 * and the walk it is on are over. An order that has lapsed by its turn (the site cancelled or fallen, the
+	 * building mended) is passed over. A plain order clears it (UVLCommand::StopAttack), so does Esc.
+	 */
+	struct FTask
+	{
+		bool bMove = false;
+		FVector Point = FVector::ZeroVector;        // a walk: where to
+		TWeakObjectPtr<AActor> Building;            // work: on what
+		bool bRun = false;
+	};
+	void QueueTask(const FTask& Task);
+	void ClearTasks() { Tasks.Reset(); }
+	bool HasTasks() const { return Tasks.Num() > 0; }
+	const TArray<FTask>& GetTasks() const { return Tasks; }
+
 private:
 	void WalkToWork(AVLKing* Unit);
+	/** Between jobs: the next of the queue, once it stands (false: nothing left). */
+	bool StartNextTask(AVLKing* Unit);
+	TArray<FTask> Tasks;
 	TWeakObjectPtr<AActor> Job;
 	bool bWorking = false;
 	bool bOrdered = false;
@@ -176,15 +198,22 @@ public:
 	bool FindPlacementNear(EVLBuilding Kind, int32 Team, const FVector& Near, float Radius, float Yaw, FVLPlacement& Out, int32 MaxTries = 90) const;
 	/** Pays and lays the site (trees cleared, the grid sampled again, troops on it step aside). Builders: who goes to
 	 *  work on it (none: the nearest free Builder of its side). Returns the building, or null (OutWhy). */
-	AActor* PlaceBuilding(const FVLPlacement& Where, const TArray<AVLKing*>& Builders, FString* OutWhy = nullptr, bool bQuiet = false);
+	AActor* PlaceBuilding(const FVLPlacement& Where, const TArray<AVLKing*>& Builders, FString* OutWhy = nullptr, bool bQuiet = false, bool bQueue = false);
 	/** A site's walls are pulled down: CancelRefund of its price back. */
 	bool CancelSite(AActor* Building);
 	/** A finished building (not the castle) is pulled down: DemolishRefund of everything paid for it back. */
 	bool Demolish(AActor* Building);
 	/** What demolishing (or cancelling) it would bring back now. */
 	FVLCost RefundFor(const AActor* Building) const;
-	/** The builders among Units go to work on Building if it is theirs and needs work. True if any were sent. */
-	bool OrderWork(const TArray<AVLKing*>& Units, AActor* Building, bool bOrdered = true);
+	/** The builders among Units go to work on Building if it is theirs and needs work. True if any were sent.
+	 *  bQueue (Shift): it goes on the end of their queue instead (UVLBuilderWork::FTask); PlaceBuilding's and
+	 *  ClaimMine's bQueue the same for the site they lay (laid and paid for at once, built in its turn). */
+	bool OrderWork(const TArray<AVLKing*>& Units, AActor* Building, bool bOrdered = true, bool bQueue = false);
+	/** Shift + right click on the ground: a walk on the end of the Builders' queues (each its place in a line round
+	 *  the point). True if any Builder was among Units. */
+	bool QueueMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun);
+	/** Esc: the queued orders of the Builders among Units are dropped (the job they are on goes on). True if any had one. */
+	bool ClearQueues(const TArray<AVLKing*>& Units);
 	/** X: the builders among Units go and repair the nearest damaged building of theirs. */
 	bool OrderRepair(const TArray<AVLKing*>& Units);
 	/** Builders at work on it now. */
@@ -243,7 +272,7 @@ public:
 	 * Returns the mine, or null (OutWhy; the player gets an alert unless bQuiet). Builders: who goes (none: the nearest
 	 * free Builder of the side). The enemy commander claims by the same call path (CheckPlacement + PlaceBuilding).
 	 */
-	AActor* ClaimMine(AActor* Mine, int32 Team, const TArray<AVLKing*>& Builders, FString* OutWhy = nullptr, bool bQuiet = false);
+	AActor* ClaimMine(AActor* Mine, int32 Team, const TArray<AVLKing*>& Builders, FString* OutWhy = nullptr, bool bQuiet = false, bool bQueue = false);
 	/** A mine nobody holds: neutral, or fallen and abandoned. */
 	bool IsFreeMine(const AActor* Mine) const;
 	/** Why Team cannot claim it now (not a free mine, the price, no Builder, foes at it), or empty. */

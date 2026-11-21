@@ -861,11 +861,17 @@ void AVLKing::TakeControlOf(AVLKing* Unit)
 		Old->UnPossess();
 		Old->Destroy();
 	}
+	MakeWay(0.f, false);                        // (whoever it passed through is solid to it again)
 	PC->UnPossess();
 	PC->Possess(Unit);
 	SpawnDefaultController();                   // this one now stands, or walks to orders, by itself
 	PC->SetControlRotation(FRotator(HeroPitch(Zoom), CamYaw, 0.f));
 	Unit->SetHeroMode(true);
+	// the one the player takes control of leads its platoon, and the platoon's idle members fall in behind it
+	if (UVLCommand* Command = UVLCommand::Get(this))
+	{
+		Command->MakeLeader(Unit, true);
+	}
 }
 
 void AVLKing::Attack(int32 Kind)
@@ -1100,7 +1106,7 @@ AActor* AVLKing::PickUnderCursor(APlayerController* PC, FVector* Ground) const
 	return PickAt(PC, FVector2D(MX, MY), Ground);
 }
 
-AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground, bool bBoxes) const
+AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground, bool bBoxes, const AActor* Skip) const
 {
 	const float MX = Point.X, MY = Point.Y;
 	// What the pointer's ray meets first that can be seen: the hidden walls (the river's and the cliffs' barriers, the
@@ -1148,7 +1154,7 @@ AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* 
 	}
 	for (AVLKing* Unit : PickBattle ? PickBattle->AllUnits() : PickLocal)
 	{
-		if (Unit->IsDead())
+		if (Unit->IsDead() || Unit == Skip)
 		{
 			continue;
 		}
@@ -1270,9 +1276,27 @@ bool AVLKing::OrderAt(const FVector2D& Point, bool bRun, bool bQueue)
 	FVector Ground = FVector::ZeroVector;
 	AActor* Hit = PickAt(PC, Point, &Ground, false);    // a foe or the tower only where the pointer is on the thing itself
 	UE_LOG(LogVoxelLab, Log, TEXT("order at %.0f %.0f of the view: %d unit(s), ground %s, on %s"), Point.X, Point.Y, Units.Num(), *Ground.ToCompactString(), *GetNameSafe(Hit));
-	if (Units.Num() == 0 || Ground.IsZero() || Units.Contains(Cast<AVLKing>(Hit)))
+	return OrderOn(Units, Hit, Ground, bRun, bQueue);
+}
+
+bool AVLKing::OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground, bool bRun, bool bQueue)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command || Units.Num() == 0 || Ground.IsZero())
 	{
 		return false;
+	}
+	// one of the player's own troops (or anyone of the selection itself, as a platoon's member): the others follow
+	// it; members of its platoon following it make it the platoon's leader. (King David and Builders not in the
+	// selection are guarded, below.)
+	if (AVLKing* Lead = Cast<AVLKing>(Hit); Lead && Lead->Team == Team && Lead->IsAlive())
+	{
+		const bool bInSelection = Units.Contains(Lead);
+		if (bInSelection || (Lead->IsTroop() && !UVLBuilderWork::IsBuilder(Lead)))
+		{
+			Units.Remove(Lead);
+			return Units.Num() > 0 && Command->OrderFollow(Units, Lead) > 0;
+		}
 	}
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	// Builders and a site or a damaged building of their side: they go to work on it (VLConstruction.*); the rest of
@@ -1282,14 +1306,25 @@ bool AVLKing::OrderAt(const FVector2D& Point, bool bRun, bool bQueue)
 	if (UVLConstruction* Construction = UVLConstruction::Get(this); Hit && Construction && Construction->IsFreeMine(Hit)
 		&& Units.ContainsByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); }))
 	{
-		Construction->ClaimMine(Hit, Team, Units.FilterByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); }));      // (refused: it says why)
+		Construction->ClaimMine(Hit, Team, Units.FilterByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); }), nullptr, false, bQueue);      // (refused: it says why; Shift: queued)
 		Units.RemoveAll([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
 		if (Units.Num() == 0)
 		{
 			return true;
 		}
 	}
-	if (UVLConstruction* Construction = UVLConstruction::Get(this); Hit && Battle && Battle->TeamOf(Hit) == Team && Construction && Construction->OrderWork(Units, Hit))
+	if (UVLConstruction* Construction = UVLConstruction::Get(this); Hit && Battle && Battle->TeamOf(Hit) == Team && Construction && Construction->OrderWork(Units, Hit, true, bQueue))
+	{
+		Units.RemoveAll([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
+		if (Units.Num() == 0)
+		{
+			return true;
+		}
+	}
+	// Shift with Builders: a walk on the end of their queues (after their jobs too, not only their walks)
+	// (not on a foe: Builders take no part in an attack)
+	if (UVLConstruction* Construction = UVLConstruction::Get(this); bQueue && Construction && !(Hit && Battle && Battle->IsHostile(Hit, Team))
+		&& Construction->QueueMove(Units, Ground, bRun))
 	{
 		Units.RemoveAll([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
 		if (Units.Num() == 0)
@@ -1321,6 +1356,533 @@ bool AVLKing::OrderAt(const FVector2D& Point, bool bRun, bool bQueue)
 	{
 		Command->OrderMove(Units, Ground, bRun, Command->SelectionFormation(), bQueue);
 	}
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------ the hero view's commands
+
+bool AVLKing::HeroCrossPoint(APlayerController* PC, FVector2D& Out) const
+{
+	if (!PC)
+	{
+		return false;
+	}
+	if (HeroTestAimTime > 0.f)
+	{
+		return PC->ProjectWorldLocationToScreen(HeroTestAim, Out);     // (vl.HeroAim: as if the crosshair were there)
+	}
+	if (bMouseLookActive)
+	{
+		int32 SX = 0, SY = 0;
+		PC->GetViewportSize(SX, SY);
+		Out = FVector2D(SX * 0.5f, SY * CrosshairHeight);
+		return SX > 0;
+	}
+	float MX = 0.f, MY = 0.f;
+	if (!PC->GetMousePosition(MX, MY))
+	{
+		return false;
+	}
+	Out = FVector2D(MX, MY);
+	return true;
+}
+
+bool AVLKing::HeroClickSelects(APlayerController* PC, AVLKing** OutUnit) const
+{
+	if (OutUnit)
+	{
+		*OutUnit = nullptr;
+	}
+	if (!PC || !bHeroMode)
+	{
+		return false;
+	}
+	const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
+	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::LeftCommand)
+		|| PC->IsInputKeyDown(EKeys::RightCommand);
+	if (bCtrl)
+	{
+		return false;                       // (Ctrl / Cmd + click: an order)
+	}
+	AVLKing* Hover = HeroHover.Get();
+	if (HeroTestAimTime > 0.f || !Hover)
+	{
+		FVector2D Cross;
+		Hover = HeroCrossPoint(PC, Cross) ? Cast<AVLKing>(PickAt(PC, Cross, nullptr, false, this)) : nullptr;
+	}
+	const bool bOwn = Hover && Hover->Team == Team && Hover->IsAlive() && Hover != this;
+	if (OutUnit && bOwn)
+	{
+		*OutUnit = Hover;
+	}
+	if (bAlt)
+	{
+		return true;                        // Alt / Option + click: always a selection
+	}
+	if (!bOwn)
+	{
+		return false;
+	}
+	// the unit's own hands come first: a bow drawn or locked, or a foe at hand (a click in a fight is a blow)
+	if (const UVLArcherCombat* Bow = bTroop ? FindComponentByClass<UVLArcherCombat>() : nullptr)
+	{
+		if (PC->IsInputKeyDown(EKeys::RightMouseButton) || Bow->IsDrawLocked() || Bow->InBattleState())
+		{
+			return false;
+		}
+	}
+	if (const UVLBattle* Battle = UVLBattle::Get(this))
+	{
+		FVLUnits Near;
+		Battle->UnitsNear(GetActorLocation(), HeroClickFightRange, Near);
+		for (const AVLKing* O : Near)
+		{
+			if (O->IsAlive() && Battle->IsHostile(O, Team) && FVector::Dist2D(O->GetActorLocation(), GetActorLocation()) < HeroClickFightRange)
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+bool AVLKing::HeroPick(APlayerController* PC, AActor*& OutHit, FVector& OutGround) const
+{
+	OutHit = nullptr;
+	OutGround = FVector::ZeroVector;
+	FVector Origin, Dir;
+	FVector2D Cross;
+	if (!PC || !HeroCrossPoint(PC, Cross) || !PC->DeprojectScreenPositionToWorld(Cross.X, Cross.Y, Origin, Dir))
+	{
+		return false;
+	}
+	// a unit drawn under it (never this one), as a click in the overview finds it
+	if (AVLKing* Unit = Cast<AVLKing>(PickAt(PC, Cross, nullptr, false, this)))
+	{
+		OutHit = Unit;
+		OutGround = Unit->GetFeet();
+		return true;
+	}
+	// else what the aim meets ahead of him (as the sword's and the bow's aim: nothing between the camera and him)
+	bool bSky = false;
+	AActor* Struck = nullptr;
+	FVector Point;
+	if (!GetAimPointAlong(Origin, Dir, Point, 3000.f, &bSky, &Struck) || bSky)
+	{
+		return false;
+	}
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (Struck && (Cast<AVLKing>(Struck) || Struck->ActorHasTag(TEXT("Selectable")) || (Battle && Battle->FindBuilding(Struck))))
+	{
+		OutHit = Struck;
+	}
+	OutGround = Point;
+	return true;
+}
+
+bool AVLKing::HeroOrder(APlayerController* PC, bool bRun, bool bQueue)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command)
+	{
+		return false;
+	}
+	TArray<AVLKing*> Units;
+	Command->GetSelection(Units);
+	Units.Remove(this);             // (the one played is the player's to move)
+	if (Units.Num() == 0)
+	{
+		return false;
+	}
+	AActor* Hit = nullptr;
+	FVector Ground;
+	if (!HeroPick(PC, Hit, Ground))
+	{
+		return false;
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("hero order: %d unit(s), ground %s, on %s%s"), Units.Num(), *Ground.ToCompactString(), *GetNameSafe(Hit), bQueue ? TEXT(" (queued)") : TEXT(""));
+	return OrderOn(Units, Hit, Ground, bRun, bQueue);
+}
+
+void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	UVLBattle* Battle = UVLBattle::Get(this);
+	if (!Command)
+	{
+		return;
+	}
+	AActor* Hit = nullptr;
+	FVector Ground;
+	HeroPick(PC, Hit, Ground);
+	AVLKing* HitUnit = Cast<AVLKing>(Hit);
+	if (HitUnit && HitUnit->Team == Team && HitUnit->IsAlive())
+	{
+		// one's own: selected (Shift: added or taken out); twice quickly: taken control of
+		const double Now = GetWorld()->GetRealTimeSeconds();
+		if (!bShift && HeroLastClicked.Get() == HitUnit && Now - HeroLastClickTime < 0.4)
+		{
+			HeroLastClicked = nullptr;
+			TakeControlOf(HitUnit);
+			return;
+		}
+		HeroLastClicked = HitUnit;
+		HeroLastClickTime = Now;
+		if (bShift)
+		{
+			Command->Toggle(HitUnit);
+		}
+		else
+		{
+			Command->Select({ HitUnit });
+		}
+		UE_LOG(LogVoxelLab, Log, TEXT("hero select: %s%s (%d selected)"), *HitUnit->GetDisplayName(), bShift ? TEXT(" toggled") : TEXT(""), Command->NumSelected());
+		if (Battle)
+		{
+			Battle->Play2D(TEXT("S_UIClick"), 0.4f);
+		}
+		return;
+	}
+	HeroLastClicked = nullptr;
+	if (Hit && Battle && Battle->IsHostile(Hit, Team))
+	{
+		// a foe: the fighters of the selection attack it (as a click on it in the overview)
+		TArray<AVLKing*> Units;
+		Command->GetSelection(Units);
+		Units.Remove(this);
+		if (Command->OrderAttack(Units, Hit, bShift) > 0)
+		{
+			AVLGameMode::PlayOrderSound(this);
+		}
+		return;
+	}
+	if (!bShift)
+	{
+		Command->ClearSelection();      // the ground, a building, the sky: the selection is let go
+	}
+}
+
+bool AVLKing::HeroCommands(APlayerController* PC)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command)
+	{
+		return false;
+	}
+	const bool bShift = PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift);
+	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::LeftCommand)
+		|| PC->IsInputKeyDown(EKeys::RightCommand);
+	const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
+	auto Order = [&]()
+	{
+		// twice quickly: at a run; Shift: on the end of their pathways (Builders: their queues)
+		const double Now = GetWorld()->GetRealTimeSeconds();
+		const bool bDouble = Now - HeroLastOrderTime < 0.35;
+		HeroLastOrderTime = Now;
+		if (HeroOrder(PC, bDouble, bShift))
+		{
+			AVLGameMode::PlayOrderSound(this);
+		}
+	};
+	// what the crosshair is on (a unit), for the HUD's hint and the click below
+	HeroTestAimTime = FMath::Max(0.f, HeroTestAimTime - GetWorld()->GetDeltaSeconds());
+	{
+		FVector2D Cross;
+		HeroHover = HeroCrossPoint(PC, Cross) ? Cast<AVLKing>(PickAt(PC, Cross, nullptr, false, this)) : nullptr;
+		bHeroHoverSelect = HeroClickSelects(PC) && !bAlt;
+	}
+	bool bTook = false;
+	if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		if (bCtrl)
+		{
+			Order();                        // Ctrl / Cmd + click: an order (the archer's and the spy's, a trackpad's)
+			bTook = true;
+		}
+		else if (HeroClickSelects(PC))
+		{
+			// the crosshair on one of his own (and no fight at hand): a click selects it, Shift adds or takes it
+			// out, twice quickly takes control of it; Alt + click anywhere: the same (on the ground: let go)
+			HeroSelect(PC, bShift);
+			bTook = true;
+		}
+		if (bTook)
+		{
+			HeroClickFrame = GFrameCounter;  // (not a swing, a bash or a lock)
+		}
+	}
+	if (PC->GetPawn() != this)
+	{
+		return true;                        // (took control of another)
+	}
+	// the right button orders, unless the unit played uses it (the archer's bow, the spy's glass). With the pointer
+	// shown a right drag turns the view, so then the order is on a click let go without dragging, as in the overview.
+	if (!bRightMouseAims && !bAlt)
+	{
+		if (bMouseLookActive ? PC->WasInputKeyJustPressed(EKeys::RightMouseButton) : (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f))
+		{
+			Order();
+		}
+	}
+	// 1..6: select platoon N (as in the overview)
+	static const FKey Digits[UVLCommand::MaxPlatoons] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
+	for (int32 i = 0; i < UVLCommand::MaxPlatoons; ++i)
+	{
+		if (PC->WasInputKeyJustPressed(Digits[i]) && !bCtrl && !bAlt && !bShift)
+		{
+			TArray<AVLKing*> Members;
+			Command->GetPlatoon(i, Members);
+			if (Members.Num() > 0)
+			{
+				Command->Select(Members);
+				if (UVLBattle* Battle = UVLBattle::Get(this))
+				{
+					Battle->Play2D(TEXT("S_UIClick"), 0.4f);
+				}
+			}
+		}
+	}
+	// G: "follow me": the selection (none selected: his platoon) falls in behind the one played; his own platoon's
+	// members following him make him its leader
+	if (PC->WasInputKeyJustPressed(EKeys::G))
+	{
+		TArray<AVLKing*> Units;
+		Command->GetSelection(Units);
+		Units.Remove(this);
+		if (Units.Num() == 0)
+		{
+			Command->GetPlatoon(Command->PlatoonIndexOf(this), Units);
+			Units.Remove(this);
+		}
+		if (Command->OrderFollow(Units, this) > 0)
+		{
+			AVLGameMode::PlayOrderSound(this);
+		}
+		else if (UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or Alt + click)"));
+			Battle->Play2D(TEXT("S_UIError"), 0.4f);
+		}
+	}
+	return bTook;
+}
+
+// ------------------------------------------------------------------------------------------------ making way
+
+void AVLKing::MakeWay(float DeltaSeconds, bool bActive)
+{
+	UCapsuleComponent* Cap = GetCapsuleComponent();
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	TArray<AVLKing*, TInlineAllocator<16>> Near;
+	if (bActive && Battle && IsAlive() && Cap)
+	{
+		const FVector Loc = GetActorLocation();
+		const FVector2D Vel(GetVelocity());
+		const float Speed = Vel.Size();
+		const FVector2D Input(GetLastMovementInputVector());
+		// the way it goes (or, against someone it has not got moving yet, the way the keys push it)
+		const FVector2D Dir = Speed > 30.f ? Vel / Speed : (Input.SizeSquared() > 0.01f ? Input.GetSafeNormal() : FVector2D::ZeroVector);
+		const float MyR = Cap->GetScaledCapsuleRadius();
+		const float Look = FMath::Clamp(Speed * 0.45f, 0.f, 320.f);   // (a run clears the way further ahead)
+		FVLUnits Others;
+		Battle->UnitsNear(Loc, 600.f, Others);
+		for (AVLKing* O : Others)
+		{
+			if (O == this || O->IsDead() || O->IsGarrisoned())
+			{
+				continue;           // (one on the tower's lookout is up there)
+			}
+			const FVector OL = O->GetActorLocation();
+			const FVector2D Rel(OL - Loc);
+			if (FMath::Abs(OL.Z - Loc.Z) > 160.f || Rel.SizeSquared() > FMath::Square(600.f))
+			{
+				continue;
+			}
+			const UVLSwordsmanCombat* OSw = UVLSwordsmanCombat::For(O, false);
+			const UVLArcherCombat* OBw = UVLArcherCombat::For(O, false);
+			const bool bFighting = (OSw && OSw->IsAttacking()) || (OBw && OBw->IsAttacking()) || GetWorld()->GetTimeSeconds() - O->LastStruckTime < 3.0;
+			const bool bFoe = O->Team != Team;
+			if (bFoe && bFighting)
+			{
+				continue;           // a foe in a fight holds its ground: solid, no yielding
+			}
+			if (!bFoe)
+			{
+				Near.Add(O);        // (one's own: walked through while it steps aside; a foe stays solid)
+			}
+			const float Touch = MyR + O->GetCapsuleComponent()->GetScaledCapsuleRadius() + 30.f;
+			FVector2D Push = FVector2D::ZeroVector;
+			float Strength = 0.f;
+			if (!Dir.IsZero())
+			{
+				// in its path (or about to be): aside, off the side it is on, and a little ahead
+				const float Along = FVector2D::DotProduct(Rel, Dir);
+				const float Side = Dir.X * Rel.Y - Dir.Y * Rel.X;
+				if (Along > -Touch * 0.5f && Along < Look + Touch && FMath::Abs(Side) < Touch)
+				{
+					const float Sgn = FMath::Abs(Side) > 4.f ? FMath::Sign(Side) : ((GetTypeHash(O->GetFName()) & 1) ? 1.f : -1.f);
+					Push = FVector2D(-Dir.Y, Dir.X) * Sgn + Dir * 0.35f;
+					Strength = FMath::Clamp(1.2f - Along / (Look + Touch), 0.35f, 1.f);
+				}
+			}
+			const float D = Rel.Size();
+			if (Strength <= 0.f && D < Touch - 10.f && D > 1.f)
+			{
+				Push = Rel / D;     // standing in it: straight out
+				Strength = 0.5f;
+			}
+			if (Strength > 0.f)
+			{
+				// one of his own in a fight gives way only half as readily; so does a foe that is not fighting
+				if (bFighting || bFoe)
+				{
+					Strength *= 0.5f;
+				}
+				O->YieldTo(Push.GetSafeNormal(), Strength, FMath::Max(Speed, O->WalkSpeed), this);
+			}
+		}
+	}
+	// its moves pass through those near it, and theirs through it; the rest are solid to it again
+	for (AVLKing* O : Near)
+	{
+		if (!WayIgnored.Contains(O))
+		{
+			Cap->IgnoreActorWhenMoving(O, true);
+			O->GetCapsuleComponent()->IgnoreActorWhenMoving(this, true);
+			WayIgnored.Add(O);
+		}
+	}
+	for (int32 i = WayIgnored.Num() - 1; i >= 0; --i)
+	{
+		AVLKing* O = WayIgnored[i].Get();
+		if (O && Near.Contains(O))
+		{
+			continue;
+		}
+		if (O)
+		{
+			Cap->IgnoreActorWhenMoving(O, false);
+			O->GetCapsuleComponent()->IgnoreActorWhenMoving(this, false);
+		}
+		WayIgnored.RemoveAt(i);
+	}
+}
+
+void AVLKing::YieldTo(const FVector2D& Dir, float Strength, float Speed, AVLKing* From)
+{
+	YieldFrom = From;
+	if (!bYielding)
+	{
+		bYielding = true;
+		YieldHome = GetFeet();
+		YieldHomeYaw = GetActorRotation().Yaw;
+		bYieldReturn = !bAutoWalk;      // (one walking to an order walks on to it)
+		UE_LOG(LogVoxelLab, Log, TEXT("%s makes way at %.0f %.0f%s"), *DisplayName, YieldHome.X, YieldHome.Y, bYieldReturn ? TEXT("") : TEXT(" (on its order)"));
+	}
+	YieldWish += Dir * Strength;
+	YieldSpeed = FMath::Max(YieldSpeed, Speed);
+	YieldClock = 0.f;
+}
+
+bool AVLKing::YieldDirection(FVector2D& Dir, bool bTurn) const
+{
+	UVLGrid* Grid = UVLGrid::Get(this);
+	if (!Grid || !Grid->IsBuilt())
+	{
+		return true;                    // (no grid in this level: as it is)
+	}
+	const FVector Feet = GetFeet();
+	const int32 Here = Grid->NodeAt(Feet, 80.f);
+	const int32 Region = Here != INDEX_NONE ? Grid->RegionOf(Here) : 0;
+	static const float Turns[7] = { 0.f, 35.f, -35.f, 70.f, -70.f, 110.f, -110.f };
+	for (int32 t = 0; t < (bTurn ? 7 : 1); ++t)
+	{
+		const FVector2D D = Dir.GetRotated(Turns[t]);
+		bool bOpen = true;
+		for (const float Step : { 45.f, 95.f })
+		{
+			const int32 N = Grid->NodeAt(Feet + FVector(D * Step, 0.f), 70.f);
+			if (N == INDEX_NONE || (Region != 0 && Grid->RegionOf(N) != Region) || Grid->Submerged(Grid->NodePos(N)))
+			{
+				bOpen = false;          // a wall, a building, a drop, the water, other ground
+				break;
+			}
+		}
+		if (bOpen)
+		{
+			Dir = D;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AVLKing::TickYield(float DeltaSeconds, FVector& OutWish)
+{
+	if (!bYielding)
+	{
+		return false;
+	}
+	YieldClock += DeltaSeconds;
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (!YieldWish.IsNearlyZero())
+	{
+		// pushed this frame: aside, as quick as the one coming (no quicker than its run)
+		FVector2D Dir = YieldWish.GetSafeNormal();
+		const float Strength = FMath::Clamp(float(YieldWish.Size()), 0.25f, 1.f);
+		YieldWish = FVector2D::ZeroVector;
+		const float Speed = YieldSpeed;
+		YieldSpeed = 0.f;
+		if (!YieldDirection(Dir, true))
+		{
+			return false;               // nowhere to go: it lets the played unit pass through
+		}
+		Move->MaxWalkSpeed = FMath::Clamp(Speed * 1.1f, WalkSpeed, RunSpeed);
+		OutWish = FVector(Dir * Strength, 0.f);
+		return true;
+	}
+	if (!bYieldReturn || YieldClock > 8.f)
+	{
+		if (bYieldReturn)
+		{
+			UE_LOG(LogVoxelLab, Log, TEXT("%s stays where it made way (its spot is still taken)"), *DisplayName);
+		}
+		bYielding = false;
+		return false;
+	}
+	if (YieldClock < 0.6f)
+	{
+		return false;                   // a moment, then back to its spot
+	}
+	if (const AVLKing* From = YieldFrom.Get(); From && FVector::Dist2D(From->GetFeet(), YieldHome) < 125.f)
+	{
+		return false;                   // the played unit stands on its spot: it waits (up to the 8 s) rather than push back in
+	}
+	const FVector2D To(YieldHome - GetFeet());
+	if (To.Size() < 30.f)
+	{
+		// back: it turns the way it faced before
+		const float Yaw = GetActorRotation().Yaw;
+		if (FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, YieldHomeYaw)) < 4.f || Move->IsFalling())
+		{
+			bYielding = false;
+			UE_LOG(LogVoxelLab, Log, TEXT("%s is back at its spot"), *DisplayName);
+		}
+		else
+		{
+			SetActorRotation(FRotator(0.f, FMath::FixedTurn(Yaw, YieldHomeYaw, 420.f * DeltaSeconds), 0.f));
+		}
+		return false;
+	}
+	FVector2D Dir = To.GetSafeNormal();
+	if (!YieldDirection(Dir, true))     // (round a step or a post as the push does: the first way that can be walked)
+	{
+		UE_LOG(LogVoxelLab, Log, TEXT("%s stays where it made way (no open way back)"), *DisplayName);
+		bYielding = false;
+		return false;
+	}
+	Move->MaxWalkSpeed = WalkSpeed;
+	OutWish = FVector(Dir * FMath::Clamp(float(To.Size()) / 120.f, 0.35f, 1.f), 0.f);
 	return true;
 }
 
@@ -1826,7 +2388,25 @@ void AVLKing::PollInput(float DeltaSeconds)
 			{
 				GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, PaceCap);     // marching together
 			}
+			if (!YieldWish.IsNearlyZero())
+			{
+				// in the way of the unit the player plays: nudged off its line, it walks on
+				FVector2D Off = YieldWish.GetSafeNormal();
+				YieldWish = FVector2D::ZeroVector;
+				if (YieldDirection(Off, false))
+				{
+					Wish = (Wish + FVector(Off, 0.f) * 0.9f).GetSafeNormal();
+				}
+			}
 			AddMovementInput(Wish, 1.f);
+		}
+		else if (GetController() && TickYield(DeltaSeconds, Wish))
+		{
+			AddMovementInput(Wish, 1.f);    // stepping out of the played unit's way, or back to its spot (MakeWay)
+		}
+		if (WayIgnored.Num() > 0)
+		{
+			MakeWay(DeltaSeconds, false);   // (played no more)
 		}
 		return;
 	}
@@ -2098,7 +2678,14 @@ void AVLKing::PollInput(float DeltaSeconds)
 			bArmed = !bArmed;
 			bAttackQueued = false;
 		}
-		if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) || PC->WasInputKeyJustPressed(EKeys::Gamepad_RightShoulder))
+		// commanding the selection from here: Alt / Option + click selects, right click (Ctrl / Cmd + click) orders,
+		// 1..6 the platoons, G follow me (a command's click is not a swing)
+		const bool bCommandClick = HeroCommands(PC);
+		if (PC->GetPawn() != this)
+		{
+			return;                 // took control of another unit
+		}
+		if (!bCommandClick && (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) || PC->WasInputKeyJustPressed(EKeys::Gamepad_RightShoulder)))
 		{
 			// a swing turns him towards the pointer for FaceMouseHoldSeconds, then he faces his way of walking again
 			float Yaw = 0.f;
@@ -2151,6 +2738,8 @@ void AVLKing::PollInput(float DeltaSeconds)
 	{
 		AddMovementInput(Wish, 1.f);
 	}
+	// his own way: the player's units he walks into step aside (foes do not)
+	MakeWay(DeltaSeconds, bHeroMode && !bDead);
 	// after a swing he faces where it was aimed (the pointer when clicked) for FaceMouseHoldSeconds, WASD strafing; then
 	// he turns back to his way of walking (the movement component's own turn). Archers aim with their own component.
 	if (!bTroop || !FindComponentByClass<UVLArcherCombat>())
@@ -2323,12 +2912,16 @@ bool AVLKing::GetAimPoint(APlayerController* PC, FVector& OutPoint, float SkyDis
 	return GetAimPointAlong(Origin, Dir, OutPoint, SkyDistance, bOutSky);
 }
 
-bool AVLKing::GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVector& OutPoint, float SkyDistance, bool* bOutSky) const
+bool AVLKing::GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVector& OutPoint, float SkyDistance, bool* bOutSky, AActor** OutActor) const
 {
 	UWorld* World = GetWorld();
 	if (bOutSky)
 	{
 		*bOutSky = false;
+	}
+	if (OutActor)
+	{
+		*OutActor = nullptr;
 	}
 	if (!World)
 	{
@@ -2367,6 +2960,10 @@ bool AVLKing::GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVecto
 		Point = Hit.ImpactPoint;
 		Reach = float(FVector::DotProduct(Point - Origin, Dir));
 		bFound = true;
+		if (OutActor)
+		{
+			*OutActor = Hit.GetActor();
+		}
 		break;
 	}
 	// A foe's body the ray passes through before that catches it (units do not stop a visibility trace; an arrow
@@ -2392,6 +2989,10 @@ bool AVLKing::GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVecto
 				Reach = Along;
 				Point = OnRay;
 				bFound = true;
+				if (OutActor)
+				{
+					*OutActor = const_cast<AVLKing*>(U);
+				}
 			}
 		}
 	}

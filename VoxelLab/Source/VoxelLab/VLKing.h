@@ -439,7 +439,7 @@ public:
 	/** The same along a given ray from the camera (Origin, Dir: GetAimRay's, or one a little off it for an archer's
 	 *  spread). A foe whose body the ray passes through (before anything else) catches it: the point is on the ray, in
 	 *  the middle of that body. bOutSky: the ray met nothing, the point is SkyDistance along it. */
-	bool GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVector& OutPoint, float SkyDistance = 3000.f, bool* bOutSky = nullptr) const;
+	bool GetAimPointAlong(const FVector& Origin, const FVector& Dir, FVector& OutPoint, float SkyDistance = 3000.f, bool* bOutSky = nullptr, AActor** OutActor = nullptr) const;
 	void UpdateCursorMode(APlayerController* PC, const class AVLHUD* HUD);
 	float LookPitch = 0.f;
 	bool bMouseLookActive = false;
@@ -547,7 +547,7 @@ public:
 	 * bBoxes: a building also counts anywhere inside its bounding box (for selecting it); without, only where the
 	 * pointer meets its own geometry (for orders: a box in the way must not turn a move into something else).
 	 */
-	AActor* PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground = nullptr, bool bBoxes = true) const;
+	AActor* PickAt(APlayerController* PC, const FVector2D& Point, FVector* Ground = nullptr, bool bBoxes = true, const AActor* Skip = nullptr) const;
 	/** What the mouse does in the overview, at a point of the viewport (also vl.Click / vl.Box / vl.RightClick):
 	 *  a click selects the unit or building there (Shift: adds the unit or takes it out) or, on a training dummy,
 	 *  has the selection's fighters attack it (UVLCommand::OrderAttack; Shift: at a run), a box every unit in it,
@@ -566,6 +566,50 @@ public:
 	bool SelectKindAt(const FVector2D& Point, bool bAdd);
 	/** True if an order was given. */
 	bool OrderAt(const FVector2D& Point, bool bRun, bool bQueue = false);
+	/** OrderAt's order once it knows what was clicked: Units (the ones to command), Hit (what the pointer is on, or
+	 *  null) and Ground (the point of the world there). Right click on one of the player's troops: the others follow
+	 *  it (UVLCommand::OrderFollow). Builders with bQueue: on the end of their queues (VLConstruction.*). */
+	bool OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground, bool bRun, bool bQueue);
+	/**
+	 * Commanding from the hero view (the crosshair picks, as the sword and the bow aim): what is under the crosshair
+	 * (a unit drawn there, not this one; else what the aim ray meets ahead of him) and the point it is on. False:
+	 * the crosshair is on the sky.
+	 */
+	bool HeroPick(APlayerController* PC, AActor*& OutHit, FVector& OutGround) const;
+	/** The selection (without the unit played) takes the order under the crosshair. True if an order was given. */
+	bool HeroOrder(APlayerController* PC, bool bRun, bool bQueue);
+	/** Alt / Option + click in the hero view: the unit under the crosshair is selected (Shift: added or taken out;
+	 *  twice quickly: played); a foe: the selection attacks it; anything else lets the selection go. */
+	void HeroSelect(APlayerController* PC, bool bShift);
+	/** The hero view's commands (select, order, platoon keys, follow me). True: this frame's left click was one. */
+	bool HeroCommands(APlayerController* PC);
+	/**
+	 * Is a plain left click now a selection, not the unit's own blow? Yes when the crosshair is on one of the player's
+	 * own units (OutUnit) and the unit played is not in a fight (no foe within HeroClickFightRange) nor drawing / holding
+	 * a locked bow. Alt held: always (Alt + click on the ground lets the selection go).
+	 */
+	bool HeroClickSelects(APlayerController* PC, AVLKing** OutUnit = nullptr) const;
+	static constexpr float HeroClickFightRange = 400.f;
+	/** This frame's left click was taken as a command (selection or order): the bow / blow components leave it. */
+	bool HeroClickTaken() const { return HeroClickFrame == GFrameCounter; }
+	/** What the crosshair is on in the hero view (a unit, updated each frame there), for the HUD's hint. */
+	AVLKing* GetHeroHover() const { return HeroHover.Get(); }
+	bool IsHeroHoverSelect() const { return bHeroHoverSelect; }
+	/** Tests (vl.HeroAim): the crosshair is taken to be on this world point for Seconds. */
+	void SetHeroTestAim(const FVector& Point, float Seconds) { HeroTestAim = Point; HeroTestAimTime = Seconds; }
+
+	/**
+	 * Way for the unit the player plays (the hero view): the player's own units standing in its way, or about to be,
+	 * step aside smoothly as it comes (its moves pass through them meanwhile), then go back to where they stood;
+	 * one on an order is nudged off its line and walks on. A foe that is not fighting gives way at half the push and
+	 * stays solid (it is shouldered aside, not walked through); one in a fight (attacking, or struck in the last 3 s)
+	 * does not give way at all. They yield only onto ground that can be walked (the path grid's, the same region,
+	 * never into the water). Units are found through the battle's spatial hash (UnitsNear).
+	 * Off (bActive false): everything it passes through is solid again.
+	 */
+	void MakeWay(float DeltaSeconds, bool bActive);
+	/** Asked by the unit the player plays to step out of its way (a push this frame: Dir on the ground, 0..1). */
+	void YieldTo(const FVector2D& Dir, float Strength, float Speed, AVLKing* From = nullptr);
 
 	/** Its pathway (Shift + right click): points walked one after another once the current order is done. */
 	void QueueLeg(const FVector& Slot, bool bRun);
@@ -874,4 +918,31 @@ private:
 	bool bTapRun = false;
 	static constexpr double DoubleTapSeconds = 0.3;
 	FVector2D AutoTarget = FVector2D::ZeroVector;
+
+	// making way for the unit the player plays (MakeWay / YieldTo)
+	TArray<TWeakObjectPtr<AVLKing>> WayIgnored;     // the played unit's: those its moves pass through now
+	FVector2D YieldWish = FVector2D::ZeroVector;    // this frame's push
+	float YieldSpeed = 0.f;
+	float YieldClock = 0.f;                          // seconds since the last push
+	FVector YieldHome = FVector::ZeroVector;         // where it stood before it stepped aside
+	float YieldHomeYaw = 0.f;
+	bool bYielding = false;
+	bool bYieldReturn = false;
+	TWeakObjectPtr<AVLKing> YieldFrom;               // the played unit it made way for
+	/** Steps aside / back (a unit not played, with no order to walk). True if it moved this frame. */
+	bool TickYield(float DeltaSeconds, FVector& OutWish);
+	/** Can it step from where it stands along Dir (open ground of its own region, no water)? Rotates Dir to the first
+	 *  way that can be walked; false: none. */
+	bool YieldDirection(FVector2D& Dir, bool bTurn) const;
+	// the hero view's double click on a unit (Alt + click twice: take control of it)
+	TWeakObjectPtr<AActor> HeroLastClicked;
+	double HeroLastClickTime = 0.0;
+	double HeroLastOrderTime = -1.0;
+	uint64 HeroClickFrame = 0;
+	TWeakObjectPtr<AVLKing> HeroHover;
+	bool bHeroHoverSelect = false;
+	FVector HeroTestAim = FVector::ZeroVector;
+	float HeroTestAimTime = 0.f;
+	/** The point of the view the hero's commands pick at: the crosshair (the pointer when shown; vl.HeroAim's point). */
+	bool HeroCrossPoint(APlayerController* PC, FVector2D& Out) const;
 };

@@ -690,6 +690,11 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 		const FVLBuildingState* St = Battle->FindBuilding(Sel);
 		if (Units.Num() > 0)
 		{
+			// (Shift: Builders put the walk on the end of their queues, as with a Shift + right click in the world)
+			if (UVLConstruction* Construction = UVLConstruction::Get(this); ShiftDown(PCtrl) && Construction && Construction->QueueMove(Units, At, false))
+			{
+				Units.RemoveAll([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
+			}
 			Command->OrderMove(Units, At, false, Command->SelectionFormation(), ShiftDown(PCtrl));
 			AVLGameMode::PlayOrderSound(this);
 			UE_LOG(LogVoxelLab, Log, TEXT("minimap: %d unit(s) sent to %.0f %.0f"), Units.Num(), At.X, At.Y);
@@ -819,10 +824,21 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 	FString Title = Total == 1 ? First->GetDisplayName() : FString::Printf(TEXT("%d Troops"), Total);
 	if (bEnemy && !Title.StartsWith(TEXT("Enemy"))) { Title = TEXT("Enemy ") + Title; }
 	if (Platoon != INDEX_NONE) { Title = KindName(Count[0], Count[1], Count[2], Count[3] + Count[4]); }
-	Text(Title, X, Y, U(22.f), bEnemy ? FLinearColor(1.f, 0.55f, 0.45f, 1.f) : GoldBright, AlignLeft, Bold);
+	const float TitleW = Text(Title, X, Y, U(22.f), bEnemy ? FLinearColor(1.f, 0.55f, 0.45f, 1.f) : GoldBright, AlignLeft, Bold);
+	// a platoon's leader: a crown after the title of one selected alone, and who leads on the platoon's line
+	const int32 OwnPlatoon = bEnemy || Total != 1 ? INDEX_NONE : Command->PlatoonIndexOf(First);
+	const bool bLeads = OwnPlatoon != INDEX_NONE && Command->GetPlatoonLeader(OwnPlatoon) == First;
+	if (bLeads)
+	{
+		Icon(EVLIcon::Crown, X + TitleW + U(8.f), Y + U(1.f), U(22.f));
+	}
+	const AVLKing* PlatoonLeader = Platoon != INDEX_NONE ? Command->GetPlatoonLeader(Platoon) : nullptr;
+	const FString LedBy = Platoon == INDEX_NONE ? FString() : (PlatoonLeader ? FString::Printf(TEXT("  ·  led by %s"), PlatoonLeader == King ? TEXT("you") : *PlatoonLeader->GetDisplayName())
+		: FString(TEXT("  ·  no leader")));
 	FString SubLine = bEnemy ? FString(TEXT("Enemy troops: right-click to attack"))
-		: (Platoon != INDEX_NONE ? FString::Printf(TEXT("Platoon %d  ·  %s  ·  %s"), Platoon + 1, UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance))
-			: FString::Printf(TEXT("Stance: %s   ·   Ctrl+1-6 forms a platoon"), UVLCommand::StanceName(Stance)));
+		: (Platoon != INDEX_NONE ? FString::Printf(TEXT("Platoon %d%s  ·  %s  ·  %s"), Platoon + 1, *LedBy, UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance))
+			: (bLeads ? FString::Printf(TEXT("Leader of platoon %d  ·  Stance: %s"), OwnPlatoon + 1, UVLCommand::StanceName(Stance))
+				: FString::Printf(TEXT("Stance: %s   ·   Ctrl+1-6 forms a platoon"), UVLCommand::StanceName(Stance))));
 	if (Total == 1 && First->IsGarrisoned()) { SubLine = TEXT("On the watch tower's lookout   ·   ") + SubLine; }
 	else if (const FString Doing = bEnemy ? FString() : Command->DescribeOrders(Units); !Doing.IsEmpty()) { SubLine = Doing + TEXT("   ·   ") + SubLine; }
 	// the command row takes the right of the panel: a hint that would run under it is dropped (its first part stays)
@@ -852,6 +868,10 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 	{
 		if (Count[t] == 0) { continue; }
 		Portrait(KindPortrait(t), PX, Y + (bCompact ? U(60.f) : U(52.f)), PS, FLinearColor::White, bEnemy);
+		if (PlatoonLeader && KindIndex(PlatoonLeader) == t)
+		{
+			Icon(EVLIcon::Crown, PX + PS - U(14.f), Y + (bCompact ? U(60.f) : U(52.f)) - U(6.f), U(18.f));     // (the leader is one of these)
+		}
 		PX += PS + U(4.f);
 		PX += Text(FString::Printf(TEXT("×%d"), Count[t]), PX, Y + (bCompact ? U(65.f) : U(61.f)), PT, Parchment, AlignLeft, Bold) + (bCompact ? U(9.f) : U(22.f));
 	}
@@ -1483,6 +1503,12 @@ void AVLHUD::DrawPlatoonPanel()
 		{
 			Icon(EVLIcon::Pop, Row.Min.X + U(32.f), Row.Min.Y + (H - U(30.f)) * 0.5f, U(30.f));
 		}
+		// led: a small crown over the portrait (a platoon whose leader fell has none)
+		const AVLKing* RowLeader = Command->GetPlatoonLeader(i);
+		if (RowLeader)
+		{
+			Icon(EVLIcon::Crown, Row.Min.X + U(50.f), Row.Min.Y + U(2.f), U(16.f));
+		}
 
 		const float TX = Row.Min.X + U(68.f), TW = Small[0].Min.X - TX - U(6.f);
 		FString Name = KindName(Info.Swords, Info.Archers, Info.Kings, Info.Others);
@@ -1530,7 +1556,10 @@ void AVLHUD::DrawPlatoonPanel()
 		if (RB.bHover && !SmallB[0].bHover && !SmallB[1].bHover && !SmallB[2].bHover)
 		{
 			SetTooltip(Row, KindName(Info.Swords, Info.Archers, Info.Kings, Info.Others), { FString::Printf(TEXT("%d troops  ·  %d%% health  ·  %s  ·  %s"), Info.Members.Num(), FMath::RoundToInt(Info.Health * 100.f),
-				UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance)), FString::Printf(TEXT("Click or press %d to select; twice to go there."), i + 1) });
+				UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance)),
+				RowLeader ? FString::Printf(TEXT("Led by %s: the formation forms up on it"), RowLeader == King ? TEXT("you") : *RowLeader->GetDisplayName())
+					: FString(TEXT("No leader: take control of a member, or have the others follow one (right-click it)")),
+				FString::Printf(TEXT("Click or press %d to select; twice to go there."), i + 1) });
 		}
 	}
 }
@@ -1551,6 +1580,35 @@ void AVLHUD::DrawHeroBits()
 		Fill(CX + G, CY - T * 0.5f, L, T, Cross);
 		Fill(CX - T * 0.5f, CY - G - L, T, L, Cross);
 		Fill(CX - T * 0.5f, CY + G, T, L, Cross);
+		// what a click does where it points (the hero view's commands, AVLKing::HeroCommands): gold over one of his own
+		// that a left click selects, red over a foe the selection would be sent at by a right click
+		if (const AVLKing* Aimed = King->GetHeroHover(); Aimed && !King->IsDead())
+		{
+			const UVLCommand* HintCmd = UVLCommand::Get(this);
+			TArray<AVLKing*> Sel;
+			if (HintCmd) { HintCmd->GetSelection(Sel); }
+			Sel.Remove(King);
+			FString Hint;
+			FLinearColor HintCol = GoldBright;
+			if (King->IsHeroHoverSelect())
+			{
+				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? TEXT("Click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift+click: let go)")
+					: TEXT("Click: select ") + Aimed->GetDisplayName());
+			}
+			else if (Sel.Num() > 0 && Battle && Battle->IsHostile(Aimed, King->Team))
+			{
+				Hint = FString::Printf(TEXT("%s: attack %s"), King->bRightMouseAims ? TEXT("Ctrl+click") : TEXT("Right click"), *Aimed->GetDisplayName());
+				HintCol = Refuse;
+			}
+			if (!Hint.IsEmpty())
+			{
+				const float HS = U(13.f);
+				const FVector2D TS = TextSize(Hint, HS);
+				const FBox2D HB(FVector2D(CX - TS.X * 0.5f - U(8.f), CY + U(16.f)), FVector2D(CX + TS.X * 0.5f + U(8.f), CY + U(20.f) + TS.Y + U(4.f)));
+				Panel(HB, false, 0.7f);
+				TextIn(HB, Hint, HS, HintCol, AlignCentre);
+			}
+		}
 	}
 	// the mode box, top left: which view, who is played, and his health
 	{
@@ -1571,13 +1629,39 @@ void AVLHUD::DrawHeroBits()
 		{
 			Info = FString::Printf(TEXT("Tab: back to %s"), *King->GetDisplayName());
 		}
-		const float W = FMath::Max(U(250.f), TextSize(Info, U(14.f)).X + U(36.f)), H = U(60.f);
+		// the hero view: whom he commands from here (the crosshair picks), and how
+		FString Commanding;
+		if (bHero && !King->IsDead())
+		{
+			const UVLCommand* Command = UVLCommand::Get(this);
+			TArray<AVLKing*> Units;
+			if (Command)
+			{
+				Command->GetSelection(Units);
+			}
+			Units.Remove(King);
+			const int32 P = Command ? Command->PlatoonIndexOf(King) : INDEX_NONE;
+			const bool bLeads = P != INDEX_NONE && Command->GetPlatoonLeader(P) == King;
+			const TCHAR* OrderKey = King->bRightMouseAims ? TEXT("Ctrl+click") : TEXT("Right click");
+			Commanding = Units.Num() > 0
+				? FString::Printf(TEXT("Commanding %d  ·  %s: move / attack  ·  G: follow me  ·  Alt+click ground: let go"), Units.Num(), OrderKey)
+				: FString(TEXT("Click a troop under the crosshair (or 1-6) to command it"));
+			if (bLeads)
+			{
+				Commanding = FString::Printf(TEXT("Leader of platoon %d  ·  "), P + 1) + Commanding;
+			}
+		}
+		const float W = FMath::Max(U(250.f), FMath::Max(TextSize(Info, U(14.f)).X, TextSize(Commanding, U(13.f)).X) + U(36.f)), H = U(Commanding.IsEmpty() ? 60.f : 80.f);
 		// top left; under the resource bar's row when a narrow window would have them overlap
 		const float BY = (TopBarRect.bIsValid && U(14.f) + W > TopBarRect.Min.X - U(8.f)) ? TopBarRect.Max.Y + U(8.f) : U(10.f);
 		const FBox2D Box(FVector2D(U(14.f), BY), FVector2D(U(14.f) + W, BY + H));
 		HudPanel(Box);
 		Text(bHero ? TEXT("HERO") : TEXT("OVERVIEW"), Box.Min.X + U(16.f), Box.Min.Y + U(8.f), U(18.f), GoldBright, AlignLeft, Bold, U(3.f));
 		Text(Info, Box.Min.X + U(16.f), Box.Min.Y + U(33.f), U(14.f), InfoCol);
+		if (!Commanding.IsEmpty())
+		{
+			Text(Commanding, Box.Min.X + U(16.f), Box.Min.Y + U(55.f), U(13.f), Dim);
+		}
 	}
 	// the controls of the hero view along the bottom
 	if (bHero)
