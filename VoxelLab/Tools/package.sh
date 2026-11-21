@@ -16,7 +16,7 @@ case "$CONFIG" in
     *) echo "usage: sh Tools/package.sh [Shipping|Development]"; exit 2 ;;
 esac
 "$UE/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun -project="$ROOT/VoxelLab.uproject" -platform=Mac \
-    -clientconfig="$CONFIG" -build -cook -stage -pak -noP4 -utf8output $EXTRA > "$ROOT/Saved/package.log" 2>&1 \
+    -clientconfig="$CONFIG" -specifiedarchitecture=arm64 -build -cook -stage -pak -noP4 -utf8output $EXTRA > "$ROOT/Saved/package.log" 2>&1 \
     || { echo "packaging failed: see Saved/package.log"; exit 1; }
 # (a Shipping build stages as VoxelLab-Mac-Shipping.app on some setups: take whichever app was staged last)
 STAGED="$ROOT/Saved/StagedBuilds/Mac/VoxelLab.app"
