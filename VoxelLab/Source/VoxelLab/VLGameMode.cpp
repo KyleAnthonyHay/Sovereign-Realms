@@ -798,12 +798,12 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map town|realm|flatlands|village|highlands: open that map"),
+	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map realm|realmv2|highlands|flatlands: open that map"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (Args.Num() > 0 && World)
 			{
-				const int32 Map = Args[0].StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 4 : Args[0].StartsWith(TEXT("r"), ESearchCase::IgnoreCase) ? 1 : (Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : (Args[0].StartsWith(TEXT("v"), ESearchCase::IgnoreCase) ? 3 : 0));
+				const int32 Map = Args[0].Contains(TEXT("2")) ? 0 : (Args[0].StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 3 : (Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : 1));
 				const UVLBattle* Battle = UVLBattle::Get(World);
 				AVLHUD::OpenMatch(World, Map, Battle ? Battle->GetDifficulty() : 1);       // a match there at once (no title screen)
 			}
@@ -909,13 +909,13 @@ void AVLGameMode::BeginPlay()
 			GConfig->Flush(false, GGameUserSettingsIni);
 		}
 	}
-	// TEMP: music off by default (user request, 2026-11-21) — restore: read the saved setting again
-	//float SavedMusic = 1.f;
-	//if (GConfig && GConfig->GetFloat(TEXT("VoxelLab.Audio"), TEXT("Music"), SavedMusic, GGameUserSettingsIni))
-	//{
-	//	MusicSetting = FMath::Clamp(SavedMusic, 0.f, 1.f);
-	//}
-	MusicSetting = 0.f;
+	// the music: on by default; the player's own choice (Settings > Music, U in the pause menu: off included) is kept.
+	// (MusicV2: the old key may hold the 0 of the days it was off by default, which was nobody's choice)
+	float SavedMusic = 1.f;
+	if (GConfig && GConfig->GetFloat(TEXT("VoxelLab.Audio"), TEXT("MusicV2"), SavedMusic, GGameUserSettingsIni))
+	{
+		MusicSetting = FMath::Clamp(SavedMusic, 0.f, 1.f);
+	}
 	auto Load = [](const FString& Name) { return LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Voxel/Audio/%s.%s"), *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet); };
 	if (USoundBase* Loop = Load(TEXT("S_AmbientLoop")))
 	{
@@ -965,7 +965,7 @@ void AVLGameMode::SetMusicSetting(float Setting)
 	ApplyMusicSetting(Setting);
 	if (GConfig)
 	{
-		GConfig->SetFloat(TEXT("VoxelLab.Audio"), TEXT("Music"), MusicSetting, GGameUserSettingsIni);
+		GConfig->SetFloat(TEXT("VoxelLab.Audio"), TEXT("MusicV2"), MusicSetting, GGameUserSettingsIni);
 		GConfig->Flush(false, GGameUserSettingsIni);
 	}
 }

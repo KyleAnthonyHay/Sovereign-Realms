@@ -95,6 +95,8 @@ public:
 	AActor* DummyAt(const class APlayerController* PC, const FVector2D& Point) const;
 	/** Can this unit fight on orders? */
 	static bool CanAttack(const AVLKing* Unit);
+	/** Is it in a fight it was ordered into (not one of its own accord)? */
+	static bool IsInOrderedFight(const AVLKing* Unit);
 	/** Those of Units that can fight go and attack Target (a dummy) until they get another order; the others are
 	 *  left as they are. Returns how many were ordered. */
 	int32 OrderAttack(const TArray<AVLKing*>& Units, AActor* Target, bool bRun, bool bMarker = true);
@@ -132,9 +134,44 @@ public:
 	 *  as it moves; they fight what they meet on the way and let go of a chase FollowLeash from it. Ends with any
 	 *  other order, or when Leader falls. If the followers and Leader share a platoon, Leader becomes its leader.
 	 *  Returns how many follow. */
-	int32 OrderFollow(const TArray<AVLKing*>& Units, AVLKing* Leader);
+	int32 OrderFollow(const TArray<AVLKing*>& Units, AVLKing* Leader, bool bMarker = true);
 	/** The unit it follows (OrderFollow), if any. */
 	AVLKing* FollowedBy(const AVLKing* Unit) const;
+	/** Those following Leader (OrderFollow). */
+	void GetFollowers(const AVLKing* Leader, TArray<AVLKing*>& Out) const;
+
+	// ---- order chains: Shift + click on foes and the ground queues them (attack unit 1, then unit 2, then a building,
+	// then walk there), for the selection or, in the hero view, those under the hero's command
+	struct FChainItem
+	{
+		TWeakObjectPtr<AActor> Target;      // an attack: the foe's unit or building
+		FVector Ground = FVector::ZeroVector;   // a walk: where to (an attack: where its target stood when queued)
+		bool bAttack = false;
+		bool bRun = false;
+	};
+	/**
+	 * Units take an order: Target (a foe's unit or building: attack it) or a walk to Ground in Shape. Not bQueue: at
+	 * once, in place of whatever they were doing (an attack is then the first item of their chain, so Shift adds to
+	 * it). bQueue: on the end of the chain they are on; with none, a chain that starts once they are done with what
+	 * they are doing (a walk, a fight they were ordered into; a patrol, guard or follow is ended). Items are done in
+	 * turn: an attack once its target has fallen or been razed (or none of them is on it any more: out of reach), a
+	 * walk once they are there. Rejoin: when the chain runs out after an attack, they fall in behind that unit
+	 * (OrderFollow): the hero's followers commanded from his view. Returns true if anyone took it.
+	 */
+	bool OrderChain(const TArray<AVLKing*>& Units, AActor* Target, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue, AVLKing* Rejoin = nullptr);
+	/** Is it on a chain (its first order under way, or waiting for what it is doing)? */
+	bool HasChain(const AVLKing* Unit) const;
+	/** Every chain (the HUD's numbered markers): its living members, its items in order (the first under way if
+	 *  bStarted), and whom it rejoins. */
+	struct FChainView
+	{
+		TArray<AVLKing*> Members;
+		TArray<FChainItem> Items;
+		bool bStarted = false;
+		AVLKing* Rejoin = nullptr;
+		int32 Id = 0;
+	};
+	void GetChains(TArray<FChainView>& Out) const;
 	static constexpr float FollowLeash = 2400.f;
 	/** Ends whatever standing order these units are on (patrol, attack-move route, guard, hold, roam). */
 	void ClearStanding(const TArray<AVLKing*>& Units);
@@ -223,14 +260,30 @@ public:
 	/** Unit becomes its platoon's leader (false: it is in none). bRally: the platoon's idle members fall in behind
 	 *  it (OrderFollow) as well. */
 	bool MakeLeader(AVLKing* Unit, bool bRally = false);
+	/**
+	 * The recruits' platoon (the platoon panel's flag, the main game's "recruits join here"): new swordsmen and
+	 * archers from every barracks and range join it and march to it (UVLBattle::SpawnRecruit), unless the building
+	 * has its own Joins platoon. One at a time; cleared by clicking the flag again, by disbanding the platoon or when
+	 * its last troop falls. A platoon of RallyPlatoonCap or more takes no more: they wait in the yard as before.
+	 */
+	void SetRallyPlatoon(int32 Index);
+	/** The flagged platoon, or INDEX_NONE (none, or it has nobody left). */
+	int32 GetRallyPlatoon() const;
+	/** The flagged platoon if it can take one more recruit, else INDEX_NONE. */
+	int32 RallyPlatoonFor() const;
+	static constexpr int32 RallyPlatoonCap = 24;
 
 	// ---- the watch tower
 	/** Does this building have a lookout archers can man (tag Lookout:..., from SM_WatchTower.json)? */
 	static bool IsTower(const AActor* Building);
 	/** The archers among Units walk to the tower's door and appear on its lookout; the others go and stand by the door. */
 	void OrderGarrison(const TArray<AVLKing*>& Units, AActor* Tower, bool bRun);
-	/** Everyone on the lookout comes down and forms up in front of the door. */
+	/** Everyone on the lookout comes down and forms up in front of the door (the tower's own archers stay up). */
 	void EmptyTower(AActor* Tower);
+	/** Puts a unit straight on a free post of the tower's lookout (the tower's own archers, UVLBattle). False if none
+	 *  is free. */
+	bool PutOnLookout(AVLKing* Unit, AActor* Tower);
+	int32 FreePosts(const AActor* Tower) const;
 	int32 TowerCount(const AActor* Tower) const;
 	int32 TowerCapacity(const AActor* Tower) const;
 	void GetGarrison(const AActor* Tower, TArray<AVLKing*>& Out) const;
@@ -297,6 +350,20 @@ private:
 		float LegTime = 0.f;
 	};
 	void IssueLeg(FRoute& R);
+	struct FChain
+	{
+		TArray<TWeakObjectPtr<AVLKing>> Members;
+		TArray<FChainItem> Items;           // [0] is under way once bStarted
+		bool bStarted = false;
+		EVLFormation Shape = EVLFormation::Line;
+		TWeakObjectPtr<AVLKing> Rejoin;
+		float Settle = 0.f;                 // seconds before it next looks whether the item is done
+		int32 Id = 0;
+	};
+	TArray<FChain> Chains;
+	int32 NextChainId = 1;
+	void IssueChainItem(FChain& C);
+	void TickChains(float Dt);
 	int32 FindRoute(const TArray<AVLKing*>& Units, bool bLoop) const;
 	bool WardPos(const AActor* Ward, FVector& Out) const;
 	bool PickRoamPoint(FRoamer& R);
@@ -334,6 +401,7 @@ private:
 
 	TArray<TWeakObjectPtr<AVLKing>> Selection;
 	FPlatoon Platoons[MaxPlatoons];
+	int32 RallyPlatoon = INDEX_NONE;
 	EVLFormation LooseFormation = EVLFormation::Line;
 	TArray<FTower> Towers;
 	TArray<FMarker> Markers;

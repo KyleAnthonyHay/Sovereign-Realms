@@ -21,9 +21,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Audio")
 	float MusicVolume = 0.32f;
 
-	/** The player's music volume (Esc menu / U): 0..100% of MusicVolume, saved. */
+	/** The player's music volume (Esc menu / U): 0..100% of MusicVolume, saved ([VoxelLab.Audio] Music); on (100%)
+	 *  until the player turns it down. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Audio")
-	float MusicSetting = 0.f;       // TEMP: music off by default (user request, 2026-11-21) — restore to 1.f
+	float MusicSetting = 1.f;
 
 	void CycleMusicVolume();
 	/** Settings > Music: 0..1, applied at once and saved. */

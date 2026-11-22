@@ -149,9 +149,9 @@ void AVLKing::BeginPlay()
 	}
 	if (!bTroop)
 	{
-		// King David's own pace (VLRules: 520 / 950 against a troop's 420 / 760). Half of it is a longer stride and half
-		// a quicker step, so the feet stay planted (StrideScale); he gets up to speed, brakes and is trailed by the
-		// camera in the same time and distance as before.
+		// King David's pace (VLRules; a troop's 420 / 760 now, it was 520 / 950). A pace other than the figure's own is
+		// half a longer stride and half a quicker step, so the feet stay planted (StrideScale); he gets up to speed,
+		// brakes and is trailed by the camera in the same time and distance as before (at a troop's pace: 1, as is).
 		const VLRules::FTroop& Rules = VLRules::Troop(TEXT("King"));
 		if (Rules.WalkSpeed > 0.f)
 		{
@@ -1195,6 +1195,11 @@ AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* 
 	}
 	if (Best)
 	{
+		// one of a tower's own archers of this side (never selected or ordered): its tower is what was clicked
+		if (Best->bTowerGuard && Best->Team == Team && Best->GarrisonIn.IsValid())
+		{
+			return Best->GarrisonIn.Get();
+		}
 		return Best;
 	}
 	if (bHit && Hit.GetActor() && Hit.GetActor()->ActorHasTag(TEXT("Selectable")))
@@ -1297,7 +1302,7 @@ bool AVLKing::OrderAt(const FVector2D& Point, bool bRun, bool bQueue)
 	return OrderOn(Units, Hit, Ground, bRun, bQueue);
 }
 
-bool AVLKing::OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground, bool bRun, bool bQueue)
+bool AVLKing::OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground, bool bRun, bool bQueue, AVLKing* Rejoin)
 {
 	UVLCommand* Command = UVLCommand::Get(this);
 	if (!Command || Units.Num() == 0 || Ground.IsZero())
@@ -1352,7 +1357,8 @@ bool AVLKing::OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground
 	}
 	if (Hit && Battle && Battle->IsHostile(Hit, Team) && Units.ContainsByPredicate([](const AVLKing* U) { return UVLCommand::CanAttack(U); }))
 	{
-		Command->OrderAttack(Units, Hit, bRun);         // a foe (a unit, a building): attack it
+		// a foe (a unit, a building): attack it; Shift: after what they are doing, on the end of their chain
+		Command->OrderChain(Units, Hit, Ground, bRun, Command->SelectionFormation(), bQueue, Rejoin);
 	}
 	else if (Hit && UVLCommand::IsTower(Hit) && (!Battle || Battle->TeamOf(Hit) == Team || Battle->TeamOf(Hit) == UVLBattle::Neutral)
 		&& Units.ContainsByPredicate([](const AVLKing* U) { return U->IsRanged(); }))
@@ -1369,6 +1375,11 @@ bool AVLKing::OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground
 		{
 			Command->OrderMove(Builders, Ground, bRun, Command->SelectionFormation(), bQueue);
 		}
+	}
+	else if (bQueue && Units.ContainsByPredicate([Command](const AVLKing* U) { return Command->HasChain(U) || UVLCommand::IsInOrderedFight(U); }))
+	{
+		// Shift with a chain of attacks under way (or an attack they were ordered into): the walk is its next order
+		Command->OrderChain(Units, nullptr, Ground, bRun, Command->SelectionFormation(), true, Rejoin);
 	}
 	else
 	{
@@ -1420,7 +1431,7 @@ bool AVLKing::HeroClickSelects(APlayerController* PC, AVLKing** OutUnit) const
 		|| PC->IsInputKeyDown(EKeys::RightCommand);
 	if (bCtrl)
 	{
-		return false;                       // (Ctrl / Cmd + click: an order)
+		return false;                       // (Ctrl / Cmd + click: an order, the right click's)
 	}
 	AVLKing* Hover = HeroHover.Get();
 	if (HeroTestAimTime > 0.f || !Hover)
@@ -1433,35 +1444,7 @@ bool AVLKing::HeroClickSelects(APlayerController* PC, AVLKing** OutUnit) const
 	{
 		*OutUnit = Hover;
 	}
-	if (bAlt)
-	{
-		return true;                        // Alt / Option + click: always a selection
-	}
-	if (!bOwn)
-	{
-		return false;
-	}
-	// the unit's own hands come first: a bow drawn or locked, or a foe at hand (a click in a fight is a blow)
-	if (const UVLArcherCombat* Bow = bTroop ? FindComponentByClass<UVLArcherCombat>() : nullptr)
-	{
-		if (PC->IsInputKeyDown(EKeys::RightMouseButton) || Bow->IsDrawLocked() || Bow->InBattleState())
-		{
-			return false;
-		}
-	}
-	if (const UVLBattle* Battle = UVLBattle::Get(this))
-	{
-		FVLUnits Near;
-		Battle->UnitsNear(GetActorLocation(), HeroClickFightRange, Near);
-		for (const AVLKing* O : Near)
-		{
-			if (O->IsAlive() && Battle->IsHostile(O, Team) && FVector::Dist2D(O->GetActorLocation(), GetActorLocation()) < HeroClickFightRange)
-			{
-				return false;
-			}
-		}
-	}
-	return true;
+	return bAlt;                            // Alt / Option + click: a command; a plain click is always the unit's own blow
 }
 
 bool AVLKing::HeroPick(APlayerController* PC, AActor*& OutHit, FVector& OutGround) const
@@ -1522,6 +1505,49 @@ bool AVLKing::HeroOrder(APlayerController* PC, bool bRun, bool bQueue)
 	return OrderOn(Units, Hit, Ground, bRun, bQueue);
 }
 
+void AVLKing::HeroCommanded(TArray<AVLKing*>& Out, bool* bOutFollowers) const
+{
+	Out.Reset();
+	if (bOutFollowers)
+	{
+		*bOutFollowers = false;
+	}
+	const UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command)
+	{
+		return;
+	}
+	// the selection (never the unit played); else those following him; else his platoon
+	Command->GetSelection(Out);
+	Out.Remove(const_cast<AVLKing*>(this));
+	if (Out.Num() == 0)
+	{
+		// (and those off on a chain of attacks who fall in behind him again after it: still his to command)
+		Command->GetFollowers(this, Out);
+		TArray<UVLCommand::FChainView> Chains;
+		Command->GetChains(Chains);
+		for (const UVLCommand::FChainView& C : Chains)
+		{
+			if (C.Rejoin == this)
+			{
+				for (AVLKing* M : C.Members)
+				{
+					Out.AddUnique(M);
+				}
+			}
+		}
+		if (bOutFollowers)
+		{
+			*bOutFollowers = Out.Num() > 0;
+		}
+	}
+	if (Out.Num() == 0)
+	{
+		Command->GetPlatoon(Command->PlatoonIndexOf(this), Out);
+		Out.Remove(const_cast<AVLKing*>(this));
+	}
+}
+
 void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
 {
 	UVLCommand* Command = UVLCommand::Get(this);
@@ -1530,9 +1556,21 @@ void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
 	{
 		return;
 	}
+	// King David himself under the pointer (shown: the crosshair is never on him): the selection is let go
+	if (!bMouseLookActive && HeroTestAimTime <= 0.f)
+	{
+		FVector2D Cross;
+		if (HeroCrossPoint(PC, Cross) && PickAt(PC, Cross, nullptr, false) == this)
+		{
+			HeroLastClicked = nullptr;
+			Command->ClearSelection();
+			UE_LOG(LogVoxelLab, Log, TEXT("hero select: let go (on %s)"), *GetDisplayName());
+			return;
+		}
+	}
 	AActor* Hit = nullptr;
 	FVector Ground;
-	HeroPick(PC, Hit, Ground);
+	const bool bPicked = HeroPick(PC, Hit, Ground);
 	AVLKing* HitUnit = Cast<AVLKing>(Hit);
 	if (HitUnit && HitUnit->Team == Team && HitUnit->IsAlive())
 	{
@@ -1562,21 +1600,36 @@ void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
 		return;
 	}
 	HeroLastClicked = nullptr;
-	if (Hit && Battle && Battle->IsHostile(Hit, Team))
+	if (!bPicked)
 	{
-		// a foe: the fighters of the selection attack it (as a click on it in the overview)
-		TArray<AVLKing*> Units;
-		Command->GetSelection(Units);
-		Units.Remove(this);
-		if (Command->OrderAttack(Units, Hit, bShift) > 0)
+		if (!bShift)
 		{
-			AVLGameMode::PlayOrderSound(this);
+			Command->ClearSelection();      // the sky: the selection is let go
+			UE_LOG(LogVoxelLab, Log, TEXT("hero select: let go (the sky)"));
 		}
 		return;
 	}
-	if (!bShift)
+	// a foe, the ground, a building: an order for those under his command (Shift: on the end of their chain)
+	bool bFollowers = false;
+	TArray<AVLKing*> Units;
+	HeroCommanded(Units, &bFollowers);
+	if (Units.Num() == 0)
 	{
-		Command->ClearSelection();      // the ground, a building, the sky: the selection is let go
+		if (Battle)
+		{
+			Battle->PushAlert(TEXT("Nobody to command: Option+click a troop to select it, or G with your platoon"));
+			Battle->Play2D(TEXT("S_UIError"), 0.4f);
+		}
+		return;
+	}
+	const double Now = GetWorld()->GetRealTimeSeconds();
+	const bool bRun = !bShift && Now - HeroLastAltOrderTime < 0.35;         // twice quickly: at a run
+	HeroLastAltOrderTime = Now;
+	UE_LOG(LogVoxelLab, Log, TEXT("hero command: %d unit(s)%s, ground %s, on %s%s%s"), Units.Num(), bFollowers ? TEXT(" (his followers)") : TEXT(""), *Ground.ToCompactString(),
+		*GetNameSafe(Hit), bShift ? TEXT(" (queued)") : TEXT(""), bRun ? TEXT(" (at a run)") : TEXT(""));
+	if (OrderOn(Units, Hit, Ground, bRun, bShift, bFollowers ? this : nullptr))
+	{
+		AVLGameMode::PlayOrderSound(this);
 	}
 }
 
@@ -1607,7 +1660,9 @@ bool AVLKing::HeroCommands(APlayerController* PC)
 	{
 		FVector2D Cross;
 		HeroHover = HeroCrossPoint(PC, Cross) ? Cast<AVLKing>(PickAt(PC, Cross, nullptr, false, this)) : nullptr;
-		bHeroHoverSelect = HeroClickSelects(PC) && !bAlt;
+		AVLKing* Own = nullptr;
+		HeroClickSelects(PC, &Own);
+		bHeroHoverSelect = Own != nullptr;  // (the hint: Option + click selects it)
 	}
 	bool bTook = false;
 	if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
@@ -1619,8 +1674,9 @@ bool AVLKing::HeroCommands(APlayerController* PC)
 		}
 		else if (HeroClickSelects(PC))
 		{
-			// the crosshair on one of his own (and no fight at hand): a click selects it, Shift adds or takes it
-			// out, twice quickly takes control of it; Alt + click anywhere: the same (on the ground: let go)
+			// Alt / Option + click: one of his own is selected (Shift adds or takes it out, twice quickly plays it);
+			// a foe is attacked and the ground walked to by those under his command (Shift: queued); the sky lets
+			// the selection go. A plain click is always the unit's own blow.
 			HeroSelect(PC, bShift);
 			bTook = true;
 		}
@@ -1678,7 +1734,7 @@ bool AVLKing::HeroCommands(APlayerController* PC)
 		}
 		else if (UVLBattle* Battle = UVLBattle::Get(this))
 		{
-			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or Alt + click)"));
+			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or Option + click)"));
 			Battle->Play2D(TEXT("S_UIError"), 0.4f);
 		}
 	}
@@ -2222,10 +2278,17 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 	}
 	else if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && bMouse && Units.Num() == 0 && SelBuilding && !UVLBattle::TroopFor(SelBuilding).IsEmpty())
 	{
-		// a barracks / range selected and nobody: a right click on the ground is where its recruits muster
+		// a barracks / range selected and nobody: a right click on the ground is where its recruits muster; on the
+		// building itself: no rally point (they wait in its yard again)
 		FVector Ground = FVector::ZeroVector;
-		PickAt(PC, Mouse, &Ground);
-		if (!Ground.IsZero())
+		AActor* On = PickAt(PC, Mouse, &Ground);
+		if (On == SelBuilding)
+		{
+			Battle->SetRally(SelBuilding, FVector::ZeroVector, true);
+			Battle->PushAlert(TEXT("No rally point: its recruits wait in its yard"));
+			AVLGameMode::PlayOrderSound(this);
+		}
+		else if (!Ground.IsZero())
 		{
 			Battle->SetRally(SelBuilding, Ground);
 			AVLGameMode::PlayOrderSound(this);
@@ -2696,8 +2759,9 @@ void AVLKing::PollInput(float DeltaSeconds)
 			bArmed = !bArmed;
 			bAttackQueued = false;
 		}
-		// commanding the selection from here: Alt / Option + click selects, right click (Ctrl / Cmd + click) orders,
-		// 1..6 the platoons, G follow me (a command's click is not a swing)
+		// commanding from here: Alt / Option + click selects his own and orders those under his command (a foe:
+		// attack; the ground: go there; Shift: queued), right click (Ctrl / Cmd + click) orders the selection, 1..6
+		// the platoons, G follow me (a command's click is not a swing; a plain click always is)
 		const bool bCommandClick = HeroCommands(PC);
 		if (PC->GetPawn() != this)
 		{

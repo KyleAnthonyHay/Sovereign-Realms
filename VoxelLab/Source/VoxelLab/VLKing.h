@@ -185,8 +185,15 @@ public:
 	/** A figure of the scenery (AVLFarmer: the farm's hands): no side (Team Neutral), not in the battle's registry,
 	 *  never selected, ordered, struck or shown through walls. Set in the constructor. */
 	bool bAmbient = false;
+	/** One of a watch tower's own archers (UVLBattle::TickTowerGuards): it stands on the tower's lookout and shoots
+	 *  from it, takes no housing and is not counted in the army, cannot be selected or ordered, and goes with its
+	 *  tower. Set when it is spawned. */
+	bool bTowerGuard = false;
 	/** Where it took up the fight (a defensive unit goes back there). */
 	FVector Post = FVector::ZeroVector;
+	/** When it was last in a fight of its own accord (UVLBattle::TickAutoCombat): a fight it takes up soon after keeps
+	 *  the post it had, so one foe after another does not lead it ever further away. */
+	double LastAutoFightTime = -100.0;
 	TWeakObjectPtr<AActor> LastStruckBy;
 	double LastStruckTime = -100.0;
 	double LastHurtTime = -100.0;
@@ -577,8 +584,11 @@ public:
 	bool OrderAt(const FVector2D& Point, bool bRun, bool bQueue = false);
 	/** OrderAt's order once it knows what was clicked: Units (the ones to command), Hit (what the pointer is on, or
 	 *  null) and Ground (the point of the world there). Right click on one of the player's troops: the others follow
-	 *  it (UVLCommand::OrderFollow). Builders with bQueue: on the end of their queues (VLConstruction.*). */
-	bool OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground, bool bRun, bool bQueue);
+	 *  it (UVLCommand::OrderFollow). Builders with bQueue: on the end of their queues (VLConstruction.*). A foe: they
+	 *  attack it; bQueue, after what they are doing (UVLCommand::OrderChain: attack one, then the next, then a
+	 *  building, then a walk); the ground with bQueue: on their chain if they are on one (or in an ordered fight),
+	 *  else a point of their pathway. Rejoin: an attack's chain ends with them falling in behind that unit again. */
+	bool OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground, bool bRun, bool bQueue, AVLKing* Rejoin = nullptr);
 	/**
 	 * Commanding from the hero view (the crosshair picks, as the sword and the bow aim): what is under the crosshair
 	 * (a unit drawn there, not this one; else what the aim ray meets ahead of him) and the point it is on. False:
@@ -587,18 +597,25 @@ public:
 	bool HeroPick(APlayerController* PC, AActor*& OutHit, FVector& OutGround) const;
 	/** The selection (without the unit played) takes the order under the crosshair. True if an order was given. */
 	bool HeroOrder(APlayerController* PC, bool bRun, bool bQueue);
-	/** Alt / Option + click in the hero view: the unit under the crosshair is selected (Shift: added or taken out;
-	 *  twice quickly: played); a foe: the selection attacks it; anything else lets the selection go. */
+	/**
+	 * Alt / Option + click in the hero view (a plain click is always the unit's own blow). One of his own under the
+	 * crosshair: selected (Shift: added or taken out; twice quickly: played). A foe's unit or building: those under
+	 * his command attack it; the ground: they go there (twice quickly: at a run); Shift: on the end of their chain
+	 * (attack unit 1, then 2, then a building, then walk). Those under his command: the selection (not the unit
+	 * played), else those following him (who fall in behind him again after an attack), else his platoon. The sky,
+	 * or King David himself with the pointer shown: the selection is let go (Esc too).
+	 */
 	void HeroSelect(APlayerController* PC, bool bShift);
+	/** Whom an Alt + click in the hero view commands (see HeroSelect); bOutFollowers: they are his followers. */
+	void HeroCommanded(TArray<AVLKing*>& Out, bool* bOutFollowers = nullptr) const;
 	/** The hero view's commands (select, order, platoon keys, follow me). True: this frame's left click was one. */
 	bool HeroCommands(APlayerController* PC);
 	/**
-	 * Is a plain left click now a selection, not the unit's own blow? Yes when the crosshair is on one of the player's
-	 * own units (OutUnit) and the unit played is not in a fight (no foe within HeroClickFightRange) nor drawing / holding
-	 * a locked bow. Alt held: always (Alt + click on the ground lets the selection go).
+	 * Is a left click now a command (HeroSelect), not the unit's own blow? Only with Alt / Option held (not with Ctrl /
+	 * Cmd: that is an order, the right click's): a plain left click is always the blow. OutUnit: one of the player's
+	 * own units under the crosshair, if any.
 	 */
 	bool HeroClickSelects(APlayerController* PC, AVLKing** OutUnit = nullptr) const;
-	static constexpr float HeroClickFightRange = 400.f;
 	/** This frame's left click was taken as a command (selection or order): the bow / blow components leave it. */
 	bool HeroClickTaken() const { return HeroClickFrame == GFrameCounter; }
 	/** What the crosshair is on in the hero view (a unit, updated each frame there), for the HUD's hint. */
@@ -947,6 +964,7 @@ private:
 	TWeakObjectPtr<AActor> HeroLastClicked;
 	double HeroLastClickTime = 0.0;
 	double HeroLastOrderTime = -1.0;
+	double HeroLastAltOrderTime = -1.0;
 	uint64 HeroClickFrame = 0;
 	TWeakObjectPtr<AVLKing> HeroHover;
 	bool bHeroHoverSelect = false;

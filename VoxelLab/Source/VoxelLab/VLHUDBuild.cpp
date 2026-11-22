@@ -33,6 +33,7 @@ namespace
 		case EVLBuilding::Barracks: return EVLIcon::Barracks;
 		case EVLBuilding::Range: return EVLIcon::Range;
 		case EVLBuilding::Treasury: return EVLIcon::Treasury;
+		case EVLBuilding::Granary: return EVLIcon::Granary;
 		default: return EVLIcon::Castle;
 		}
 	}
@@ -182,9 +183,19 @@ void AVLHUD::DrawBuildMenu(float X, float Bottom)
 				break;
 			}
 			case EVLBuilding::Tower:
-				Lines.Add(FString::Printf(TEXT("%.0f damage every %.1f s, reach %.0f m."), Lv.Damage, Lv.Interval, Lv.Range / 100.f));
+				Lines.Add(FString::Printf(TEXT("%.0f damage every %.1f s, reach %.0f m; %d archers of its own on the lookout (free; +1 a level)."), Lv.Damage, Lv.Interval, Lv.Range / 100.f, VLRules::TowerGuards(1)));
 				Lines.Add(FString::Printf(TEXT("Towers raised: %d of %d (each castle level allows %d more)."), Have, Limit, VLBuild::TowerLimitPerLevel));
 				break;
+			case EVLBuilding::Granary:
+			case EVLBuilding::Treasury:
+			{
+				const bool bFood = S.Kind == EVLBuilding::Granary;
+				const VLRules::FLevel& L2 = VLRules::Level(S.Kind, 2);
+				const VLRules::FLevel& L3 = VLRules::Level(S.Kind, 3);
+				Lines.Add(FString::Printf(TEXT("Holds %d %s on top of the castle's stores (%d / %d at levels 2 / 3, with the castle at level %d / %d)."),
+					Lv.Storage, bFood ? TEXT("food") : TEXT("gold"), L2.Storage, L3.Storage, L2.CastleLevel, L3.CastleLevel));
+				break;
+			}
 			default: break;
 			}
 			Lines.Add(FString::Printf(TEXT("Cost %s   ·   %.0f s with one Builder   ·   %.0f health"), *CostLine(S.Cost), S.Seconds, Lv.Health));

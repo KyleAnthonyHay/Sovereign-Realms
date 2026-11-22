@@ -108,7 +108,7 @@ void UVLCommand::Select(const TArray<AVLKing*>& Units, bool bAdd)
 	}
 	for (AVLKing* U : Units)
 	{
-		if (U && U->IsAlive() && U->Team == UVLBattle::Player)        // the player commands only their own
+		if (U && U->IsAlive() && U->Team == UVLBattle::Player && !U->bTowerGuard)        // the player commands only their own (not a tower's own archers)
 		{
 			Selection.AddUnique(U);
 		}
@@ -117,7 +117,7 @@ void UVLCommand::Select(const TArray<AVLKing*>& Units, bool bAdd)
 
 void UVLCommand::Toggle(AVLKing* Unit)
 {
-	if (!Unit || Unit->IsDead() || Unit->Team != UVLBattle::Player)
+	if (!Unit || Unit->IsDead() || Unit->Team != UVLBattle::Player || Unit->bTowerGuard)
 	{
 		return;
 	}
@@ -587,6 +587,10 @@ void UVLCommand::OnUnitDied(AVLKing* Unit)
 		}
 		P.Members.Remove(Unit);     // (a platoon whose last troop falls is struck off by itself: its slot is empty)
 		P.Members.RemoveAll([](const TWeakObjectPtr<AVLKing>& M) { return !M.IsValid() || M->IsDead(); });
+		if (bWas && P.Members.Num() == 0 && RallyPlatoon == i)
+		{
+			RallyPlatoon = INDEX_NONE;      // (its last troop is gone: the recruits' flag with it)
+		}
 		if (bWas && P.Members.Num() == 0 && Unit->Team == UVLBattle::Player && Unit->GetHealth() <= 0.f)
 		{
 			if (UVLBattle* Battle = UVLBattle::Get(this))
@@ -920,9 +924,35 @@ void UVLCommand::DisbandPlatoon(int32 Index)
 		}
 		Platoons[Index].Members.Reset();
 		Platoons[Index].Leader = nullptr;
+		if (RallyPlatoon == Index)
+		{
+			RallyPlatoon = INDEX_NONE;      // (the recruits' flag goes with it)
+		}
 		UpdateMarchPace();
 		UE_LOG(LogVoxelLab, Log, TEXT("platoon %d disbanded"), Index + 1);
 	}
+}
+
+void UVLCommand::SetRallyPlatoon(int32 Index)
+{
+	TArray<AVLKing*> Members;
+	GetPlatoon(Index, Members);
+	RallyPlatoon = Members.Num() > 0 ? Index : INDEX_NONE;
+	UE_LOG(LogVoxelLab, Log, TEXT("recruits' platoon: %s"), RallyPlatoon != INDEX_NONE ? *FString::Printf(TEXT("%d"), RallyPlatoon + 1) : TEXT("none"));
+}
+
+int32 UVLCommand::GetRallyPlatoon() const
+{
+	TArray<AVLKing*> Members;
+	GetPlatoon(RallyPlatoon, Members);
+	return Members.Num() > 0 ? RallyPlatoon : INDEX_NONE;
+}
+
+int32 UVLCommand::RallyPlatoonFor() const
+{
+	TArray<AVLKing*> Members;
+	GetPlatoon(RallyPlatoon, Members);
+	return Members.Num() > 0 && Members.Num() < RallyPlatoonCap ? RallyPlatoon : INDEX_NONE;
 }
 
 void UVLCommand::GetPlatoon(int32 Index, TArray<AVLKing*>& Out) const
@@ -1306,12 +1336,42 @@ void UVLCommand::EmptyTower(AActor* Tower)
 {
 	TArray<AVLKing*> In;
 	GetGarrison(Tower, In);
+	In.RemoveAll([](const AVLKing* U) { return U->bTowerGuard; });     // (the tower's own stay at their posts)
 	if (In.Num() == 0)
 	{
 		return;
 	}
 	const FVector Front = Tower->GetActorRotation().RotateVector(FVector(0.f, 1.f, 0.f));
 	OrderMove(In, DoorPoint(Tower) + Front * 300.f, false, EVLFormation::Line);
+}
+
+int32 UVLCommand::FreePosts(const AActor* Tower) const
+{
+	if (!IsTower(Tower))
+	{
+		return 0;
+	}
+	const FTower* T = FindTower(Tower);
+	if (!T)
+	{
+		return 8;
+	}
+	int32 Free = 0;
+	for (const TWeakObjectPtr<AVLKing>& P : T->Posts)
+	{
+		Free += (!P.IsValid() || (P->GarrisonIn.Get() != Tower && P->PendingGarrison.Get() != Tower)) ? 1 : 0;
+	}
+	return Free;
+}
+
+bool UVLCommand::PutOnLookout(AVLKing* Unit, AActor* Tower)
+{
+	if (!Unit || Unit->IsDead() || !IsTower(Tower) || FreePosts(Tower) == 0)
+	{
+		return false;
+	}
+	Enter(Unit, Tower);
+	return Unit->GarrisonIn.Get() == Tower;
 }
 
 // ------------------------------------------------------------------------------------------------ standing orders
@@ -1386,6 +1446,14 @@ void UVLCommand::ClearStanding(const TArray<AVLKing*>& Units)
 		if (Routes[i].Members.Num() == 0)
 		{
 			Routes.RemoveAt(i);
+		}
+	}
+	for (int32 i = Chains.Num() - 1; i >= 0; --i)
+	{
+		Chains[i].Members.RemoveAll([&Units](const TWeakObjectPtr<AVLKing>& M) { return !M.IsValid() || Units.Contains(M.Get()); });
+		if (Chains[i].Members.Num() == 0)
+		{
+			Chains.RemoveAt(i);
 		}
 	}
 }
@@ -1868,7 +1936,7 @@ int32 UVLCommand::Dismiss(const TArray<AVLKing*>& InUnits)
 	return N;
 }
 
-int32 UVLCommand::OrderFollow(const TArray<AVLKing*>& InUnits, AVLKing* Leader)
+int32 UVLCommand::OrderFollow(const TArray<AVLKing*>& InUnits, AVLKing* Leader, bool bMarker)
 {
 	if (!Leader || Leader->IsDead())
 	{
@@ -1895,7 +1963,7 @@ int32 UVLCommand::OrderFollow(const TArray<AVLKing*>& InUnits, AVLKing* Leader)
 	{
 		MakeLeader(Leader);
 	}
-	if (Leader->Team == UVLBattle::Player && !bQuietMove)
+	if (Leader->Team == UVLBattle::Player && !bQuietMove && bMarker)
 	{
 		AddMarker(Leader->GetFeet());
 	}
@@ -1908,6 +1976,274 @@ AVLKing* UVLCommand::FollowedBy(const AVLKing* Unit) const
 {
 	const FFollower* F = Unit ? Followers.FindByPredicate([Unit](const FFollower& X) { return X.Unit.Get() == Unit; }) : nullptr;
 	return F ? F->Leader.Get() : nullptr;
+}
+
+void UVLCommand::GetFollowers(const AVLKing* Leader, TArray<AVLKing*>& Out) const
+{
+	Out.Reset();
+	for (const FFollower& F : Followers)
+	{
+		if (AVLKing* U = F.Unit.Get(); U && U->IsAlive() && Leader && F.Leader.Get() == Leader)
+		{
+			Out.AddUnique(U);
+		}
+	}
+}
+
+// ------------------------------------------------------------------------------------------------ order chains
+
+bool UVLCommand::OrderChain(const TArray<AVLKing*>& InUnits, AActor* Target, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue, AVLKing* Rejoin)
+{
+	TArray<AVLKing*> Units = Living(InUnits);
+	Units.RemoveAll([](const AVLKing* U) { return U->bTowerGuard || PlayedByHand(U); });
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	FChainItem Item;
+	Item.bAttack = Target != nullptr;
+	Item.Target = Target;
+	Item.Ground = Target ? Target->GetActorLocation() : Ground;
+	Item.bRun = bRun;
+	if (Item.bAttack)
+	{
+		// (only those who can fight it: the others are left as they are)
+		Units.RemoveAll([Battle, Target](const AVLKing* U) { return !CanAttack(U) || (Battle && !Battle->IsHostile(Target, U->Team)); });
+	}
+	if (Units.Num() == 0 || (!Item.bAttack && Ground.IsZero()))
+	{
+		return false;
+	}
+	const bool bPlayer = Units[0]->Team == UVLBattle::Player;
+	if (bQueue)
+	{
+		// on the end of the chain they are on (the first's: the rest of them join it), else a new one that waits for
+		// what they are doing now
+		const int32 Ci = Chains.IndexOfByPredicate([&Units](const FChain& C) { return C.Members.Contains(Units[0]); });
+		if (Ci != INDEX_NONE)
+		{
+			TArray<AVLKing*> Newcomers = Units.FilterByPredicate([this, Ci](const AVLKing* U) { return !Chains[Ci].Members.Contains(U); });
+			if (Newcomers.Num() > 0)
+			{
+				ClearStanding(Newcomers);       // (out of any chain of their own; Ci is still the same chain)
+			}
+			const int32 Cj = Chains.IndexOfByPredicate([&Units](const FChain& C) { return C.Members.Contains(Units[0]); });
+			if (Cj != INDEX_NONE)
+			{
+				for (AVLKing* U : Newcomers)
+				{
+					Chains[Cj].Members.AddUnique(U);
+				}
+				Chains[Cj].Items.Add(Item);
+				if (bPlayer && !bQuietMove)
+				{
+					AddMarker(Item.Ground);
+				}
+				UE_LOG(LogVoxelLab, Log, TEXT("chain %d: %d unit(s), item %d: %s %s"), Chains[Cj].Id, Chains[Cj].Members.Num(), Chains[Cj].Items.Num(),
+					Item.bAttack ? TEXT("attack") : TEXT("walk to"), Item.bAttack ? *GetNameSafe(Target) : *Ground.ToCompactString());
+				return true;
+			}
+		}
+		ClearStanding(Units);               // (a patrol, a guard, a follow, a hold end; what they are doing now goes on)
+		FChain& C = Chains.AddDefaulted_GetRef();
+		C.Id = NextChainId++;
+		for (AVLKing* U : Units)
+		{
+			C.Members.Add(U);
+		}
+		C.Items.Add(Item);
+		C.Shape = Shape;
+		C.Rejoin = Rejoin;
+		C.bStarted = false;
+		if (bPlayer && !bQuietMove)
+		{
+			AddMarker(Item.Ground);
+		}
+		UE_LOG(LogVoxelLab, Log, TEXT("chain %d: %d unit(s), item 1 (after what they are doing): %s %s"), C.Id, Units.Num(),
+			Item.bAttack ? TEXT("attack") : TEXT("walk to"), Item.bAttack ? *GetNameSafe(Target) : *Ground.ToCompactString());
+		return true;
+	}
+	// at once: whatever they were doing ends (the order's own call ends their standing orders and chains)
+	if (Item.bAttack)
+	{
+		if (OrderAttack(Units, Target, bRun, true) == 0)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		OrderMove(Units, Ground, bRun, Shape);
+	}
+	if (!Item.bAttack)
+	{
+		return true;                        // (a plain walk needs no chain: a Shift walk after it is their pathway)
+	}
+	FChain& C = Chains.AddDefaulted_GetRef();
+	C.Id = NextChainId++;
+	for (AVLKing* U : Units)
+	{
+		C.Members.Add(U);
+	}
+	C.Items.Add(Item);
+	C.Shape = Shape;
+	C.Rejoin = Rejoin;
+	C.bStarted = true;
+	C.Settle = 0.6f;
+	return true;
+}
+
+bool UVLCommand::IsInOrderedFight(const AVLKing* Unit)
+{
+	return Unit && IsFightingNow(Unit) && !Unit->bAutoAttack;
+}
+
+bool UVLCommand::HasChain(const AVLKing* Unit) const
+{
+	return Unit && Chains.ContainsByPredicate([Unit](const FChain& C) { return C.Members.Contains(Unit); });
+}
+
+void UVLCommand::GetChains(TArray<FChainView>& Out) const
+{
+	Out.Reset();
+	for (const FChain& C : Chains)
+	{
+		FChainView& V = Out.AddDefaulted_GetRef();
+		for (const TWeakObjectPtr<AVLKing>& M : C.Members)
+		{
+			if (M.IsValid() && M->IsAlive())
+			{
+				V.Members.Add(M.Get());
+			}
+		}
+		V.Items = C.Items;
+		V.bStarted = C.bStarted;
+		V.Rejoin = C.Rejoin.Get();
+		V.Id = C.Id;
+	}
+}
+
+void UVLCommand::IssueChainItem(FChain& C)
+{
+	TArray<AVLKing*> Live;
+	for (const TWeakObjectPtr<AVLKing>& M : C.Members)
+	{
+		if (M.IsValid() && M->IsAlive())
+		{
+			Live.Add(M.Get());
+		}
+	}
+	C.bStarted = true;
+	C.Settle = 0.6f;
+	if (Live.Num() == 0 || C.Items.Num() == 0)
+	{
+		return;
+	}
+	const FChainItem& It = C.Items[0];
+	// (their chain's own orders: an inner hand, so the chain itself is not ended by them; no marker, no click)
+	TGuardValue<bool> Inner(bInnerOrder, true);
+	TGuardValue<bool> Quiet(bQuietMove, true);
+	if (It.bAttack)
+	{
+		if (AActor* T = It.Target.Get())
+		{
+			OrderAttack(Live, T, It.bRun, false);
+		}
+	}
+	else
+	{
+		OrderMove(Live, It.Ground, It.bRun, C.Shape);
+	}
+	UE_LOG(LogVoxelLab, Log, TEXT("chain %d: %d unit(s) on to %s %s (%d left)"), C.Id, Live.Num(), It.bAttack ? TEXT("attack") : TEXT("walk to"),
+		It.bAttack ? *GetNameSafe(It.Target.Get()) : *It.Ground.ToCompactString(), C.Items.Num());
+}
+
+void UVLCommand::TickChains(float Dt)
+{
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	for (int32 i = Chains.Num() - 1; i >= 0; --i)
+	{
+		FChain& C = Chains[i];
+		C.Members.RemoveAll([](const TWeakObjectPtr<AVLKing>& M) { return !M.IsValid() || M->IsDead() || PlayedByHand(M.Get()); });
+		if (C.Members.Num() == 0 || C.Items.Num() == 0)
+		{
+			Chains.RemoveAt(i);
+			continue;
+		}
+		C.Settle -= Dt;
+		if (C.Settle > 0.f)
+		{
+			continue;
+		}
+		TArray<AVLKing*> Live;
+		for (const TWeakObjectPtr<AVLKing>& M : C.Members)
+		{
+			Live.Add(M.Get());
+		}
+		if (!C.bStarted)
+		{
+			// waiting for what they were doing (a walk, a fight they were ordered into) to be done
+			bool bBusy = false;
+			for (const AVLKing* U : Live)
+			{
+				bBusy |= U->IsOnOrder() || (IsFightingNow(U) && !U->bAutoAttack);
+			}
+			if (!bBusy)
+			{
+				IssueChainItem(C);
+			}
+			continue;
+		}
+		const FChainItem& It = C.Items[0];
+		bool bDone = false;
+		if (It.bAttack)
+		{
+			// its target has fallen or been razed; or none of them is on it any more (out of reach, given up)
+			AActor* T = It.Target.Get();
+			bDone = !T || (Battle && !Battle->IsAlive(T));
+			if (!bDone)
+			{
+				bool bOn = false;
+				for (const AVLKing* U : Live)
+				{
+					bOn |= FightTarget(U) == T || (U->HasOrder() && !U->bAutoAttack && CanAttack(U));
+				}
+				bDone = !bOn;
+			}
+		}
+		else
+		{
+			bool bWalking = false;
+			for (const AVLKing* U : Live)
+			{
+				bWalking |= U->IsOnOrder();
+			}
+			bDone = !bWalking;
+		}
+		if (!bDone)
+		{
+			continue;
+		}
+		const bool bWasAttack = It.bAttack;
+		C.Items.RemoveAt(0);
+		// the next item that still stands (an attack on one fallen meanwhile is passed over)
+		while (C.Items.Num() > 0 && C.Items[0].bAttack && (!C.Items[0].Target.IsValid() || (Battle && !Battle->IsAlive(C.Items[0].Target.Get()))))
+		{
+			C.Items.RemoveAt(0);
+		}
+		if (C.Items.Num() > 0)
+		{
+			IssueChainItem(C);
+			continue;
+		}
+		// the chain has run out: after an attack, those under the hero's command fall in behind him again
+		AVLKing* Rejoin = C.Rejoin.Get();
+		const int32 Id = C.Id;
+		Chains.RemoveAt(i);
+		UE_LOG(LogVoxelLab, Log, TEXT("chain %d: done%s"), Id, Rejoin && bWasAttack ? *FString::Printf(TEXT(", back behind %s"), *Rejoin->GetDisplayName()) : TEXT(""));
+		if (Rejoin && Rejoin->IsAlive() && bWasAttack)
+		{
+			TGuardValue<bool> Quiet(bQuietMove, true);
+			OrderFollow(Live, Rejoin, false);
+		}
+	}
 }
 
 void UVLCommand::TickFollowers()
@@ -2257,6 +2593,9 @@ FString UVLCommand::DescribeOrders(const TArray<AVLKing*>& Units) const
 
 void UVLCommand::TickOrders(float Dt)
 {
+	// ---- order chains (Shift + click): the next order once the one under way is done
+	TickChains(Dt);
+
 	// ---- patrols and attack-moves: the next leg once nobody is walking or fighting; a leg cut short by a fight is
 	// walked again (the main game's units kept their destination through a fight)
 	for (int32 i = Routes.Num() - 1; i >= 0; --i)
@@ -2432,9 +2771,9 @@ namespace
 				Out.Add(*It);
 				continue;
 			}
-			if (It->Team != UVLBattle::Player)
+			if (It->Team != UVLBattle::Player || It->bTowerGuard)
 			{
-				continue;
+				continue;           // (a tower's own archers only by name)
 			}
 			const FString& K = It->GetKind();
 			if (Who.Equals(TEXT("all"), ESearchCase::IgnoreCase) || (Who.Equals(TEXT("troops"), ESearchCase::IgnoreCase) && It->IsTroop())
@@ -2623,7 +2962,7 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdHeroOrder(TEXT("vl.HeroOrder"), TEXT("vl.HeroOrder [run] [queue] | select [add]: the played unit's right click (or Alt + click) at the crosshair"),
+	FAutoConsoleCommandWithWorldAndArgs CmdHeroOrder(TEXT("vl.HeroOrder"), TEXT("vl.HeroOrder [run] [queue] | select [add] | click: the played unit's right click / Option + click (add: with Shift) / plain left click at the crosshair"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			APlayerController* PC = World->GetFirstPlayerController();
@@ -2639,18 +2978,11 @@ namespace
 			}
 			if (Args.Contains(TEXT("click")))
 			{
-				// a plain left click: a selection where HeroClickSelects says so, else the unit's own blow
+				// a plain left click: always the unit's own blow (Option + click is the command: "select")
 				AVLKing* On = nullptr;
-				const bool bSel = Me->HeroClickSelects(PC, &On);
-				UE_LOG(LogVoxelLab, Log, TEXT("vl.HeroOrder click: on %s -> %s"), *GetNameSafe(On), bSel ? TEXT("select") : TEXT("swing"));
-				if (bSel)
-				{
-					Me->HeroSelect(PC, Args.Contains(TEXT("add")));
-				}
-				else
-				{
-					Me->Attack();
-				}
+				Me->HeroClickSelects(PC, &On);
+				UE_LOG(LogVoxelLab, Log, TEXT("vl.HeroOrder click: on %s -> swing"), *GetNameSafe(On));
+				Me->Attack();
 				return;
 			}
 			AActor* Hit = nullptr;
@@ -2658,6 +2990,29 @@ namespace
 			const bool bPick = Me->HeroPick(PC, Hit, Ground);
 			UE_LOG(LogVoxelLab, Log, TEXT("vl.HeroOrder: pick %d on %s at %s; order %d"), bPick ? 1 : 0, *GetNameSafe(Hit), *Ground.ToCompactString(),
 				Me->HeroOrder(PC, Args.Contains(TEXT("run")), Args.Contains(TEXT("queue"))) ? 1 : 0);
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdChains(TEXT("vl.Chains"), TEXT("vl.Chains: log every order chain (Shift + click: attack, attack, walk ...)"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const UVLCommand* C = UVLCommand::Get(World);
+			if (!C)
+			{
+				return;
+			}
+			TArray<UVLCommand::FChainView> Chains;
+			C->GetChains(Chains);
+			UE_LOG(LogVoxelLab, Log, TEXT("chains: %d"), Chains.Num());
+			for (const UVLCommand::FChainView& V : Chains)
+			{
+				FString Who, What;
+				for (const AVLKing* M : V.Members) { Who += (Who.IsEmpty() ? TEXT("") : TEXT(", ")) + M->GetDisplayName(); }
+				for (const UVLCommand::FChainItem& It : V.Items)
+				{
+					What += (What.IsEmpty() ? TEXT("") : TEXT(" > ")) + (It.bAttack ? TEXT("attack ") + GetNameSafe(It.Target.Get()) : TEXT("walk ") + It.Ground.ToCompactString());
+				}
+				UE_LOG(LogVoxelLab, Log, TEXT("chain %d (%s%s): %s | %s"), V.Id, V.bStarted ? TEXT("under way") : TEXT("waiting"), V.Rejoin ? *(TEXT(", then back to ") + V.Rejoin->GetDisplayName()) : TEXT(""), *Who, *What);
+			}
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdHeroAim(TEXT("vl.HeroAim"), TEXT("vl.HeroAim <unit name> | X Y [Z] [seconds]: the hero view's crosshair is taken to be on that unit / point (for vl.HeroOrder)"),

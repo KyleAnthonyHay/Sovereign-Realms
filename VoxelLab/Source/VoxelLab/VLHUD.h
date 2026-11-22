@@ -74,13 +74,15 @@ class VOXELLAB_API AVLHUD : public AHUD
 
 public:
 	virtual void BeginPlay() override;
+	/** (the settings screen left open as the game quits or the map changes: what was changed is saved all the same) */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void DrawHUD() override;
 
 	/** The building review field, L_Flatlands (every building side by side), rather than the village. */
 	bool InFlatlands() const;
-	/** The maps of the menu: 0 the town, 1 the realm (the battle map, L_Realm), 2 the flatlands, 3 the village, 4 the
-	 *  highlands (the bigger battle map, L_Highlands). */
-	static const int32 NumMaps = 5;
+	/** The maps of the menu: 0 Realm v2 (the biggest battle map, L_RealmV2), 1 the realm (the battle map, L_Realm), 2 the
+	 *  flatlands (the building review field), 3 the highlands (L_Highlands). The town and the village are gone. */
+	static const int32 NumMaps = 4;
 	static FString MapPath(int32 Map);
 	static const TCHAR* MapName(int32 Map);
 	int32 CurrentMap() const;
@@ -177,8 +179,12 @@ private:
 	void DrawRouteLines();
 	/** What DrawRouteLines drew last frame (vl.HUD): line segments, the Builders' chains and their numbers, the Shift
 	 *  preview to the ghost, and whether the hero view hid them. */
-	struct FLineStats { int32 Segments = 0; int32 Chains = 0; int32 Badges = 0; bool bPreview = false; bool bHidden = false; };
+	struct FLineStats { int32 Segments = 0; int32 Chains = 0; int32 Badges = 0; bool bPreview = false; bool bHidden = false; int32 OrderChains = 0; int32 OrderBadges = 0; };
 	FLineStats LineStats;
+	/** The troops' order chains (Shift + click: UVLCommand::OrderChain) of the selection, and in the hero view of those
+	 *  he commands: numbered plates over each queued foe and point, in the overview also a dashed line through them
+	 *  (red attacks, blue walks). */
+	void DrawOrderChains();
 	/** Who the mode box (top left) showed last frame, for vl.HUD. */
 	FString ModeBoxUnit;
 	/** The hero chip was double-clicked: his hero view, once this frame's drawing is done. */

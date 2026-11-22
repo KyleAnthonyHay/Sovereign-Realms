@@ -99,6 +99,15 @@ void AVLHUD::BeginPlay()
 	ApplySettings();
 }
 
+void AVLHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (bSettingsDirty)
+	{
+		SaveSettings();
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
 void AVLHUD::ApplySettings()
 {
 	if (UWorld* World = GetWorld())
@@ -133,21 +142,21 @@ void AVLHUD::SaveSettings()
 
 FString AVLHUD::MapPath(int32 Map)
 {
-	static const TCHAR* Paths[NumMaps] = { TEXT("/Game/Maps/L_Town"), TEXT("/Game/Maps/L_Realm"), TEXT("/Game/Maps/L_Flatlands"), TEXT("/Game/Maps/L_VoxelVillage"),
-		TEXT("/Game/Maps/L_Highlands") };
+	static const TCHAR* Paths[NumMaps] = { TEXT("/Game/Maps/L_RealmV2"), TEXT("/Game/Maps/L_Realm"), TEXT("/Game/Maps/L_Flatlands"), TEXT("/Game/Maps/L_Highlands") };
 	return Paths[FMath::Clamp(Map, 0, NumMaps - 1)];
 }
 
 const TCHAR* AVLHUD::MapName(int32 Map)
 {
-	static const TCHAR* Names[NumMaps] = { TEXT("Town"), TEXT("Realm"), TEXT("Flatlands"), TEXT("Village"), TEXT("Highlands") };
+	static const TCHAR* Names[NumMaps] = { TEXT("Realm v2"), TEXT("Realm"), TEXT("Flatlands"), TEXT("Highlands") };
 	return Names[FMath::Clamp(Map, 0, NumMaps - 1)];
 }
 
 int32 AVLHUD::CurrentMap() const
 {
 	const FString Name = GetWorld() ? GetWorld()->GetMapName() : FString();
-	return Name.Contains(TEXT("Highlands")) ? 4 : (Name.Contains(TEXT("Realm")) ? 1 : (Name.Contains(TEXT("Flatlands")) ? 2 : (Name.Contains(TEXT("Village")) ? 3 : 0)));
+	// ("L_RealmV2" contains "Realm": it is asked first)
+	return Name.Contains(TEXT("RealmV2")) ? 0 : (Name.Contains(TEXT("Highlands")) ? 3 : (Name.Contains(TEXT("Flatlands")) ? 2 : 1));
 }
 
 bool AVLHUD::InFlatlands() const
@@ -290,6 +299,18 @@ void AVLHUD::OnEscape()
 				}
 				return;
 			}
+			// the hero view: the selection is let go first (then the pause menu)
+			Units.Remove(King);
+			if (King && King->IsHeroMode() && Units.Num() > 0)
+			{
+				Command->ClearSelection();
+				if (UVLBattle* Battle = UVLBattle::Get(this))
+				{
+					Battle->Play2D(TEXT("S_UIClick"), 0.4f);
+				}
+				UE_LOG(LogVoxelLab, Log, TEXT("hud: Esc lets the selection go (hero view)"));
+				return;
+			}
 		}
 		SetScreen(EVLScreen::Pause);
 		return;
@@ -404,6 +425,7 @@ void AVLHUD::LogButtons() const
 	UE_LOG(LogVoxelLab, Log, TEXT("hud: %s; route lines %s: %d segment(s), %d Builder chain(s), %d number(s)%s; mode box shows %s"), King && King->IsHeroMode() ? TEXT("hero view") : TEXT("overview"),
 		LineStats.bHidden ? TEXT("hidden (hero view)") : TEXT("shown"), LineStats.Segments, LineStats.Chains, LineStats.Badges, LineStats.bPreview ? TEXT(", the Shift preview to the ghost") : TEXT(""),
 		ModeBoxUnit.IsEmpty() ? TEXT("-") : *ModeBoxUnit);
+	UE_LOG(LogVoxelLab, Log, TEXT("hud: troops' order chains drawn: %d, %d number(s)"), LineStats.OrderChains, LineStats.OrderBadges);
 }
 
 void AVLHUD::Click(bool bError)
@@ -526,6 +548,7 @@ void AVLHUD::DrawHUD()
 		DrawBuildFeedback();
 		DrawRangeCircles();
 		DrawRouteLines();
+		DrawOrderChains();
 		DrawOrderMarkers();
 		DrawPayoutPopups();
 		DrawSelectionBox();
@@ -1305,6 +1328,12 @@ void AVLHUD::DrawPlatoonTags()
 			const float CS = U(bSel ? 22.f : 19.f);
 			Icon(EVLIcon::Crown, FMath::RoundToFloat(S.X - CS * 0.5f), FMath::RoundToFloat(Y - CS * 0.82f), CS);
 		}
+		if (Command->GetRallyPlatoon() == i)
+		{
+			// the recruits' platoon: a little flag beside its tag (the platoon panel's flag)
+			const float FS = U(bSel ? 20.f : 17.f);
+			Icon(EVLIcon::RecruitFlag, FMath::RoundToFloat(X + W + U(2.f)), FMath::RoundToFloat(Y + H * 0.5f - FS * 0.6f), FS);
+		}
 	}
 }
 
@@ -1371,9 +1400,10 @@ void AVLHUD::DrawFarPips()
 		}
 		const FLinearColor Team = UVLBattle::TeamColour(Unit->Team);
 		FLinearColor Col = FLinearColor(FMath::Min(Team.R * 1.6f + 0.15f, 1.f), FMath::Min(Team.G * 1.6f + 0.15f, 1.f), FMath::Min(Team.B * 1.6f + 0.15f, 1.f), Alpha);
-		// a platoon's troops show in its colour from afar too
+		// a platoon's troops show in its colour from afar too; the player's units in no platoon are grey
 		if (Command && Unit->Team == UVLBattle::Player)
 		{
+			Col = FLinearColor(0.62f, 0.63f, 0.66f, Alpha);
 			if (bFast)
 			{
 				if (const int32* In = Frame.Platoon.Find(Unit)) { Col = PlatoonColor(*In); Col.A = Alpha; }
@@ -1772,12 +1802,122 @@ void AVLHUD::DrawRouteLines()
 		LineStats.Badges = Badges.Num();
 		LineStats.Chains = Chains.Num();
 	}
-	if (const FVLBuildingState* St = Battle->FindBuilding(SelectedBuilding()); St && St->Trains() && St->Team == UVLBattle::Player)
+	// (a barracks' / range's only when one was set: without one its recruits wait in its yard)
+	if (const FVLBuildingState* St = Battle->FindBuilding(SelectedBuilding()); St && St->Trains() && St->Team == UVLBattle::Player && (St->bHasRally || St->Kind == EVLBuilding::Castle))
 	{
 		FVector Door, Rally, Front;
 		Battle->FrontOf(St->Actor.Get(), Door, Rally, Front);
 		const FVector To = St->bHasRally ? St->Rally : Rally;
 		Dashed(FVector(Door.X, Door.Y, GroundZ(FVector2D(Door), Door.Z)), FVector(To.X, To.Y, GroundZ(FVector2D(To), To.Z)), Blue, true);
+	}
+}
+
+void AVLHUD::DrawOrderChains()
+{
+	LineStats.OrderChains = LineStats.OrderBadges = 0;
+	const UVLCommand* Command = UVLCommand::Get(this);
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (!Command || !Battle || !King)
+	{
+		return;
+	}
+	TArray<UVLCommand::FChainView> Chains;
+	Command->GetChains(Chains);
+	if (Chains.Num() == 0)
+	{
+		return;
+	}
+	const bool bHero = King->IsHeroMode();
+	TSet<const AVLKing*> Shown;
+	Command->GetSelectionSet(Shown);
+	if (bHero)
+	{
+		TArray<AVLKing*> Commanded;
+		King->HeroCommanded(Commanded);
+		Shown.Append(Commanded);
+	}
+	const FLinearColor AttackCol(1.f, 0.42f, 0.32f, 0.95f), WalkCol(0.55f, 0.8f, 1.f, 0.95f);
+	auto Ground = [this](const FVector& P) { return FVector(P.X, P.Y, GroundZ(FVector2D(P), P.Z)); };
+	auto Dashed = [this](const FVector& A0, const FVector& B0, const FLinearColor& Color)
+	{
+		const FVector Lift(0.f, 0.f, 20.f);
+		const int32 N = FMath::Clamp(int32(FVector::Dist(A0, B0) / 60.f) * 2, 2, 64);
+		for (int32 i = 0; i < N; i += 2)
+		{
+			const FVector S0 = Project(FMath::Lerp(A0, B0, float(i) / N) + Lift);
+			const FVector S1 = Project(FMath::Lerp(A0, B0, float(i + 1) / N) + Lift);
+			if (S0.Z <= 0.f || S1.Z <= 0.f) { continue; }
+			DrawLine(S0.X, S0.Y, S1.X, S1.Y, Color, FMath::Max(1.f, U(2.f)));
+		}
+	};
+	for (const UVLCommand::FChainView& C : Chains)
+	{
+		if (C.Members.Num() == 0 || !(C.Members.ContainsByPredicate([&Shown](const AVLKing* M) { return Shown.Contains(M); }) || (bHero && C.Rejoin == King)))
+		{
+			continue;
+		}
+		++LineStats.OrderChains;
+		// where each item is: a foe over its head (a building over its middle), a walk on the ground
+		FVector From = FVector::ZeroVector;
+		for (const AVLKing* M : C.Members) { From += M->GetFeet(); }
+		From = Ground(From / C.Members.Num());
+		int32 N = 0;
+		for (const UVLCommand::FChainItem& It : C.Items)
+		{
+			FVector On = It.Ground, Over = It.Ground;
+			if (It.bAttack)
+			{
+				const AActor* T = It.Target.Get();
+				if (!T || !Battle->IsAlive(T))
+				{
+					continue;           // (fallen meanwhile: passed over)
+				}
+				if (const AVLKing* TU = Cast<AVLKing>(T))
+				{
+					On = TU->GetFeet();
+					Over = TU->GetActorLocation() + FVector(0.f, 0.f, 150.f);
+				}
+				else
+				{
+					FVector Origin, Extent;
+					T->GetActorBounds(true, Origin, Extent);
+					On = FVector(Origin.X, Origin.Y, T->GetActorLocation().Z);
+					Over = Origin + FVector(0.f, 0.f, Extent.Z * 0.6f);
+				}
+			}
+			else
+			{
+				On = Over = Ground(It.Ground);
+			}
+			++N;
+			const FLinearColor Col = It.bAttack ? AttackCol : WalkCol;
+			if (!bHero)
+			{
+				Dashed(From, Ground(On), Col);      // (the hero view keeps no lines across it: only the numbers)
+				From = Ground(On);
+			}
+			const FVector S = Project(Over + FVector(0.f, 0.f, 20.f));
+			if (S.Z <= 0.f || S.X < -40.f || S.Y < -40.f || S.X > View.X + 40.f || S.Y > View.Y + 40.f)
+			{
+				continue;
+			}
+			// a dark plate edged in the item's colour (the Builders' queue's), smaller in the hero view; the one under
+			// way pulses
+			const FString Num = FString::FromInt(N);
+			const float R = U(bHero ? 8.f : 10.f), E = FMath::Max(1.f, U(2.f));
+			const float BW = FMath::Max(2.f * R, TextSize(Num, U(bHero ? 12.f : 14.f), Bold).X + U(8.f));
+			const float BX = FMath::RoundToFloat(S.X - BW * 0.5f), BY = FMath::RoundToFloat(S.Y - 2.f * R - U(bHero ? 6.f : 18.f));
+			const bool bNow = N == 1 && C.bStarted;
+			const FLinearColor Edge = bNow ? FMath::Lerp(Col, FLinearColor::White, 0.35f + 0.35f * FMath::Sin(float(Now) * 6.f)) : Col;
+			if (!bHero)
+			{
+				DrawLine(S.X, BY + 2.f * R, S.X, S.Y, Col, FMath::Max(1.f, U(1.5f)));
+			}
+			Fill(BX - E, BY - E, BW + 2.f * E, 2.f * R + 2.f * E, Edge);
+			Fill(BX, BY, BW, 2.f * R, FLinearColor(0.02f, 0.03f, 0.06f, 0.92f));
+			TextIn(FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + 2.f * R)), Num, U(bHero ? 12.f : 14.f), Col, AlignCentre, Bold);
+			++LineStats.OrderBadges;
+		}
 	}
 }
 

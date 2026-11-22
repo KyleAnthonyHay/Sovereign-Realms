@@ -32,7 +32,7 @@ namespace
 		{ nullptr, TEXT("ORDERS") },
 		{ TEXT("RMB"), TEXT("Move in formation / attack a foe") },
 		{ TEXT("RMB twice"), TEXT("The same, at a run") },
-		{ TEXT("Shift + RMB"), TEXT("Pathway: add a point; they walk them in order") },
+		{ TEXT("Shift + RMB"), TEXT("Pathway / queue: points, foes, buildings in turn") },
 		{ TEXT("RMB your troop"), TEXT("The others follow it (its platoon's: it leads)") },
 		{ TEXT("Shift (Builders)"), TEXT("Queue walks, builds, repairs, claims (Esc clears)") },
 		{ TEXT("LMB a dummy"), TEXT("The fighters attack it (Shift: at a run)") },
@@ -58,6 +58,7 @@ namespace
 		{ TEXT("1-6"), TEXT("Select the platoon (twice: go to it)") },
 		{ TEXT("Shift + 1-6"), TEXT("Add the selection to the platoon") },
 		{ TEXT("Delete"), TEXT("Disband the selected platoon") },
+		{ TEXT("Flag (platoon row)"), TEXT("New recruits join that platoon (again: off)") },
 		{ nullptr, TEXT("BUILDINGS") },
 		{ TEXT("U"), TEXT("Upgrade the selected building") },
 		{ TEXT("T"), TEXT("Turn the selected building a quarter turn") },
@@ -68,12 +69,16 @@ namespace
 		{ nullptr, TEXT("HERO") },
 		{ TEXT("Tab"), TEXT("Hero view / overview") },
 		{ TEXT("WASD, Shift, Space"), TEXT("Walk, run (or double-tap), jump") },
-		{ TEXT("F / LMB"), TEXT("Draw or sheathe the sword / attack") },
+		{ TEXT("F"), TEXT("Draw or sheathe the sword") },
 		{ TEXT("Hold RMB"), TEXT("An archer draws; let go: she shoots") },
 		{ TEXT("Hold RMB (a spy)"), TEXT("The spyglass: the view looks far ahead") },
-		{ TEXT("LMB your troop, 1-6"), TEXT("Select it (Shift: add; twice: play it); else LMB swings") },
+		{ TEXT("LMB"), TEXT("Attack: always your own blow, never a selection") },
+		{ TEXT("Option + LMB troop"), TEXT("Select it (Shift: add / remove; twice: play it)") },
+		{ TEXT("Option + LMB foe"), TEXT("Attack: the selection, else followers, else platoon") },
+		{ TEXT("Option + LMB ground"), TEXT("They go there (twice quickly: at a run)") },
+		{ TEXT("Shift + Option + LMB"), TEXT("Queue: foe 1, then foe 2, a building, a walk") },
 		{ TEXT("RMB / Ctrl + LMB"), TEXT("Selection: move / attack at the crosshair") },
-		{ TEXT("Alt + LMB ground"), TEXT("Let the selection go") },
+		{ TEXT("Esc / Option + LMB sky"), TEXT("Let the selection go (Esc again: the menu)") },
 		{ TEXT("G"), TEXT("Follow me: the selection falls in behind you") },
 		{ nullptr, TEXT("GAME") },
 		{ TEXT("Esc / P"), TEXT("Cancel, then pause (P: nobody selected)") },
@@ -89,13 +94,12 @@ namespace
 		TEXT("The enemy strikes early, raids often, adapts fully.") };
 
 	// the maps of New Game, in the order shown: the battles first, then the sandboxes
-	const int32 MapOrder[AVLHUD::NumMaps] = { 1, 4, 0, 2, 3 };
-	const TCHAR* MapTitles[AVLHUD::NumMaps] = { TEXT("Town"), TEXT("The Realm"), TEXT("Flatlands"), TEXT("Village"), TEXT("Highlands") };
+	const int32 MapOrder[AVLHUD::NumMaps] = { 1, 0, 3, 2 };
+	const TCHAR* MapTitles[AVLHUD::NumMaps] = { TEXT("Realm v2"), TEXT("The Realm"), TEXT("Flatlands"), TEXT("Highlands") };
 	const TCHAR* MapNotes[AVLHUD::NumMaps] = {
-		TEXT("Sandbox: the island town. No enemy."),
+		TEXT("The great battle: a mountain, two rivers, five mines, the ruins."),
 		TEXT("The battle: two kingdoms with a river between."),
 		TEXT("Sandbox: every building side by side."),
-		TEXT("Sandbox: the voxel village. No enemy."),
 		TEXT("The bigger battle: bluffs, a gorge, the Crown.") };
 
 	const int32 Caps[5] = { 30, 40, 60, 120, 0 };
@@ -339,7 +343,7 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 {
 	AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
 	AVLKing* Me = King;
-	const int32 NumRows = 11;
+	const int32 NumRows = 12;
 	const float W = U(600.f), RowH = U(46.f), HeadH = U(34.f);
 	const float H = U(92.f) + NumRows * RowH + 2.f * HeadH + U(96.f) + U(24.f);
 	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
@@ -421,6 +425,14 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 	RY += RowH;
 	Label(TEXT("Frame rate limit"));
 	if (Choice(VLId::Setting + 4, Caps[FrameCap] > 0 ? FString::Printf(TEXT("%d fps"), Caps[FrameCap]) : FString(TEXT("Unlimited")), nullptr)) { FrameCap = (FrameCap + 1) % 5; ApplySettings(); }
+	RY += RowH;
+	// the window (saved in GameUserSettings by UVLGraphics, as F11 / Alt+Enter and a dragged edge are; the editor's
+	// play window is the editor's own)
+	Label(TEXT("Window"));
+	if (Choice(VLId::Setting + 11, !UVLGraphics::CanChangeWindow() ? FString(TEXT("Editor window")) : FString(UVLGraphics::IsFullscreen() ? TEXT("Full screen") : TEXT("Windowed")), nullptr))
+	{
+		UVLGraphics::ToggleFullscreen();
+	}
 	RY += RowH;
 	Head(TEXT("CAMERA"));
 	Label(TEXT("Camera angle"));

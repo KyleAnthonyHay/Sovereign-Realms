@@ -47,15 +47,17 @@ namespace VLRules
 	{
 		// The main game: Shieldbearer 280 hp, 27 a blow every 1.15 s, 100 food, 9 s; Archer 125 hp, 18 an arrow every
 		// 1.5 s, 0.35x against buildings, 85 food, 8 s. Per hit here x1.25/1.15 and x2.4/1.5: the same damage a second.
-		// Sight and acquire range are the main game's 13 m / 15 m plus 30% (the user's call): 16.9 m / 19.5 m. The
+		// Sight is the main game's 13 m / 15 m plus 30% (the user's call): 16.9 m / 19.5 m. What they notice and go
+		// for (Acquire) is much further, 40 m / 42 m (about 2.4x / 2.15x: the owner's call, 2026-11-22, troops stood by
+		// while a fight went on just ahead of them); the stances still hold them (UVLBattle::TickAutoCombat). The
 		// archer's arrow is 40 (was 29, the main game's damage a second): +38%, so archers are worth fielding; a
 		// swordsman still wins up close (23 damage a second against 17, 280 health against 125).
-		static const FTroop Sword = [] { FTroop T; T.Health = 280.f; T.Damage = 29.f; T.BuildingScale = 1.f; T.Acquire = 1690.f; T.Sight = 1690.f; T.Pop = 1; T.Cost.Food = 100; T.TrainSeconds = 9.f; return T; }();
-		static const FTroop Bow = [] { FTroop T; T.Health = 125.f; T.Damage = 40.f; T.BuildingScale = 0.5f; T.Acquire = 1950.f; T.Sight = 1950.f; T.Pop = 1; T.Cost.Food = 85; T.TrainSeconds = 8.f; return T; }();
-		// King David: the hero (the main game had none). Worth two swordsmen and a half; he takes no housing. His own
-		// pace: 520 / 950 cm/s against a troop's 420 / 760.
-		static const FTroop King = [] { FTroop T; T.Health = 600.f; T.Damage = 45.f; T.BuildingScale = 1.f; T.Acquire = 1690.f; T.Sight = 1690.f; T.Pop = 0; T.TrainSeconds = 0.f;
-			T.WalkSpeed = 520.f; T.RunSpeed = 950.f; return T; }();
+		static const FTroop Sword = [] { FTroop T; T.Health = 280.f; T.Damage = 29.f; T.BuildingScale = 1.f; T.Acquire = 4000.f; T.Sight = 1690.f; T.Pop = 1; T.Cost.Food = 100; T.TrainSeconds = 9.f; return T; }();
+		static const FTroop Bow = [] { FTroop T; T.Health = 125.f; T.Damage = 40.f; T.BuildingScale = 0.5f; T.Acquire = 4200.f; T.Sight = 1950.f; T.Pop = 1; T.Cost.Food = 85; T.TrainSeconds = 8.f; return T; }();
+		// King David: the hero (the main game had none). Worth two swordsmen and a half; he takes no housing. His pace
+		// is a troop's, 420 / 760 cm/s (the owner's call, 2026-11-22: he walks with his men; it was 520 / 950).
+		static const FTroop King = [] { FTroop T; T.Health = 600.f; T.Damage = 45.f; T.BuildingScale = 1.f; T.Acquire = 4000.f; T.Sight = 1690.f; T.Pop = 0; T.TrainSeconds = 0.f;
+			T.WalkSpeed = 420.f; T.RunSpeed = 760.f; return T; }();
 		// The Spy (the main game's Scout): 90 hp, 8 a blow every 1.2 s (x0.2 against buildings), picks no fights (no
 		// acquire range), sees 26 m, noticed at 45% of the usual distance, 875 cm/s (a Shieldbearer did 450: 1.94x),
 		// 350 gold + 200 food, 12 s at the castle.
@@ -1072,14 +1074,14 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 		{
 			UE_LOG(LogVoxelLab, Log, TEXT("hit: %s takes %.0f from %s (%.0f left)"), *U->GetDisplayName(), Amount, By ? *By->GetName() : TEXT("-"), U->GetHealth() - Amount);
 		}
-		// friends close by come to its help (those not busy and free to fight)
+		// friends close by come to its help (those not busy and free to fight; a defensive one lets go at its leash)
 		if (Striker && IsAlive(Striker))
 		{
 			FVLUnits Near;
-			UnitsNear(U->GetActorLocation(), 650.f, Near);
+			UnitsNear(U->GetActorLocation(), VLRules::HelpRadius, Near);
 			for (AVLKing* F : Near)
 			{
-				if (F == U || !F->IsAlive() || F->Team != U->Team || FVector::DistSquared2D(F->GetActorLocation(), U->GetActorLocation()) >= FMath::Square(650.f))
+				if (F == U || !F->IsAlive() || F->Team != U->Team || FVector::DistSquared2D(F->GetActorLocation(), U->GetActorLocation()) >= FMath::Square(VLRules::HelpRadius))
 				{
 					continue;
 				}
@@ -1212,7 +1214,7 @@ void UVLBattle::OnUnitKilled(AVLKing* Unit, AActor* By)
 		return;
 	}
 	const int32 ByTeam = TeamOf(By);
-	if (Unit->IsTroop())
+	if (Unit->IsTroop() && !Unit->bTowerGuard)
 	{
 		++Kingdoms[FMath::Clamp(Unit->Team, 0, 1)].Lost;
 	}
@@ -1274,6 +1276,7 @@ void UVLBattle::Collapse(FVLBuildingState& B, AActor* By, int32 ByTeam, bool bDe
 		{
 			PushAlert(FString::Printf(TEXT("The enemy's %s is destroyed"), *B.Name), EVLAlert::Good, &At);
 		}
+		DismissTowerGuards(B);                  // the tower's own archers go with it
 		if (UVLCommand* Command = UVLCommand::Get(this))
 		{
 			if (UVLCommand::IsTower(A))
@@ -1421,7 +1424,7 @@ int32 UVLBattle::GetPopulation(int32 Team) const
 	int32 N = 0;
 	for (const AVLKing* U : AllUnits())
 	{
-		N += (U->IsAlive() && U->Team == Team) ? U->KindRules().Pop : 0;
+		N += (U->IsAlive() && U->Team == Team && !U->bTowerGuard) ? U->KindRules().Pop : 0;     // (a tower's own archers are free)
 	}
 	return N;
 }
@@ -1737,11 +1740,11 @@ float UVLBattle::TrainProgress(const AActor* Building) const
 	return (B && B->Queue.Num() > 0) ? FMath::Clamp(B->TrainClock / FMath::Max(TrainSeconds(Building, B->Queue[0]), 0.1f), 0.f, 1.f) : 0.f;
 }
 
-void UVLBattle::SetRally(AActor* Building, const FVector& Ground)
+void UVLBattle::SetRally(AActor* Building, const FVector& Ground, bool bClear)
 {
 	if (FVLBuildingState* B = FindBuilding(Building))
 	{
-		B->bHasRally = true;
+		B->bHasRally = !bClear;
 		B->Rally = Ground;
 	}
 }
@@ -1825,17 +1828,44 @@ void UVLBattle::SpawnRecruit(FVLBuildingState& B, const FString& Kind)
 	UVLCommand* Command = UVLCommand::Get(this);
 	FVector Goal = B.bHasRally ? B.Rally : Rally;
 	bool bToPlatoon = false;
-	if (B.FeedPlatoon != INDEX_NONE && Command && B.Team == Player && Kind != TEXT("Spy") && Kind != TEXT("Builder"))       // (the Spy goes alone; Builders join no platoon)
+	// Where it goes, first that applies: the platoon this building feeds (its Joins chips); the recruits' platoon (the
+	// platoon panel's flag), unless that one is full; the building's rally point; else its yard.
+	// (the Spy goes alone; Builders join no platoon)
+	int32 Join = INDEX_NONE;
+	bool bFlagged = false;
+	if (Command && B.Team == Player && Kind != TEXT("Spy") && Kind != TEXT("Builder"))
 	{
-		// it joins the platoon this building feeds, and marches to it (a wiped-out platoon is formed again by it)
+		Join = B.FeedPlatoon;
+		if (Join == INDEX_NONE)
+		{
+			Join = Command->RallyPlatoonFor();
+			bFlagged = Join != INDEX_NONE;
+		}
+	}
+	if (Join != INDEX_NONE)
+	{
+		// it joins the platoon, and marches to it (a wiped-out platoon a building feeds is formed again by it): it
+		// falls in behind the platoon's leader and keeps with it (UVLCommand::OrderFollow), or, with no leader, walks
+		// to where the platoon stands
 		TArray<AVLKing*> Members;
-		Command->GetPlatoon(B.FeedPlatoon, Members);
+		Command->GetPlatoon(Join, Members);
+		AVLKing* Leader = Command->GetPlatoonLeader(Join);
 		if (Members.Num() > 0)
 		{
-			Goal = Command->PlatoonCentre(B.FeedPlatoon);
+			Goal = Command->PlatoonCentre(Join);
 			bToPlatoon = true;
 		}
-		Command->AddToPlatoon(B.FeedPlatoon, { T });
+		Command->AddToPlatoon(Join, { T });
+		if (bToPlatoon && Leader && Leader != T && Command->OrderFollow({ T }, Leader, false) > 0)
+		{
+			if (B.Team == Player)
+			{
+				Play2D(TEXT("S_RecruitReady"), 0.45f);
+			}
+			UE_LOG(LogVoxelLab, Log, TEXT("trained %s at %s (team %d): joins platoon %d%s, follows %s"), *T->GetDisplayName(), *B.Name, B.Team, Join + 1,
+				bFlagged ? TEXT(" (the recruits' flag)") : TEXT(""), *Leader->GetDisplayName());
+			return;
+		}
 	}
 	// no rally point set and no platoon to march to: it waits in the building's yard (the barracks' fenced yard, the
 	// range's), in ranks with those trained before it (UVLConstruction::SendToYard); a full yard sends it out as before
@@ -1978,7 +2008,7 @@ FString UVLBattle::Describe(const FVLBuildingState& B) const
 	case EVLBuilding::Mine:
 		return FString::Printf(TEXT("+%d gold every %.0f s"), L.Yield, VLRules::PayoutInterval);
 	case EVLBuilding::Tower:
-		return FString::Printf(TEXT("Shoots %.0f every %.2f s to %.0f m; archers can man its lookout"), L.Damage, L.Interval, L.Range / 100.f);
+		return FString::Printf(TEXT("Shoots %.0f every %.2f s to %.0f m; %d archers of its own on the lookout; more can man it"), L.Damage, L.Interval, L.Range / 100.f, VLRules::TowerGuards(B.Level));
 	case EVLBuilding::Barracks:
 	case EVLBuilding::Range:
 		return FString::Printf(TEXT("Trains %s (%d food, %.1f s each)"), TroopFor(B.Actor.Get()) == TEXT("Archer") ? TEXT("archers") : TEXT("swordsmen"), VLRules::Troop(TroopFor(B.Actor.Get())).Cost.Food, TrainSeconds(B.Actor.Get()));
@@ -2074,6 +2104,154 @@ void UVLBattle::TickDefence(float Dt)
 	}
 }
 
+// ------------------------------------------------------------------------------------------------ the towers' own archers
+
+void UVLBattle::TickTowerGuards(float Dt)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command)
+	{
+		return;
+	}
+	for (int32 i = 0; i < Buildings.Num(); ++i)
+	{
+		{
+			FVLBuildingState& B = Buildings[i];
+			AActor* A = B.Actor.Get();
+			if (B.Kind != EVLBuilding::Tower || !A || !UVLCommand::IsTower(A))
+			{
+				continue;
+			}
+			if (!B.IsAlive() || B.Team < 0)
+			{
+				DismissTowerGuards(B);
+				continue;
+			}
+			// the fallen are struck off; one of another side now (vl.SetTeam) goes; one brought down is put back up
+			for (int32 k = B.Guards.Num() - 1; k >= 0; --k)
+			{
+				AVLKing* G = B.Guards[k].Get();
+				if (!G || G->IsDead())
+				{
+					B.Guards.RemoveAt(k);
+					continue;
+				}
+				if (G->Team != B.Team || (G->GarrisonIn.Get() != A && !Command->PutOnLookout(G, A)))
+				{
+					Command->Dismiss({ G });
+					B.Guards.RemoveAt(k);
+				}
+			}
+			// they shoot as far as the tower does (its level's reach from its walls; they stand inside them)
+			const float Reach = VLRules::Level(EVLBuilding::Tower, B.Level).Range + 300.f;
+			for (const TWeakObjectPtr<AVLKing>& G : B.Guards)
+			{
+				if (UVLArcherCombat* Bow = UVLArcherCombat::For(G.Get(), false))
+				{
+					Bow->TowerRange = Reach;
+				}
+			}
+			if (!B.IsWorking())
+			{
+				continue;               // (a site has none yet; one under repair is not restocked meanwhile)
+			}
+		}
+		// a tower that has just gone up is manned at once, and one raised a level gets its extra archer at once; a
+		// fallen one is replaced after a while, one at a time
+		const int32 Want = VLRules::TowerGuards(Buildings[i].Level);
+		if (Buildings[i].GuardLevel < Buildings[i].Level)
+		{
+			Buildings[i].GuardLevel = Buildings[i].Level;
+			Buildings[i].GuardRestock = VLRules::TowerGuardRestock;
+			for (int32 Tries = 0; Buildings[i].Guards.Num() < Want && Tries < 4; ++Tries)
+			{
+				if (!SpawnTowerGuard(i))
+				{
+					break;              // (no post free on the lookout)
+				}
+			}
+			continue;
+		}
+		FVLBuildingState& B = Buildings[i];
+		if (B.Guards.Num() >= Want)
+		{
+			B.GuardRestock = VLRules::TowerGuardRestock;      // (the clock starts at the next loss)
+			continue;
+		}
+		B.GuardRestock -= Dt;
+		if (B.GuardRestock <= 0.f)
+		{
+			B.GuardRestock = VLRules::TowerGuardRestock;
+			SpawnTowerGuard(i);
+		}
+	}
+}
+
+bool UVLBattle::SpawnTowerGuard(int32 Slot)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command || !Buildings.IsValidIndex(Slot))
+	{
+		return false;
+	}
+	AActor* A = Buildings[Slot].Actor.Get();
+	const int32 Team = Buildings[Slot].Team;
+	if (!A || Command->FreePosts(A) == 0)
+	{
+		return false;
+	}
+	FVector Door, Rally, Front;
+	FrontOf(A, Door, Rally, Front);
+	AVLTroop* T = SpawnTroop(TEXT("Archer"), Team, Door, Front.Rotation().Yaw);
+	if (!T)
+	{
+		return false;
+	}
+	T->bTowerGuard = true;
+	const FString Prefix = Team == Enemy ? TEXT("Enemy ") : TEXT("");
+	--Numbers.FindOrAdd(Prefix + TEXT("Archer"));      // (its own count: the trained archers' names run on without a gap)
+	T->SetDisplayName(FString::Printf(TEXT("%sTower Archer %d"), *Prefix, ++Numbers.FindOrAdd(Prefix + TEXT("Tower Archer"))));
+	if (UVLArcherCombat* Bow = UVLArcherCombat::For(T, true))
+	{
+		Bow->TowerRange = VLRules::Level(EVLBuilding::Tower, Buildings.IsValidIndex(Slot) ? Buildings[Slot].Level : 1).Range + 300.f;
+	}
+	if (!Command->PutOnLookout(T, A))
+	{
+		Command->Dismiss({ T });
+		return false;
+	}
+	if (Buildings.IsValidIndex(Slot))     // (the spawn may have grown the list: by index)
+	{
+		Buildings[Slot].Guards.Add(T);
+		UE_LOG(LogVoxelLab, Log, TEXT("%s takes post on %s (team %d, %d of %d)"), *T->GetDisplayName(), *Buildings[Slot].Name, Team,
+			Buildings[Slot].Guards.Num(), VLRules::TowerGuards(Buildings[Slot].Level));
+	}
+	return true;
+}
+
+void UVLBattle::DismissTowerGuards(FVLBuildingState& B)
+{
+	if (B.Guards.Num() == 0)
+	{
+		return;
+	}
+	TArray<AVLKing*> Going;
+	for (const TWeakObjectPtr<AVLKing>& G : B.Guards)
+	{
+		if (G.IsValid() && G->IsAlive())
+		{
+			Going.Add(G.Get());
+		}
+	}
+	B.Guards.Reset();
+	B.GuardLevel = 0;
+	if (UVLCommand* Command = UVLCommand::Get(this); Command && Going.Num() > 0)
+	{
+		Command->Dismiss(Going);
+		UE_LOG(LogVoxelLab, Log, TEXT("%s: its %d archers are gone with it"), *B.Name, Going.Num());
+	}
+}
+
 // ------------------------------------------------------------------------------------------------ fighting on their own
 
 void UVLBattle::GetUnits(int32 Team, TArray<AVLKing*>& Out, bool bTroopsOnly) const
@@ -2081,7 +2259,8 @@ void UVLBattle::GetUnits(int32 Team, TArray<AVLKing*>& Out, bool bTroopsOnly) co
 	Out.Reset();
 	for (AVLKing* U : AllUnits())
 	{
-		if (U->IsAlive() && U->Team == Team && (!bTroopsOnly || U->IsTroop()))
+		// (troops: the army; a tower's own archers are the tower's, not the army's)
+		if (U->IsAlive() && U->Team == Team && (!bTroopsOnly || (U->IsTroop() && !U->bTowerGuard)))
 		{
 			Out.Add(U);
 		}
@@ -2103,6 +2282,9 @@ AActor* UVLBattle::FindFoeIn(const AVLKing* U, float Range, bool bUnitsOnly, con
 	const bool bMelee = !U->IsRanged();
 	AActor* Best = nullptr;
 	float BestD = FMath::Square(Range);
+	// a hard-to-notice foe (the Spy) is noticed at its share of the unit's sight, not of how far it goes for foes
+	// (so 7.6 m from a swordsman, as before the longer reach); from a lookout, of the bow's reach
+	const float NoticeBase = U->IsGarrisoned() ? Range : FMath::Min(Range, U->KindRules().Sight);
 	for (const AVLKing* F : Among)
 	{
 		if (!F->IsAlive() || F->Team == U->Team || F->Team < 0 || (bMelee && F->IsGarrisoned()))
@@ -2111,7 +2293,7 @@ AActor* UVLBattle::FindFoeIn(const AVLKing* U, float Range, bool bUnitsOnly, con
 		}
 		const FVector Feet = F->GetFeet();
 		const float D = FVector::DistSquared2D(Feet, Me);
-		if (D > FMath::Square(Range * F->KindRules().Notice))
+		if (F->KindRules().Notice < 1.f && D > FMath::Square(NoticeBase * F->KindRules().Notice))
 		{
 			continue;               // reduced visibility: a Spy is only noticed from close by
 		}
@@ -2151,9 +2333,10 @@ void UVLBattle::Engage(AVLKing* Unit, AActor* Target)
 		return;
 	}
 	const bool bWasAttackMove = Unit->bAttackMove;
-	if (!Unit->HasOrder() || bWasAttackMove)
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	if ((!Unit->HasOrder() || bWasAttackMove) && Now - Unit->LastAutoFightTime > 6.0)
 	{
-		Unit->Post = Unit->GetFeet();
+		Unit->Post = Unit->GetFeet();       // (straight from another fight of its own: it keeps the post it had)
 	}
 	TGuardValue<bool> Inner(Command->bInnerOrder, true);    // its own fight: a patrol, a guard or a hold goes on
 	if (Command->OrderAttack({ Unit }, Target, false, false) > 0)
@@ -2201,7 +2384,13 @@ void UVLBattle::TickAutoCombat(float Dt)
 		const VLRules::FTroop& R = U->KindRules();
 		const UVLArcherCombat* Bow = UVLArcherCombat::For(U, false);
 		const float BowReach = Bow ? (U->IsGarrisoned() ? Bow->TowerRange : Bow->Range) : 0.f;
+		// what it notices and goes for (40 m, archers 42 m; on a lookout its bow's reach), and what it can strike from
+		// where it stands
 		const float Sight = U->IsGarrisoned() ? BowReach : R.Acquire;
+		const float Reach = U->IsRanged() ? BowReach : 240.f;
+		// a defensive unit goes for what it can strike without going further than its leash from its post
+		const bool bDefensive = U->Stance == EVLStance::Defensive && !U->IsGarrisoned();
+		const float DefRange = FMath::Min(Sight, VLRules::DefensiveLeash + Reach);
 		bool bAttacking = false;
 		AActor* Current = CombatTarget(U, &bAttacking);
 		if (bAttacking)
@@ -2210,20 +2399,31 @@ void UVLBattle::TickAutoCombat(float Dt)
 			{
 				continue;       // an order: obeyed, not second-guessed
 			}
+			U->LastAutoFightTime = Now;
 			// fighting a building of its own accord: a troop that comes into sight comes first
 			if (!Cast<AVLKing>(Current))
 			{
-				if (AActor* Foe = FindFoe(U, Sight, true))
+				if (AActor* Foe = FindFoe(U, U->IsHolding() ? Reach : (bDefensive ? DefRange : Sight), true))
 				{
 					Engage(U, Foe);
 					continue;
 				}
 			}
-			// let go by its stance: a defensive unit goes no further than its leash from its post; an aggressive one
-			// gives up a chase at twice its sight unless it is being struck
+			// let go by its stance: a defensive unit goes no further than its leash (20 m) from its post, then back;
+			// an aggressive one gives up a chase at 1.5 times its reach (60 m) unless it is being struck
 			const float FromPost = FVector::Dist2D(U->GetFeet(), U->Post);
 			const float ToFoe = DistanceTo(Current, U->GetFeet());
-			if (U->Stance == EVLStance::Defensive && FromPost > FMath::Max(VLRules::DefensiveLeash, Sight) && !U->IsGarrisoned())
+			// (one on an attack-move, following, guarding or on a chain: its order brings it back, not its post)
+			const bool bFree = !U->bAttackMove && !U->IsGarrisoned() && !Command->FollowedBy(U) && !Command->GuardWardOf(U) && !Command->HasChain(U);
+			auto BackToPost = [&]()
+			{
+				if (bFree && FromPost > 600.f)
+				{
+					TGuardValue<bool> Inner(Command->bInnerOrder, true);
+					Command->OrderMove({ U }, U->Post, false, EVLFormation::Line);
+				}
+			};
+			if (bDefensive && FromPost > VLRules::DefensiveLeash)
 			{
 				Command->StopAttack(U);
 				U->bAutoAttack = false;
@@ -2241,12 +2441,20 @@ void UVLBattle::TickAutoCombat(float Dt)
 					Command->OrderMove({ U }, U->Post, false, EVLFormation::Line);
 				}
 			}
+			// an aggressive one gone too far from where it took the fight up: back there (not while it is being struck)
+			else if (U->Stance == EVLStance::Aggressive && bFree && FromPost > VLRules::AggressiveLeash && Now - U->LastStruckTime > 2.0)
+			{
+				Command->StopAttack(U);
+				U->bAutoAttack = false;
+				BackToPost();
+			}
 			// (a hard-to-notice foe, the Spy, slips away at its share of that distance)
-			else if (ToFoe > FMath::Max(Sight * 2.f, BowReach * 1.2f) * (Cast<AVLKing>(Current) ? Cast<AVLKing>(Current)->KindRules().Notice : 1.f)
+			else if (ToFoe > FMath::Max(Sight * VLRules::ChaseLetGo, BowReach * 1.2f) * (Cast<AVLKing>(Current) ? Cast<AVLKing>(Current)->KindRules().Notice : 1.f)
 				&& Now - U->LastStruckTime > 4.0)
 			{
 				Command->StopAttack(U);
 				U->bAutoAttack = false;
+				BackToPost();       // (and back to where it took the fight up, not on to the next foe from there)
 			}
 			continue;
 		}
@@ -2255,12 +2463,13 @@ void UVLBattle::TickAutoCombat(float Dt)
 		{
 			continue;           // a plain move ignores foes
 		}
-		// Hold: only what is already in reach. Otherwise anything in its sight; first whoever struck it
+		// Hold: only what is already in reach. Defensive: what it can strike within its leash. Otherwise anything in
+		// its reach (40 / 42 m); first whoever struck it
 		const bool bHold = U->IsHolding();
-		const float Range = bHold ? (U->IsRanged() ? BowReach : 240.f) : Sight;
+		const float Range = bHold ? Reach : (bDefensive ? DefRange : Sight);
 		AActor* Target = nullptr;
 		AActor* Striker = U->LastStruckBy.Get();
-		if (Striker && Now - U->LastStruckTime < 3.0 && IsHostile(Striker, U->Team) && DistanceTo(Striker, U->GetFeet()) < (bHold ? Range : FMath::Max(Range * 2.f, BowReach))
+		if (Striker && Now - U->LastStruckTime < 3.0 && IsHostile(Striker, U->Team) && DistanceTo(Striker, U->GetFeet()) < (bHold ? Range : FMath::Max(Range * 1.5f, BowReach))
 			&& !(Cast<AVLKing>(Striker) && Cast<AVLKing>(Striker)->IsGarrisoned() && !U->IsRanged()))
 		{
 			Target = Striker;
@@ -2268,6 +2477,43 @@ void UVLBattle::TickAutoCombat(float Dt)
 		if (!Target)
 		{
 			Target = FindFoe(U, Range);
+		}
+		// a friend in a fight close by (within its reach): it goes for that friend's foe, or whoever struck the friend,
+		// if that is no more than VLRules::AssistExtra further. Not while holding its ground
+		if (!Target && !bHold && !U->IsGarrisoned())
+		{
+			FVLUnits Near;
+			UnitsNear(U->GetActorLocation(), Range, Near);
+			float BestD = FMath::Square(Range);
+			for (AVLKing* F : Near)
+			{
+				if (F == U || !F->IsAlive() || F->Team != U->Team)
+				{
+					continue;
+				}
+				const float D = FVector::DistSquared2D(F->GetActorLocation(), U->GetActorLocation());
+				if (D >= BestD)
+				{
+					continue;
+				}
+				bool bFighting = false;
+				AActor* Foe = CombatTarget(F, &bFighting);
+				if (!bFighting || !Foe || !IsHostile(Foe, U->Team))
+				{
+					Foe = (F->LastStruckBy.IsValid() && Now - F->LastStruckTime < 3.0 && IsHostile(F->LastStruckBy.Get(), U->Team)) ? F->LastStruckBy.Get() : nullptr;
+				}
+				const AVLKing* FoeUnit = Cast<AVLKing>(Foe);
+				if (!Foe || (FoeUnit && FoeUnit->IsGarrisoned() && !U->IsRanged()) || DistanceTo(Foe, U->GetFeet()) > Range + VLRules::AssistExtra)
+				{
+					continue;
+				}
+				BestD = D;
+				Target = Foe;
+			}
+			if (Target && BattleLog())
+			{
+				UE_LOG(LogVoxelLab, Log, TEXT("%s comes to help against %s"), *U->GetDisplayName(), *Target->GetName());
+			}
 		}
 		// on guard: only what comes near its ward (a foe that struck it: a little further)
 		float Leash = 0.f;
@@ -2287,6 +2533,14 @@ void UVLBattle::TickAutoCombat(float Dt)
 		if (Target)
 		{
 			Engage(U, Target);
+		}
+		else if (bDefensive && !U->HasOrder() && Now - U->LastAutoFightTime < 6.0 && FVector::Dist2D(U->GetFeet(), U->Post) > 600.f && !U->bAttackMove
+			&& !Command->FollowedBy(U) && !Command->GuardWardOf(U) && !Command->HasChain(U))
+		{
+			// a defensive unit whose fight is over (no foe left in its reach): back to its post
+			U->LastAutoFightTime = -100.0;
+			TGuardValue<bool> Inner(Command->bInnerOrder, true);
+			Command->OrderMove({ U }, U->Post, false, EVLFormation::Line);
 		}
 	}
 }
@@ -2584,6 +2838,7 @@ void UVLBattle::Tick(float DeltaSeconds)
 	TickKingRest(DeltaSeconds);
 	TickTraining(DeltaSeconds);
 	TickUpgrades(DeltaSeconds);
+	TickTowerGuards(DeltaSeconds);
 	for (int32 t = 0; t < 2; ++t)
 	{
 		if (FVLCommander* C = Commanders[t].Get(); C && C->bActive)

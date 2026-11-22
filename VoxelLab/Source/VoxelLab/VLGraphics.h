@@ -56,6 +56,15 @@ public:
 	static void SetUserFrameCap(int32 InFps);
 	static void SetMenuThrottle(UWorld* World, bool bInMenu);
 	static void Save();
+	/** The window (packaged game only; the editor's play window is the editor's): full screen (borderless, the
+	 *  desktop's size) or a window. The choice and the window's size are kept in GameUserSettings.ini
+	 *  ([/Script/Engine.GameUserSettings] FullscreenMode, ResolutionSizeX / Y) however they were changed: the Settings
+	 *  row, F11 / Alt+Enter, the green button, dragging the window's edge (KeepWindowState, once a second and when the
+	 *  world goes). */
+	static bool IsFullscreen();
+	static bool CanChangeWindow() { return !GIsEditor; }
+	static void ToggleFullscreen();
+	static void KeepWindowState();
 	/** Everything, to the engine and to this world's look actors. */
 	static void Apply(UWorld* World);
 
@@ -100,4 +109,5 @@ private:
 	int32 ThermalLevel = 0;              // macOS NSProcessInfoThermalState (0 Nominal .. 3 Critical)
 	bool bLowPowerMode = false;          // macOS Low Power Mode
 	float ThermalCheckIn = 0.f;
+	float WindowCheckIn = 1.f;
 };

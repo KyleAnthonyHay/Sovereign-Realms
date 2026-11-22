@@ -205,8 +205,8 @@ namespace VLBuild
 {
 	const TArray<FSpec>& Specs()
 	{
-		// the main game's FSRBuildingStats: price (gold), build time with one Builder. Granary and Treasury have no
-		// voxel model yet; the town hall was never built in the main game.
+		// the main game's FSRBuildingStats: price (gold), build time with one Builder (Treasury: TreasuryStats,
+		// 140 gold, 16 s; Granary: GranaryStats, 120 gold, 14 s). The town hall was never built in the main game.
 		static const TArray<FSpec> S = [] {
 			TArray<FSpec> L;
 			auto Add = [&L](EVLBuilding K, const TCHAR* Mesh, int32 Gold, float Sec, int32 InTab, const TCHAR* Blurb)
@@ -217,6 +217,7 @@ namespace VLBuild
 			};
 			Add(EVLBuilding::Farm, TEXT("SM_Farmstead"), 90, 14.f, 0, TEXT("Grows food for troops and houses them."));
 			Add(EVLBuilding::Treasury, TEXT("SM_Treasury"), 140, 16.f, 0, TEXT("Holds gold on top of the castle's stores."));
+			Add(EVLBuilding::Granary, TEXT("SM_Granary"), 120, 14.f, 0, TEXT("Holds food on top of the castle's stores, so no harvest is lost."));
 			// (not in the menu, Tab -1: a mine is never built. A free one of the map is claimed, at this price and in this
 			// time: UVLConstruction::ClaimMine)
 			Add(EVLBuilding::Mine, TEXT("SM_MineCliff"), 140, 16.f, -1, TEXT("Digs gold. Claimed, not built: order Builders onto a free mine."));
@@ -570,6 +571,9 @@ int32 UVLConstruction::BuildLimit(EVLBuilding Kind, int32 Team) const
 	{
 	case EVLBuilding::Farm: return VLBuild::FarmLimitBase + VLBuild::FarmLimitPerLevel * Up;
 	case EVLBuilding::Tower: return VLBuild::TowerLimitBase + VLBuild::TowerLimitPerLevel * Up;
+	// the storehouses: one of each per kingdom, as in the main game (raise it a level to hold more)
+	case EVLBuilding::Granary:
+	case EVLBuilding::Treasury: return 1;
 	default: return INDEX_NONE;
 	}
 }
@@ -622,6 +626,10 @@ FString UVLConstruction::BuildRefusal(EVLBuilding Kind, int32 Team) const
 	const int32 Limit = BuildLimit(Kind, Team);
 	if (Limit != INDEX_NONE && CountRaised(Kind, Team) >= Limit)
 	{
+		if (Kind == EVLBuilding::Granary || Kind == EVLBuilding::Treasury)
+		{
+			return FString::Printf(TEXT("Only one %s per kingdom: raise it a level to hold more"), VLRules::Name(Kind));
+		}
 		return FString::Printf(TEXT("%s limit %d reached: raise the castle for another"), VLRules::Name(Kind), Limit);
 	}
 	int32 Queued = 0;

@@ -6,6 +6,8 @@
 #include "Engine/Engine.h"
 #include "Engine/ExponentialHeightFog.h"
 #include "Engine/GameViewportClient.h"
+#include "GameFramework/GameUserSettings.h"
+#include "Widgets/SWindow.h"
 #include "Engine/PointLight.h"
 #include "Components/LightComponent.h"
 #include "Engine/PostProcessVolume.h"
@@ -375,6 +377,7 @@ void UVLGraphics::Deinitialize()
 #endif
 	bFarFog = false;
 	bMenuThrottle = false;
+	KeepWindowState();          // (quitting, or another map: the window as it is now is kept)
 	Super::Deinitialize();
 }
 
@@ -626,5 +629,117 @@ void UVLGraphics::Tick(float DeltaTime)
 	{
 		ThermalCheckIn = 2.f;
 		UpdateThermalAndFrameCap(false);
+	}
+	WindowCheckIn -= DeltaTime;
+	if (WindowCheckIn <= 0.f)
+	{
+		WindowCheckIn = 1.f;
+		KeepWindowState();
+	}
+}
+
+// ------------------------------------------------------------------------------------------------ the window
+
+namespace
+{
+	/** The game's window and what it shows now (packaged only). */
+	bool GameWindow(EWindowMode::Type& OutMode, FIntPoint& OutSize)
+	{
+		if (GIsEditor || !GEngine || !GEngine->GameViewport || !GEngine->GameViewport->Viewport)
+		{
+			return false;
+		}
+		const TSharedPtr<SWindow> Window = GEngine->GameViewport->GetWindow();
+		if (!Window.IsValid())
+		{
+			return false;
+		}
+		OutMode = Window->GetWindowMode();
+		OutSize = GEngine->GameViewport->Viewport->GetSizeXY();
+		return OutSize.X > 0 && OutSize.Y > 0;
+	}
+}
+
+bool UVLGraphics::IsFullscreen()
+{
+	EWindowMode::Type Mode = EWindowMode::Windowed;
+	FIntPoint Size;
+	if (GameWindow(Mode, Size))
+	{
+		return Mode != EWindowMode::Windowed;
+	}
+	const UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	return S && S->GetFullscreenMode() != EWindowMode::Windowed;
+}
+
+void UVLGraphics::ToggleFullscreen()
+{
+	UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	if (!S || !CanChangeWindow())
+	{
+		return;
+	}
+	KeepWindowState();          // (the window's own size first, to come back to)
+	const bool bFull = !IsFullscreen();
+	S->SetFullscreenMode(bFull ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
+	if (!bFull)
+	{
+		// back to the window it was ([VoxelLab.Video] WindowX / WindowY; none: 85% of the desktop, at most 1600 x 900)
+		FIntPoint Res(0, 0);
+		if (GConfig)
+		{
+			GConfig->GetInt(TEXT("VoxelLab.Video"), TEXT("WindowX"), Res.X, GGameUserSettingsIni);
+			GConfig->GetInt(TEXT("VoxelLab.Video"), TEXT("WindowY"), Res.Y, GGameUserSettingsIni);
+		}
+		const FIntPoint Desk = S->GetDesktopResolution();
+		if (Res.X < 640 || Res.Y < 360 || (Desk.X > 0 && Res.X >= Desk.X && Res.Y >= Desk.Y))
+		{
+			Res.X = FMath::Min(1600, FMath::RoundToInt(Desk.X * 0.85f));
+			Res.Y = FMath::RoundToInt(Res.X * 9.f / 16.f);
+		}
+		S->SetScreenResolution(Res);
+	}
+	S->ApplyResolutionSettings(false);
+	S->ConfirmVideoMode();
+	S->SaveSettings();
+	UE_LOG(LogVoxelLab, Log, TEXT("window: %s (saved)"), bFull ? TEXT("full screen") : TEXT("a window"));
+}
+
+void UVLGraphics::KeepWindowState()
+{
+	UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	EWindowMode::Type Mode = EWindowMode::Windowed;
+	FIntPoint Size;
+	if (!S || !GameWindow(Mode, Size))
+	{
+		return;
+	}
+	// against what the file holds (the engine puts a dragged window's size in the settings itself, but never saves it)
+	int32 SavedX = 0, SavedY = 0, SavedMode = -1;
+	if (GConfig)
+	{
+		const TCHAR* Section = TEXT("/Script/Engine.GameUserSettings");
+		GConfig->GetInt(Section, TEXT("ResolutionSizeX"), SavedX, GGameUserSettingsIni);
+		GConfig->GetInt(Section, TEXT("ResolutionSizeY"), SavedY, GGameUserSettingsIni);
+		GConfig->GetInt(Section, TEXT("FullscreenMode"), SavedMode, GGameUserSettingsIni);
+	}
+	bool bChanged = SavedMode != int32(Mode);
+	S->SetFullscreenMode(Mode);
+	// a window's size (a full-screen one is the desktop's: the window's own is kept for coming back to it)
+	if (Mode == EWindowMode::Windowed)
+	{
+		bChanged |= SavedX != Size.X || SavedY != Size.Y;
+		S->SetScreenResolution(Size);
+	}
+	if (bChanged)
+	{
+		S->ConfirmVideoMode();
+		if (Mode == EWindowMode::Windowed && GConfig)
+		{
+			GConfig->SetInt(TEXT("VoxelLab.Video"), TEXT("WindowX"), Size.X, GGameUserSettingsIni);
+			GConfig->SetInt(TEXT("VoxelLab.Video"), TEXT("WindowY"), Size.Y, GGameUserSettingsIni);
+		}
+		S->SaveSettings();
+		UE_LOG(LogVoxelLab, Log, TEXT("window: kept as %s %d x %d"), Mode == EWindowMode::Windowed ? TEXT("a window") : TEXT("full screen"), Size.X, Size.Y);
 	}
 }

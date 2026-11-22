@@ -1402,6 +1402,15 @@ void FVLCommander::ManageBuilding(UVLBattle* B, const TArray<AVLKing*>& Mine)
 		if (Towers < 1 + Mines / 2 + FMath::Min(FoeAttacks, 2)) { Want(EVLBuilding::Tower, TEXT("towers")); }
 		if (Food > 450 && Barracks < 2) { Want(EVLBuilding::Barracks, TEXT("food to spare")); }             // food piling up: train faster
 		if (Food > 450 && Ranges < 2) { Want(EVLBuilding::Range, TEXT("food to spare")); }
+		// the storehouses (one of each): when a stock nears what the kingdom can hold, before it is wasted
+		if (B->CountBuildings(EVLBuilding::Granary, Team) == 0 && Food >= B->GetStorage(Team, EVLRes::Food) * 0.8f)
+		{
+			Want(EVLBuilding::Granary, TEXT("food store nearly full"));
+		}
+		if (B->CountBuildings(EVLBuilding::Treasury, Team) == 0 && Gold >= B->GetStorage(Team, EVLRes::Gold) * 0.8f)
+		{
+			Want(EVLBuilding::Treasury, TEXT("gold store nearly full"));
+		}
 		Want(EVLBuilding::Farm, TEXT("more"));
 		if (Gold > 600) { Want(EVLBuilding::Mine, TEXT("gold to spare")); Want(EVLBuilding::Tower, TEXT("gold to spare")); }      // gold to spare
 	}
@@ -1675,7 +1684,7 @@ void FVLCommander::ManageSpy(UVLBattle* B, const TArray<AVLKing*>& Mine)
 			const FVLBuildingState* S = B->FindBuilding(At);
 			const float Reach = S ? VLRules::Level(S->Kind, S->Level).Range : 0.f;
 			// (the troops' sight: the archer's, the furthest, plus a little)
-			const float Out = FMath::Clamp(FMath::Max(Reach, VLRules::Troop(EVLUnitKind::Archer).Acquire + 100.f) * R.Notice + 500.f, 900.f, R.Sight * 0.8f);
+			const float Out = FMath::Clamp(FMath::Max(Reach, VLRules::Troop(EVLUnitKind::Archer).Sight + 100.f) * R.Notice + 500.f, 900.f, R.Sight * 0.8f);
 			const float Angle = FMath::FRandRange(0.f, 2.f * PI);
 			FVector Origin, Extent;
 			At->GetActorBounds(true, Origin, Extent);

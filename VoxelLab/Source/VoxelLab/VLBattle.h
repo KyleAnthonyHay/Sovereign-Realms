@@ -121,7 +121,28 @@ namespace VLRules
 	constexpr int32 RecruitBatchLarge = 10;      // Ctrl / Cmd / Alt + Train
 	constexpr float KingRespawnSeconds = 20.f;
 	constexpr float CorpseSeconds = 2.4f;
-	constexpr float DefensiveLeash = 1300.f;     // DefensiveChaseDistance 900, or the unit's sight
+	/** A watch tower's own archers (the owner's call, 2026-11-22): 2 on the lookout at level 1, one more for each
+	 *  level it is raised (3, 4); free (no housing, no army count). One that falls is replaced TowerGuardRestock
+	 *  seconds later, one at a time. They shoot as far as the tower itself does (its level's reach, from its walls),
+	 *  so its reach is as the enemy commander reckons it. */
+	inline int32 TowerGuards(int32 Level) { return 1 + FMath::Clamp(Level, 1, 3); }
+	constexpr float TowerGuardRestock = 40.f;
+	/** How far a defensive unit goes from its post after a foe before it turns back (cm). It goes for foes it can
+	 *  strike within that: a swordsman 22.4 m from where it stands, an archer her full 42 m. (It was 13 m, or the
+	 *  unit's sight of 16.9 / 19.5 m, which then was also how far troops noticed foes.) */
+	constexpr float DefensiveLeash = 2000.f;
+	/** An aggressive unit lets go of a chase at this many times its reach (unless it is being struck). */
+	constexpr float ChaseLetGo = 1.5f;
+	/** An aggressive unit on a fight of its own goes no further than this from where it took it up (cm), then walks
+	 *  back there, as it does after letting a chase go (one on an attack-move, following, guarding or on a chain of
+	 *  orders is brought back by that order instead). With the longer reach a troop would otherwise run down one foe
+	 *  after another into the enemy's base. */
+	constexpr float AggressiveLeash = 5000.f;
+	/** Friends within this of a struck unit come to its help (cm; was 6.5 m). */
+	constexpr float HelpRadius = 1200.f;
+	/** An idle unit with no foe in its reach goes for the foe of a friend fighting within its reach, if that foe is
+	 *  no more than this beyond its reach (cm). */
+	constexpr float AssistExtra = 1000.f;
 	constexpr float EndScreenDelay = 1.6f;
 	// the Spy (the main game's Scout: ScoutCastleLevel, MaxScouts, ScoutCooldown)
 	constexpr int32 SpyCastleLevel = 3;          // the castle level a kingdom needs before it can train its Spy
@@ -163,6 +184,10 @@ struct FVLBuildingState
 	FVLCost Paid;                       // what it cost to lay (refunds)
 	FString Mesh;                       // the mesh it was raised with (a farm's variant)
 	TArray<TWeakObjectPtr<AVLKing>> Yard;   // a barracks' / range's yard: who waits at each of its places
+	// a watch tower's own archers (UVLBattle::TickTowerGuards): on its lookout, VLRules::TowerGuards(level) of them
+	TArray<TWeakObjectPtr<AVLKing>> Guards;
+	int32 GuardLevel = 0;               // the level they were last filled up for (0: never)
+	float GuardRestock = 0.f;           // seconds until a fallen one is replaced
 
 	bool IsAlive() const { return !bDestroyed && Actor.IsValid(); }
 	bool IsSite() const { return Build < 1.f; }
@@ -359,7 +384,8 @@ public:
 	float TrainProgress(const AActor* Building) const;
 	/** Seconds it takes to train one of Kind (empty: its own troop) at its level. */
 	float TrainSeconds(const AActor* Building, const FString& Kind = FString()) const;
-	void SetRally(AActor* Building, const FVector& Ground);
+	/** bClear: no rally point (its recruits wait in its yard, or join the recruits' platoon). */
+	void SetRally(AActor* Building, const FVector& Ground, bool bClear = false);
 	void SetFeedPlatoon(AActor* Building, int32 Platoon);
 	// ---- the Spy: castle level 3, one at a time, a wait between two (the main game's Scout rules)
 	/** Spies alive, and (OutQueued) in training. */
@@ -439,6 +465,13 @@ private:
 	void TickTraining(float Dt);
 	void TickUpgrades(float Dt);
 	void TickDefence(float Dt);
+	/** The watch towers' own archers: filled when a tower is first up (and by one when it is raised a level), a fallen
+	 *  one replaced after VLRules::TowerGuardRestock; they go with the tower. */
+	void TickTowerGuards(float Dt);
+	/** One more archer of the tower's own on its lookout; false if there is no post free. */
+	bool SpawnTowerGuard(int32 Slot);
+	/** A tower's own archers go (it fell, was pulled down or changed hands). */
+	void DismissTowerGuards(FVLBuildingState& B);
 	void TickCollapse(float Dt);
 	void TickAutoCombat(float Dt);
 	void TickKings(float Dt);

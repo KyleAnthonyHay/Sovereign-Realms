@@ -987,6 +987,7 @@ void AVLHUD::DrawUpgradeButton(const FBox2D& R, AActor* Building)
 		Gain = FString::Printf(TEXT("damage %.0f > %.0f"), Cur.Damage, Next.Damage);
 		Lines.Add(FString::Printf(TEXT("Damage %.0f > %.0f   ·   a shot every %.2f > %.2f s"), Cur.Damage, Next.Damage, Cur.Interval, Next.Interval));
 		Lines.Add(FString::Printf(TEXT("Reach %.0f > %.0f m   ·   health %.0f > %.0f"), Cur.Range / 100.f, Next.Range / 100.f, Cur.Health, Next.Health));
+		Lines.Add(FString::Printf(TEXT("Its own archers %d > %d (one more on the lookout at once)"), VLRules::TowerGuards(L), VLRules::TowerGuards(L + 1)));
 		break;
 	case EVLBuilding::Barracks:
 	case EVLBuilding::Range:
@@ -1072,8 +1073,12 @@ void AVLHUD::DrawLookoutButton(const FBox2D& R, AActor* Tower)
 	{
 		return;
 	}
-	const int32 In = Command->TowerCount(Tower), Cap = Command->TowerCapacity(Tower);
-	const bool bEnabled = In > 0;
+	// (the tower's own archers count as manning it, but stay up: "send them out" is for the troops sent up)
+	TArray<AVLKing*> Up;
+	Command->GetGarrison(Tower, Up);
+	const int32 Guards = Up.FilterByPredicate([](const AVLKing* U) { return U->bTowerGuard; }).Num();
+	const int32 In = Up.Num(), Cap = Command->TowerCapacity(Tower);
+	const bool bEnabled = In > Guards;
 	FBtn B = Button(R, VLId::SendOut, bEnabled);
 	if (!bEnabled) { B.Hot *= 0.3f; }
 	ButtonFrame(R, B, bEnabled);
@@ -1086,10 +1091,11 @@ void AVLHUD::DrawLookoutButton(const FBox2D& R, AActor* Tower)
 	Text(bEnabled ? TEXT("Click: send them out") : TEXT("RMB it with archers"), R.Min.X + U(10.f), R.Max.Y - U(26.f) + Lift, U(13.f), Dim);
 	if (B.bHover)
 	{
-		SetTooltip(R, FString::Printf(TEXT("Lookout   ·   %d of %d posts manned"), In, Cap), {
-			TEXT("Archers on it shoot from it, to 42 m, and see as far."),
+		SetTooltip(R, FString::Printf(TEXT("Lookout   ·   %d of %d posts manned (%d of the tower's own)"), In, Cap, Guards), {
+			TEXT("The tower's own archers (2, +1 a level) stay up there: free, and replaced when they fall."),
+			TEXT("Archers sent up shoot from it, to 55 m, and see as far."),
 			TEXT("Select archers and right-click the tower to man it."),
-			TEXT("Click: everyone on it comes down and forms up by the door.") });
+			TEXT("Click: the archers sent up come down and form up by the door.") });
 	}
 	if (B.bClicked)
 	{
@@ -1169,7 +1175,13 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 	case EVLBuilding::Tower:
 	{
 		const int32 Manned = Command ? Command->TowerCount(Building) : 0;
-		Text(FString::Printf(TEXT("Level %d: %.0f damage every %.2f s"), St->Level, Lv.Damage, Lv.Interval), X, LY, U(15.f), Parchment);
+		// its own archers on the lookout, and when a fallen one is replaced
+		const int32 Own = St->Guards.FilterByPredicate([](const TWeakObjectPtr<AVLKing>& G) { return G.IsValid() && G->IsAlive(); }).Num();
+		const int32 OwnWant = VLRules::TowerGuards(St->Level);
+		const FString OwnLine = St->IsSite() ? FString() : (Own < OwnWant && St->IsWorking()
+			? FString::Printf(TEXT("   ·   archers %d / %d (next in %.0f s)"), Own, OwnWant, FMath::Max(0.f, St->GuardRestock))
+			: FString::Printf(TEXT("   ·   archers %d / %d"), Own, OwnWant));
+		Text(FString::Printf(TEXT("Level %d: %.0f damage every %.2f s%s"), St->Level, Lv.Damage, Lv.Interval, *OwnLine), X, LY, U(15.f), Parchment);
 		Text(FString::Printf(TEXT("Reach %.0f m (the orange circle)%s"), Lv.Range / 100.f, Manned > 0 && !bPlayer ? *FString::Printf(TEXT("   ·   %d archers on its lookout"), Manned) : TEXT("")),
 			X, LY + U(22.f), U(14.f), Dim);
 		if (bPlayer)
@@ -1340,7 +1352,7 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 			if (CB.bHover)
 			{
 				SetTooltip(Chip, p < 0 ? TEXT("Recruits join no platoon") : FString::Printf(TEXT("Recruits join platoon %d"), p + 1),
-					{ p < 0 ? FString(TEXT("They gather at the rally point.")) : FString(TEXT("Each new troop from here joins the platoon and marches to it.")),
+					{ p < 0 ? FString(TEXT("They join the platoon flagged in the platoon panel, else go to the rally point, else wait in the yard.")) : FString(TEXT("Each new troop from here joins the platoon and marches to it.")),
 					  TEXT("Ctrl+1-6 with this building selected sets it too.") });
 			}
 			if (CB.bClicked && !bOn) { Click(); Battle->SetFeedPlatoon(Building, p); }
@@ -1473,9 +1485,9 @@ void AVLHUD::DrawPlatoonPanel()
 			continue;
 		}
 
-		// the small buttons (formation, stance, disband) claim their clicks before the row itself does
-		const int32 NSmall = 3;
-		const uint32 SmallIds[NSmall] = { 1, 2, 4 };
+		// the small buttons (formation, stance, the recruits' flag, disband) claim their clicks before the row itself does
+		const int32 NSmall = 4;
+		const uint32 SmallIds[NSmall] = { 1, 2, 3, 4 };
 		const float SB = U(30.f), SG = U(3.f);
 		FBox2D Small[NSmall];
 		FBtn SmallB[NSmall];
@@ -1537,10 +1549,23 @@ void AVLHUD::DrawPlatoonPanel()
 		Icon(FormationIcon(Shape), Small[0].Min.X + U(5.f), Small[0].Min.Y + U(5.f), SB - U(10.f), FLinearColor(1.f, 1.f, 1.f, Shape != EVLFormation::Loose ? 1.f : 0.55f));
 		ButtonFrame(Small[1], SmallB[1], true);
 		Icon(StanceIcon(Stance), Small[1].Min.X + U(5.f), Small[1].Min.Y + U(5.f), SB - U(10.f));
-		ButtonFrame(Small[2], SmallB[2], true);
-		Icon(EVLIcon::Disband, Small[2].Min.X + U(5.f), Small[2].Min.Y + U(5.f), SB - U(10.f));
-		if (SmallB[2].bHover) { SetTooltip(Small[2], TEXT("Disband"), { TEXT("Break up the platoon (the troops stay)."), TEXT("A platoon whose troops all fall disbands itself.") }); }
-		if (SmallB[2].bClicked) { Click(); Command->DisbandPlatoon(i); continue; }
+		// the recruits' flag: new troops from every barracks and range join this platoon (one platoon at a time)
+		const bool bRecruits = Command->GetRallyPlatoon() == i;
+		const bool bFull = bRecruits && Info.Members.Num() >= UVLCommand::RallyPlatoonCap;
+		ButtonFrame(Small[2], SmallB[2], true, bRecruits);
+		Icon(EVLIcon::RecruitFlag, Small[2].Min.X + U(5.f), Small[2].Min.Y + U(5.f), SB - U(10.f), FLinearColor(1.f, 1.f, 1.f, bRecruits ? 1.f : 0.4f));
+		if (SmallB[2].bHover)
+		{
+			SetTooltip(Small[2], bRecruits ? (bFull ? TEXT("Recruits join here (full)") : TEXT("Recruits join here")) : TEXT("Recruits do not join"),
+				{ TEXT("New troops from your barracks and ranges join this platoon and march to it."),
+				  FString::Printf(TEXT("One platoon at a time; up to %d troops (then they wait in the yard)."), UVLCommand::RallyPlatoonCap),
+				  TEXT("A building's own Joins choice comes first. Click again to clear.") });
+		}
+		if (SmallB[2].bClicked) { Click(); Command->SetRallyPlatoon(bRecruits ? INDEX_NONE : i); }
+		ButtonFrame(Small[3], SmallB[3], true);
+		Icon(EVLIcon::Disband, Small[3].Min.X + U(5.f), Small[3].Min.Y + U(5.f), SB - U(10.f));
+		if (SmallB[3].bHover) { SetTooltip(Small[3], TEXT("Disband"), { TEXT("Break up the platoon (the troops stay)."), TEXT("A platoon whose troops all fall disbands itself.") }); }
+		if (SmallB[3].bClicked) { Click(); Command->DisbandPlatoon(i); continue; }
 		if (SmallB[0].bHover) { SetTooltip(Small[0], FString::Printf(TEXT("Formation: %s"), UVLCommand::FormationName(Shape)), { TEXT("Click (or F with it selected): the next shape.") }); }
 		if (SmallB[1].bHover) { SetTooltip(Small[1], FString::Printf(TEXT("Stance: %s"), UVLCommand::StanceName(Stance)), { TEXT("Click (or G) to change.") }); }
 		if (SmallB[0].bClicked || SmallB[0].bRightClicked) { Click(); Command->CyclePlatoonFormation(i); }
@@ -1553,7 +1578,7 @@ void AVLHUD::DrawPlatoonPanel()
 			LastSlotClickTime = Now;
 			King->SelectPlatoon(i, bDouble);
 		}
-		if (RB.bHover && !SmallB[0].bHover && !SmallB[1].bHover && !SmallB[2].bHover)
+		if (RB.bHover && !SmallB[0].bHover && !SmallB[1].bHover && !SmallB[2].bHover && !SmallB[3].bHover)
 		{
 			SetTooltip(Row, KindName(Info.Swords, Info.Archers, Info.Kings, Info.Others), { FString::Printf(TEXT("%d troops  ·  %d%% health  ·  %s  ·  %s"), Info.Members.Num(), FMath::RoundToInt(Info.Health * 100.f),
 				UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance)),
@@ -1590,14 +1615,18 @@ void AVLHUD::DrawHeroBits()
 			Sel.Remove(King);
 			FString Hint;
 			FLinearColor HintCol = GoldBright;
+			TArray<AVLKing*> Commanded;
+			King->HeroCommanded(Commanded);
 			if (King->IsHeroHoverSelect())
 			{
-				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? TEXT("Click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift+click: let go)")
-					: TEXT("Click: select ") + Aimed->GetDisplayName());
+				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? TEXT("Option+click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift+Option+click: let go)")
+					: TEXT("Option+click: select ") + Aimed->GetDisplayName());
 			}
-			else if (Sel.Num() > 0 && Battle && Battle->IsHostile(Aimed, King->Team))
+			else if (Commanded.Num() > 0 && Battle && Battle->IsHostile(Aimed, King->Team))
 			{
-				Hint = FString::Printf(TEXT("%s: attack %s"), King->bRightMouseAims ? TEXT("Ctrl+click") : TEXT("Right click"), *Aimed->GetDisplayName());
+				// (the right click orders the selection only)
+				Hint = FString::Printf(TEXT("Option+click%s: attack %s   ·   Shift: after the last"), Sel.Num() > 0 ? (King->bRightMouseAims ? TEXT(" / Ctrl+click") : TEXT(" / right click")) : TEXT(""),
+					*Aimed->GetDisplayName());
 				HintCol = Refuse;
 			}
 			if (!Hint.IsEmpty())
@@ -1660,10 +1689,14 @@ void AVLHUD::DrawHeroBits()
 		{
 			const int32 P = Command ? Command->PlatoonIndexOf(King) : INDEX_NONE;
 			const bool bLeads = P != INDEX_NONE && Command->GetPlatoonLeader(P) == King;
-			const TCHAR* OrderKey = King->bRightMouseAims ? TEXT("Ctrl+click") : TEXT("Right click");
+			bool bFollowers = false;
+			TArray<AVLKing*> Commanded;
+			King->HeroCommanded(Commanded, &bFollowers);
 			Commanding = Sel.Num() > 0
-				? FString::Printf(TEXT("Commanding %d  ·  %s: move / attack  ·  G: follow me  ·  Alt+click ground: let go"), Sel.Num(), OrderKey)
-				: FString(TEXT("Click a troop under the crosshair (or 1-6) to command it"));
+				? FString::Printf(TEXT("Commanding %d  ·  Option+click: attack / move (Shift: queue)  ·  G: follow me  ·  Esc: let go"), Sel.Num())
+				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  Option+click: attack / move (Shift: queue)"), Commanded.Num())
+				: (Commanded.Num() > 0 ? FString::Printf(TEXT("Your platoon (%d)  ·  Option+click: attack / move (Shift: queue)  ·  G: follow me"), Commanded.Num())
+				: FString(TEXT("Option+click a troop under the crosshair (or 1-6) to command it"))));
 			if (bLeads)
 			{
 				Commanding = FString::Printf(TEXT("Leader of platoon %d  ·  "), P + 1) + Commanding;
@@ -1713,8 +1746,8 @@ void AVLHUD::DrawHeroBits()
 					? TEXT("WASD move   Shift run   Space jump   Hold right mouse: look through the spyglass (far ahead)   Left click: a light blow   Tab overview   Esc menu")
 					: (King->GetKind() == TEXT("Builder")
 						? TEXT("WASD move   Shift run   Space jump   Left click: swing the hammer   Tab overview (select the king + Enter to go back to him)   Esc menu")
-						: TEXT("WASD move   Shift run   Space jump   Left click swing   Tab overview (select the king + Enter to go back to him)   Esc menu"))))
-			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   Tab overview   Esc menu");
+						: TEXT("WASD move   Shift run   Space jump   Left click swing   Option+click select / command   Tab overview (select the king + Enter to go back to him)   Esc menu"))))
+			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   Option+click select / command (Shift: queue)   Tab overview   Esc menu");
 		const float P = U(15.f);
 		const float W = TextSize(Help, P).X + U(32.f), H = U(32.f);
 		const FBox2D Box(FVector2D(FMath::RoundToFloat((View.X - W) * 0.5f), View.Y - U(14.f) - H), FVector2D(FMath::RoundToFloat((View.X + W) * 0.5f), View.Y - U(14.f)));
