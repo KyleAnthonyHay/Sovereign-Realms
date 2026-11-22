@@ -1,14 +1,20 @@
-"""A second level of detail for the tall trees: SM_Tree2_<A..D>_Trunk_L1 / _Leaves_L1.
+"""The tall trees' further levels of detail: SM_Tree2_<A..D>_Leaves_L1, _Leaves_L2 and _Trunk_L2.
 
     Blender -b --factory-startup --python Tools/blender/assets/tree_lods.py -- [--only A,B] [--render]
 
 A forest of the full trees is far too much to draw (a D is 10k faces, an A 100k). Each tree is read back from its own
 exported mesh (SourceArt/Meshes/SM_Tree2_<k>_<part>.gltf, so trees_tall.py does not have to be run again) and built
-again out of blocks twice the size: crowns of half-metre cubes (the trees' are 0.25 m), trunks of 0.25 m voxels
-(0.125 m). A block is solid where at least two of the eight voxels it replaces showed a face, plus whatever those
-enclose; it takes their commonest material and their mean colour. About a tenth of the faces. The textures are laid
-out in world space, so from where the engine switches to it (some 40 m: Tools/ue/tree_lods.py makes it LOD 1 of the
-tree's mesh) the difference is the size of the crown's lumps, not its colour.
+again out of blocks:
+  _Leaves_L1   the crown at its OWN scale, 0.25 m leaf cubes: the 0.125 m lace and notches cut into its surface cubes
+               become whole cubes again. The same silhouette and the same size of lump as the tree up close, a third
+               to two fifths of the faces. What the overview draws at its usual zoom (owner's rule, 2026-11-21: no
+               coarse version where the player normally looks, References/Remake/lod_coarse_bad.png).
+  _Leaves_L2   crowns of half-metre cubes, about a tenth of the faces,
+  _Trunk_L2    trunks of 0.25 m voxels (theirs are 0.125 m): only far away, where a half-metre is a pixel or two.
+A block is solid where enough of the voxels it replaces showed a face (one of one; two of eight), plus whatever those
+enclose; it takes their commonest material and their mean colour. The textures are laid out in world space, so the
+difference is the size of the crown's lumps, not its colour. Tools/ue/tree_lods.py makes them LOD 1 / LOD 2 of the
+tree's meshes and sets where each is drawn.
 """
 import os
 import sys
@@ -20,7 +26,8 @@ from voxlib import Vox, IDS, MATS
 import bpy
 
 FINE = {"Trunk": 0.125, "Leaves": 0.25}        # the voxel the tree was made of
-MIN_SHOWING = {"Trunk": 2, "Leaves": 2}        # how many of a block's eight voxels must have shown a face
+# the levels: (part, suffix, how many fine voxels a block is on a side, how many of them must have shown a face)
+LEVELS = [("Leaves", "_L1", 1, 1), ("Leaves", "_L2", 2, 2), ("Trunk", "_L2", 2, 2)]
 
 
 def lin_to_srgb(c):
@@ -73,19 +80,19 @@ def read(path):
     return inside, col, mats[np.clip(mi, 0, len(mats) - 1)], names
 
 
-def rebuild(kind, part):
+def rebuild(kind, part, suffix="_L2", k=2, min_showing=2):
     name = "SM_Tree2_%s_%s" % (kind, part)
     inside, col, mat, slots = read(os.path.join(V.MESHES, name + ".gltf"))
     f = FINE[part]
-    v = f * 2.0
+    v = f * k
     lo = np.floor(inside.min(axis=0) / v) * v - v
     fi = np.floor((inside - lo) / f).astype(np.int64)                       # the voxel each face belonged to
-    nf = (fi.max(axis=0) + 1 + 3) // 2 * 2
+    nf = (fi.max(axis=0) + 1 + k + 1) // k * k
     fine = np.zeros(tuple(nf), bool)
     fine[fi[:, 0], fi[:, 1], fi[:, 2]] = True
-    n = tuple(int(x) // 2 for x in nf)
-    showing = fine.reshape(n[0], 2, n[1], 2, n[2], 2).sum(axis=(1, 3, 5))
-    solid = showing >= MIN_SHOWING[part]
+    n = tuple(int(x) // k for x in nf)
+    showing = fine.reshape(n[0], k, n[1], k, n[2], k).sum(axis=(1, 3, 5))
+    solid = showing >= min_showing
     # what the shell encloses: everything the outside cannot reach
     outside = np.zeros(n, bool)
     outside[0], outside[-1], outside[:, 0], outside[:, -1], outside[:, :, 0], outside[:, :, -1] = True, True, True, True, True, True
@@ -100,7 +107,7 @@ def rebuild(kind, part):
         outside = grow
     filled = ~outside
     # colour and material of each block: from the faces that fell in it
-    ci = fi // 2
+    ci = fi // k
     flat = (ci[:, 0] * n[1] + ci[:, 1]) * n[2] + ci[:, 2]
     cnt = np.bincount(flat, minlength=n[0] * n[1] * n[2]).astype(np.float32)
     rgb = np.stack([np.bincount(flat, weights=col[:, k], minlength=len(cnt)) for k in range(3)], axis=1) / np.maximum(cnt, 1.0)[:, None]
@@ -111,7 +118,7 @@ def rebuild(kind, part):
     rgb = rgb.reshape(n + (3,))
     mean = col.mean(axis=0)
     main = np.uint8(max(ids, key=lambda i: int((mat == i).sum())))
-    vox = Vox(n[0], n[1], n[2], v, origin=tuple(float(x) for x in (-lo / v)), name=name + "_L1", seed=3)
+    vox = Vox(n[0], n[1], n[2], v, origin=tuple(float(x) for x in (-lo / v)), name=name + suffix, seed=3)
     vox.m[:] = np.where(filled, np.where(have, best, main), 0)
     vox.c[:] = np.round(lin_to_srgb(np.where(have[..., None], rgb, mean[None, None, None, :])) * 255.0).astype(np.uint8)
     V.reset_scene()
@@ -120,23 +127,25 @@ def rebuild(kind, part):
     names = [s if s in slots else ("bark" if "bark" in slots else slots[0]) for s in a["slots"]]
     uniq = [s for s in slots if s in names]
     remap = np.array([uniq.index(s) for s in names], np.int32)
-    ob = V.mesh_object(name + "_L1", a["verts"], a["uvs"], a["cols"], a["tris"], remap[a["slot"]], uniq, [], None, a["alpha"])
+    ob = V.mesh_object(name + suffix, a["verts"], a["uvs"], a["cols"], a["tris"], remap[a["slot"]], uniq, [], None, a["alpha"])
     V.export_gltf(ob, collision="none")
-    print("LOD %s: %d triangles -> %d faces (%d blocks of %.3f m); slots %s" % (name, len(inside), ob["voxel_faces"], int(filled.sum()), v, slots))
+    print("LOD %s%s: %d triangles -> %d faces (%d blocks of %.3f m); slots %s" % (name, suffix, len(inside), ob["voxel_faces"], int(filled.sum()), v, slots))
     return ob
 
 
 def main():
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     only = args[args.index("--only") + 1].split(",") if "--only" in args else list("ABCD")
-    for k in only:
-        for part in ("Trunk", "Leaves"):
-            rebuild(k, part)
+    for kind in only:
+        for (part, suffix, k, m) in LEVELS:
+            rebuild(kind, part, suffix, k, m)
     if "--render" in args:
         V.reset_scene()
         for i, k in enumerate(only):
             for part in ("Trunk", "Leaves"):
-                for j, suffix in enumerate(("", "_L1")):
+                for j, suffix in enumerate(("", "_L1", "_L2")):
+                    if not os.path.exists(os.path.join(V.MESHES, "SM_Tree2_%s_%s%s.gltf" % (k, part, suffix))):
+                        continue
                     bpy.ops.import_scene.gltf(filepath=os.path.join(V.MESHES, "SM_Tree2_%s_%s%s.gltf" % (k, part, suffix)))
                     for o in bpy.context.selected_objects:
                         o.location.x += i * 18.0

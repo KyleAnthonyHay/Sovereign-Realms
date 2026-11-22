@@ -1,11 +1,11 @@
 {
  "name": "SM_FarmerMan_Head",
- "faces": 3357,
+ "faces": 3151,
  "collision": "none",
  "bounds": [
   [
    -0.2062,
-   -0.1764,
+   -0.155,
    -0.0059
   ],
   [
@@ -22,6 +22,6 @@
  ],
  "part": "Head",
  "parent": "Chest",
- "triangles": 6714,
- "blocks": 289
+ "triangles": 6303,
+ "blocks": 272
 }

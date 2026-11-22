@@ -1,7 +1,7 @@
 #!/bin/sh
 # Rebuild the realm (L_Realm) end to end (editor open, not in PIE):  sh Tools/realm_rebuild.sh [layout]
-#   (no argument) ground + water + sea + backdrop + far woods + barriers + plan in Blender, import them, build /Game/Maps/L_Realm
-#   trees         the tall trees' second level of detail (Tools/blender/assets/tree_lods.py -> LOD 1 of SM_Tree2_*) and the small plants'
+#   (no argument) ground + water + sea + backdrop + barriers + plan in Blender, import them, build /Game/Maps/L_Realm
+#   trees         the tall trees' further levels of detail (Tools/blender/assets/tree_lods.py -> LOD 1, 2 of SM_Tree2_*) and the small plants'
 #                 (Tools/ue/plant_lods.py): once, and after importing the trees or the plants again
 #   layout        only the plan changed (things moved, no ground, water or hazard changed): realm.json + the level, no import
 # The balance report (walking distances from each castle) needs scipy: it is measured with the tools' python first and
@@ -14,7 +14,7 @@ if [ "$1" = "trees" ]; then
     "$B" -b --factory-startup --python "$ROOT/Tools/blender/assets/tree_lods.py" 2>&1 | grep -E "^LOD|Traceback|Error"
     python3 "$ROOT/Tools/ue_py.py" -c "
 ROOT = r'$ROOT'
-PARTS = ['meshes']; ONLY = ['SM_Tree2_%s_%s_L1' % (k, p) for k in 'ABCD' for p in ('Trunk', 'Leaves')]
+PARTS = ['meshes']; ONLY = ['SM_Tree2_%s_%s' % (k, p) for k in 'ABCD' for p in ('Leaves_L1', 'Leaves_L2', 'Trunk_L2')]
 exec(open(ROOT + '/Tools/ue/import_assets.py').read())" 600 | tail -1
     python3 "$ROOT/Tools/ue_py.py" "$ROOT/Tools/ue/tree_lods.py" 600
     python3 "$ROOT/Tools/ue_py.py" "$ROOT/Tools/ue/plant_lods.py" 600      # the grass, flowers and bushes: their cheap far version
@@ -28,7 +28,7 @@ else
     python3 "$ROOT/Tools/ue_py.py" -c "
 import json
 ROOT = r'$ROOT'
-PARTS = ['meshes']; ONLY = json.load(open(ROOT + '/SourceArt/Meshes/realm_tiles.json')) + ['SM_RealmWater', 'SM_RealmSea', 'SM_RealmBackdrop', 'SM_RealmWoods', 'SM_RealmBarrier']
+PARTS = ['meshes']; ONLY = json.load(open(ROOT + '/SourceArt/Meshes/realm_tiles.json')) + ['SM_RealmWater', 'SM_RealmSea', 'SM_RealmBackdrop', 'SM_RealmBarrier']
 exec(open(ROOT + '/Tools/ue/import_assets.py').read())" 2400 | tail -1
 fi
 python3 "$ROOT/Tools/ue_py.py" "$ROOT/Tools/ue/build_realm.py" 2400 | tail -1

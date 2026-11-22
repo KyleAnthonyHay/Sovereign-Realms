@@ -1,0 +1,21 @@
+{
+ "name": "SM_Boat_L1",
+ "faces": 15372,
+ "collision": "none",
+ "bounds": [
+  [
+   -7.5,
+   -2.875,
+   -0.75
+  ],
+  [
+   7.625,
+   2.5,
+   8.625
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Boat",
+ "voxel": 0.125,
+ "triangles": 30744
+}

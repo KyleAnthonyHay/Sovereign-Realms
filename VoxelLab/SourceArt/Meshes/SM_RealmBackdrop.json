@@ -1,11 +1,11 @@
 {
  "name": "SM_RealmBackdrop",
- "faces": 152386,
+ "faces": 141188,
  "collision": "none",
  "bounds": [
   [
-   -382.0,
-   -340.0,
+   -180.0,
+   -118.0,
    -8.5
   ],
   [

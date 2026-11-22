@@ -1,0 +1,18 @@
+{
+ "name": "SM_RealmV2Backdrop",
+ "faces": 521527,
+ "collision": "none",
+ "bounds": [
+  [
+   -600.0,
+   -600.0,
+   -7.0
+  ],
+  [
+   600.0,
+   600.0,
+   163.0
+  ]
+ ],
+ "lights": []
+}

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Rebuild the highlands (L_Highlands) end to end (editor open, not in PIE):  sh Tools/highland_rebuild.sh [layout]
-#   (no argument) ground + water + sea + backdrop + far woods + barriers + plan in Blender, import them, build /Game/Maps/L_Highlands
+#   (no argument) ground + water + sea + backdrop + barriers + plan in Blender, import them, build /Game/Maps/L_Highlands
 #   layout        only the plan changed (things moved, no ground, water or hazard changed): highland.json + the level, no import
 #   blender       only the Blender part (no editor needed): the meshes and the plan
 # The tall trees' second level of detail is the realm's (sh Tools/realm_rebuild.sh trees).
@@ -19,7 +19,7 @@ else
     python3 "$ROOT/Tools/ue_py.py" -c "
 import json
 ROOT = r'$ROOT'
-PARTS = ['meshes']; ONLY = json.load(open(ROOT + '/SourceArt/Meshes/highland_tiles.json')) + ['SM_HighlandWater', 'SM_HighlandSea', 'SM_HighlandBackdrop', 'SM_HighlandWoods', 'SM_HighlandBarrier']
+PARTS = ['meshes']; ONLY = json.load(open(ROOT + '/SourceArt/Meshes/highland_tiles.json')) + ['SM_HighlandWater', 'SM_HighlandSea', 'SM_HighlandBackdrop', 'SM_HighlandBarrier']
 exec(open(ROOT + '/Tools/ue/import_assets.py').read())" 3600 | tail -1
 fi
 python3 "$ROOT/Tools/ue_py.py" "$ROOT/Tools/ue/build_highland.py" 3600 | tail -1

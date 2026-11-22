@@ -1,11 +1,11 @@
 {
  "name": "SM_RealmBarrier",
- "faces": 4210,
+ "faces": 5350,
  "collision": "complex",
  "bounds": [
   [
-   -200.5,
-   -200.0,
+   -187.0,
+   -202.0,
    -8.5
   ],
   [

@@ -1,13 +1,11 @@
 """The highlands' ground, water, backdrop and barriers (the second battle map, L_Highlands). As assets/realm_terrain.py,
 which this was written from.
 
-    Blender -b --factory-startup --python Tools/blender/assets/highland_terrain.py -- [--no-render] [--only ground,water,sea,backdrop,woods,barrier]
+    Blender -b --factory-startup --python Tools/blender/assets/highland_terrain.py -- [--no-render] [--only ground,water,sea,backdrop,barrier]
 
 Reads the plan from highland_layout.py (heights, surfaces and the hazard map on the quarter-block grid) and exports
   SM_HighlandGround_<i>_<j>  27 m tiles of the ground (the open sea bed is left out: the level puts one flat slab there).
                           Meshed in 54 m blocks; flat faces are joined two by two where nothing tells them apart
-  SM_HighlandWoods        the forest where nobody can go (the peaks' feet, the spurs, the highland, the ridge): trees of
-                          1 m blocks, one mesh, no collision. The woods people walk through are real trees
   SM_HighlandWater        the river: the upper reach, the great fall, the gorge and its two channels round the Crown,
                           the second fall, the last reach, the third fall into the sea
   SM_HighlandSea          the sea, one sheet of 2 m voxels, 1140 m square (holes under the land)
@@ -33,10 +31,12 @@ TILE = 27.0
 BLOCK = 54.0         # the ground is meshed in blocks of this size (2 x 2 tiles)
 FAR = 570.0          # the sea and the backdrop reach this far from the middle
 BV = 2.0             # the backdrop's and the sea's voxel
-WV = 1.0             # the far woods' voxel
 WALL_TOP = L.TOP + 3.0
-FAR_ISLES = [(-360, -80, 10, 8), (-340, -360, 13, 12), (-90, -400, 9, 7), (190, -380, 12, 10), (-420, 130, 11, 9), (400, -320, 10, 8),
-             (-350, 260, 8, 6), (40, -330, 7, 6), (-320, -200, 8, 7), (380, -80, 11, 9), (330, -180, 8, 7), (-330, 420, 9, 7)]
+# (the rock stacks that stood out at sea here, in the backdrop's 2 m blocks, read as a coarse version of the islands up
+# close: References/Remake/lod_coarse_bad.png, owner 2026-11-21. The islands are the plan's ISLETS, in the ground's own
+# quarter blocks.)
+FAR_ISLES = []
+NEAR_BARE = 70.0     # metres beyond the playable edge with no 2 m leaf blocks (they read as coarse trees from the overview)
 BACK_TOP = 150.0     # the backdrop's mountains are cut off here
 
 
@@ -181,57 +181,6 @@ def build_terrain(G, s):
             yield a
 
 
-def build_woods(G, s):
-    """The forest where nobody can go: trees of 1 m blocks (a log of two or three, a crown of leaves) on the grass of the
-    mountain, the highland and the ridge. One mesh without collision; the level's SM_HighlandWoods."""
-    k = int(round(WV / L.CELL))
-    n = L.N // k
-    h, R = G["h"], G["R"]
-    wild = G["wild"] & ~R["spire"] & G["land"] & ~G["path"] & ~G["wet"]
-    for key in L.BUILD:
-        wild &= ~L.in_rect(G["X"], G["Y"], L.footprint(key, 5.0)[:4])
-    wild &= ~dilate(~G["wild"], 10)                                         # (not hanging over the ground people walk on)
-
-    def blocks(arr, f):
-        return f(f(arr.reshape(n, k, n, k), axis=3), axis=1)
-
-    ok = blocks(wild, np.all) & (blocks(h, np.max) - blocks(h, np.min) <= 0.5) & (blocks((s == L.GRASS) | (s == L.MOSSY), np.mean) > 0.5)
-    hb = np.floor(blocks(h, np.min) + 1e-3)
-    ok &= hb < 27.0                                                         # (bare rock higher up)
-    a = -L.HALF + (np.arange(n) + 0.5) * WV
-    X, Y = np.meshgrid(a, a, indexing="ij")
-    dense = L.noise2(X, Y, 26.0, 311)
-    I, J = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
-    # one candidate in every 3 x 3 m: trees keep apart without a search
-    pick = (I % 3 == (L.hash2(I // 3, J // 3, 41) * 3).astype(int)) & (J % 3 == (L.hash2(I // 3, J // 3, 43) * 3).astype(int))
-    tree = ok & pick & (L.hash2(I, J, 47) < 0.35 + dense * 0.9)
-    z0 = -9.0
-    nz = int(L.TOP - z0 + 10)
-    w = Vox(n, n, nz, WV, origin=(n / 2.0, n / 2.0, -z0 / WV), name="highland_woods", seed=5)
-    greens = ["#4f8a35", "#5d9a3c", "#467a30", "#6aa544"]
-    count = 0
-    for (i, j) in np.argwhere(tree):
-        if i < 3 or j < 3 or i > n - 4 or j > n - 4:
-            continue
-        r1, r2 = float(L.hash2(np.array(i), np.array(j), 53)), float(L.hash2(np.array(i), np.array(j), 59))
-        zb = int(hb[i, j] - z0)
-        th = 2 + int(r1 * 2.99)                                             # the log: 2 .. 4 blocks
-        col = greens[int(r2 * 3.99)]
-        w.box(i, j, zb - 1, i + 1, j + 1, zb + th, "log", "#6b4a2c")
-        big = r1 > 0.55
-        if big:                                                             # a skirt of leaves, its corners knocked off
-            w.box(i - 2, j - 1, zb + th - 1, i + 3, j + 2, zb + th, "leaves", col)
-            w.box(i - 1, j - 2, zb + th - 1, i + 2, j + 3, zb + th, "leaves", col)
-        w.box(i - 1, j - 1, zb + th, i + 2, j + 2, zb + th + (2 if big else 1), "leaves", col)
-        w.box(i - 1, j, zb + th + (2 if big else 1), i + 2, j + 1, zb + th + (3 if big else 2), "leaves", col)
-        w.box(i, j - 1, zb + th + (2 if big else 1), i + 1, j + 2, zb + th + (3 if big else 2), "leaves", col)
-        if r2 > 0.5:
-            w.box(i, j, zb + th + (3 if big else 2), i + 1, j + 1, zb + th + (4 if big else 3), "leaves", col)
-        count += 1
-    print("far woods: %d trees" % count)
-    return w
-
-
 def build_water(G):
     """The fresh water on the quarter-block grid: each sheet's surface a quarter block below its banks, and the falls.
     Meshed in 60 m pieces (the river runs the whole length of the map, 65 layers deep) and joined into one mesh."""
@@ -351,7 +300,7 @@ def build_backdrop(G):
     b.where(solid & (depth <= 1) & snow[:, :, None], "paint", "#f2f6fb")
     # the distant forest: blocks of leaves on the wooded slopes (two tints)
     hh = L.hash2(np.floor(X / BV), np.floor(Y / BV), 77)
-    wooded = land & ~rock & ~snow & (hz < 48.0) & (L.noise2(X, Y, 22.0, 211) > 0.36)
+    wooded = land & ~rock & ~snow & (hz < 48.0) & (L.noise2(X, Y, 22.0, 211) > 0.36) & (e > NEAR_BARE)
     for (lo, hi, tall, col) in ((0.5, 0.78, 1, "#5d8f3a"), (0.78, 1.01, 2, "#4c7d33")):
         tree = wooded & (hh >= lo) & (hh < hi)
         b.where(tree[:, :, None] & (K >= top[:, :, None]) & (K < top[:, :, None] + tall), "leaves", col)
@@ -431,7 +380,7 @@ def bpy_remove(ob):
 
 def main():
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    only = args[args.index("--only") + 1].split(",") if "--only" in args else ["ground", "water", "sea", "backdrop", "woods", "barrier"]
+    only = args[args.index("--only") + 1].split(",") if "--only" in args else ["ground", "water", "sea", "backdrop", "barrier"]
     V.reset_scene()
     layout, G, s = L.build()
     report = []
@@ -463,10 +412,6 @@ def main():
         bob.name = bob.data.name = "SM_HighlandBackdrop"
         V.export_gltf(bob, collision="none")
         report.append("backdrop %d faces" % bob["voxel_faces"])
-    if "woods" in only:
-        wob = build_woods(G, s).to_object("SM_HighlandWoods")
-        V.export_gltf(wob, collision="none")
-        report.append("far woods %d faces" % wob["voxel_faces"])
     if "barrier" in only:
         V.export_gltf(build_barrier(G), collision="complex")
     print("highland terrain: " + "; ".join(report))

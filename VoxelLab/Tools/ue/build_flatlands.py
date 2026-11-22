@@ -3,8 +3,10 @@ side by side on a flat field, with its name in front, the same light and look as
 
     python3 Tools/ue_py.py Tools/ue/build_flatlands.py
 
-The ground tiles SM_Flat_* must be imported first:
-    python3 Tools/ue_py.py -c "PARTS=['meshes']; ONLY=[...the names in SourceArt/Meshes/flat_tiles.json...]; exec(open(r'<abs>/Tools/ue/import_assets.py').read())"
+The ground tiles SM_Flat_* and the pond's water SM_FlatPond must be imported first:
+    python3 Tools/ue_py.py -c "PARTS=['meshes']; ONLY=[...the names in SourceArt/Meshes/flat_tiles.json..., 'SM_FlatPond']; exec(open(r'<abs>/Tools/ue/import_assets.py').read())"
+The line-up's figures are the units' own parts (/Game/Voxel/King, /Game/Voxel/Troops/<Kind>: import_king.py), each
+placed at its pivot, static, in the pose it was modelled in.
 """
 import json
 import math
@@ -16,6 +18,7 @@ ROOT = os.path.abspath(unreal.Paths.project_dir())
 L = {"NO_MAIN": True, "__name__": "build_level"}
 exec(open(os.path.join(ROOT, "Tools", "ue", "build_level.py")).read(), L)
 L["MAP"] = "/Game/Maps/L_Flatlands"
+L["SELECTABLE"].update({"SM_Treasury": "Treasury", "SM_Granary": "Granary"})
 SRC = L["SRC"]
 vec, spawn, place, lamps = L["vec"], L["spawn"], L["place"], L["lamps"]
 eas, eal, les = L["eas"], L["eal"], L["les"]
@@ -58,6 +61,49 @@ def label(lb):
         plinth.static_mesh_component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
 
 
+def water(name):
+    """The pond's water: no collision but queries (as the realm's river: tag Water)."""
+    a = place(name, 0, 0, 0, folder="Ground")
+    if a is None:
+        return None
+    a.tags = [unreal.Name("Water")]
+    c = a.static_mesh_component
+    c.set_editor_property("use_default_collision", False)
+    c.set_collision_enabled(unreal.CollisionEnabled.QUERY_ONLY)
+    c.set_collision_object_type(unreal.CollisionChannel.ECC_WORLD_DYNAMIC)
+    c.set_collision_response_to_all_channels(unreal.CollisionResponseType.ECR_IGNORE)
+    c.set_editor_property("cast_shadow", False)
+    return a
+
+
+def figure(fg):
+    """One figure of the line-up: each of its parts (its mesh's origin is its joint) at its pivot, in the pose it was
+    modelled in, facing -Y (Unreal +Y: toward the road and the camera). No collision. A small name in front."""
+    x, y, z = fg["pos"]
+    n = 0
+    for pt in fg["parts"]:
+        path = fg["folder"] + "/" + pt["mesh"]
+        sm = eal.load_asset(path) if eal.does_asset_exist(path) else None
+        if sm is None:
+            continue
+        px, py, pz = pt["pivot"]
+        a = eas.spawn_actor_from_object(sm, vec(x + px, y + py, z + pz), unreal.Rotator(roll=0, pitch=0, yaw=0))
+        a.set_folder_path("Lineup/" + fg["name"])
+        c = a.static_mesh_component
+        c.set_mobility(unreal.ComponentMobility.STATIC)
+        c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+        n += 1
+    t = spawn(unreal.TextRenderActor, vec(x, y - 1.1, z + 0.05), unreal.Rotator(roll=0, pitch=60.0, yaw=90.0), "Name " + fg["name"], "Lineup")
+    tr = t.text_render
+    tr.set_editor_property("text", fg["name"])
+    tr.set_editor_property("world_size", 26.0)
+    tr.set_editor_property("horizontal_alignment", unreal.HorizTextAligment.EHTA_CENTER)
+    tr.set_editor_property("vertical_alignment", unreal.VerticalTextAligment.EVRTA_TEXT_BOTTOM)
+    tr.set_editor_property("text_render_color", unreal.Color(r=255, g=226, b=150, a=255))
+    tr.set_editor_property("cast_shadow", False)
+    return n
+
+
 def bounds_walls(g):
     cube = eal.load_asset("/Engine/BasicShapes/Cube")
     hw, hd, cy = g["w"] / 2.0 - 1.0, g["d"] / 2.0 - 1.0, g["cy"]
@@ -82,6 +128,8 @@ def main():
     camera(plan)
     for t in json.load(open(os.path.join(SRC, "Meshes", "flat_tiles.json"))):
         place(t, 0, 0, 0, folder="Ground")
+    if plan.get("water"):
+        water(plan["water"]["mesh"])
     placed, nl, missing = 0, 0, set()
     for it in plan["instances"]:
         x, y, z = it["pos"]
@@ -94,9 +142,11 @@ def main():
         nl += lamps(it["mesh"], x, y, z, it.get("yaw", 0.0), sc, "Lamps")
     for lb in plan["labels"]:
         label(lb)
+    nf = sum(figure(fg) for fg in plan.get("figures", []))
     bounds_walls(plan["ground"])
     les.save_current_level()
-    print("flatlands built: %d placed, %d lamps, %d labels, missing: %s" % (placed, nl, len(plan["labels"]), ", ".join(sorted(missing)) or "none"))
+    print("flatlands built: %d placed, %d lamps, %d labels, %d figures (%d parts), missing: %s" % (
+        placed, nl, len(plan["labels"]), len(plan.get("figures", [])), nf, ", ".join(sorted(missing)) or "none"))
 
 
 main()

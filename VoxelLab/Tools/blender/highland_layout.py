@@ -53,6 +53,8 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import highland_cam as C
 import minehill
+import softground
+import wildwoods
 import town_layout as T
 from town_layout import hash2, noise2, seg_dist, dist_polyline, in_poly, in_rect, meta, rot
 
@@ -89,12 +91,18 @@ def MR(r):
 # ---------------------------------------------------------------------------------------------------- the plan
 
 # the coast: the land's outline (it runs off the map to the north and, north of y = 100, to the east)
-COAST = [(-244, 300), (300, 300), (300, 104), (246, 100), (242, 80), (241, 64), (241, 40), (245, 10), (240, -30), (246, -70), (238, -110),
+COAST = [(-244, 300), (300, 300), (300, 104), (246, 100), (242, 80), (241, 64), (241, 40), (245, 10), (232, -2), (232, -28), (240, -30), (246, -70), (238, -110),
          (244, -150), (236, -190), (222, -214), (196, -228), (160, -236), (120, -232), (80, -238), (40, -234), (0, -238), (-40, -234),
          (-80, -238), (-120, -234), (-160, -238), (-200, -234), (-226, -222), (-240, -196), (-244, -160), (-240, -120), (-242, -80),
-         (-241, -60), (-241, -44), (-246, -10), (-240, 30), (-246, 70), (-240, 110), (-246, 150), (-240, 190), (-244, 230), (-240, 262)]
-ISLETS = [(-258, -150, 5.0), (-257, 20, 4.0), (-140, -257, 5.5), (-20, -258, 6.0), (100, -256, 6.5), (200, -250, 5.0), (258, -130, 5.0),
-          (257, -20, 4.5), (-258, 180, 4.5)]
+         (-241, -60), (-241, -44), (-246, -10), (-232, 2), (-232, 28), (-240, 30), (-246, 70), (-240, 110), (-246, 150), (-240, 190), (-244, 230), (-240, 262)]
+# The islands off the coast (x, y, half size): rounded squares, flat on top at the land's level (References/Remake/
+# lod_detail_good.png: grass, a band of dirt over stone, rocks at the waterline). The first two, one off each side's
+# coast (each other's half turn), are big enough for a barracks (its 19 x 18 m yard) and each is reached by a footbridge
+# from a little bay in its side's cliff (SEA_BRIDGES); nobody reaches the others. (They were rocks of 4 to 6.5 m with
+# a tree each; the sea inside the map's edge is too narrow for more big ones.)
+ISLETS = [(-253.0, 15.0, 15.0), (253.0, -15.0, 15.0), (-140.0, -254.0, 10.0), (-20.0, -255.0, 10.0), (100.0, -254.0, 10.0),
+          (200.0, -251.0, 9.0), (-258.0, -150.0, 7.0), (258.0, -130.0, 7.0), (-258.0, 180.0, 7.0)]
+SEA_BRIDGES = [(-235.0, 15.0, 90.0), (235.0, -15.0, 90.0)]       # SM_Bridge (7 m): its middle, its yaw (90: east-west)
 
 # ---- each side's ground. The two sides are NOT each other's mirror: each has the same kinds of things (a bluff to build
 # on with one stair and the second mine on top, a first mine with its tower, a spur with a pass, a far country with a
@@ -553,9 +561,16 @@ def heights():
     rag = (noise2(X, Y, 6.0, 11) - 0.5) * 3.0 + (noise2(X, Y, 24.0, 12) - 0.5) * 7.0
     for (d, _yaw, _s) in DOCKS:                                             # (the docks' cliffs are where the plan says)
         rag = rag * np.clip((np.hypot(X - d[0], Y - d[1]) - 9.0) / 10.0, 0.0, 1.0)
+    for (bx, by, _yaw) in SEA_BRIDGES:                                      # (and the sea bridges' ends)
+        rag = rag * np.clip((np.hypot(X - bx, Y - by) - 9.0) / 10.0, 0.0, 1.0)
     dc = sdist(X, Y, COAST) + rag                                           # > 0 on the land, metres from the coast
+    isle = np.full(X.shape, -1e9)
     for (ix, iy, r) in ISLETS:
-        dc = np.maximum(dc, r - np.hypot(X - ix, Y - iy) + rag * 0.5)
+        isle = np.maximum(isle, softground.islet(X, Y, ix, iy, r, rag * 0.25))
+    dc = np.maximum(dc, isle)
+    sea_cor = np.zeros(X.shape, bool)
+    for (bx, by, byaw) in SEA_BRIDGES:                                      # the sea bridges' decks and their landings
+        sea_cor |= softground.bridge_rect(X, Y, bx, by, byaw, 6.5, 1.5)
     for mr in mound_rects():                                                # (ground under the whole of a mine's hill, where the coast is near)
         dc = np.where(in_rect(X, Y, mr, 1.0), np.maximum(dc, 3.0), dc)
     land = dc > 0
@@ -606,8 +621,8 @@ def heights():
     open_ = ((meadow(X, Y) > 0.5) | R["bluff"] | R["mesa"] | R["shelf"]) & ~wild
     h = np.where((snoise(X, Y, 11.0, 51) > 0.6) & ~wild & ~open_, h + 0.5, h)
     h = np.where((snoise(X, Y, 4.5, 77) > 0.58) & ~(open_ & ~wild), h + 0.25, h)
-    for (ix, iy, r) in ISLETS:
-        h = np.where(np.hypot(X - ix, Y - iy) < r + 2.5, SEA + 3.25 + np.round(n1 * 2) * 0.5, h)
+    islet = isle > -2.5
+    h = np.where(islet, 0.0, h)                                             # (flat on top: to build on)
 
     # ---- the plots' terraces, the buildings' pads, the rock the mines are set in
     for (x0, y0, x1, y1, z, _k, _g) in PLOTS:
@@ -645,6 +660,8 @@ def heights():
     blk = hash2(np.floor((X + 0.4 * np.floor(Y / 1.5)) / 1.5), np.floor(Y / 1.5), 7)
     blk2 = hash2(np.floor(X / 0.75), np.floor(Y / 0.75), 9)
     keep = path | apron
+    for (bx, by, byaw) in SEA_BRIDGES:                                      # (no ragged ledges where a bridge lands)
+        keep |= softground.bridge_rect(X, Y, bx, by, byaw, 9.0, 3.0)
     for k in BUILD:
         keep |= in_rect(X, Y, footprint(k, 1.5))
     for mr in mound_rects():
@@ -662,7 +679,7 @@ def heights():
         h = np.where(wm, lvl - 0.75, h)
         h = np.where(wm & (d < -0.9), lvl - deep, h)
     # the bridges' feet stand on rock abutments built out from both banks (the stream runs between them)
-    corridor = np.zeros(X.shape, bool)
+    corridor = sea_cor.copy()
     abut = np.zeros(X.shape, bool)
     for (bx, by) in BRIDGES.values():
         corridor |= rect_mask(X, Y, bx, by, 4.25, 1.5)
@@ -694,7 +711,7 @@ def heights():
     return dict(X=X, Y=Y, h=h, land=land, dc=dc, sea=sea, rocks=rocks, path=path, psurf=psurf, psteps=psteps,
                 water_up=W["water_up"], water_mid=W["water_mid"], water_low=W["water_low"], wet=wet, pads=pads, island=island, isl_rock=stone,
                 cut=(cut1 | cut2 | shelf) & ~wet, hazard=hazard, corridor=corridor, deck=deck, d_river=d_any, R=R, wild=wild, open=open_ & ~wild,
-                abut=abut, rim=rim)
+                abut=abut, rim=rim, islet=islet & land)
 
 
 def surface(G):
@@ -791,8 +808,10 @@ class Scene(T.Scene):
             px, py = rot(pr["pos"][0], pr["pos"][1], yaw)
             self.add(pr["mesh"], x + px, y + py, yaw + float(pr.get("yaw", 0.0)), float(pr.get("scale", 1.0)), z=z + pr["pos"][2], group="props")
 
-    def tree(self, kind, x, y, yaw=0.0, scale=1.0, group="forest"):
-        super().tree(kind, x, y, yaw, scale, group)
+    def tree(self, kind, x, y, yaw=0.0, scale=1.0, group="forest", z=None):
+        r = {"A": 1.6, "B": 1.5, "C": 1.1, "D": 0.7}[kind] * scale
+        self.add("SM_Tree2_%s_Trunk" % kind, x, y, yaw, scale, z=z, dz=-0.15, group=group, r=r)
+        self.add("SM_Tree2_%s_Leaves" % kind, x, y, yaw, scale, z=z, dz=-0.15, group=group)
         self.trees.append((x, y, kind, scale))
 
 
@@ -840,6 +859,8 @@ def things(G, s):
             sc.add("SM_MineMound", x, y, yaw, z=z, group="rocks", tags=["MineMound"])
     for (bx, by) in BRIDGES.values():
         sc.add("SM_Bridge", bx, by, 90.0, z=0.04, group="buildings", team="Neutral")
+    for (bx, by, byaw) in SEA_BRIDGES:                                    # out to the two big islets
+        sc.add("SM_Bridge", bx, by, byaw, z=0.04, group="buildings", team="Neutral")
     sc.add("SM_PlazaBanner", PLAZA0[0], PLAZA0[1], z=0.0, r=1.3, team=0)
     sc.add("SM_PlazaBanner", PLAZA1[0], PLAZA1[1], z=0.0, r=1.3, team=1)
     moor = meta("SM_Dock").get("moor", [2.9, -5.9, -1.0, 90.0])
@@ -923,7 +944,7 @@ def things(G, s):
         for (x0, y0, x1, y1) in rects:
             if x0 - pad < x < x1 + pad and y0 - pad < y < y1 + pad:
                 return True
-        if any(math.hypot(x - bx, y - by) < 14.0 for (bx, by) in BRIDGES.values()):
+        if any(math.hypot(x - bx, y - by) < 14.0 for (bx, by) in list(BRIDGES.values()) + [b[:2] for b in SEA_BRIDGES]):
             return True
         return math.hypot(x - PLAZA0[0], y - PLAZA0[1]) < 5.5 or math.hypot(x - PLAZA1[0], y - PLAZA1[1]) < 5.5
 
@@ -994,7 +1015,7 @@ def things(G, s):
         near_trees.setdefault((int(x // 12.0), int(y // 12.0)), []).append((x, y, kind))
         count[kind] += 1
 
-    hand = [("C" if r > 5.0 else "D", ix, iy) for (ix, iy, r) in ISLETS]                             # the islets'
+    hand = [("D", ix + r * 0.45, iy - r * 0.55) for (ix, iy, r) in ISLETS]           # one at the edge of each islet (its top left to build on)
     hand += [("B", 0.0, 41.0), ("B", 0.0, -41.0)]                                                   # an old tree at each end of the Crown
     for kind, x, y in hand:
         plant(kind, x, y, float(rng.uniform(0.85, 1.0)), "frame")
@@ -1004,7 +1025,7 @@ def things(G, s):
             tries += 1
             x, y = rng.uniform(-HALF + 5, HALF - 5, 2)
             i, j = cell(x, y)
-            if wild[i, j]:
+            if wild[i, j] or G["islet"][i, j]:                     # (the islets are left open to build on)
                 continue
             w = wood(x, y) * (1.0 if kind in "CD" else 0.8)
             if open_[i, j]:                                # a lone tree here and there on the open ground, no more
@@ -1029,6 +1050,21 @@ def things(G, s):
         for (_x, _y, k, _w) in against:
             count[k] -= 1
     sc.cleared = len(against)
+
+    # ---- the wild woods (where nobody can go): the same trees as the forest, D and a few C, instances of the level's
+    # AVLForest with their levels of detail. They were SM_HighlandWoods, one mesh of trees of 1 m blocks, which read as a
+    # coarse, dark, wrong forest beside these (owner, 2026-11-21: References/Remake/trees_wrong_set.png). wildwoods.py
+    bare = np.zeros(h.shape, bool)
+    for key in BUILD:
+        bare |= in_rect(X, Y, footprint(key, 5.0)[:4])
+    bare |= R["shelf"] | R["spire"]
+    sc.wild_trees = 0
+    for (x, y, z, kind, scale) in wildwoods.spots(G, s, CELL, (GRASS, MOSSY), 27.0, bare):
+        if tree_blocked(x, y, kind, scale):
+            continue
+        sc.tree(kind, x, y, yaw=float(rng.integers(0, 4)) * 90.0, scale=scale, group="wild", z=z)
+        count[kind] += 1
+        sc.wild_trees += 1
 
     # ---- undergrowth
     def scatter(n, meshes, r, group, gap, scale=(0.9, 1.15), where=None, solid=False, allow_pad=False):
@@ -1306,7 +1342,8 @@ def build(write=True, verbose=False):
         balance=bal,
         meadows=dict(player=MEADOWS0, enemy=MEADOWS1),
         buildable=buildable_areas(),
-        trees=dict(count=sc.tree_counts, clear=TREE_CLEAR, margin=BUILD_MARGIN, cleared_at_build=sc.cleared,
+        trees=dict(count=sc.tree_counts, clear=TREE_CLEAR, margin=BUILD_MARGIN, cleared_at_build=sc.cleared, wild=sc.wild_trees,
+                   lod_faces_m=wildwoods.budget(sc.tree_counts, meta),
                    faces=int(sum(sc.tree_counts[k] * (meta("SM_Tree2_%s_Trunk" % k).get("faces", 0) + meta("SM_Tree2_%s_Leaves" % k).get("faces", 0)) for k in "ABCD"))),
         instances=sc.items,
     )
@@ -1324,8 +1361,8 @@ def build(write=True, verbose=False):
         for it in sc.items:
             counts[it["mesh"]] = counts.get(it["mesh"], 0) + 1
         faces = sum(meta(m).get("faces", 0) * n for m, n in counts.items())
-        print("highland: %d instances, %d kinds, %.2f M faces; trees %s = %.2f M faces, %d taken away from buildings; not built yet: %s" % (
-            len(sc.items), len(counts), faces / 1e6, sc.tree_counts, layout["trees"]["faces"] / 1e6, sc.cleared, ", ".join(sorted(sc.missing)) or "none"))
+        print("highland: %d instances, %d kinds, %.2f M faces; trees %s (%d of them wild) = %.2f M faces (all at LOD 0 / 1 / 2: %s M), %d taken away from buildings; not built yet: %s" % (
+            len(sc.items), len(counts), faces / 1e6, sc.tree_counts, sc.wild_trees, layout["trees"]["faces"] / 1e6, " / ".join("%.2f" % v for v in layout["trees"]["lod_faces_m"]), sc.cleared, ", ".join(sorted(sc.missing)) or "none"))
     return layout, G, s
 
 

@@ -1,6 +1,6 @@
 {
  "name": "SM_RealmGround_12_6",
- "faces": 6454,
+ "faces": 6849,
  "collision": "complex",
  "bounds": [
   [
@@ -11,7 +11,7 @@
   [
    130.0,
    -26.0,
-   1.75
+   1.5
   ]
  ],
  "lights": []

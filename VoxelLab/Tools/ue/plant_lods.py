@@ -12,8 +12,10 @@ import math
 import unreal
 
 MESH = "/Game/Voxel/Meshes/"
-PLANTS = {"SM_GrassTuft_A": 110.0, "SM_GrassTuft_B": 110.0, "SM_GrassTuft_C": 110.0, "SM_Flowers_A": 120.0, "SM_Flowers_B": 120.0,
-          "SM_Flowers_C": 120.0, "SM_Flowers_D": 120.0, "SM_Bush_A": 170.0, "SM_Bush_B": 170.0, "SM_Bush_C": 170.0}    # SWITCH, metres
+# (owner's rule, 2026-11-21: no simplified version where the player normally looks. These were 110 / 120 / 170 m, which
+# the overview, switching at 4/3 of these, passed at its usual zoom for the bushes' lumpy far version)
+PLANTS = {"SM_GrassTuft_A": 170.0, "SM_GrassTuft_B": 170.0, "SM_GrassTuft_C": 170.0, "SM_Flowers_A": 180.0, "SM_Flowers_B": 180.0,
+          "SM_Flowers_C": 180.0, "SM_Flowers_D": 180.0, "SM_Bush_A": 260.0, "SM_Bush_B": 260.0, "SM_Bush_C": 260.0}    # SWITCH, metres
 KEEP = 0.12
 FOV = 40.0
 

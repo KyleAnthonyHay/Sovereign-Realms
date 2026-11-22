@@ -1,13 +1,15 @@
-"""dock: the pier and the rowing boat of the town (References/Remake/town.png, lower left).
+"""dock: the pier of the town (References/Remake/town.png, lower left), and where the grain ship ties up.
 
   SM_Dock   a timber pier. Origin: the middle of its LAND end, at the top of the deck (the deck top is z = 0, flat
             all over). It runs out along -Y: a walkway 3 m wide and 9 m long, then a cross platform 8 x 3.5 m (a T).
             Log piles go down to z = -4 (the sea lies about 1 m under the deck); the piles at the edges stand proud
             of the deck, several with a stone block and a lantern on top; bollards with rope, a ladder, braces.
             Nothing stands in the way: the clear deck is 2.5 m wide on the walkway, more on the head.
-            Sidecar: "moor" [x, y, z, yaw] where SM_Boat floats; "props" crates and barrels for the head's corners.
-  SM_Boat   a rowing boat, 4 x 1.6 m: plank hull, gunwale, thwarts, two oars. Origin: its middle on the waterline
-            (z = 0 is the water; it draws 0.25 m). Long axis X, bow +X. No collision.
+            Sidecar: "moor" [x, y, z, yaw] where SM_Boat floats: alongside the seaward face of the head, its starboard
+            side 30 cm off the piles, bow toward +X; "props" crates and barrels for the head's corners.
+  SM_Boat   the grain ship: built by boat.py (References/Remake/boat_grain.png), exported here too so that running
+            this script keeps it. Origin: its middle on the waterline (z = 0 is the water). Long axis X, bow +X.
+            (Until 2026-11-22 it was a 4 m rowing boat moored along the walkway: build_rowboat() below.)
 
 Run:  Blender -b --factory-startup --python Tools/blender/assets/dock.py -- [--no-render] [--cpu] [--samples N]
 """
@@ -18,6 +20,8 @@ import numpy as np
 import voxlib as V
 import voxkit as K
 from voxlib import Vox
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from boat import build as build_boat           # the grain ship (SM_Boat)
 
 ARGS = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 NO_RENDER = "--no-render" in ARGS
@@ -34,7 +38,7 @@ WALK_HW, WALK_LEN = 12, 72             # the walkway: 3 m wide, 9 m long
 HEAD_HW, HEAD_LEN = 32, 28             # the head: 8 m wide, 3.5 m deep
 WATER = -8                             # the waterline, voxels below the deck top
 
-MOOR = [2.875, -5.9, -1.0, 90.0]
+MOOR = [0.0, -14.8, -1.0, 0.0]          # the grain ship (13.5 m by 3.5 m): along the head's seaward face
 PROPS = [
     dict(mesh="SM_CrateStack", pos=[-3.05, -11.55, 0.0], yaw=8.0),
     dict(mesh="SM_Barrel", pos=[-3.35, -9.75, 0.0], yaw=0.0),
@@ -146,7 +150,8 @@ def build_dock():
     return V.join([v], "SM_Dock")
 
 
-def build_boat():
+def build_rowboat():
+    """The rowing boat that was SM_Boat until the grain ship took its place (not exported)."""
     L, W, H = 34, 14, 7
     cx, cy, wl = 17.0, 7.0, 2                    # the waterline is 2 voxels (0.25 m) above the keel
     v = Vox(L, W, H, VX, origin=(cx, cy, wl), name="boat", seed=1)
@@ -221,10 +226,6 @@ def sea():
 
 def main():
     V.reset_scene()
-    if "--boat" in ARGS:
-        build_boat()
-        render(os.path.join(V.PREVIEWS, "dock_boat.png"), target=(0, 0, 0.1), az=-40, el=38, dist=14, res=(1000, 700))
-        return
     boat = build_boat()
     V.export_gltf(boat, collision="none")
     dock = build_dock()
@@ -239,9 +240,6 @@ def main():
     sea()
     for tag, az, el, dist in (("", -35, 34, 62), ("_back", 150, 28, 62), ("_top", 0, 80, 62)):
         render(os.path.join(V.PREVIEWS, "dock%s.png" % tag), target=(0, -6.5, -0.3), az=az, el=el, dist=dist, res=(1200, 900))
-    V.reset_scene()
-    build_boat()
-    render(os.path.join(V.PREVIEWS, "dock_boat.png"), target=(0, 0, 0.1), az=-40, el=38, dist=14, res=(1000, 700))
 
 
 main()

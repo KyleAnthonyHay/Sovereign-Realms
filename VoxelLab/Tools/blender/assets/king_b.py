@@ -36,7 +36,6 @@ NO_RENDER = "--no-render" in ARGS
 DIAG = "--diag" in ARGS
 FAST = "--fast" in ARGS
 VIEWS = set(ARGS[ARGS.index("--views") + 1].split(",")) if "--views" in ARGS else None
-FACE = ARGS[ARGS.index("--face") + 1] if "--face" in ARGS else "K"      # the young face: K is the approved one; A, B, C are alternatives (build_head)
 
 U = 0.0125
 PREFIX = "SM_KingB_"
@@ -990,33 +989,63 @@ def build_sword(Fo, at):
     return P
 
 
+def archer_face(P, F, z0, front=-11.0, hw=12.0, top=None, skin="skin", shade="skin_d", lip="lip", brow="brow",
+                nose=(1.3, 2.6, 0.6), brow_t=1.6, brow_x=(2.6, 9.6), brow_dip=0.0, mouth=3.0, mouth_dz=0.0, glint="gem_w",
+                plate=True, eyes_only=False):
+    """THE ARCHER'S FACE (troop_archer.py, build_head): the one every figure's face is built on. ONE smooth skin plate
+    in front of the skull (a single block, so no seams between blocks read as features); eyes of a 6 x 4 u white with
+    a 3 x 4 u dark pupil centred in it (a level gaze, straight ahead) and a glint; a level rectangle brow a little above
+    each eye; a small nose with a shadow under it; a short mouth line. Her heights above the foot of her face (100) are
+    kept above z0, and her depths in front of her plate (front: -11) in front of this one.
+    Each figure's own touches: nose = (half width, height, how far proud), brow_t (how thick), brow_x (its inner and
+    outer ends), brow_dip (its inner end coming down toward the nose: a sterner look), mouth (half width).
+    eyes_only: just the eyes, brows and glints (a face whose plate, nose and mouth are already the archer's)."""
+    b = lambda *a, **k: P.blk(F, *a, **k)
+    d = front + 11.0                              # the archer's y + d
+    K = z0 - 100.0                                # the archer's z + K
+    if plate and not eyes_only:
+        b(-hw, hw, front, front + 1.0, z0, top if top is not None else z0 + 22.0, skin, bevel=0.03)
+    if not eyes_only:
+        b(-mouth, mouth, -11.2 + d, -10.9 + d, 103.6 + K + mouth_dz, 104.6 + K + mouth_dz, lip, bevel=0.1)   # mouth: one thin bar
+        nw, nh, npr = nose
+        b(-nw, nw, -10.9 - npr + d, -10.9 + d, 106.8 + K, 106.8 + nh + K, skin, bevel=0.12, tint=1.05)      # nose: one block
+        b(-nw, nw, -11.2 + d, -10.9 + d, 106.1 + K, 106.8 + K, shade, bevel=0.1)                           # ... the shadow under it
+    for sx in (1, -1):
+        b(3.0, 9.0, -11.25 + d, -10.9 + d, 110.0 + K, 114.0 + K, "white", sx=sx, bevel=0.05)          # eyes
+        b(4.5, 7.5, -11.4 + d, -10.9 + d, 110.0 + K, 114.0 + K, "pupil", sx=sx, bevel=0.05)           # the pupil, centred
+        b(brow_x[0], brow_x[1], -11.7 + d, -10.9 + d, 114.6 + K, 114.6 + brow_t + K, brow, sx=sx, bevel=0.08)   # brows
+        if brow_dip > 0:
+            b(brow_x[0], brow_x[0] + 2.6, -11.75 + d, -10.9 + d, 114.6 - brow_dip + K, 114.6 + K, brow, sx=sx, bevel=0.08)
+        b(4.8, 5.7, -11.55 + d, -11.35 + d, 112.6 + K, 113.5 + K, glint, sx=sx, bevel=0.2)            # the glint in each eye
+
+
 def build_head():
-    """The young king: clean-shaven, the face a little longer (the crown sits 2 u higher, the jaw narrows to the chin),
-    taller eyes under the same bold brows, a fringe showing under the crown, a mouth. Hair, skin, crown and its stones
-    as before. FACE picks the face: K (the one the user approved) or the alternatives A, B, C (--face)."""
+    """King David's head: the ARCHER's face (archer_face: one smooth skin plate, her eyes with their centred pupils
+    and glints, a short mouth line) made a man's and a king's: heavy brows that dip toward a bolder, prouder nose, and
+    a short, square black beard (References/crops/king_head.png): the jaw and the chin under it, up the cheeks to the
+    sideburns, a moustache over the mouth. Hair, skin, crown and its stones as before."""
     P = Part("Head")
     F = Frame().sub(RZ(9.0) @ RY(-2.5), P.joint)
     g = Grid(F, -18, 18, -19, 19, 100, 140, cs=2)
     X, Y, Z = g.X, g.Y, g.Z
     AX = np.abs(X)
     g.box(-12, 12, -11, 11, 106, 130, "skin")
-    if FACE in "KC":
-        g.carve((AX > 10) & (Z < 110) & (Y < 3))             # the jaw steps in to the chin
-    else:
-        g.carve((AX > 10) & (Z < 112) & (Y < 3))             # the jaw steps in twice to a narrower chin
-        g.carve((AX > 8) & (Z < 108) & (Y < 1))
-    burn = {"K": 118, "A": 114, "B": 116, "C": 118}[FACE]    # how far down the sideburns come
+    sk = g.solid()
+    g.paint(sk & (AX > 10) & (Y < -1) & (Z < 112), "hair")     # the beard along the jaw, seen from the side ...
+    g.paint(sk & (AX > 10) & (Y < -5) & (Z < 120), "hair")     # ... rising to the sideburns
+    g.paint(sk & (Z < 108) & (Y < 1), "hair")                  # ... and under the chin
+    g.box(-12, 12, -11, -3, 104, 106, "hair")                  # the beard under the jaw
     # hair: back (down to the nape), sides behind the ears, a strip above the ears under the crown, top
     g.box(-14, 14, 11, 13, 104, 132, "hair")
     g.fill((AX > 12) & (AX < 14) & (Y > 3) & (Y < 13) & (Z > 106) & (Z < 132), "hair")
     g.fill((AX > 12) & (AX < 14) & (Y > -11) & (Y < 3) & (Z > 122) & (Z < 132), "hair")
     g.box(-12, 12, -11, 13, 130, 132, "hair")
-    hair = g.isn("hair")
+    hair = g.isn("hair") & ~((Z < 120) & (Y < 3))
     g.grow(hair & (Y > 11) & (g.hash(2, 7) < 0.3), "+y")     # locks standing out, two cells at a time
     g.grow(hair & (X > 12) & (Y > 3) & (Z < 126) & (g.hash(2, 8) < 0.3), "+x")
     g.grow(hair & (X < -12) & (Y > 3) & (Z < 126) & (g.hash(2, 9) < 0.3), "-x")
-    # short sideburns in front of the ears
-    g.fill((AX > 12) & (AX < 14) & (Y > (-7 if FACE in "KC" else -11)) & (Y < -3) & (Z > burn) & (Z < 122), "hair_d" if FACE == "K" else "hair")
+    g.fill((AX > 12) & (AX < 14) & (Y > -9) & (Y < -3) & (Z > 112) & (Z < 122), "hair_d")    # the sideburns, down into the beard
+    g.fill((AX > 12) & (AX < 14) & (Y > -11) & (Y < -1) & (Z > 106) & (Z < 112), "hair")     # the beard over the jaw's corner
     # ears
     g.fill((AX > 12) & (AX < 14) & (Y > -3) & (Y < 3) & (Z > 114) & (Z < 122), "skin_l")
     # the crown takes the place of the hair at its own height
@@ -1028,57 +1057,26 @@ def build_head():
     b = lambda *a, **k: P.blk(F, *a, **k)
     for sx in (1, -1):
         b(13.6, 14.8, -1.6, 1.8, 115.6, 119.4, "skin_d", sx=sx)    # the hollow of the ear
-    # ---- the face: a 1 u plate in front of the skull; every feature is one or two boxes standing proud of it
-    f = Grid(F, -14, 14, -17, -11, 100, 132)
-    X, Y, Z = f.X, f.Y, f.Z
-    AX = np.abs(X)
-    L0, L1, L2 = (Y > -12), (Y > -13), (Y > -14)
-    jaw = np.where(Z < 110, 10, 12) if FACE in "KC" else np.where(Z < 108, 8, np.where(Z < 112, 10, 12))
-    f.fill(L0 & (AX < jaw) & (Z > 106) & (Z < 128), "skin")
-    f.fill(L1 & (AX < 12) & (Z >= 126) & (Z < 128), "hair")   # the fringe under the crown
-    if FACE == "K":
-        # the approved face: the bearded king's eyes (a little taller), bold brows and nose, the jaw stepping in to a
-        # chin, and a mouth that is one dark line
-        f.fill(L1 & (AX < 5) & (Z > 106) & (Z < 108), "skin")                          # chin
-        f.fill(L0 & (AX < 4) & (Z > 110) & (Z < 112), "mouth")                         # mouth
-        f.fill(L2 & (AX < 2) & (Z >= 115) & (Z < 120), "skin_l")                       # nose: one block
-        eye0, eye1, brow0, brow1, browx = 118, 122, 122, 124, 2
-    elif FACE == "A":
-        # framed by his hair: sideburns down the edges of the face, a lock swept across the brow; bold brows on
-        # the eyes as ever; a small nose; a mouth with the corners turned up
-        f.fill(L1 & (AX > 10) & (AX < 12) & (Z >= burn) & (Z < 126), "hair")
-        f.fill(L1 & (X > -12) & (X < -3) & (Z >= 124) & (Z < 126), "hair")
-        f.fill(L1 & (AX < 3) & (Z > 106) & (Z < 108), "skin")                          # chin
-        f.fill(L0 & (AX < 4) & (Z > 110) & (Z < 111), "mouth")                         # mouth: a dark line ..
-        f.fill(L0 & (AX > 4) & (AX < 5) & (Z > 111) & (Z < 112), "mouth")              # .. its corners turned up ..
-        f.fill(L1 & (AX < 3) & (Z > 108) & (Z < 110), "lip_l")                         # .. and a lighter lower lip
-        f.paint(L0 & (AX > 6) & (AX < 10) & (Z > 113) & (Z < 116), "skin_l")           # cheeks
-        f.fill(L2 & (AX < 2) & (Z >= 114) & (Z < 119), "skin_l")                       # nose: one block
-        eye0, eye1, brow0, brow1, browx = 118, 122, 122, 124, 2
-    elif FACE == "B":
-        # softer: shorter sideburns, locks at both temples, the brows lifted a little off the eyes, a straight mouth
-        f.fill(L1 & (AX > 10) & (AX < 12) & (Z >= burn) & (Z < 126), "hair")
-        f.fill(L1 & (AX > 7) & (AX < 12) & (Z >= 124) & (Z < 126), "hair")
-        f.fill(L1 & (AX < 3) & (Z > 106) & (Z < 108), "skin")
-        f.fill(L0 & (AX < 4) & (Z > 110) & (Z < 112), "mouth")
-        f.fill(L1 & (AX < 3) & (Z > 108) & (Z < 110), "lip_l")
-        f.paint(L0 & (AX > 6) & (AX < 10) & (Z > 113) & (Z < 116), "skin_l")
-        f.fill(L2 & (AX < 2) & (Z >= 115) & (Z < 119), "skin_l")
-        eye0, eye1, brow0, brow1, browx = 118, 122, 123, 125, 3
-    else:
-        # nearest the bearded king: his square jaw, his eyes and brows exactly, the long nose, a short firm mouth
-        f.fill(L1 & (AX < 4) & (Z > 106) & (Z < 108), "skin")
-        f.fill(L0 & (AX < 3) & (Z > 110) & (Z < 112), "mouth")
-        f.fill(L1 & (AX < 3) & (Z > 109) & (Z < 110), "lip_l")
-        f.fill(L2 & (AX < 2) & (Z >= 114) & (Z < 120), "skin_l")
-        eye0, eye1, brow0, brow1, browx = 118, 121, 121, 123, 2
-    f.fill(L0 & (AX > 6) & (AX < 9) & (Z >= eye0) & (Z < eye1), "white")               # eyes: a white and a pupil each
-    f.fill(L0 & (AX > 3) & (AX <= 6) & (Z >= eye0) & (Z < eye1), "pupil")
-    f.fill(L2 & (AX > browx) & (AX < 10) & (Z >= brow0) & (Z < brow1), "hair_d")       # brows: one bold rectangle each
-    emit(P, f, lim=(9, 15), lims={"hair_d": (10, 12), "white": (4, 4), "pupil": (4, 4), "skin_l": (8, 8), "hair": (7, 13), "mouth": (8, 8), "lip_l": (6, 6), **({} if FACE == "K" else {"skin_l": (5, 8)})},
-         shade=0.14, proud_p=0.25, proud=(0.08, 0.2), bevel=0.8, seed=63, core=False)
+    # ---- THE FACE: the archer's, on a plate in front of the skull (its front at -12), her heights + 6: a bolder,
+    # prouder nose, brows thicker and dipping toward it, the mouth a little shorter (it shows in the beard's gap)
+    archer_face(P, F, 106.0, front=-12.0, hw=12.0, top=128.0, brow="hair_d", nose=(1.7, 3.4, 1.1), brow_t=2.2,
+                brow_x=(2.3, 9.8), brow_dip=0.5, mouth=2.4)
+    b(-12.0, 12.0, -13.0, -11.9, 126.0, 128.0, "hair")         # the fringe under the crown
     for sx in (1, -1):
-        b(3.4, 4.4, -12.35, -11.9, eye1 - 1.6, eye1 - 0.6, "gem_w", sx=sx, bevel=0.2)  # the glint in each eye
+        b(9.0, 12.0, -12.8, -11.9, 123.0, 126.0, "hair_d", sx=sx)                    # the hair coming down at the temples
+    # ---- the beard, one layer proud of the face: big plain blocks as in the picture. The chin and jaw, a square
+    # goatee hanging below the chin, round the mouth, stepping up the cheeks to the sideburns; a moustache.
+    bd = lambda x0, x1, z0, z1, nm="hair", y0=-13.0: b(x0, x1, y0, -11.9, z0, z1, nm, bevel=0.12)
+    bd(-12.0, 12.0, 106.0, 109.2)                              # chin and jaw
+    bd(-7.0, 7.0, 103.6, 107.0, "hair", -13.6)                 # the goatee, hanging below the chin
+    bd(-4.6, 4.6, 103.0, 104.0, "hair_l", -13.4)
+    for sx in (1, -1):
+        b(3.2, 12.0, -13.0, -11.9, 109.2, 111.0, "hair", sx=sx, bevel=0.12)          # round the mouth
+        b(8.0, 12.0, -13.0, -11.9, 111.0, 113.6, "hair_l", sx=sx, bevel=0.12)        # up the cheeks ...
+        b(10.0, 12.0, -12.8, -11.9, 113.6, 116.4, "hair", sx=sx, bevel=0.12)         # ... to the sideburns
+        b(10.6, 12.0, -12.5, -11.9, 116.4, 119.0, "hair_d", sx=sx, bevel=0.12)
+        b(3.6, 5.8, -13.5, -11.9, 109.0, 111.6, "hair_d", sx=sx, bevel=0.12)         # the moustache's ends
+    b(-5.8, 5.8, -13.6, -11.9, 110.8, 112.3, "hair_d", bevel=0.12)                  # the moustache
     # ---- the crown, on top of the head: a band of large blocks, points all round, a tall front piece with its stone
     c = Grid(F, -18, 18, -19, 19, 126, 140, cs=2)
     X, Y, Z = c.X, c.Y, c.Z

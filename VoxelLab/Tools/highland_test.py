@@ -94,6 +94,8 @@ def routes():
             ("enemy castle -> near flank bridge (north)", G["castle1"], ne, E.get("near_flank_bridge")),
             ("over the north bridge", nw, ne, None),
             ("over the south bridge", sw, se, None),
+            ("player castle -> its islet (over the sea bridge)", G["castle0"], (-253.0, 15.0), None),
+            ("enemy castle -> its islet (over the sea bridge)", G["castle1"], (253.0, -15.0), None),
             ("castle -> castle", G["castle0"], G["castle1"], P.get("enemy_castle")),
             ("castle -> castle, back", G["castle1"], G["castle0"], E.get("enemy_castle")),
             ("player castle -> dock head", G["castle0"], (d0[0] - 10.5, d0[1]), P.get("dock")),
@@ -173,6 +175,8 @@ def barriers(only_dock=False):
     probe("the south bridge, east to west", (-22.0, -170.0), (-34.0, -170.0), 5.0, cross=True)
     probe("up the first flight of the bluff's stair", (-158.0, -127.4), (-171.0, -130.0), 7.0, cross=True)
     probe("up its second flight, onto the bluff", (-177.0, -134.0), (-177.0, -148.0), 7.0, cross=True)
+    probe("the player's islet bridge, out onto the islet", (-227.0, 15.0), (-245.0, 15.0), 6.0, cross=True)
+    probe("the enemy's islet bridge, out onto the islet", (227.0, -15.0), (245.0, -15.0), 6.0, cross=True)
 
 
 def BANKS():
@@ -201,6 +205,8 @@ def BANKS():
             ("the landing of the bluff's stair, off its rim", (-176.0, -130.0), (-176.0, -116.0)),
             ("the enemy's shelf, off its south face", (160.0, 178.0), (160.0, 154.0)),
             ("the enemy's shelf, off its east end", (210.0, 214.0), (234.0, 214.0)),
+            ("the player's islet, off its far side", (-252.0, 15.0), (-275.0, 15.0)),
+            ("the enemy's islet, off its far side", (252.0, -15.0), (275.0, -15.0)),
             ("the landing of the enemy's stair, off its rim", (136.0, 155.0), (150.0, 155.0))]
 
 
@@ -215,7 +221,7 @@ def trees():
     m = re.search(r"round (\d+) building\(s\).*: (\d+) tree", lines[-1]) if lines else None
     check(bool(m) and int(m.group(1)) > 15 and int(m.group(2)) == 0, "no tree stands in or against a building: %s" % (lines[-1].split("TREES ")[-1] if lines else "no answer"))
     # the thickest 16 m square of trunks on the player's bank
-    trunks = [(i["pos"][0], i["pos"][1]) for i in J["instances"] if i["mesh"].startswith("SM_Tree2") and i["mesh"].endswith("_Trunk")]
+    trunks = [(i["pos"][0], i["pos"][1]) for i in J["instances"] if i["mesh"].startswith("SM_Tree2") and i["mesh"].endswith("_Trunk") and i.get("group") != "wild"]     # (not the wild woods: nobody walks there)
     best, at = 0, None
     for (x, y) in trunks:
         if x < -20:

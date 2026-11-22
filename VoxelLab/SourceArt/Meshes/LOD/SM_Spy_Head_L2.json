@@ -1,6 +1,6 @@
 {
  "name": "SM_Spy_Head_L2",
- "faces": 155,
+ "faces": 169,
  "collision": "none",
  "bounds": [
   [
@@ -17,5 +17,5 @@
  "lights": [],
  "lod_of": "SM_Spy_Head",
  "voxel": 0.05,
- "triangles": 310
+ "triangles": 338
 }

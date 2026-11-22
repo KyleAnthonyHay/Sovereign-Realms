@@ -1,6 +1,6 @@
 {
  "name": "SM_Builder_Head_L1",
- "faces": 891,
+ "faces": 861,
  "collision": "none",
  "bounds": [
   [
@@ -10,12 +10,12 @@
   ],
   [
    0.325,
-   0.225,
+   0.2,
    0.425
   ]
  ],
  "lights": [],
  "lod_of": "SM_Builder_Head",
  "voxel": 0.025,
- "triangles": 1782
+ "triangles": 1722
 }

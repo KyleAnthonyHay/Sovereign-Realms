@@ -1,20 +1,18 @@
 # VoxelLab: the voxel-style sandbox
 
 A separate Unreal 5.8 project inside the Sovereign Realms repo for trying the Minecraft-like look before porting it to
-the game. Nothing here touches the main game. Three levels, switched from the Esc menu (or M while it is open: the
-next one round); the packaged game starts in the town:
+the game. Nothing here touches the main game. Four levels, chosen on the New Game screen (or M while the Esc menu is
+open: the next one round); the packaged game starts on the realm's title screen. The town (`L_Town`) and the village
+(`L_VoxelVillage`) were removed on 2026-11-22 (their maps, and the assets only they used: see *Realm v2*, the end).
 
-- `L_Town`: the island town of `References/Remake/town.png`: the castle and its plaza in the middle, the barracks and
-  its yard to the east, the archery range on the west terrace, the mine and the watch tower on the high ground behind
-  it, two cottages with their paddocks by the plaza, the farmstead, the fenced plots (`References/Remake/farmland.png`),
-  the lily pond and the windmill on the east terrace, a river off that terrace over two falls to the sea, the bridge,
-  and the dock with its boat under the west cliff.
-- `L_VoxelVillage`: the village of `References/village.png` in its forest. The castle now stands at the head of the
-  plaza and the town hall across the river at the end of the road (`SWAP` in `village_layout.py` puts them back).
+- `L_RealmV2`: **Realm v2**, the third and biggest battle map, an island 640 m square: a mountain 184 m high with the
+  sea's arms round it, five gold mines, the ruins plateau, a port for each side (see *Realm v2*).
 - `L_Highlands`: the second battle map, 540 m square: a bluff to build on behind each castle, the river's gorge, and
   the Crown, a mesa in the middle with two neutral gold mines (see *The highlands*). `L_Realm` is the first.
 - `L_Flatlands`: every building side by side on flat grass along one road, at its village size, each with its name in
-  front, for reviewing them and checking the look. Same controls as the village.
+  front, for reviewing them and checking the look (the Treasury and the Granary too). Across the road: King David and
+  every troop in a line (the farmer woman and man too; static, in their modelled pose), the harbour (the dock running
+  out into a pond, the grain ship moored at it), and the newest props (Realm v2's ruins and port pieces).
 
 Reference renders of each building on flat ground, King David beside it for scale, are in `References/Buildings/`
 (`<Name>.png` three-quarter view, `<Name>_front.png`, `Lineup.png` all of them at one scale).
@@ -35,8 +33,12 @@ There are two ways to play, switched with **Tab**.
 | Shift, or double-tap a direction | run (after a double tap he runs until the keys are let go) |
 | Space | jump |
 | F | draw / sheathe the sword |
-| Left click on one of your units (the crosshair on it) | select it (Shift: add it / take it out; twice quickly: take control of it). Not while a foe is within 4 m of you or a bow is drawn: then the click is your own blow. Alt / Option + click: always a selection (on the ground: let the selection go). The crosshair says what a click does there (gold "Click: select ...", red "Right click: attack ...") and the mode box top left whom you command |
-| Right click (Ctrl / Cmd + click; an archer or spy played: Ctrl / Cmd + click only) | the selected troops (never the unit you play) go where the crosshair points, or attack the foe's unit or building under it, with the overview's order marker and click; twice quickly: at a run; Shift: on their pathway (Builders: their queue). On one of your troops: the others follow it. 1..6 select platoon N; **G**: follow me (the selection, or else your platoon, falls in behind you) |
+| Option (Alt) + left click on one of your units (the crosshair on it) | select it (Shift + Option: add it / take it out; twice quickly: take control of it). **A plain left click never selects: it is always your own blow** |
+| Option + left click on a foe's unit or building | those under your command attack it: the selection (never the unit you play), else the troops following you (they fall in behind you again when the attack is done), else your platoon. Shift + Option + click: **queued** after what they are doing (attack unit 1, then unit 2, then a building, then walk: each in turn, the next as soon as the target falls or is razed; one fallen meanwhile is passed over) |
+| Option + left click on the ground | they go there in formation (twice quickly: at a run); Shift + Option: queued after the attacks (or a point of their pathway when they have no chain) |
+| Option + left click on the sky, Esc, or (pointer shown) on King David himself | let the selection go (Esc first lets go, a second Esc opens the menu) |
+| | The crosshair says what a click does there (gold "Option+click: select ...", red "Option+click: attack ..."), the mode box top left whom you command; a queue shows small numbered plates over its targets and points (no lines across the hero view) |
+| Right click (Ctrl / Cmd + click; an archer or spy played: Ctrl / Cmd + click only) | the selected troops (never the unit you play) go where the crosshair points, or attack the foe's unit or building under it, with the overview's order marker and click; twice quickly: at a run; Shift: queued as with Option (on a foe: after what they are doing; on the ground: their pathway, or the walk after their attacks; Builders: their queue). On one of your troops: the others follow it. 1..6 select platoon N; **G**: follow me (the selection, or else your platoon, falls in behind you) |
 | Left click | attack (draws first if need be): the training dummies by the barracks rock when hit. He drops into a battle stance (`References/king_stance.png`: a lunge, the sword across his body) for the swing and holds it 1 s after the last one, then carries the sword low at his side; 4 s later he sheathes it. Clicks while he is in the stance go through a combo: a side slash, a diagonal cut, then an up-down-up (three blows); a click during a swing queues the next. Once the stance has lapsed the next click starts at the side slash again |
 
 **Overview** (a bird's-eye camera that roams freely)
@@ -50,7 +52,7 @@ There are two ways to play, switched with **Tab**.
 | Left click on a training dummy | the swordsmen of the selection attack it (Shift: they go at a run): each takes a place on a ring round it, walks there by the usual routes, turns to it and swings, each on its own beat, until given another order. A unit standing in front of the dummy is still selected by the click; with no fighter selected the click is the usual one |
 | Right click (or Ctrl / Cmd + click) | the selection goes there: by a route round fences, buildings, cliffs and water, through gates, over the bridge, up and down steps, and forms up in its formation. A double right click: at a run |
 | Right click on one of your troops | the rest of the selection follows it (falls in behind it in its formation, re-sent as it moves, fights what it meets, lets go of a chase 24 m from it); its platoon's members following it make it the platoon's leader |
-| Shift + right click | a point on the selection's pathway (as in the main game): units already on an order walk there after it, in order; idle ones start at once. A plain right click replaces the pathway |
+| Shift + right click | a point on the selection's pathway (as in the main game): units already on an order walk there after it, in order; idle ones start at once. A plain right click replaces the pathway. **On a foe's unit or building: queued** (`UVLCommand::OrderChain`): they attack it after what they are doing, then the next foe, a building, a walk (Shift + right click on the ground after an attack is the chain's next walk); a dashed line through the chain (red attacks, blue walks) with numbered plates, as the Builders' queue |
 | Right click on the Watch Tower | the archers of the selection walk to its door and appear on the lookout (8 posts); anyone else waits by the door |
 | Select the Watch Tower | its panel (the selection panel, bottom middle) shows who mans it; its **Lookout** button brings them down. An archer on the lookout can also be selected and sent somewhere: it comes down first |
 | F | the next formation: Line, Column, Wedge, Square, Loose (melee in front, archers behind) |
@@ -147,8 +149,12 @@ white and his pose holds for a moment, while the game carries on (there is nothi
 (swordsmen), the **Archery Range** (archers) or the **Castle** (the Spy, from castle level 3) and click the recruit button of the selection panel (bottom middle); several
 can be queued (Shift 5, Ctrl 10). A barracks or range is raised by Builders first (*Building*). A trained troop **waits in the
 building's yard**, in ranks (the barracks' fenced yard in front of its hall, the range's yard inside its rail fence;
-facing the gate), until sent somewhere; with a rally point set (right click with the building selected) it walks out to
-it instead, and one that joins a platoon (the Joins chips) marches to the platoon. Select troops and right click to send
+facing the gate), until sent somewhere. Where it goes instead, the first that applies: the platoon the building's
+**Joins** chips name; the **recruits' platoon** (the flag on a platoon panel row: one platoon at a time, up to 24
+troops; click the flag again to clear it, and it clears itself when the platoon is disbanded or wiped out); the
+building's rally point (right click on the ground with the building selected; a right click on the building itself
+clears it, and its dashed line is only drawn while one is set). One that joins a platoon falls in behind the platoon's
+leader and keeps with it (no leader: it walks to where the platoon stands). Select troops and right click to send
 them somewhere, Enter or a double click to take control of one (walk, run, jump). A swordsman you control fights as the king does:
 left click swings, through the same three-swing combo and battle stance, and the dummies take the blows; his sword has
 no scabbard and is always in his hand, so F does nothing. To go back to the king,
@@ -202,13 +208,33 @@ only while a Builder works at it.
 | Building (menu tab) | Model | Cost | Time (one Builder) | Limit |
 | --- | --- | --- | --- | --- |
 | Farm (Economy) | `SM_Farmstead_A/B/C` in turn (each side round robin, so neighbours differ; `SM_Farmstead` while they are not imported) | 90 gold | 14 s | 3, +1 a castle level |
+| Treasury (Economy) | `SM_Treasury` (gold vault, `Tools/blender/assets/treasury.py`) | 140 gold | 16 s | - |
+| Granary (Economy) | `SM_Granary` (thatched food storehouse, `Tools/blender/assets/granary.py`, after `References/Remake/granary.png`) | 120 gold | 14 s | - |
 | Gold Mine (Economy) | `SM_MineCliff`, on a gold vein only: a neutral mine (taken over) or the ruin of a fallen one | 140 gold | 16 s | - |
 | Barracks (Military) | `SM_BarracksYard` | 110 gold | 16 s | - |
 | Archery Range (Military) | `SM_ArcheryHall` | 125 gold | 16 s | - |
 | Watch Tower (Defence) | `SM_WatchTower` (its lookout tag added when done) | 160 gold | 18 s | 2, +1 a castle level |
 
-Limits count only what a side raised in the match (the map's own farms and tower are its endowment). Granary and
-Treasury have no voxel model, and the main game never built a town hall, so they are not in the menu.
+Limits count only what a side raised in the match (the map's own farms and tower are its endowment). The main game
+never built a town hall, so it is not in the menu. Prices and times are the main game's (`GranaryStats` 120 gold / 14 s,
+`TreasuryStats` 140 / 16). Each side may raise one of each storehouse, as in the main game (`StoreLimitBase` 1). The
+storehouse adds its level's storage on top of the castle's stores, so a side holds more by raising it a level. The
+enemy builds each storehouse once its stock of that resource reaches 80% of what it can hold.
+
+**The storehouses** (the main game's `FSRStoreLevel`, `VLBattle.cpp` `FTables`; health / holds / upgrade price / castle
+level the upgrade needs):
+
+| Level | Granary (food) | Treasury (gold) |
+| --- | --- | --- |
+| 1 | 900 hp, holds 400 | 1100 hp, holds 400 |
+| 2 | 1200 hp, holds 900; 180 gold, 30 s; castle 2 | 1450 hp, holds 900; 200 gold, 30 s; castle 2 |
+| 3 | 1500 hp, holds 1600; 320 gold + 80 food, 40 s; castle 3 | 1800 hp, holds 1600; 340 gold + 80 food, 40 s; castle 3 |
+
+What they hold is added to the castle's own stores (600 food and 600 gold at castle level 1, 1000 / 1500 / 2200 / 3000
+/ 4000 / 5500 at levels 2 to 7), and income beyond the total is lost (`UVLBattle::GetStorage` / `AddStock`). A side
+starts with 300 food and 400 gold; a farm brings 14 food every 6 s (20 / 27 at levels 2 / 3), so three farms fill the
+castle's 600 food in well under a minute. A level-1 Granary (120 gold) lifts that to 1000; at level 3 it holds 1600,
+a little more than a level-3 castle's own 1500, so one fully raised Granary doubles a mid-game kingdom's food stores.
 
 - **The menu**: the Build button left of the selection panel (or **B**); tabs Economy / Military / Defence (clicked; Tab is
   the hero view's key here), cards with the price, the limit used, the key 1-6, the refusal (limit, gold, no Builder).
@@ -312,21 +338,20 @@ Everything is generated by scripts, so any change can be rebuilt end to end.
 | Import the sounds (editor open) | `python3 Tools/ue_py.py Tools/ue/import_audio.py` | `/Game/Voxel/Audio` |
 | Water material | `python3 Tools/ue_py.py Tools/ue/build_special_materials.py` | `M_VoxWater` |
 | King David | `python3 Tools/ue_py.py -c "KING='SM_KingB'; exec(open(r'<abs>/Tools/ue/import_king.py').read())"` | `/Game/Voxel/King/DA_King` |
-| The level | `python3 Tools/ue_py.py Tools/ue/build_level.py` | `/Game/Maps/L_VoxelVillage` |
 | A mine's hill, as a mesh (then import: `ONLY=['SM_MineMound']`) | `Blender -b --factory-startup --python Tools/blender/assets/mine_mound.py -- --no-render` | `SM_MineMound` |
-| Flatlands plan + ground | `Blender -b --factory-startup --python Tools/blender/assets/flatlands.py` | `SourceArt/flatlands.json`, `SM_Flat_*` |
+| The grain ship (moored at the docks), with its far level of detail | `Blender -b --factory-startup --python Tools/blender/assets/boat.py -- --lod` (then import `ONLY=['SM_Boat']` and `ONLY=['SM_Boat']` of `Tools/ue/voxel_lods.py`); `dock.py` makes the dock's mooring | `SM_Boat`, `LOD/SM_Boat_L1` |
+| Flatlands plan + ground | `Blender -b --factory-startup --python Tools/blender/assets/flatlands.py` | `SourceArt/flatlands.json`, `SM_Flat_*`, `SM_FlatPond` |
 | Flatlands level | `python3 Tools/ue_py.py Tools/ue/build_flatlands.py` | `/Game/Maps/L_Flatlands` |
-| Town: ground, water, plan | `Blender -b --factory-startup --python Tools/blender/assets/town_terrain.py -- --no-render` | `SM_TownGround_*`, `SM_TownWater`, `SM_TownSea`, `SourceArt/town.json` |
-| Town: its own assets | `Blender -b --factory-startup --python Tools/blender/assets/windmill.py` (and `dock.py`, `hay_cart.py`) | `SM_Windmill`, `SM_Windmill_Sails`, `SM_Dock`, `SM_Boat`, `SM_HayCart` |
-| Town level (after importing those meshes) | `python3 Tools/ue_py.py Tools/ue/build_town.py` | `/Game/Maps/L_Town` |
-| Town, all of the above but its own assets | `sh Tools/town_rebuild.sh` (`layout`: only the plan changed) | |
-| Realm: ground, water, sea, backdrop, far woods, barriers, plan | `Blender -b --factory-startup --python Tools/blender/assets/realm_terrain.py -- --no-render` | `SM_RealmGround_*`, `SM_RealmWater`, `SM_RealmSea`, `SM_RealmBackdrop`, `SM_RealmWoods`, `SM_RealmBarrier`, `SourceArt/realm.json` |
-| Tall trees: their second level of detail | `sh Tools/realm_rebuild.sh trees` (`assets/tree_lods.py`, import, `Tools/ue/tree_lods.py`; again after importing the trees again) | `SM_Tree2_*_L1`, LOD 1 of `SM_Tree2_*` |
+| Realm: ground, water, sea, backdrop, barriers, plan | `Blender -b --factory-startup --python Tools/blender/assets/realm_terrain.py -- --no-render` | `SM_RealmGround_*`, `SM_RealmWater`, `SM_RealmSea`, `SM_RealmBackdrop`, `SM_RealmBarrier`, `SourceArt/realm.json` |
+| Tall trees: their further levels of detail | `sh Tools/realm_rebuild.sh trees` (`assets/tree_lods.py`, import, `Tools/ue/tree_lods.py`; again after importing the trees again) | `SM_Tree2_*_Leaves_L1`, `_Leaves_L2`, `_Trunk_L2`; LOD 1, 2 of `SM_Tree2_*` |
 | Units' and buildings' far levels of detail | `Blender -b --factory-startup --python Tools/blender/assets/voxel_lods.py`, then `python3 Tools/ue_py.py Tools/ue/voxel_lods.py 900` (again after importing a building again; `import_king.py` does it for its parts) | LOD 1 / 2 of `SM_KingB_*`, `SM_<Troop>_*`, LOD 1 of `SM_Castle`, `SM_BarracksYard`, ... |
 | Realm level (after importing those meshes) | `python3 Tools/ue_py.py Tools/ue/build_realm.py` | `/Game/Maps/L_Realm` |
 | Realm, all of the above | `sh Tools/realm_rebuild.sh` (`layout`: only the plan changed) | |
-| Highlands: ground, water, sea, backdrop, far woods, barriers, plan | `Blender -b --factory-startup --python Tools/blender/assets/highland_terrain.py -- --no-render` (`--only backdrop,sea` for some of them) | `SM_HighlandGround_*`, `SM_HighlandWater`, `SM_HighlandSea`, `SM_HighlandBackdrop`, `SM_HighlandWoods`, `SM_HighlandBarrier`, `SourceArt/highland.json` |
+| Highlands: ground, water, sea, backdrop, barriers, plan | `Blender -b --factory-startup --python Tools/blender/assets/highland_terrain.py -- --no-render` (`--only backdrop,sea` for some of them) | `SM_HighlandGround_*`, `SM_HighlandWater`, `SM_HighlandSea`, `SM_HighlandBackdrop`, `SM_HighlandBarrier`, `SourceArt/highland.json` |
 | Highlands, everything (import and level too) | `sh Tools/highland_rebuild.sh` (`layout`: only the plan changed; `blender`: no editor) | `/Game/Maps/L_Highlands` |
+| Realm v2: ground, water, backdrop, barriers, plan | `Blender -b --factory-startup --python Tools/blender/assets/realmv2_terrain.py -- --no-render` (`--only ground,water,backdrop,barrier` for some of them) | `SM_RealmV2Ground_*`, `SM_RealmV2Water`, `SM_RealmV2Backdrop`, `SM_RealmV2Barrier`, `SourceArt/realmv2.json` |
+| Realm v2: the ruins | `sh Tools/realmv2_rebuild.sh ruins` (`assets/ruins.py`, import) | `SM_Ruin_Arch`, `SM_Ruin_Pillar_A/B/C`, `SM_Ruin_Block` |
+| Realm v2, everything (import and level too) | `sh Tools/realmv2_rebuild.sh` (`layout`: only the plan changed; `blender`: no editor) | `/Game/Maps/L_RealmV2` |
 | Building renders | `Blender -b --factory-startup --python Tools/blender/render_buildings.py [-- NAME ... LINEUP]` | `References/Buildings/*.png` |
 | Package | `sh Tools/package.sh` | `Builds/Mac/VoxelLab.app` |
 
@@ -350,6 +375,56 @@ Everything is generated by scripts, so any change can be rebuilt end to end.
   smoke), `UVLGrid` (where units can walk, and routes), `UVLCommand` (selection, platoons, formations, orders, the
   watch tower's garrison).
 
+## Terrain rule: no hard edges in open ground (owner's rule, 2026-11-21)
+
+- **No abrupt ledges on open ground.** Where the landscape rises in the open (meadow, fields, the plain round a
+  town), it must rise gradually.
+  - Use shelves of one block that wander and step back, or a soft slope.
+  - Never a long, straight, sheer bank of exposed dirt a metre or more high cutting across flat grass.
+  - Bad example: `References/Remake/terrain_hard_edge_bad.png`.
+- **Sheer faces only where there is clearly a wall or a mountainside.** A cliff of rock or stone that reads as a
+  mountain, a gorge or a bluff, with terraces stepping up it, may stand sheer.
+  - Good example: `References/Remake/terrain_cliff_ok.png`.
+- **Applies to every map.** Every layout (`realm_layout.py`, `highland_layout.py`, `town_layout.py`, `flatlands.py`)
+  and every new map keeps to this. The same spirit as the mine hills, which roll off in wandering one-metre shelves.
+  - How: `Tools/blender/softground.py` `soft_rise` turns an edge into four shelves of a quarter block, each 1.4 to
+    3.2 m deep and wandering on its own, centred on the old edge: walkable, and a building may stand across one
+    (`VLBuild::LevelTolerance` is 30 cm). The realm's west terrace and the enemy's plateau (both a metre up) use it;
+    they were the straight one-metre banks of the bad example. Left sheer on purpose: the mountain, the highland, the
+    ridge, the gorges, the sea cliffs, the highlands' bluffs and the Crown. (The watch towers' round mounds were left
+    sheer too: no more, see the tower rule below.)
+  - Check: `../Tools/.venv/bin/python` on a plan's `heights()` and look for drops of a metre or more between
+    neighbouring cells where both are open ground (not `wild`, water, hazard or steps). On the realm and the
+    highlands only the towers' mounds are left.
+- **No coarse version where the player normally looks** (owner, same day). Bad: `References/Remake/lod_coarse_bad.png`
+  (an island of big flat leaf cubes on a blocky base: the backdrop's 2 m rock stacks at sea). Good:
+  `References/Remake/lod_detail_good.png`, `References/Remake/lod_detail_good_2.png` (an island in full detail: a
+  proper tree, a grassy top, a band of dirt and stone, rocks at the waterline). The same goes for the coarse forest of
+  `References/Remake/trees_wrong_set.png` (the mountain's baked 1 m block trees, and the tall trees' half-metre far
+  version, which the overview drew from 61 m, nearer than its usual zoom).
+  - Trees: one forest everywhere (the wild woods too, `Tools/blender/wildwoods.py`); LOD 1 is the crown at its own
+    0.25 m scale without the lace, LOD 2 the half-metre version only from 280 m (D, C; 320 m A, B) from the hero
+    camera, 373 m in the overview (`Tools/ue/tree_lods.py`).
+  - Plants: their reduced far version from 170 m (grass), 180 m (flowers), 260 m (bushes) (`Tools/ue/plant_lods.py`).
+  - Units (LOD 1 of 2.5 cm cubes from 70 m in the overview) and buildings (0.25 m cubes from 317 m) are well under a
+    pixel's difference there and stay as they are.
+  - The backdrops have no rock stacks at sea any more, and no 2 m leaf blocks within 70 m of the playable edge.
+- **A watch tower never stands on a drum** (owner, 2026-11-22: "this is bad, remember that, stop doing that").
+  Bad: `References/Remake/tower_cylinder_bad.png` (a tower on a round plinth with sheer walls of dirt and stone and a
+  stone stair up its side). A tower stands on **level ground**, or on a **natural mound** that rolls off gradually in
+  wandering, irregular shelves, as the mine hills do (`minehill.hill`): not a circle, no sheer walls, no stair needed.
+  - Realm v2: the towers by the home mines stand on the level ground; the two hill towers on `KNOLLS` (4 m, a level top
+    of 10 m, the slope 22 m long in quarter-block shelves from a wandering foot: anyone walks up from any side).
+  - The realm (`L_Realm`): its two towers stood on such drums (3 m); they now stand on their side's level ground
+    (`realm_layout.py` `SHELF`, `KNOLL`: the terrace and the plateau, +1), and their flights of steps are gone.
+  - The highlands and the Flatlands still have the old mounds (test grounds; not rebuilt).
+- **Islands are big enough to build on** (owner, same day). Rounded squares, flat on top at the land's level, a band
+  of dirt over stone and rocks at the waterline; a tree at one edge, not a grove. Each map has one big islet per side
+  (about 30 m across, 550 to 590 m2 of walkable top: a barracks' or a farm's footprint fits) reached by a footbridge
+  (`SEA_BRIDGES`) from a little bay in its side's coast; the smaller ones (14 to 20 m) nobody reaches. The realm's
+  divider island is flat, open ground from 42 m south of the crossing to 70 m north of it (two lobes of 760 and
+  980 m2, each takes a barracks); only its two points are bare rock.
+
 ## The realm (`L_Realm`): the battle map
 
 After `References/Remake/battlefield.png`, at twice its size each way: 416 m square, the same buildings twice as far apart. `Tools/blender/realm_layout.py` is the plan (built on
@@ -361,13 +436,18 @@ the level. `../Tools/.venv/bin/python Tools/blender/realm_layout.py --debug` dra
   else stands at the start but its mine and the mine's tower: no farm, no cottages, no second mine, no barracks and no
   archery range on either side: Builders put them up in the game, and the ground round the castle is open, level
   meadow for them. **North-west**: the mountain: the player's one gold mine is set into the mountain's foot at the
-  north end of the west terrace (136 m from the castle's door), its watch tower on a mound (3 m up) 19 m from the
+  north end of the west terrace (136 m from the castle's door), its watch tower on the level terrace 19 m from the
   mine's mouth, beside the last stretch of the mine road; a neutral mine in the mountain's east face.
 - **Middle**: the river from the highland in the north to the sea in the south-east: the upper reach, a fall into the
   gorge (water 2.25 m under the banks), the divider island that splits it into two channels, two footbridges over the
-  island (the only crossing), a second fall into the lower gorge (4 m down), a third into the sea.
+  island (the only crossing), a second fall into the lower gorge (4 m down), a third into the sea. The island is
+  open, level grass from 42 m south of the crossing to 70 m north of it (`ISLAND_FLAT`; two broad lobes either side
+  of its narrow waist at the bridges, each with room for a barracks); only its two points are bare rock.
+- **Off the coast**: five islets (`ISLETS`), flat-topped rounded squares at the land's level. The two big ones (30 m)
+  are each reached by a footbridge (`SEA_BRIDGES`): the player's from a little bay in the south cliff below its town,
+  the enemy's from its south coast east of the river's mouth; the three smaller (18 to 20 m) nobody reaches.
 - **North-east**: the enemy's base on a plateau one metre up: the same, laid out differently (the castle faces west,
-  its mine set into the east ridge to the south-east, 131 m from its door, the tower on a mound beside that mine, as
+  its mine set into the east ridge to the south-east, 131 m from its door, the tower on the level plateau beside that mine, as
   the player's). **South-east**: the hill with the second neutral mine.
 - **Mines are set into the ground they stand by, and nobody builds one**: every mine is placed by the plan (a Builder
   claims a neutral or fallen one where it stands). Two ways, both in `Tools/blender/minehill.py`:
@@ -387,12 +467,13 @@ the level. `../Tools/.venv/bin/python Tools/blender/realm_layout.py --debug` dra
 - **Roads** (`PATHS` in `realm_layout.py`): only each castle's road to the bridge, to its mine (with the steps up
   to the tower by it; the player's mine road also steps up onto the west terrace) and the player's to the dock. None to the neutral mines or anywhere else: that ground is
   grass to build on, and the lanterns stand only along the roads that are left.
-- **Beyond the edge** (`SM_RealmBackdrop`, 2 m voxels, no collision): wooded slopes and snowy mountains to the north
-  and the east, rock stacks out at sea. Nobody gets there: the map's edge has the usual hidden walls.
+- **Beyond the edge** (`SM_RealmBackdrop`, 2 m voxels, no collision): slopes and snowy mountains to the north and the
+  east, wooded from 70 m out (no rock stacks at sea any more: see the terrain rule). Nobody gets there: the map's edge has the usual hidden walls.
 - **Barriers** (`SM_RealmBarrier`, tag `Barrier`): hidden walls half a metre thick on the edge of the plan's hazard
   map: both banks of the whole river and the tops of the falls, the island's two rocky points, the rim of the cliff
-  over the sea all along the west and south coasts, the sea round the dock's planks. They block pawns only (the path
-  grid's capsule test sees them; clicks, arrows and the camera do not). The bridges and the dock are open.
+  over the sea all along the west and south coasts and round the islets, the sea round the dock's planks. They block
+  pawns only (the path grid's capsule test sees them; clicks, arrows and the camera do not). The bridges (the sea
+  bridges too) and the dock are open.
   `UVLGrid::ApplyLevelCollision` enforces this when play starts in every level (barriers and the hidden walls round
   the map's edge: pawns only; `Water`: nothing; `Backdrop`: no collision), and the builders now clear the components'
   "use default collision", without which the mesh asset's BlockAll came back when the level was loaded again (hidden
@@ -404,23 +485,30 @@ the level. `../Tools/.venv/bin/python Tools/blender/realm_layout.py --debug` dra
   `MI_Vox_cloth_Enemy` (red: `TeamMix` / `TeamTint` of `M_VoxSway`).
 - **Balance**: `realm_layout.balance()` measures the walking distances from each castle's door (to the bridge, its
   mine `own_mine`, its tower, the neutral mines, the other castle; and from the mine to its tower and to the bridge)
-  on the plan; they are in `realm.json` under `balance` (player / enemy: bridge 122.8 / 137.5, own mine 136.2 / 130.6,
-  tower 136.0 / 130.2, mine to the bridge 156.3 / 176.6). Move a building in `BUILD` and run the script with `--balance`
+  on the plan; they are in `realm.json` under `balance` (player / enemy: bridge 122.8 / 137.5, own mine 123.6 / 130.6,
+  tower 123.4 / 130.2, mine to the bridge 156.3 / 170.0; the terrace and the plateau can be walked onto anywhere
+  since their edges became shelves, which shortened the player's way to its mine by 13 m). Move a building in `BUILD` and run the script with `--balance`
   to see them again.
 - **Ground to build on**: `MEADOWS0` / `MEADOWS1` in `realm_layout.py` are the flat, open meadows round each side's
   buildings (about 14 000 m2 a side); the forest between them can be cleared. `balance()` also measures this
   (`realm.json`, `balance.buildable_m2`: level ground a side can walk to and is nearer to than its foe, less roads,
   buildings, plots: total / meadow / open / wooded).
 - **The forest** (`AVLForest`, `VLForest.*`; the level's actor `Forest`): every tree and all the undergrowth are
-  instances of one hierarchical instanced component per mesh, not an actor each (12 000 instances in 23 components).
-  Budget: `TREES` in `realm_layout.py` (8 A, 8 B, 110 C, 1301 D). The tall trees have a second level of detail of
-  half-metre blocks, a tenth of the faces (`assets/tree_lods.py`: A 101k -> 8k faces, D 10k -> 0.9k), which the engine
-  draws from about 46 m (D) to 75 m (A) away; grass and flowers are not drawn beyond 400 / 440 m (`build_realm.CULL`; it was 230 / 260 m,
+  instances of one hierarchical instanced component per mesh, not an actor each (12 900 instances).
+  Budget: `TREES` in `realm_layout.py` (8 A, 8 B, 110 C, 1350 D) and the wild woods on the mountain, the highland and
+  the ridge (`Tools/blender/wildwoods.py`: about 360 more D and C, the same trees; they were `SM_RealmWoods`, one
+  mesh of 1 m block trees, 45k faces, which read as a coarse wrong forest): 1739 trees, 23.2 M faces if all were near,
+  8.8 M at LOD 1, 1.9 M at LOD 2 (`realm.json` `trees.lod_faces_m`). The tall trees' levels of detail
+  (`assets/tree_lods.py`): LOD 1 the crown at its own 0.25 m scale without the 0.125 m lace (D leaves 8.6k -> 2.1k
+  faces, the trunk its own), from 60 m (D) to 95 m (A) from the hero camera (80 to 127 m in the overview); LOD 2
+  half-metre blocks (D 0.9k faces in all) from 280 m (D, C) and 320 m (A, B). Estimated tree faces in a view (the
+  plan's trees through the overview's camera): over the woods at the usual zoom 0.07 M before (all at the old half-metre
+  version) -> 0.38 M, halfway out over the middle 0.18 -> 0.72 M, pulled all the way back 1.16 -> 1.31 M; grass and flowers are not drawn beyond 400 / 440 m (`build_realm.CULL`; it was 230 / 260 m,
   and they went as soon as the overview pulled back a little: it is 190 m from what it looks at halfway out, and the top of the view is
-  further), the bushes always are. To pay for that the small plants have a cheap far version, an eighth of the triangles, from 110 m
-  (grass), 120 m (flowers), 170 m (bushes): `Tools/ue/plant_lods.py` (in `realm_rebuild.sh trees`; again after importing them again). The
+  further), the bushes always are. To pay for that the small plants have a cheap far version, an eighth of the triangles, from 170 m
+  (grass), 180 m (flowers), 260 m (bushes) from the hero camera (it was 110 / 120 / 170 m; the overview switches at 4/3 of these): `Tools/ue/plant_lods.py` (in `realm_rebuild.sh trees`; again after importing them again). The
   farms' wheat, sheep and vegetable beds are single actors with no cull distance, here and in `L_Town` / `L_Flatlands`: drawn at any zoom. Where nobody can go
-  (the mountain, the highland, the ridge) there are no tree meshes: `SM_RealmWoods` is one mesh of 1 m block trees.
+  (the mountain, the highland, the ridge) the trees are the forest's own (see above); nothing builds there.
   The ground's flat faces are joined two by two where nothing tells them apart (`realm_terrain.merge_quads`).
 - **Clearing trees for a building** (for the building mechanics to come): `AVLForest::ClearTrees(World, Centre,
   HalfExtent, YawDegrees, Margin = 150, bPoof = true, bDryRun = false)` (world cm; also `ClearTreesIn(World, FBox2D,
@@ -443,7 +531,7 @@ the level. `../Tools/.venv/bin/python Tools/blender/realm_layout.py --debug` dra
 540 m square (the realm's 416 m and 30 % more each way, 1.7 times the ground), made the same way by its own scripts,
 written from the realm's: `Tools/blender/highland_layout.py` (the plan; `--debug` draws `Saved/highland_plan.png` and
 prints the balance table), `highland_cam.py`, `assets/highland_terrain.py`, `Tools/ue/build_highland.py`,
-`Tools/highland_rebuild.sh`, `Tools/highland_test.py`. In the New Game menu as "Highlands" (map 4 of `AVLHUD`;
+`Tools/highland_rebuild.sh`, `Tools/highland_test.py`. In the New Game menu as "Highlands" (map 3 of `AVLHUD`;
 `vl.Map highlands`); the realm is still the default. It carries the realm's contract (the tags, `TeamStart:0/1`,
 `Rally:0/1`, the PlayerStart; `SourceArt/highland.json` with `teams`, `markers`, `balance`, `meadows`, `buildable`).
 
@@ -479,7 +567,13 @@ prints the balance table), `highland_cam.py`, `assets/highland_terrain.py`, `Too
 - **The long way round**: a bridge far up the river (28, 170) and one far down (-28, -170), on tracks. Each side has
   one about 132 m from its castle; the other is 320 m away.
 - **The rest of the ground**: lone crags, meadows at the places worth holding, and groves rather than one forest:
-  1426 trees (A 8, B 8, C 110, D 1300; the realm has about as many on 0.6 of the ground), 11 440 plants.
+  1541 trees (A 8, B 8, C 124, D 1401; 115 of them the wild woods on the peaks, the spurs, the highland and the ridge,
+  which were `SM_HighlandWoods`, 1 m block trees: `Tools/blender/wildwoods.py`), 11 440 plants. Tree faces: 20.6 M
+  if all were near, 7.9 M at LOD 1, 1.7 M at LOD 2.
+- **Off the coast**: nine islets (`ISLETS`), flat-topped rounded squares at the land's level. One big one (30 m) off
+  each side's coast, each other's half turn, reached by a footbridge (`SEA_BRIDGES`) from a little bay in the cliff:
+  the player's off the west coast north of the dock (-253, 15), the enemy's off the east coast (253, -15); about
+  550 m2 of walkable top each, a barracks or a farm fits. The seven smaller (14 to 20 m) nobody reaches.
 - **Roads**: castle to plaza, to the Crown's bridge, to the mine (and the tower's steps), up the bluff, to the dock; dirt tracks through the pass to the neutral mine and to the two far bridges.
 - **Barriers** (`SM_HighlandBarrier`, 5003 m of wall): the realm's rule (sea, cliff rim, river banks) and one more: the
   rim of every drop where people walk (`rim` in `heights()`: ground with something more than 1.5 m lower within a
@@ -489,12 +583,13 @@ prints the balance table), `highland_cam.py`, `assets/highland_terrain.py`, `Too
   bridge 122.7 / 121.0, its top 147.0 / 145.6, its mines 173.3, 172.0 / 171.0, 171.9, own mine 94.4 / 91.1,
   bluff top 89.2 / 89.9, tower 101.4 / 100.8, dock 133.4 / 137.7, neutral mine
   on its own bank 245.7 / 239.8, on the far bank 329.3 / 325.6, near bridge 131.1 / 131.3, far bridge 322.0 / 319.8,
-  castle to castle 342.7; own mine to the Crown's bridge 212.2 / 212.1. Ground to build on (m2): total 50 667 /
-  50 630, of it open meadow 33 313 / 31 887, the bluff's top 6260 / 6221, its half of the Crown 2734 / 2840 (the
-  realm: about 14 000 of meadow a side).
+  castle to castle 342.7; own mine to the Crown's bridge 212.2 / 212.1. Ground to build on (m2): total 52 486 /
+  52 495, of it open meadow 34 704 / 33 432, the bluff's top 6709 / 6579, its half of the Crown 2676 / 2774 (the
+  realm: about 16 000 of meadow a side).
 - **Tests** (`Tools/highland_test.py`). With a match running (`vl.StartMatch 0` first, or the king does not move):
-  `routes` (28 found by the path grid, as long as the plan says) and `barriers` (25 edges he runs at and stops short
-  of, 4 on the dock, 8 crossings: the four bridges, the Crown's stair, the bluff's two flights, the dock). Without a
+  `routes` (30 found by the path grid, as long as the plan says; two of them out to the islets) and `barriers` (27
+  edges he runs at and stops short of, 4 on the dock, 10 crossings: the four bridges, the two sea bridges, the Crown's
+  stair, the bluff's two flights, the dock). Without a
   match (in one the enemy fights the test's troops and its Builders fell trees): `trees` (the count, none against a
   building, clearing) and `march` (over the Crown both ways, 340 m in 52 s at a run; an archer up the tower). A match
   starts there as a battle (12 buildings, 6 a side).
@@ -503,6 +598,116 @@ prints the balance table), `highland_cam.py`, `assets/highland_terrain.py`, `Too
   overview over the home at its usual zoom 40 to 42 fps (the realm 37), over the middle 31 to 39 (33), pulled all the
   way back 36 to 38 (33), as the king 36 to 44 (37): the same as the realm within what the measure wanders. (That session gave the realm
   less than the 50 fps noted above.)
+
+## Realm v2 (`L_RealmV2`): the third, biggest battle map
+
+An island, 640 m square with the sea round it. After `References/RealmV2/`: `PLAN.md` (the owner's brief),
+`layout_annotated.png` and `layout_island_suggestion.png` (the layout: the second is the later word), and for the look
+and the scale `visual_inspiration.png`, `scale_and_clouds.png`, `terrain_pockets.png`, `port.png`. Made by its own
+scripts, written from the highlands': `Tools/blender/realmv2_layout.py` (the plan; `--debug` draws
+`Saved/realmv2_plan.png` and prints the balance table), `realmv2_cam.py`, `assets/realmv2_terrain.py`,
+`assets/ruins.py`, `assets/ports.py`, `Tools/ue/build_realmv2.py`, `Tools/ue/realmv2_lods.py`,
+`Tools/realmv2_rebuild.sh`, `Tools/realmv2_test.py`, `Tools/realmv2_perf.sh`. In the New Game menu as "Realm v2"
+(map 0 of `AVLHUD`; `vl.Map realmv2`). The level is fixed; the scripts are the tool that makes it (everything is
+seeded). It carries the realm's contract (the tags, `TeamStart:0/1`, `Rally:0/1`, the PlayerStart;
+`SourceArt/realmv2.json` with `teams`, `markers`, `balance`, `buildable`, `sky`).
+
+- **Scale** (why these sizes): a soldier is 1.8 m, the castle 12 m high on 14 x 11 m, a watch tower 21 m, a farmstead
+  23 x 19 m, a tall tree 8 to 17 m; a unit walks 4.2 m/s and runs 7.6. The map is 640 m (the realm 416, the highlands
+  540), the island about 590 m across: castle to castle is 580 m on foot (76 s at a run, 2 min 20 s at a walk), each
+  home mine 95 to 100 m from its castle (as on the other maps), a neutral mine 150 to 560 m. Bigger would make marches
+  a chore; smaller would not hold five mines, three contested places and a mountain that reads as colossal. **The
+  mountain is 184 m high** (15 castles, 100 soldiers) on a massif 200 x 225 m, a third of the island's width; it was
+  first 95 m, and the owner asked for about twice that. The ruins plateau is 12 m up (a castle's height), the upper
+  terrace 22 m, the bluffs 7 m, the hill towers' knolls 4 m; the sea and the channels lie 6 m under the land.
+- **The island.** `COAST` (a rounded square that wobbles; straight at the two ports): sea cliffs 6 to 9 m with ragged
+  ledges and rocks at their foot, five coves with a beach (`BEACHES`: the land comes down in shelves), five islets
+  (`ISLETS`: rocks with a tree, nobody reaches them). The sea is `SM_RealmV2Sea`, one sheet 1200 m square; nothing
+  lies beyond it (no backdrop).
+- **Channels round the mountain** (`RIVER_LOW`): two arms of the sea come in from the north coast, run down either
+  side of the massif in **ravines 6 m deep and 26 m wide** (15 m of water, terraced walls a metre and a half a step)
+  and meet south of the ruins; a third comes in from the west coast. Nobody crosses them but by the **nine bridges**
+  (`BRIDGES`; all at level 0, each on a neck of land that comes out to a narrow channel 5 m wide).
+- **The massif** (the land between the arms). The mountain (`mountain()`, `M_POLY`, `PEAKS`): eleven peaks, the
+  summit in the middle, benches 10 m apart on its shoulders up to about 100 m (grass and the forest's own trees on the
+  treads, cliffs between), crags of 2, 4 and 8 m, bare rock above, snow from 150 m. Nobody climbs it. On its south
+  shoulder the **upper terrace** (22 m: the old arch) and under that the **ruins plateau** (12 m, 8500 m2 of level
+  ground, pillars round a paved court): climbed by three ramps (south, west, east; a shelf of a quarter block every
+  1.2 m and more) and a stair between the terraces. A creek falls 30 m out of the mountain's wall onto the plateau,
+  crosses it (a stone slab carries the road over) and falls 18 m off its south edge into the east arm. Round the
+  mountain's feet: the west foot's pocket, the **north crossing** (the saddle between the west arm and the mountain's
+  north-west buttress), the ground behind the mountain (50 m to the north coast, a pocket to build in), the east shelf.
+- **Pockets, forest, hills** (owner: "too much open land"): the level, open ground is the plan's pockets (`FLATS` of
+  kind `build`, 1800 to 9000 m2 each: the two homes, three more round each, six neutral ones) and the zones; everything
+  else that can be walked is forest (`wood()`: four places in five) with roads through it, twelve low rounded hills
+  (`HILLOCKS`, 3 to 5 m, wooded, walked over from any side) and five rock plateaus with trees on top (`MESAS` of
+  top `wild`).
+- **Layout** (player south-west, enemy north-east, as both layout pictures):
+  - `castle0` (-176, -118), facing south; `castle1` (246, 152), facing west.
+  - mines: **W** `mine0`, the player's, in the west bluff's east face; **NE** `mine1`, the enemy's, in the north
+    bluff's south face (both `minehill.embed`, in a wall); **NW** `mine_nw` and **SE** `mine_se`, neutral, each in its
+    tor (`minehill.hill`); **centre-east** `mine_c`, neutral, in the mountain's east wall (`embed`). The island's
+    shape moved none of them.
+  - watch towers (the tower rule: no drums): `tower0` / `tower1` on the level ground beside the home mines;
+    `tower0b` (W) and `tower1b` (E) on their knolls (`KNOLLS`), over the ways north and south along each coast.
+  - **ports** (`PORTS`, scenery; reference `port.png`): the player's on the west coast 120 m from its castle, the
+    enemy's on the east coast 50 m from its castle. Each: a quay cut into the cliff's foot 1 m over the sea (the
+    island's own rock, 13 x 40 m), a stone stair down the cliff to it (5 m), the pier (`SM_Dock`) with a boat moored
+    (`SM_GrainBoat` when that mesh exists, else `SM_Boat`; the instance is tagged `Moored`), and from `assets/ports.py`
+    `SM_Port_Warehouse` (green roof, awning, anchor banner), `SM_Port_Crane`, `SM_Port_Arch` (the tunnel's mouth in
+    the cliff) and `SM_Port_Tower` (the harbour tower on the cliff: green roof in two tiers, a lit lantern room).
+  - contested zones (terrain only; `TargetPoint`s tagged `NorthCrossing`, `SouthCrossing`, `Ruins`, which the enemy's
+    commander reads as markers): the north crossing, the south crossing (the double bridge over the joined arm, on a
+    rock in midstream, and the open ground before it), the ruins plateau.
+  - crossings: `nw` and `n` (round the mountain's north), `w` and `s` (the player's ways onto the massif), `e` and
+    `se` (the enemy's), `big_w` + `big_e` (the south crossing), `trib` (the player's way to the north-west).
+- **Terrain maths** (`realmv2_layout.py`; the ideas, not the code, are Luanti's Carpathian mapgen's and
+  FastNoiseLite's): `fbm` (layered value noise), `ridged` (each octave 1 - |n| squared and weighted by the octave
+  before: sharp crests, smooth feet), `warp` (domain warping: the massif's outline and the peaks are looked up at
+  places pushed about by two layers of noise), `steps` (Carpathian's stepped mountains: a height cut into risers and
+  treads). The mountain = a shoulder that rises quickly from the foot + the peaks' envelope (a 4-norm of cones with
+  hollow flanks, so ridges join the peaks) x a ridged sum + finer ridges, then benches, then crags (heights rounded to
+  1, 2, 4 or 8 m by a slow noise). The lowland = one slow noise (0 to 3.6 m), blended to its level at every place of
+  the plan (`FLATS`), rounded to quarter blocks: it rises in shelves of a quarter block 2.5 m and more deep (the
+  terrain rule; `hard_edges()` counts drops of a metre between open cells). A ramp (`RAMPS`) is a floor rising evenly,
+  the hillside beside it stepping away in one-metre terraces.
+- **The sky** (`AVLSky`, `VLSky.*`; `realmv2_layout._sky()`): 32 voxel clouds (14 small puffs low round the
+  mountain's flanks at 58 to 120 m, 12 banks beyond the coast, 6 wisps over the channels), each fourteen white boxes
+  drifting about its place, unlit (`M_VoxSky`). A cloud is puffed away when the camera comes within 70 m of it or rises
+  to 12 m under it, so none ever lies between the overview camera and the ground; they are not on the minimap. 7 flocks
+  of 6 birds (three cubes each: a body and two wings that beat and glide) wheel at 62 to 226 m: some at the clouds'
+  height, some under, some over. No collision, no shadows; two instanced components, 574 cubes. (The project had no
+  birds; the loops and the beat-and-glide are after the old main game's `SRBirds`.)
+- **Balance** (`--balance`, metres walked from the castle's door, player / enemy): own mine 99 / 95, its tower 75 /
+  82, hill tower 200 / 154, the ruins 415 / 315, north crossing 346 / 426, south crossing 197 / 443, the north-west
+  mine 352 / 561, the centre-east mine 436 / 152, the south-east mine 455 / 367, castle to castle 582. The plan is not
+  symmetric (it is the layout pictures'): the enemy is nearer the massif and the centre-east mine, the player has more
+  ground and the nearer way to the north-west mine.
+- **Cost.** Ground: 387 tiles of 32 m (`SM_RealmV2Ground_*`, tagged `Ground`), 5.40 M faces after joining (the realm
+  1.95 M, the highlands 3.86 M), each tile with **two further levels of detail that are the same shape**
+  (`merge_far`: flat faces of one plane and one material joined into quads of up to 1 m, from 110 m from the hero
+  camera, and up to 4 m, from 280 m; the overview at 4/3 of these; what goes is the block-to-block tint and the corner
+  shading; `Tools/ue/realmv2_lods.py`, run by the rebuild after every import): 2.02 M faces at LOD 1, 1.64 M at
+  LOD 2. Water 0.43 M (its undersides left out), the sea 937 faces, the barrier's walls. Forest (`TREES`): 3621 trees
+  (A 12, B 12, C 231, D 3366; 339 of them the wild woods of the mountain's benches and the rock plateaus): 45.7 M faces
+  if all were near, 17.4 M at LOD 1, 3.8 M at LOD 2; 14 760 plants; the sky 574 cubes; the path grid 1280 x 1280 cells.
+  Measured (`sh Tools/realmv2_perf.sh`: PIE in the editor, a match running, GPU ms; M5 Pro): before the LODs (the
+  valley with its backdrop) at the base 26.5, the mountain in view 24.1 (its base pass 10.3), the whole map 59.1; with
+  them 19.0 / 20.8 (base pass 5.3) / 25.7; the island as it is now 18.3 / 21.1 / 25.0. `L_Realm` measured the same
+  way in the same session: 18.1 at its base, 23.2 over the whole map. (The realm's 15.5 ms is a packaged build's
+  figure; this map has not been measured packaged.)
+- **Checks** (`Tools/realmv2_test.py`, PIE with a match running): `routes` (from the two castles to every mine, tower,
+  zone and buildable area: all found, as long as the plan says), `build` (a barracks laid in every buildable area and
+  zone and on the plateau and the bluffs, a tower on the upper terrace), `stuck` (every unit on the plan's ground).
+  Movement and battles are tested apart.
+- **Town and Village removed** (2026-11-22): `L_Town` and `L_VoxelVillage`, their menu entries, `MapsToCook`, the
+  town's level builder (`Tools/ue/build_town.py`, `Tools/town_rebuild.sh`, `assets/town_terrain.py`) and the 76 assets
+  only they used (`Saved/town_village_only.json` lists them: the village's `SM_Terrain_*`, the town's
+  `SM_TownGround_*`, `SM_TownWater`, `SM_TownSea`, the windmill and its sails, the hay cart, the old `SM_Tree_A..D`,
+  the banner posts, the arrow barrel, the weapon rack, the sacks, the stone steps). Kept: `town_layout.py` /
+  `town_cam.py` (the battle maps' plans are built on them), `village_layout.py` and `SourceArt/layout.json` (the
+  Flatlands take the buildings' sizes from it), `build_level.py` (the other builders run on it), the four fence
+  meshes (the plans' plot code places them), and every asset another map or the code names.
 
 ## The battle: teams, combat, economy, the enemy, the menus
 
@@ -513,7 +718,7 @@ in-game HUD). Every number is the main game's (`SRFeelSettings`); per-hit damage
 main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) rhythm.
 
 - **The match.** The game opens on the title screen (New Game, How to Play, Settings, Quit). New Game: the map (**The Realm**, the
-  battle; Town, Flatlands, Village are sandboxes) and the enemy's difficulty (Easy / Normal / Hard); Start opens the
+  battle; **Realm v2** and Highlands, the bigger battles; Flatlands is a sandbox) and the enemy's difficulty (Easy / Normal / Hard); Start opens the
   map with `?Match=1?Difficulty=N`. Each side starts with 400 gold, 300 food, its castle and whatever else the map places
   (on the two battle maps: one gold mine and the watch tower beside it; **no farm**, **no barracks and no archery range**: the
   Builder raises them, and the enemy's commander lays a farm first, then the trainers), 3 swordsmen and 2 archers in front of its
@@ -528,13 +733,19 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
 - **Troops.** Swordsman (the Shieldbearer): 280 health, 29 a swing (split over its blows), 100 food, 9 s at the
   Barracks. Archer: 125 health, 40 an arrow (x0.35 against buildings: 14; raised from the main game's 29, +38%, so
   archers are worth fielding: 17 damage a second against a swordsman's 23), 85 food, 8 s at the Archery Range, bow
-  range 31 m. King David: 600 health, 45 a swing, no housing, his own pace (5.2 m/s on the march, 9.5 at a run; a
-  troop 4.2 / 7.6); **if he falls he rises again at his castle 20 s later** (not if it has fallen).
-  Troops not on an order go for any foe in their sight (16.9 m, archers 19.5 m: the main game's 13 / 15 m plus 30%; on
-  a lookout 55 m), troops before
-  buildings, and answer whoever strikes them; friends within 6.5 m (13 m of a building) come to help. Stance per
-  platoon or unit (G): Aggressive (chases, lets go at twice its sight unless struck), Defensive (no further than
-  13 m from its post, then back), Hold ground (only what is in reach). A plain move ignores foes; a left or right
+  range 31 m. King David: 600 health, 45 a swing, no housing, a troop's pace (4.2 m/s on the march, 7.6 at a run; it
+  was 5.2 / 9.5); **if he falls he rises again at his castle 20 s later** (not if it has fallen).
+  Troops not on an order go for any foe within their reach (`Acquire`: 40 m, archers 42 m; raised from 16.9 / 19.5 m,
+  about 2.4x / 2.15x, on 2026-11-22; on a lookout the bow's reach), troops before buildings, and answer whoever strikes
+  them; friends within 12 m (13 m of a building) come to help, and an idle troop with no foe in its reach goes for the
+  foe of a friend fighting within its reach (up to 10 m beyond it). Sight (the Spy's notice, fog of war) stays 16.9 /
+  19.5 m. Stance per platoon or unit (G): Aggressive (40 / 42 m; lets a chase go at 1.5 times that unless struck, and
+  goes no further than 50 m from where it took the fight up, `VLRules::AggressiveLeash`: then, and after letting a chase
+  go, it walks back there; a fight taken up within 6 s of another keeps the first one's post, so one foe after another
+  does not lead it into the enemy's base), Defensive (only what it can strike within its leash of 20 m from its post: a
+  swordsman goes for foes within 22.4 m, an archer within her 42 m; past the leash, and once no foe is left in its
+  reach, it walks back to its post), Hold ground (only what is in reach; it does not help friends). Units on an
+  attack-move, following, guarding or on a chain of orders are brought back by that order instead of a post. A plain move ignores foes (a march too, until it arrives); a left or right
   click on a foe's unit or building attacks it. Swordsmen run a moving foe down (a fresh route every 0.6 s, given up
   after a dozen that get no closer) and go for a building's walls; archers lead a moving foe and walk into range
   again when it leaves it. Arrows strike the bodies of foes they pass (never friends). The dead topple and are gone.
@@ -564,11 +775,23 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
   walls: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500 and 4 archers), Barracks 1600, Archery Range 1400 (levels:
   training x1.35 / x1.8), Farm 1000 (14 food every 6 s, houses 4; levels 20 / 27, 6 / 8), Gold Mine 1250 (10 gold
   every 6 s; levels 16 / 23), Watch Tower 1800 (shoots 50 every 1.2 s to 24 m; levels 85 / 120, 0.95 / 0.8 s, 27 / 30 m;
-  archers on its lookout shoot too), Granary / Treasury if a map has them (+400 / 900 / 1600 storage). The selected
+  archers on its lookout shoot too; **its own archers**: see below), Granary 900 / 1200 / 1500 and Treasury 1100 / 1450 / 1800 (+400 / 900 / 1600 storage; built from the Economy tab). The selected
   building's panel (bottom middle): health, what it does, the recruit button (Shift 5, Ctrl 10: each paid for and
   housed when queued, no queue limit), the upgrade button (U), its lookout. Right click with a barracks / range selected: its rally point;
   Ctrl+1..6: its recruits join that platoon. A fallen building sinks into the ground (its queue lost; a storehouse's
   stock beyond what is left is lost).
+- **The watch towers' own archers** (`UVLBattle::TickTowerGuards`, `AVLKing::bTowerGuard`; the owner's call,
+  2026-11-22). Every watch tower of either side, the map's and those raised in the match, has archers of its own on
+  its lookout: 2 at level 1, 3 at level 2, 4 at level 3 (`VLRules::TowerGuards`); one more steps up the moment the
+  tower is raised a level, and a finished tower is manned at once. They take no housing and are not counted in the
+  troops (the top bar, the cap, the commander's army or squads), cannot be selected, ordered or played (a click on
+  one is a click on its tower), and stay up when the Lookout button sends the others down. They shoot as far as the
+  tower does (its level's reach plus 3 m: 27 / 30 / 33 m), so the tower's reach is what the enemy commander reckons
+  with; enemy archers (and the towers) can shoot them down, and one that falls is replaced **40 s** later, one at a
+  time (`VLRules::TowerGuardRestock`; not while the tower is under repair). They go with their tower (razed, pulled
+  down, changing hands); their deaths are not counted as troops lost. The tower's panel shows them ("archers 2 / 2",
+  "next in 31 s"); its own shot is as before. On the commander's side they count as manning the tower (its
+  `TowerArchers` 2 / 3 are mostly met by them).
 - **The enemy commander** (`FVLCommander`; the main game's `SRAISubsystem` grown into a commander of three layers over
   its economy). It plays by the player's rules (no extra resources; Easy gets less of its income) and knows only what
   it has seen. Files: `VLAIWorld.*` (perception: influence map, the map's points, events), `VLEnemyAI.*` (the profile,
@@ -736,13 +959,15 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
   watch tower's **Lookout** (who mans it; click: send them out). Farms and mines show their payout meter, storehouses
   the kingdom's stores, the castle its archers.
 - **Platoon panel** (bottom right): six slots; a formed platoon shows its number in its colour, its kind, counts,
-  health, a burning edge while it fights, and buttons for formation, stance and disband; click selects, twice within
-  0.35 s also looks at it; empty slots read "Ctrl+N to form". The header folds it away (remembered).
+  health, a burning edge while it fights, and buttons for formation, stance, **the recruits' flag** (lit on the one
+  platoon new troops join; a click sets it there, a second clears it; the platoon's tag over the troops carries a small
+  flag too) and disband; click selects, twice within 0.35 s also looks at it; empty slots read "Ctrl+N to form". The
+  header folds it away (remembered).
 - **Castle card**: raising the castle a level shows what the level brings (14 s, or **Onward**).
 - **Portraits**: every troop portrait (selection panel, queue, recruit and lookout buttons, training bars, platoon rows,
   the hero's bar) is a render of the voxel character's head and shoulders; an enemy's is reddened.
-- **World**: no rings under units' feet (the user's call: the platoon diamond over their heads and the health bars
-  mark them; the side-coloured ring under every unit is behind `vl.TeamRings 1`, off by default; the main game's green
+- **World**: no rings under units' feet (the user's call: the platoon diamond over their heads, in the platoon's
+  colour, **grey for the player's units in no platoon**, and the health bars mark them; the side-coloured ring under every unit is behind `vl.TeamRings 1`, off by default; the main game's green
   ring under the selected and the pale one under the pointer are left out); the selected
   building's footprint; health bars over units of both sides in
   every view: always in the red (under 34 %), else for 3 s after a hit or a heal and fading over 0.8 s, and always while
@@ -774,11 +999,21 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
   `vl.Cam.Clearance <cm>`, `vl.Cam.Overhang 0|1`, `vl.Cam.Log 1` (logs a camera being held up).
 
 **Menus.** Title screen (the live map drifting behind; crown, title lettering, NEW GAME, HOW TO PLAY, SETTINGS, QUIT;
-Enter: New Game). New Game: the map (The Realm, Town, Flatlands, Village) and Easy / Normal / Hard, BEGIN. Pause (Esc):
+Enter: New Game). New Game: the map (The Realm, Realm v2, Highlands, Flatlands) and Easy / Normal / Hard, BEGIN. Pause (Esc):
 RESUME, RESTART, NEW GAME (another map), CONTROLS, SETTINGS, QUIT TO MAIN MENU, QUIT GAME; restart and the quits ask
-first (CANCEL / yes). Settings: master volume, effects, music (sliders), interface scale (applied when the slider is let
-go), Graphics (Quality High / Medium / Low, Render scale 100-50 %), frame-rate limit, camera angle (V), look speed (L),
-invert look (I); saved in `GameUserSettings.ini` (`[VoxelLab.Video] Quality`, `RenderScale`). See *Performance* below. Controls
+first (CANCEL / yes). Settings: master volume, effects, music (sliders; music on, 100 %, until the player turns it
+down), interface scale (applied when the slider is let go), Graphics (Quality High / Medium / Low, Render scale 100-50 %,
+dynamic resolution), frame-rate limit, **Window** (Windowed / Full screen; the editor's play window says "Editor
+window"), camera angle (V), look speed (L), invert look (I). **Every setting is kept across launches** in
+`GameUserSettings.ini` (`Saved/Config/Mac/` packaged): `[VoxelLab.Audio] MasterVolume`, `Effects`, `MusicV2` (a new key:
+the old `Music` could hold the 0 of the days it was off by default), `[VoxelLab.Interface] Scale`, `PlatoonsCollapsed`,
+`[VoxelLab.Video] Quality`, `RenderScale`, `DynamicRes`, `FrameCapV2`, `WindowX` / `WindowY` (the window's own size, to
+come back to from full screen), `[VoxelLab.Camera] CameraAngle`, `LookSpeed`, `LookInvertV2`, `[VoxelLab.Game]
+Difficulty`, and the engine's `[/Script/Engine.GameUserSettings] FullscreenMode`, `ResolutionSizeX / Y`. Each is
+written when it changes (the sliders and choices when Settings is left, or the game quits with it open); the window's
+mode and size however they change (the Window row, F11 / Alt+Enter, the green button, dragging an edge: looked at once a
+second, `UVLGraphics::KeepWindowState`). An explicit choice (the music off, a window) survives a restart. See
+*Performance* below. Controls
 (F1, or HOW TO PLAY): every key, two columns. Victory / defeat: the match's numbers, PLAY AGAIN, MAIN MENU, KEEP WATCHING.
 
 **Input.** `AVLKing::OverviewCommands` hands every left press (and a right click let go without dragging) to
@@ -788,15 +1023,15 @@ same path; `vl.HUD` lists the buttons drawn last frame with their ids (`VLHUDSty
 
 **Changed from the main game** (layout): the mode box top left and the hero view's help line and health bar are new;
 the top bar's chips show the hero as well as the Builders and the Spy (no builders' list), and the enemy's status after
-the clock; the build menu's tabs are clicked (no Tab key); the castle's panel is wider (Builder, Spy, upgrade); the recruit buttons have no hotkey cap; the platoon rows have three small buttons
-(no recruit flag); the watch tower's panel has a Lookout button; the castle's panel has the Spy's recruit button; the
+the clock; the build menu's tabs are clicked (no Tab key); the castle's panel is wider (Builder, Spy, upgrade); the recruit buttons have no hotkey cap; the platoon rows have the main
+game's four small buttons (formation, stance, the recruits' flag, disband; a building's own Joins chips come before the
+flag); the watch tower's panel has a Lookout button; the castle's panel has the Spy's recruit button; the
 pause menu has New Game and Quit Game instead of Save / Load; the victory screen adds Keep Watching; unit portraits are
 the voxel characters, not the pixel icons.
 
 **Not ported** (their features are not in this game; their buttons are left out, not shown dead): the castle's building
 zone; the Medic, the Rider and the Catapult (recruit buttons, portraits); the command card's Build and Repair buttons
-(B and X do it, and the Build button), and the platoon panel's "recruits join here" flag (here each barracks / range
-has its own Joins chips); fog of war on the minimap; saved games (Continue, Load, Save, the save list); the title
+(B and X do it, and the Build button); fog of war on the minimap; saved games (Continue, Load, Save, the save list); the title
 screen's film; the recruit buttons' Q / E keys (Q / E turn the view here); the sandbox match of the main game's New Game.
 
 ## Orders: paths, platoons, the tower
@@ -857,8 +1092,9 @@ doings on one (a fight it picks up, an archer walking into range, a defensive un
 
 Console (the four of 2026-11-21's second pass): `vl.Leaders` (each platoon's leader and who follows whom),
 `vl.Follow <who> <unit name | king>`, `vl.HeroAim <unit name> | X Y [Z] [seconds]` (the hero view's crosshair taken to
-be there), `vl.HeroOrder [run] [queue] | click [add] | select [add]` (the hero view's right click / plain left click /
-Alt + click at the crosshair), `vl.Queue <who> X Y | work <building name> | clear | log`, `vl.Build ... queue`.
+be there), `vl.HeroOrder [run] [queue] | click | select [add]` (the hero view's right click / plain left click, always a
+swing / Option + click at the crosshair, add: with Shift), `vl.Chains` (every order chain: its units, its items, what it
+rejoins), `vl.Queue <who> X Y | work <building name> | clear | log`, `vl.Build ... queue`.
 
 Console: `vl.Stop [who]`, `vl.Hold [who]`, `vl.Patrol <who> X Y [X Y ...] [run]`, `vl.AttackMove <who> X Y [queue]
 [run]`, `vl.Guard <who> <building name | unit name>`, `vl.Roam [who]`, `vl.Dismiss [who]`, `vl.March`, `vl.Orders`
@@ -874,14 +1110,19 @@ thighs > shins, the cape's yoke > 5 columns of 4 hinged panels (`Cape<col><row>`
 lantern is on the material slot `glow` and the tail on `sway`, which `import_king.py` gives an emissive instance and
 an instance of the wind material `M_VoxSway`, the vertex alpha being how far a corner moves.) The sword is
 modelled in the closed fist (grip through the fist, guard beyond the thumb, pommel behind) and never turns in it: the
-blade is aimed with the arm and the wrist. `--face K|A|B|C` picks the face (K is the approved one), `--views
+blade is aimed with the arm and the wrist. **Faces** (2026-11-22): every figure's face is the archer's, built by one
+function copied into each script, `archer_face`: one smooth skin plate, a 6 x 4 u white with a 3 x 4 u pupil centred
+in it and a glint, a level brow above each eye, a small nose with a shadow under it, a short mouth line. Each figure
+keeps its own touches through its arguments (a bigger or prouder nose, thicker brows, brows dipping toward the nose)
+and its own beard of big plain blocks: King David's square black beard and moustache, the swordsman's short one, the
+builder's full one, the farmer man's brown one. `--views
 face,grip,head,hero,sides,...` the preview renders, `--search-sheath` re-runs the scabbard search (it is pinned).
 
-**His pace** (`VLRules::Troop("King")`, applied in `AVLKing::BeginPlay`): 520 cm/s walking and 950 running, against a
-troop's 420 / 760. Half of the gain is a longer stride and half a quicker step (`StrideScale` = sqrt(520 / 420) =
-1.11: the feet reach 11% further, the pelvis drops to let the legs reach them, and the cadence is 11% quicker), so a
-planted foot stays still on the ground; his acceleration, braking and the camera's lag are scaled by 950 / 760 so he
-gets going, stops and is trailed as before. With troops in a formation he keeps their pace (March together).
+**His pace** (`VLRules::Troop("King")`, applied in `AVLKing::BeginPlay`): a troop's, 420 cm/s walking and 760 running
+(the owner's call, 2026-11-22: he walks with his men; it was 520 / 950). The code that made a quicker pace half a longer
+stride and half a quicker step (`StrideScale` = sqrt(his walk / 420), acceleration, braking and the camera's lag scaled
+by his run / 760) is kept for any other pace; at a troop's pace all of it is 1. With troops in a formation he keeps
+their pace (March together).
 
 `AVLKing::Animate` poses him each frame: a gait whose feet are placed on the ground and reached by a two-bone leg
 solver, a jump with an airborne pose and a sprung landing, the three swings as runs of whole-body key poses
@@ -944,7 +1185,7 @@ Console commands for testing (in the game's console, or `Tools/pie.py run "<cmd>
 | `vl.Spawn Swordsman\|Archer X Y [count]` | troops without training |
 | `vl.Units` | log every unit: position, state, distance to its goal (each finished order also logs `arrived` / `GAVE UP`) |
 | `vl.Path X0 Y0 X1 Y1`, `vl.ShowPaths [s]`, `vl.Grid [X Y [R]] \| rebuild` | log and draw a route / the units' routes / the grid's nodes |
-| `vl.Look X Y [Zoom] [Yaw]`, `vl.Map town\|realm\|flatlands\|village\|highlands` | the overview camera over a point; open a map |
+| `vl.Look X Y [Zoom] [Yaw]`, `vl.Map realm\|realmv2\|highlands\|flatlands` | the overview camera over a point; open a map |
 | `vl.Input click\|rclick [U V]`, `vl.Input wheel D`, `vl.Input pinch D`, `vl.Input scroll DX DY`, `vl.Input key NAME` | a real mouse / trackpad / key event, put in where the operating system's would be (through Slate, the pointer moved to the middle of the game's view or to U V: it moves the real pointer). It logs what is under the pointer; the game's window has to be in front. `vl.InputLog 1` logs the clicks, wheel steps and gestures the player's unit sees, with the zoom |
 | `vl.StepLog 0\|1` | log the step sounds (see *Sounds*) |
 | `vl.Record Name Frames [Fps]`, `vl.At Frame <cmd>` | save a frame sequence at a fixed time step, running commands at given frames |

@@ -1,0 +1,18 @@
+{
+ "name": "SM_RealmV2Ground_1_17_L1",
+ "faces": 5840,
+ "collision": "none",
+ "bounds": [
+  [
+   -288.0,
+   224.0,
+   -10.0
+  ],
+  [
+   -256.0,
+   256.0,
+   1.25
+  ]
+ ],
+ "lights": []
+}

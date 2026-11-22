@@ -201,13 +201,13 @@
  },
  "SM_KingB_Head": {
   "set": "units",
-  "triangles": 6300,
+  "triangles": 7401,
   "levels": [
    {
     "level": 1,
     "file": "SM_KingB_Head_L1.gltf",
     "voxel": 0.025,
-    "triangles": 1556,
+    "triangles": 1574,
     "slots": [
      "paint",
      "gold"
@@ -217,7 +217,7 @@
     "level": 2,
     "file": "SM_KingB_Head_L2.gltf",
     "voxel": 0.05,
-    "triangles": 460,
+    "triangles": 522,
     "slots": [
      "paint",
      "gold"
@@ -1050,13 +1050,13 @@
  },
  "SM_Swordsman_Head": {
   "set": "units",
-  "triangles": 18757,
+  "triangles": 18055,
   "levels": [
    {
     "level": 1,
     "file": "SM_Swordsman_Head_L1.gltf",
     "voxel": 0.025,
-    "triangles": 2010,
+    "triangles": 1942,
     "slots": [
      "paint"
     ]
@@ -1065,7 +1065,7 @@
     "level": 2,
     "file": "SM_Swordsman_Head_L2.gltf",
     "voxel": 0.05,
-    "triangles": 544,
+    "triangles": 636,
     "slots": [
      "paint"
     ]
@@ -2590,13 +2590,13 @@
  },
  "SM_Spy_Head": {
   "set": "units",
-  "triangles": 5070,
+  "triangles": 4648,
   "levels": [
    {
     "level": 1,
     "file": "SM_Spy_Head_L1.gltf",
     "voxel": 0.025,
-    "triangles": 602,
+    "triangles": 622,
     "slots": [
      "paint",
      "gold"
@@ -2606,7 +2606,7 @@
     "level": 2,
     "file": "SM_Spy_Head_L2.gltf",
     "voxel": 0.05,
-    "triangles": 310,
+    "triangles": 338,
     "slots": [
      "paint",
      "gold"
@@ -3408,13 +3408,13 @@
  },
  "SM_Builder_Head": {
   "set": "units",
-  "triangles": 17441,
+  "triangles": 16695,
   "levels": [
    {
     "level": 1,
     "file": "SM_Builder_Head_L1.gltf",
     "voxel": 0.025,
-    "triangles": 1782,
+    "triangles": 1722,
     "slots": [
      "paint"
     ]
@@ -3423,7 +3423,7 @@
     "level": 2,
     "file": "SM_Builder_Head_L2.gltf",
     "voxel": 0.05,
-    "triangles": 484,
+    "triangles": 486,
     "slots": [
      "paint"
     ]
@@ -4171,6 +4171,68 @@
      "beam",
      "roof",
      "leaves",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_Granary": {
+  "set": "buildings",
+  "triangles": 149776,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Granary_L1.gltf",
+    "voxel": 0.25,
+    "triangles": 21970,
+    "slots": [
+     "stone",
+     "brick",
+     "cobble",
+     "plank",
+     "beam",
+     "beam_v",
+     "leaves",
+     "wheat_top",
+     "wheat",
+     "hay",
+     "wool",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
+ },
+ "SM_Boat": {
+  "set": "buildings",
+  "triangles": 133940,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_Boat_L1.gltf",
+    "voxel": 0.125,
+    "triangles": 30744,
+    "slots": [
+     "stone",
+     "plank",
+     "beam",
+     "beam_v",
+     "roof",
+     "wheat_top",
+     "wheat",
+     "wool",
      "paint",
      "glow",
      "window",

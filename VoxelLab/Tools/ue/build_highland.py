@@ -5,7 +5,7 @@ PIE). Written from build_realm.py; the level is made the same way and carries th
     python3 Tools/ue_py.py Tools/ue/build_highland.py          (sh Tools/highland_rebuild.sh does everything)
 
 Import first (editor open): the ground tiles in SourceArt/Meshes/highland_tiles.json, SM_HighlandWater, SM_HighlandSea,
-SM_HighlandBackdrop, SM_HighlandWoods, SM_HighlandBarrier.
+SM_HighlandBackdrop, SM_HighlandBarrier.
 
   tags Selectable, Name:<kind>, Team:0|1|Neutral   every building: the player's (0), the enemy's (1); Neutral: the four
                       bridges, the two mines of the Crown (also tagged Rich) and the two far ones
@@ -14,7 +14,8 @@ SM_HighlandBackdrop, SM_HighlandWoods, SM_HighlandBarrier.
   tag Crown           a TargetPoint on the mesa in the middle (for rules to come: holding it)
   tag Barrier         SM_HighlandBarrier: hidden walls that block pawns and nothing else: the river, the sea, the
                       cliff's rim, the rims of the bluffs, the landings, the mounds and the Crown
-  tag Backdrop        SM_HighlandBackdrop (beyond the edge), SM_HighlandWoods (block trees where nobody goes): no collision
+  tag Backdrop        SM_HighlandBackdrop (beyond the edge): no collision. (The woods where nobody goes are the forest's own
+                      trees now, not SM_HighlandWoods.)
   actor Forest        an AVLForest: every tree and all the undergrowth as instanced components
 The enemy's cloth (banners, flags) is MI_Vox_cloth_Enemy.
 """
@@ -84,19 +85,6 @@ def barrier():
     c.set_editor_property("affect_distance_field_lighting", False)
     c.set_editor_property("affect_dynamic_indirect_lighting", False)
     c.set_visibility(False)
-    return a
-
-
-def far_woods():
-    a = place("SM_HighlandWoods", 0, 0, 0, folder="Terrain")
-    if a is None:
-        return None
-    a.tags = [unreal.Name("Backdrop")]
-    c = a.static_mesh_component
-    c.set_editor_property("use_default_collision", False)
-    c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
-    c.set_editor_property("affect_distance_field_lighting", False)
-    c.set_editor_property("affect_dynamic_indirect_lighting", False)
     return a
 
 
@@ -186,7 +174,6 @@ def main():
     water("SM_HighlandSea")
     seabed(layout["terrain"])
     backdrop()
-    far_woods()
     _forest, in_wood, wood_kinds = forest(layout)
     has_barrier = barrier() is not None
     red = eal.load_asset("/Game/Voxel/Materials/MI_Vox_cloth_Enemy") if eal.does_asset_exist("/Game/Voxel/Materials/MI_Vox_cloth_Enemy") else None

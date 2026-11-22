@@ -1,10 +1,10 @@
 {
  "name": "SM_HighlandGround_0_3",
- "faces": 6364,
+ "faces": 6709,
  "collision": "complex",
  "bounds": [
   [
-   -252.0,
+   -269.0,
    -189.0,
    -10.0
   ],

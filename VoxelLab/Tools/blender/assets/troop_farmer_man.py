@@ -1048,11 +1048,41 @@ def build_pitchfork(grip):
     return P
 
 
+def archer_face(P, F, z0, front=-11.0, hw=12.0, top=None, skin="skin", shade="skin_d", lip="lip", brow="brow",
+                nose=(1.3, 2.6, 0.6), brow_t=1.6, brow_x=(2.6, 9.6), brow_dip=0.0, mouth=3.0, mouth_dz=0.0, glint="gem_w",
+                plate=True, eyes_only=False):
+    """THE ARCHER'S FACE (troop_archer.py, build_head): the one every figure's face is built on. ONE smooth skin plate
+    in front of the skull (a single block, so no seams between blocks read as features); eyes of a 6 x 4 u white with
+    a 3 x 4 u dark pupil centred in it (a level gaze, straight ahead) and a glint; a level rectangle brow a little above
+    each eye; a small nose with a shadow under it; a short mouth line. Her heights above the foot of her face (100) are
+    kept above z0, and her depths in front of her plate (front: -11) in front of this one.
+    Each figure's own touches: nose = (half width, height, how far proud), brow_t (how thick), brow_x (its inner and
+    outer ends), brow_dip (its inner end coming down toward the nose: a sterner look), mouth (half width).
+    eyes_only: just the eyes, brows and glints (a face whose plate, nose and mouth are already the archer's)."""
+    b = lambda *a, **k: P.blk(F, *a, **k)
+    d = front + 11.0                              # the archer's y + d
+    K = z0 - 100.0                                # the archer's z + K
+    if plate and not eyes_only:
+        b(-hw, hw, front, front + 1.0, z0, top if top is not None else z0 + 22.0, skin, bevel=0.03)
+    if not eyes_only:
+        b(-mouth, mouth, -11.2 + d, -10.9 + d, 103.6 + K + mouth_dz, 104.6 + K + mouth_dz, lip, bevel=0.1)   # mouth: one thin bar
+        nw, nh, npr = nose
+        b(-nw, nw, -10.9 - npr + d, -10.9 + d, 106.8 + K, 106.8 + nh + K, skin, bevel=0.12, tint=1.05)      # nose: one block
+        b(-nw, nw, -11.2 + d, -10.9 + d, 106.1 + K, 106.8 + K, shade, bevel=0.1)                           # ... the shadow under it
+    for sx in (1, -1):
+        b(3.0, 9.0, -11.25 + d, -10.9 + d, 110.0 + K, 114.0 + K, "white", sx=sx, bevel=0.05)          # eyes
+        b(4.5, 7.5, -11.4 + d, -10.9 + d, 110.0 + K, 114.0 + K, "pupil", sx=sx, bevel=0.05)           # the pupil, centred
+        b(brow_x[0], brow_x[1], -11.7 + d, -10.9 + d, 114.6 + K, 114.6 + brow_t + K, brow, sx=sx, bevel=0.08)   # brows
+        if brow_dip > 0:
+            b(brow_x[0], brow_x[0] + 2.6, -11.75 + d, -10.9 + d, 114.6 - brow_dip + K, 114.6 + K, brow, sx=sx, bevel=0.08)
+        b(4.8, 5.7, -11.55 + d, -11.35 + d, 112.6 + K, 113.5 + K, glint, sx=sx, bevel=0.2)            # the glint in each eye
+
+
 def build_head():
     """The head, put together from two other troops (see the top of this file).
     FACE: the ARCHER's. Her skull (24 x 20 x 22 u), one smooth skin plate in front of it, her nose, mouth and ears at
     her heights above the skull's base (hers is at 100, his at SKULL_Z); his jaw is 2 u broader each side and carries
-    the beard. EYES: the SWORDSMAN's (whites, pupils, thick brows, glints; see the block marked below).
+    the beard. EYES: the ARCHER's too (archer_face).
     His own: warm tan skin, brown hair down to the collar, a full brown beard and a moustache."""
     P = Part("Head")
     F = Frame()
@@ -1087,32 +1117,22 @@ def build_head():
         b(15.6, 16.5, -1.0, 1.0, 109.6 + K, 112.4 + K, "skin_d", sx=sx)                  # the hollow of the ear
         b(9.6, 12.0, -11.3, -10.5, 122.6, 126.0, "hair_d", sx=sx)                        # the hair coming down at the temples
     b(-12.0, 12.0, -11.4, -10.5, 125.0, 128.0, "hair")        # the hairline (under the hat's brim)
-    # ---- SWORDSMAN: the eyes, and (his own) the beard, on a grid of 1 u cells standing on the plate. Layer 0 is the
-    # eyes' (a white 6 x 3 with a 3 x 3 pupil one cell in from its inner end), layer 1 the brows' (one thick 8 x 3
-    # rectangle resting on each eye, a cell proud of it); the glints are single small blocks on the pupils.
-    f = Grid(F, -16, 16, -16, -10, 100.5, 132.5)
-    X, Y, Z = f.X, f.Y, f.Z
-    AX = np.abs(X)
-    L0, L1, L2, L3 = (Y > -11), (Y > -12), (Y > -13), (Y > -14)
-    EZ = SKULL_Z + 10.5                                       # the eyes' lower edge: the archer's eye line
-    f.fill(L0 & (AX > 3) & (AX < 9) & (Z > EZ) & (Z < EZ + 3), "white")                  # eyes: a white and a pupil each
-    f.fill(L0 & (AX > 4) & (AX < 7) & (Z > EZ) & (Z < EZ + 3), "pupil")
-    f.fill(L1 & (AX > 2) & (AX < 10) & (Z > EZ + 3) & (Z < EZ + 6), "brow")              # brows: one thick rectangle each
-    # the beard, carried by the broad jaw: chin and jaw, thicker on the chin, round the mouth, up the cheeks to the
+    # ---- his own: a full brown beard, one layer proud of the face in big plain blocks (as the swordsman's and the
+    # builder's), carried by his broad jaw: chin and jaw, thicker on the chin, round the mouth, up the cheeks to the
     # sideburns; a moustache proud of it with drooping ends
-    f.fill(L1 & (AX < 14) & (Z > 105.5) & (Z < 109.5), "beard")
-    f.fill(L2 & (AX < 10) & (Z > 104.5) & (Z < 109.5), "beard")
-    f.fill(L3 & (AX < 6) & (Z > 104.5) & (Z < 108.5), "beard")
-    f.fill(L1 & (AX > 4) & (AX < 14) & (Z > 109.5) & (Z < 111.5), "beard")
-    f.fill(L1 & (AX > 9) & (AX < 14) & (Z > 111.5) & (Z < 114.5), "beard")
-    f.fill(L1 & (AX > 11) & (AX < 14) & (Z > 114.5) & (Z < 116.5), "beard")
-    f.fill(L0 & (AX > 12) & (AX < 14) & (Z > 116.5) & (Z < 120.5), "beard_l")
-    f.fill(L2 & (AX < 7) & (Z > 110.5) & (Z < 112.5), "beard_l")                         # the moustache
-    f.fill(L2 & (AX > 4) & (AX < 8) & (Z > 108.5) & (Z < 111.5), "beard_l")              # ... its ends
-    emit(P, f, lim=(9, 15), lims={"beard": (5, 10), "white": (3, 3), "pupil": (3, 3), "brow": (10, 14)},
-         shade=0.2, proud_p=0.25, proud=(0.08, 0.2), bevel=0.8, seed=63, core=False)
+    bd = lambda x0, x1, z0, z1, nm, y0=-11.6, sx=1: b(x0, x1, y0, -10.5, z0 + K - 6.0, z1 + K - 6.0, nm, sx=sx, bevel=0.12)
+    bd(-14.0, 14.0, 105.6, 109.2, "beard")
+    bd(-10.0, 10.0, 104.4, 108.0, "beard", -12.4)
+    bd(-6.0, 6.0, 103.6, 104.8, "beard_d", -12.2)
     for sx in (1, -1):
-        b(4.3, 5.2, -11.35, -10.9, EZ + 1.8, EZ + 2.7, "gem_w", sx=sx, bevel=0.2)        # SWORDSMAN: the glint in each eye
+        bd(3.4, 14.0, 109.2, 111.0, "beard", sx=sx)
+        bd(9.0, 14.0, 111.0, 113.6, "beard", sx=sx)
+        bd(11.2, 14.0, 113.6, 116.4, "beard_d", -11.4, sx=sx)
+        bd(12.0, 14.0, 116.4, 120.4, "beard_l", -11.2, sx=sx)
+        bd(4.0, 6.4, 108.8, 111.4, "beard_l", -12.2, sx=sx)
+    bd(-6.2, 6.2, 110.8, 112.3, "beard_l", -12.3)
+    # ---- ARCHER: the eyes too (a 6 x 4 u white with a 3 x 4 u pupil centred in it, a glint); his brows a little heavier
+    archer_face(P, F, 100.0 + K, front=-10.6, brow="brow", brow_t=2.0, brow_x=(2.4, 9.8), eyes_only=True)
     return P
 
 

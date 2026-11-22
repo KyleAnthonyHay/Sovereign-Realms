@@ -1,6 +1,6 @@
 {
  "name": "SM_Swordsman_Head_L1",
- "faces": 1005,
+ "faces": 971,
  "collision": "none",
  "bounds": [
   [
@@ -17,5 +17,5 @@
  "lights": [],
  "lod_of": "SM_Swordsman_Head",
  "voxel": 0.025,
- "triangles": 2010
+ "triangles": 1942
 }

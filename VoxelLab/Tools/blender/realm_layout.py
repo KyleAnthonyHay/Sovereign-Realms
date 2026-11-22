@@ -46,6 +46,8 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import realm_cam as C
 import minehill
+import softground
+import wildwoods
 import town_layout as T
 from town_layout import hash2, noise2, seg_dist, dist_polyline, in_poly, in_rect, meta, rot
 
@@ -71,19 +73,28 @@ GRASS, COBBLE, DIRT, GRAVEL, STONE, MOSSY, PLANK = range(7)
 
 # the coast: the land's outline (it runs off the map to the north and the east)
 COAST = [(-184, 280), (280, 280), (280, -116), (200, -120), (168, -132), (140, -136), (120, -148), (96, -154), (72, -144), (48, -152),
-         (20, -168), (-16, -176), (-56, -172), (-88, -176), (-116, -168), (-140, -152), (-160, -136), (-170, -116), (-172, -100), (-180, -84),
+         (20, -168), (-16, -176), (-56, -172), (-62, -164), (-82, -164), (-88, -176), (-116, -168), (-140, -152), (-160, -136), (-170, -116), (-172, -100), (-180, -84),
          (-184, -56), (-180, -24), (-186, 0), (-182, 40), (-188, 80), (-180, 124), (-186, 168), (-180, 208)]
-ISLETS = [(-196, -148, 6.0), (-195, -36, 4.0), (-120, -194, 5.5), (-24, -196, 6.5), (80, -184, 7.0), (156, -168, 6.0), (192, -148, 5.0)]
+# The islands off the coast (x, y, half size): rounded squares, flat on top at the land's level (References/Remake/
+# lod_detail_good.png: grass, a band of dirt over stone, rocks at the waterline). The first two are big enough for a
+# barracks (its 19 x 18 m yard) and each is reached by a footbridge from its side's coast (SEA_BRIDGES; the player's
+# from a little bay south of its town, the enemy's from its south coast east of the river's mouth); nobody reaches the
+# others. (They were rocks of 4 to 7 m with a tree each, and the narrow sea inside the map's edge has no room for
+# more big ones.)
+ISLETS = [(-72.0, -185.0, 15.0), (161.0, -154.0, 15.0), (-140.0, -182.0, 10.0), (-10.0, -195.0, 9.0), (80.0, -180.0, 10.0)]
+SEA_BRIDGES = [(-72.0, -167.0, 0.0), (161.0, -136.0, 0.0)]      # SM_Bridge (7 m): its middle, its yaw (0: north-south)
 
 # the mountain in the north-west corner (its edge: cliffs), the enemy's plateau
 MOUNTAIN = [(-280, 280), (-60, 280), (-60, 56), (-128, 56), (-140, 34), (-280, 34)]
 PLATEAU = [(36, 92), (52, 56), (68, 28), (92, 4), (116, -16), (132, -48), (172, -64), (280, -64), (280, 280), (20, 280), (16, 192), (18, 140)]
-# The watch towers guard the gold mines: each stands on a mound 3 m over its side's ground, some 18 m from its mine's
-# mouth and beside the last stretch of the mine road, which is the way a raid from the bridge comes. Each side has one
+# The watch towers guard the gold mines: each stands on its side's level ground, some 18 m from its mine's mouth and
+# beside the last stretch of the mine road, which is the way a raid from the bridge comes. (They stood on round drums of
+# rock 3 m high with sheer walls and a stair: never that, owner's rule 2026-11-22, References/Remake/
+# tower_cylinder_bad.png. A tower stands on level ground or on a natural mound that rolls off in wandering shelves.) Each side has one
 # mine, set into the wall at the edge of its land: the player's into the mountain's foot, the enemy's into the east
 # ridge (References/Remake/mine_in_wall.png; no hills of their own).
-SHELF = (-152.0, 14.0, 9.0)       # the player's tower: a mound south-east of its mine's mouth, at +4 (3 m over the terrace)
-KNOLL = (152.5, -2.0, 9.0)        # the enemy's tower: a mound north-west of its mine's mouth, at +4 (3 m over its plateau)
+SHELF = (-152.0, 14.0, 9.0)       # the player's tower: level ground south-east of its mine's mouth, on the terrace (+1)
+KNOLL = (152.5, -2.0, 9.0)        # the enemy's tower: level ground north-west of its mine's mouth, on its plateau (+1)
 HOME_CRAGS = []                   # (no drums of rock for the home mines)
 CRAG = (77.0, -63.0, 14.0)        # the neutral mine of the east bank is set into this rock (its back and both sides)
 FALL1_Y = 187.0                   # the highland's edge at the river: the first fall
@@ -95,10 +106,10 @@ TERRACE_W = (-116.0, -76.0)       # the player's west terrace (+1): west of this
 BUILD = dict(
     castle0=("SM_Castle", -104.0, -56.0, 0.0, 0.0, 0),
     mine0=("SM_MineCliff", -158.0, 39.5, 1.0, 0.0, 0),                 # (set into the mountain's foot, at the north end of the west terrace)
-    tower0=("SM_WatchTower", SHELF[0], SHELF[1], 4.0, 180.0, 0),
+    tower0=("SM_WatchTower", SHELF[0], SHELF[1], 1.0, 180.0, 0),
     castle1=("SM_Castle", 118.0, 98.0, 1.0, -90.0, 1),
     mine1=("SM_MineCliff", 179.0, -8.0, 1.0, -90.0, 1),                # (set into the east ridge, south-east of the castle)
-    tower1=("SM_WatchTower", KNOLL[0], KNOLL[1], 4.0, 90.0, 1),
+    tower1=("SM_WatchTower", KNOLL[0], KNOLL[1], 1.0, 90.0, 1),
     mine_w=("SM_MineCliff", -66.5, 88.0, 0.0, 90.0, "Neutral"),
     mine_e=("SM_MineCliff", 67.0, -62.0, 0.0, -90.0, "Neutral"),
 )
@@ -111,7 +122,10 @@ PLAZA0, PLAZA1 = (-104.0, -70.0), (104.0, 98.0)
 BRIDGE_Y = 10.0
 BRIDGE_W, BRIDGE_E = (-6.5, BRIDGE_Y), (6.5, BRIDGE_Y)
 BRIDGE_WEST_END, BRIDGE_EAST_END = (-10.0, BRIDGE_Y), (10.0, BRIDGE_Y)
-ISLAND_WALK = 11.0                # the island can be walked this far north and south of the crossing; beyond: bare rock
+ISLAND_WALK = 11.0                # (the island's narrow waist: this far north and south of the crossing)
+# The island is flat, open ground from ISLAND_FLAT[0] to [1] (y): room for a building on each of its two broad lobes
+# north and south of the crossing (owner, 2026-11-21: islands big enough to build on); beyond, its points are bare rock.
+ISLAND_FLAT = (-42.0, 70.0)
 DOCK = (-171.0, -112.0)           # its land end; it runs out west (yaw -90), deck 1 m above the sea
 DOCK_Z = SEA + 1.0
 SPAWN = (-104.0, -66.0, -120.0)   # x, y, facing (degrees from +X): in front of the player's castle, facing the viewer
@@ -167,12 +181,12 @@ def behind(key, X, Y, side=3.0, depth=7.0):
 
 # The river. Each stretch: (points, half width). The two channels are narrow where the bridges cross them.
 RIVER_UP = [([(-8, 280), (-16, 224), (FALL1_X, FALL1_Y - 0.5)], 5.0)]
-CHANNEL_W = [(0, 76), (-9, 58), (-10, 34), (-6.5, 22), (-6.5, -2), (-10, -14), (-9, -32), (0, -48)]
+CHANNEL_W = [(0, 84), (-12, 72), (-18, 52), (-17, 36), (-6.5, 22), (-6.5, -2), (-16, -16), (-17, -32), (-10, -46), (0, -54)]
 CHANNEL_E = [(-x, y) for (x, y) in CHANNEL_W]
-RIVER_MID = [([(FALL1_X, FALL1_Y + 0.5), (-18, 156), (-10, 124), (-2, 96), (0, 76)], 5.5),
-             (CHANNEL_W[:4], 3.2), (CHANNEL_W[3:5], 2.6), (CHANNEL_W[4:], 3.2),            # the west channel
-             (CHANNEL_E[:4], 3.2), (CHANNEL_E[3:5], 2.6), (CHANNEL_E[4:], 3.2),            # the east channel
-             ([(0, -48), (6, -60), (16, -74)], 5.5)]
+RIVER_MID = [([(FALL1_X, FALL1_Y + 0.5), (-18, 156), (-10, 124), (-2, 98), (0, 84)], 5.5),
+             (CHANNEL_W[:5], 3.2), (CHANNEL_W[4:6], 2.6), (CHANNEL_W[5:], 3.2),            # the west channel
+             (CHANNEL_E[:5], 3.2), (CHANNEL_E[4:6], 2.6), (CHANNEL_E[5:], 3.2),            # the east channel
+             ([(0, -54), (7, -63), (16, -74)], 5.5)]
 FALL2 = (16.5, -74.5)
 FALL2_DIR = (0.68, -0.735)        # the river's direction there: beyond this line the water lies at LOW
 RIVER_LOW = [([(17, -75), (40, -100), (76, -120), (108, -138), (128, -156)], 6.0)]
@@ -198,14 +212,14 @@ PATHS = [
     ([PLAZA0 + (0,), (-118.0, -105.0, 0), (-144.0, -112.0, 0), (-157.25, -112.0, 0), (-168.75, -112.0, DOCK_Z), (DOCK[0] + 0.25, DOCK[1], DOCK_Z)], 1.4, COBBLE),   # to the dock
     ([ROAD_M0 + (0,), (-83.0, -48.0, 0), (-90.0, -16.0, 0), (-100.0, 12.0, 0), (-111.0, 18.0, 0), (-121.0, 16.0, 1), (-136.0, 27.0, 1),
       TOWER_RD0 + (1,), G_["mine0"] + (1,)], 1.3, COBBLE),                                                                                              # to the mine
-    ([TOWER_RD0 + (1,), (G_["tower0"][0], 24.0, 4), G_["tower0"] + (4,)], 1.3, COBBLE),
+    ([TOWER_RD0 + (1,), (G_["tower0"][0], 24.0, 1), G_["tower0"] + (1,)], 1.3, COBBLE),
     # ---- the crossing
     ([(-3.0, BRIDGE_Y, 0), (3.0, BRIDGE_Y, 0)], 1.4, COBBLE),
     # ---- the enemy's side (its plateau: +1)
     ([G_["castle1"] + (1,), PLAZA1 + (1,)], 1.8, COBBLE),
     ([PLAZA1 + (1,), ROAD_M1 + (1,), (62.0, 54.0, 1), (56.0, 45.0, 0), BEND_E + (0,), (28.0, 12.0, 0), BRIDGE_EAST_END + (0,)], 2.0, COBBLE),          # to the bridge
     ([ROAD_M1 + (1,), (104.0, 72.0, 1), (136.0, 68.0, 1), (160.0, 44.0, 1), (166.0, 20.0, 1), TOWER_RD1 + (1,), G_["mine1"] + (1,)], 1.3, COBBLE),     # to the mine
-    ([TOWER_RD1 + (1,), (TOWER_RD1[0] - 6.0, TOWER_RD1[1], 4), G_["tower1"] + (4,)], 1.3, COBBLE),
+    ([TOWER_RD1 + (1,), (TOWER_RD1[0] - 6.0, TOWER_RD1[1], 1), G_["tower1"] + (1,)], 1.3, COBBLE),
 ]
 # where a path meets something at its own level: it is not sunk there
 APRONS = [G_[k] for k in G_] + [BRIDGE_WEST_END, BRIDGE_EAST_END, (-3.0, BRIDGE_Y), (3.0, BRIDGE_Y), DOCK]
@@ -255,11 +269,14 @@ def relief(X, Y):
     h = np.zeros(X.shape)
     dm = sdist(X, Y, MOUNTAIN) + (n2 - 0.5) * 3.0
     mountain = dm > 0
-    # the west terrace (the player's mine stands on it, against the sea cliff)
-    h = np.where((X < TERRACE_W[0] + (n1 - 0.5) * 4.0) & (Y > TERRACE_W[1]) & ~mountain, 1.0, h)
-    # the enemy's plateau
+    # the west terrace (the player's mine stands on it, against the sea cliff) and the enemy's plateau, a metre up. Their
+    # edges were one sheer, straight bank of dirt a metre high across the meadows (References/Remake/
+    # terrain_hard_edge_bad.png): they rise in four wandering shelves of a quarter block now (softground.soft_rise),
+    # which anyone walks up and a building may stand across.
+    dt = np.minimum(TERRACE_W[0] + (n1 - 0.5) * 4.0 - X, Y - TERRACE_W[1] + (noise2(X, Y, 11.0, 23) - 0.5) * 5.0)
+    h = np.where(~mountain, np.maximum(h, softground.soft_rise(dt, X, Y, 61)), h)
     de = sdist(X, Y, PLATEAU) + (n2 - 0.5) * 3.0
-    h = np.where(de > 0, 1.0, h)
+    h = np.maximum(h, softground.soft_rise(de, X, Y, 71))
     # (its north terrace, a metre higher, is gone with the archery range that stood on it and the steps of its road: it
     # could not be reached any more. That ground is the plateau's now, level with the rest, to build on.)
     # the highland north of the first fall (its edge is straight where the river crosses it)
@@ -359,9 +376,16 @@ def heights():
     X, Y = grid()
     rag = (noise2(X, Y, 6.0, 11) - 0.5) * 3.0 + (noise2(X, Y, 24.0, 12) - 0.5) * 7.0
     rag = rag * np.clip((np.hypot(X - DOCK[0], Y - DOCK[1]) - 9.0) / 10.0, 0.0, 1.0)      # (the dock's cliff is where the plan says)
+    for (bx, by, _yaw) in SEA_BRIDGES:                                      # (and the sea bridges' ends)
+        rag = rag * np.clip((np.hypot(X - bx, Y - by) - 9.0) / 10.0, 0.0, 1.0)
     dc = sdist(X, Y, COAST) + rag                                           # > 0 on the land, metres from the coast
+    isle = np.full(X.shape, -1e9)
     for (ix, iy, r) in ISLETS:
-        dc = np.maximum(dc, r - np.hypot(X - ix, Y - iy) + rag * 0.5)
+        isle = np.maximum(isle, softground.islet(X, Y, ix, iy, r, rag * 0.25))
+    dc = np.maximum(dc, isle)
+    sea_cor = np.zeros(X.shape, bool)
+    for (bx, by, byaw) in SEA_BRIDGES:                                      # the sea bridges' decks and their landings
+        sea_cor |= softground.bridge_rect(X, Y, bx, by, byaw, 6.5, 1.5)
     for mr in mound_rects():                                                # (ground under the whole of a mine's hill, where the coast is near)
         dc = np.where(in_rect(X, Y, mr, 1.0), np.maximum(dc, 3.0), dc)
     land = dc > 0
@@ -378,8 +402,8 @@ def heights():
     open_ = meadow(X, Y) > 0.5
     h = np.where((noise2(X, Y, 11.0, 51) > 0.6) & ~wild & ~open_, h + 0.5, h)
     h = np.where((noise2(X, Y, 4.5, 77) > 0.58) & ~(open_ & ~wild), h + 0.25, h)
-    for (ix, iy, r) in ISLETS:
-        h = np.where(np.hypot(X - ix, Y - iy) < r + 2.5, -3.0 + np.round(n1 * 2) * 0.5, h)
+    islet = isle > -2.5
+    h = np.where(islet, 0.0, h)                                             # (flat on top: to build on)
 
     # ---- the plots' terraces, the buildings' pads, the rock the mines are set in
     for (x0, y0, x1, y1, z, _k, _g) in PLOTS:
@@ -419,6 +443,8 @@ def heights():
         keep |= in_rect(X, Y, footprint(k, 1.5))
     for mr in mound_rects():
         keep |= in_rect(X, Y, mr, 1.0)
+    for (bx, by, byaw) in SEA_BRIDGES:                                      # (no ragged ledges where a bridge lands)
+        keep |= softground.bridge_rect(X, Y, bx, by, byaw, 9.0, 3.0)
     cut1 = land & (dc < 1.3) & ~keep & (blk > 0.62)
     cut2 = land & (dc < 2.6) & (dc >= 1.3) & ~keep & (blk > 0.8)
     h = np.where(cut1, h - 1.0 - np.round(blk2 * 3.0) * 0.5, h)
@@ -445,7 +471,7 @@ def heights():
     # the bridges' feet stand on rock sills
     for (bx, by) in (BRIDGE_W, BRIDGE_E):
         h = np.where(water_mid & rect_mask(X, Y, bx, by, 2.6, 1.9), MID - 0.75, h)
-    corridor = rect_mask(X, Y, BRIDGE_W[0], BRIDGE_Y, 4.25, 1.5) | rect_mask(X, Y, BRIDGE_E[0], BRIDGE_Y, 4.25, 1.5)
+    corridor = rect_mask(X, Y, BRIDGE_W[0], BRIDGE_Y, 4.25, 1.5) | rect_mask(X, Y, BRIDGE_E[0], BRIDGE_Y, 4.25, 1.5) | sea_cor
     # rock shelves a little way down the gorge's sides (not at the bridges)
     shelf = (d_any >= 0) & (d_any < 0.75) & land & ~keep & ~corridor & (blk > 0.55) & (Y < FALL1_Y - 1.0)
     h = np.where(shelf, np.minimum(h, np.where(beyond2 & (d_low < 0.75), -1.5, -0.75) - np.round(blk2) * 0.5), h)
@@ -455,7 +481,7 @@ def heights():
     # ---- the divider island: flat where the crossing is, bare broken rock towards its two points
     wet = water_up | water_mid | water_low
     island = in_poly(X, Y, CHANNEL_W + CHANNEL_E[::-1]) & ~wet
-    isl_rock = island & (np.abs(Y - BRIDGE_Y) > ISLAND_WALK)
+    isl_rock = island & ((Y > ISLAND_FLAT[1]) | (Y < ISLAND_FLAT[0]))
     h = np.where(island & ~isl_rock & ~path, 0.0, h)
     h = np.where(isl_rock, 0.75 + np.round(blk2 * 3.0) * 0.5 + np.where(np.abs(Y - BRIDGE_Y) > 20.0, 0.5, 0.0), h)
 
@@ -468,7 +494,8 @@ def heights():
 
     return dict(X=X, Y=Y, h=h, land=land, dc=dc, sea=sea, rocks=rocks, path=path, psurf=psurf, psteps=psteps,
                 water_up=water_up, water_mid=water_mid, water_low=water_low, wet=wet, pads=pads, island=island, isl_rock=isl_rock,
-                cut=(cut1 | cut2 | shelf) & ~wet, hazard=hazard, corridor=corridor, deck=deck, d_river=d_any, R=R, wild=wild, open=open_ & ~wild)
+                cut=(cut1 | cut2 | shelf) & ~wet, hazard=hazard, corridor=corridor, deck=deck, d_river=d_any, R=R, wild=wild, open=open_ & ~wild,
+                islet=islet & land)
 
 
 def surface(G):
@@ -490,8 +517,9 @@ def surface(G):
     s[(noise2(X, Y, 5.0, 41) > 0.82) & (s == 0) & G["land"]] = DIRT
     s[(noise2(X, Y, 3.0, 61) > 0.84) & (s == 0) & G["land"]] = MOSSY
     # the island
-    isl = G["island"] & ~G["path"]
-    s[isl] = np.where(hs[isl] > 0.55, MOSSY, np.where(hs[isl] > 0.25, STONE, GRASS))
+    isl = G["island"] & ~G["path"]                                       # (grass to build on, a little moss and stone near the water)
+    s[isl] = np.where(G["d_river"][isl] < 2.5, np.where(hs[isl] > 0.55, MOSSY, np.where(hs[isl] > 0.3, STONE, GRASS)),
+                      np.where(hs[isl] > 0.9, MOSSY, GRASS))
     s[G["isl_rock"]] = np.where(hs[G["isl_rock"]] > 0.5, STONE, MOSSY)
     # the coast's ledges and rocks, the gorge's shelves
     cut = G["cut"]
@@ -562,8 +590,10 @@ class Scene(T.Scene):
             px, py = rot(pr["pos"][0], pr["pos"][1], yaw)
             self.add(pr["mesh"], x + px, y + py, yaw + float(pr.get("yaw", 0.0)), float(pr.get("scale", 1.0)), z=z + pr["pos"][2], group="props")
 
-    def tree(self, kind, x, y, yaw=0.0, scale=1.0, group="forest"):
-        super().tree(kind, x, y, yaw, scale, group)
+    def tree(self, kind, x, y, yaw=0.0, scale=1.0, group="forest", z=None):
+        r = {"A": 1.6, "B": 1.5, "C": 1.1, "D": 0.7}[kind] * scale
+        self.add("SM_Tree2_%s_Trunk" % kind, x, y, yaw, scale, z=z, dz=-0.15, group=group, r=r)
+        self.add("SM_Tree2_%s_Leaves" % kind, x, y, yaw, scale, z=z, dz=-0.15, group=group)
         self.trees.append((x, y, kind, scale))
 
 
@@ -618,6 +648,8 @@ def things(G, s):
             sc.add("SM_MineMound", x, y, yaw, z=z, group="rocks", tags=["MineMound"])
     sc.add("SM_Bridge", BRIDGE_W[0], BRIDGE_W[1], 90.0, z=0.04, group="buildings", team="Neutral")
     sc.add("SM_Bridge", BRIDGE_E[0], BRIDGE_E[1], 90.0, z=0.04, group="buildings", team="Neutral")
+    for (bx, by, byaw) in SEA_BRIDGES:                                    # out to the two big islets
+        sc.add("SM_Bridge", bx, by, byaw, z=0.04, group="buildings", team="Neutral")
     sc.add("SM_PlazaBanner", PLAZA0[0], PLAZA0[1], z=0.0, r=1.3, team=0)
     sc.add("SM_PlazaBanner", PLAZA1[0], PLAZA1[1], z=1.0, r=1.3, team=1)
     sc.building("SM_Dock", DOCK[0], DOCK[1], DOCK_Z, -90.0, 0)
@@ -700,6 +732,8 @@ def things(G, s):
         for (x0, y0, x1, y1) in rects:
             if x0 - pad < x < x1 + pad and y0 - pad < y < y1 + pad:
                 return True
+        if any(math.hypot(x - bx, y - by) < 12.0 for (bx, by, _yaw) in SEA_BRIDGES):
+            return True
         return math.hypot(x, y - BRIDGE_Y) < 16.0 or math.hypot(x - PLAZA0[0], y - PLAZA0[1]) < 5.5 or math.hypot(x - PLAZA1[0], y - PLAZA1[1]) < 5.5
 
     path_d = np.full(X.shape, 1e9, np.float32)
@@ -765,8 +799,8 @@ def things(G, s):
         near_trees.setdefault((int(x // 12.0), int(y // 12.0)), []).append((x, y, kind))
         count[kind] += 1
 
-    hand = [("D", 0.0, BRIDGE_Y + ISLAND_WALK + 2.0), ("D", 1.0, BRIDGE_Y - ISLAND_WALK - 2.5)]        # the island's two trees
-    hand += [("C" if r > 5.0 else "D", ix, iy) for (ix, iy, r) in ISLETS]                           # the islets'
+    hand = [("D", 0.0, ISLAND_FLAT[1] - 2.0), ("D", 0.5, ISLAND_FLAT[0] + 2.0)]        # the island's two trees, at its ends
+    hand += [("D", ix + r * 0.45, iy - r * 0.55) for (ix, iy, r) in ISLETS]           # one at the edge of each islet (its top left to build on)
     for kind, x, y in hand:
         plant(kind, x, y, float(rng.uniform(0.85, 1.0)), "frame")
     tries, lone = 0, 0
@@ -775,7 +809,7 @@ def things(G, s):
             tries += 1
             x, y = rng.uniform(-HALF + 5, HALF - 5, 2)
             i, j = cell(x, y)
-            if wild[i, j]:
+            if wild[i, j] or G["islet"][i, j] or (G["island"][i, j] and not G["isl_rock"][i, j]):     # (the islands are left open to build on)
                 continue
             w = wood(x, y) * (1.0 if kind in "CD" else 0.8)
             if open_[i, j]:                                # a lone tree here and there on the meadows, no more
@@ -800,6 +834,22 @@ def things(G, s):
         for (_x, _y, k, _w) in against:
             count[k] -= 1
     sc.cleared = len(against)
+
+    # ---- the wild woods (where nobody can go): the same trees as the forest, D and a few C, instances of the level's
+    # AVLForest with their levels of detail. They were SM_RealmWoods, one mesh of trees of 1 m blocks, which read as a
+    # coarse, dark, wrong forest beside these (owner, 2026-11-21: References/Remake/trees_wrong_set.png). wildwoods.py
+    bare = np.zeros(h.shape, bool)
+    for key in BUILD:
+        bare |= in_rect(X, Y, footprint(key, 5.0)[:4])
+    kx, ky, kr = KNOLL
+    bare |= R["shelf"] | (np.hypot(X - kx, Y - ky) < kr + 3.0)
+    sc.wild_trees = 0
+    for (x, y, z, kind, scale) in wildwoods.spots(G, s, CELL, (GRASS, MOSSY), TOP - 9.0, bare):
+        if tree_blocked(x, y, kind, scale):
+            continue
+        sc.tree(kind, x, y, yaw=float(rng.integers(0, 4)) * 90.0, scale=scale, group="wild", z=z)
+        count[kind] += 1
+        sc.wild_trees += 1
 
     # ---- undergrowth
     def scatter(n, meshes, r, group, gap, scale=(0.9, 1.15), where=None, solid=False, allow_pad=False):
@@ -838,7 +888,7 @@ def things(G, s):
             sc.add(str(rng.choice(["SM_Rock_A", "SM_Rock_B", "SM_Rock_D", "SM_Rock_E"])), x, y, float(rng.integers(0, 4)) * 90.0,
                    float(rng.uniform(0.8, 1.2)), group="rocks", r=1.5)
             k += 1
-    for (x, y, m) in ((0.3, 34.0, "SM_Rock_A"), (-0.6, 52.0, "SM_Rock_D"), (0.4, -14.0, "SM_Rock_B"), (-0.2, -30.0, "SM_Rock_E")):
+    for (x, y, m) in ((0.3, ISLAND_FLAT[1] + 5.0, "SM_Rock_A"), (-0.6, ISLAND_FLAT[1] + 10.0, "SM_Rock_D"), (0.4, ISLAND_FLAT[0] - 3.0, "SM_Rock_B")):
         sc.add(m, x, y, float(rng.integers(0, 4)) * 90.0, 1.0, group="rocks", r=1.5)
     # lily pads on the sea by the dock and in the river's quiet reaches
     k = 0
@@ -1044,7 +1094,8 @@ def build(write=True, verbose=False):
         markers=markers,
         balance=bal,
         meadows=dict(player=MEADOWS0, enemy=MEADOWS1),
-        trees=dict(count=sc.tree_counts, clear=TREE_CLEAR, margin=BUILD_MARGIN, cleared_at_build=sc.cleared,
+        trees=dict(count=sc.tree_counts, clear=TREE_CLEAR, margin=BUILD_MARGIN, cleared_at_build=sc.cleared, wild=sc.wild_trees,
+                   lod_faces_m=wildwoods.budget(sc.tree_counts, meta),
                    faces=int(sum(sc.tree_counts[k] * (meta("SM_Tree2_%s_Trunk" % k).get("faces", 0) + meta("SM_Tree2_%s_Leaves" % k).get("faces", 0)) for k in "ABCD"))),
         instances=sc.items,
     )
@@ -1062,8 +1113,8 @@ def build(write=True, verbose=False):
         for it in sc.items:
             counts[it["mesh"]] = counts.get(it["mesh"], 0) + 1
         faces = sum(meta(m).get("faces", 0) * n for m, n in counts.items())
-        print("realm: %d instances, %d kinds, %.2f M faces; trees %s = %.2f M faces, %d taken away from buildings; not built yet: %s" % (
-            len(sc.items), len(counts), faces / 1e6, sc.tree_counts, layout["trees"]["faces"] / 1e6, sc.cleared, ", ".join(sorted(sc.missing)) or "none"))
+        print("realm: %d instances, %d kinds, %.2f M faces; trees %s (%d of them wild) = %.2f M faces (all at LOD 0 / 1 / 2: %s M), %d taken away from buildings; not built yet: %s" % (
+            len(sc.items), len(counts), faces / 1e6, sc.tree_counts, sc.wild_trees, layout["trees"]["faces"] / 1e6, " / ".join("%.2f" % v for v in layout["trees"]["lod_faces_m"]), sc.cleared, ", ".join(sorted(sc.missing)) or "none"))
     return layout, G, s
 
 

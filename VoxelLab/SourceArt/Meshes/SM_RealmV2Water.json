@@ -1,0 +1,18 @@
+{
+ "name": "SM_RealmV2Water",
+ "faces": 433864,
+ "collision": "complex",
+ "bounds": [
+  [
+   -292.0,
+   -273.0,
+   -7.5
+  ],
+  [
+   233.25,
+   291.75,
+   41.75
+  ]
+ ],
+ "lights": []
+}

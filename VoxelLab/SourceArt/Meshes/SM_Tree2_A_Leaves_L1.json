@@ -1,6 +1,6 @@
 {
  "name": "SM_Tree2_A_Leaves_L1",
- "faces": 4338,
+ "faces": 24880,
  "collision": "none",
  "bounds": [
   [
@@ -9,7 +9,7 @@
    5.5
   ],
   [
-   7.0,
+   6.75,
    7.0,
    17.0
   ]

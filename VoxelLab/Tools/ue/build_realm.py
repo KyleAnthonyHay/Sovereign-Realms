@@ -14,8 +14,8 @@ What the game reads from the level (Source/VoxelLab), on top of what build_town.
                       or archery range is placed: they are built in the game. Each side has two gold mines.
   tag Barrier         SM_RealmBarrier: hidden walls that block pawns and nothing else (no trace, no camera, no arrow):
                       the river, the sea, the cliff's rim, the island's rocks. The path grid's capsule test sees them.
-  tag Backdrop        SM_RealmBackdrop: the mountains and woods beyond the edge (no collision); SM_RealmWoods: the
-                      trees of 1 m blocks on the mountain, the highland and the ridge (no collision either)
+  tag Backdrop        SM_RealmBackdrop: the mountains and woods beyond the edge (no collision). (The woods on the
+                      mountain, the highland and the ridge are the forest's own trees now, not SM_RealmWoods.)
   actor Forest        an AVLForest (Source/VoxelLab/VLForest.h): every tree (trunk + crown) and all the undergrowth as
                       instanced components, one per mesh, not an actor each. AVLForest::ClearTrees takes trees away
                       for a building. The trees' meshes need their LOD 1 (Tools/ue/tree_lods.py).
@@ -87,19 +87,6 @@ def barrier():
     c.set_editor_property("affect_distance_field_lighting", False)
     c.set_editor_property("affect_dynamic_indirect_lighting", False)
     c.set_visibility(False)
-    return a
-
-
-def far_woods():
-    a = place("SM_RealmWoods", 0, 0, 0, folder="Terrain")
-    if a is None:
-        return None
-    a.tags = [unreal.Name("Backdrop")]
-    c = a.static_mesh_component
-    c.set_editor_property("use_default_collision", False)
-    c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
-    c.set_editor_property("affect_distance_field_lighting", False)
-    c.set_editor_property("affect_dynamic_indirect_lighting", False)
     return a
 
 
@@ -189,7 +176,6 @@ def main():
     water("SM_RealmSea")
     seabed(layout["terrain"])
     backdrop()
-    far_woods()
     _forest, in_wood, wood_kinds = forest(layout)
     has_barrier = barrier() is not None
     red = eal.load_asset("/Game/Voxel/Materials/MI_Vox_cloth_Enemy") if eal.does_asset_exist("/Game/Voxel/Materials/MI_Vox_cloth_Enemy") else None

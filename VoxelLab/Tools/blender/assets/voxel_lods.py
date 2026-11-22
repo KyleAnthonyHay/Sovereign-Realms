@@ -35,7 +35,7 @@ U = 0.0125
 UNITS = ["SM_KingB", "SM_Swordsman", "SM_Archer", "SM_Spy", "SM_Builder"]          # SourceArt/Meshes/<name>.json: their parts
 BUILDINGS = ["SM_Castle", "SM_TownHall", "SM_Barracks", "SM_BarracksYard", "SM_ArcheryHall", "SM_ArcheryRange", "SM_WatchTower",
              "SM_MineCliff", "SM_Farmstead", "SM_Farmstead_A", "SM_Farmstead_B", "SM_Farmstead_C", "SM_FarmCottage_A",
-             "SM_FarmCottage_B", "SM_Dock", "SM_Windmill", "SM_Bridge", "SM_Treasury"]
+             "SM_FarmCottage_B", "SM_Dock", "SM_Bridge", "SM_Treasury", "SM_Granary"]
 LEVELS = {"units": [2 * U, 4 * U], "buildings": [0.25]}        # the cube of each level
 TOL = {"units": 0.04, "buildings": 0.03}       # how unlike (square root of the linear colour) two faces joined into one may be
 K = 4                           # fine cells along a cube's edge

@@ -81,6 +81,10 @@ def routes():
             ("enemy castle -> neutral mine (west bank)", G["castle1"], G["mine_w"], b.get("enemy", {}).get("neutral_mine_far_bank")),
             ("player castle -> the terrace (the old archery ground)", G["castle0"], (-148.0, -52.0), None),
             ("enemy castle -> the old archery ground in the north", G["castle1"], (124.0, 160.0), None),
+            ("player castle -> its islet (over the sea bridge)", G["castle0"], (-72.0, -185.0), None),
+            ("enemy castle -> its islet (over the sea bridge)", G["castle1"], (161.0, -154.0), None),
+            ("bridge -> the island's north lobe", bw, (0.0, 50.0), None),
+            ("bridge -> the island's south lobe", bw, (0.0, -26.0), None),
             ("castle -> castle", G["castle0"], G["castle1"], b.get("player", {}).get("enemy_castle")),
             ("castle -> castle, back", G["castle1"], G["castle0"], b.get("enemy", {}).get("enemy_castle")),
             ("player castle -> dock head", G["castle0"], (J["places"]["dock"][0] - 11.0, J["places"]["dock"][1]), None)]
@@ -155,16 +159,18 @@ def barriers(only_dock=False):
     probe("the west bridge, west to east", (-12.0, by), (-2.0, by), 5.0, cross=True)
     probe("the east bridge, west to east", (-2.0, by), (12.0, by), 6.0, cross=True)
     probe("both bridges, east to west", (12.0, by), (-12.0, by), 9.0, cross=True)
+    probe("the player's islet bridge, out onto the islet", (-72.0, -159.0), (-72.0, -177.0), 6.0, cross=True)
+    probe("the enemy's islet bridge, out onto the islet", (161.0, -128.0), (161.0, -146.0), 6.0, cross=True)
 
 
 def BANKS(by, f2):
     """Where he is put, and the point in the water (or over the cliff) he runs at: one of every kind of edge."""
-    return [("west bank, west channel (north of the bridge)", (-22.0, 40.0), (-10.0, 40.0)),
-            ("west bank, west channel (south of the bridge)", (-22.0, -14.0), (-10.0, -14.0)),
-            ("east bank, east channel", (22.0, -14.0), (10.0, -14.0)),
+    return [("west bank, west channel (north of the bridge)", (-28.0, 40.0), (-17.0, 40.0)),
+            ("west bank, west channel (south of the bridge)", (-24.0, -14.0), (-14.0, -14.0)),
+            ("east bank, east channel", (24.0, -14.0), (14.0, -14.0)),
             ("east bank, beside the bridge's rail", (11.0, by + 3.2), (6.5, by + 3.2)),
-            ("the island, towards its north point", (0.0, by), (0.0, by + 30.0)),
-            ("the island, towards its south point", (0.0, by), (0.0, by - 30.0)),
+            ("the island, towards its north point", (0.0, by + 48.0), (0.0, by + 76.0)),
+            ("the island, towards its south point", (0.0, by - 40.0), (0.0, by - 60.0)),
             ("the island, off its west side", (0.0, by + 4.0), (-6.5, by + 4.0)),
             ("the gorge above the island (west bank)", (-34.0, 120.0), (-10.0, 120.0)),
             ("the gorge above the island (east bank)", (16.0, 120.0), (-8.0, 120.0)),
@@ -178,7 +184,9 @@ def BANKS(by, f2):
             ("the south cliff by the farm", (0.0, -158.0), (4.0, -190.0)),
             ("the west cliff (the west terrace)", (-170.0, -60.0), (-200.0, -60.0)),
             ("the west cliff (the north-west meadow)", (-170.0, 0.0), (-200.0, 0.0)),
-            ("the enemy's south coast", (160.0, -116.0), (160.0, -150.0))]
+            ("the enemy's south coast", (175.0, -116.0), (175.0, -150.0)),
+            ("the player's islet, off its far side", (-72.0, -186.0), (-72.0, -206.0)),
+            ("the enemy's islet, off its far side", (161.0, -154.0), (161.0, -175.0))]
 
 
 def trees():
@@ -192,7 +200,7 @@ def trees():
     m = re.search(r"round (\d+) building\(s\).*: (\d+) tree", lines[-1]) if lines else None
     check(bool(m) and int(m.group(1)) > 8 and int(m.group(2)) == 0, "no tree stands in or against a building: %s" % (lines[-1].split("TREES ")[-1] if lines else "no answer"))
     # the thickest 16 m square of trunks on the player's bank
-    trunks = [(i["pos"][0], i["pos"][1]) for i in J["instances"] if i["mesh"].startswith("SM_Tree2") and i["mesh"].endswith("_Trunk")]
+    trunks = [(i["pos"][0], i["pos"][1]) for i in J["instances"] if i["mesh"].startswith("SM_Tree2") and i["mesh"].endswith("_Trunk") and i.get("group") != "wild"]     # (not the wild woods: nobody walks there)
     best, at = 0, None
     for (x, y) in trunks:
         if x < -20:

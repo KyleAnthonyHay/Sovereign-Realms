@@ -1,11 +1,11 @@
 {
  "name": "SM_HighlandBackdrop",
- "faces": 210153,
+ "faces": 200738,
  "collision": "none",
  "bounds": [
   [
-   -432.0,
-   -410.0,
+   -242.0,
+   104.0,
    -10.0
   ],
   [

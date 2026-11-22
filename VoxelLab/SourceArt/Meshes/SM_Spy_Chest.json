@@ -1,6 +1,6 @@
 {
  "name": "SM_Spy_Chest",
- "faces": 6985,
+ "faces": 6983,
  "collision": "none",
  "bounds": [
   [
@@ -21,6 +21,6 @@
   0.9125
  ],
  "part": "Chest",
- "triangles": 13970,
+ "triangles": 13966,
  "blocks": 615
 }

@@ -1,17 +1,17 @@
 {
  "name": "SM_Builder_Head",
- "faces": 8720,
+ "faces": 8347,
  "collision": "none",
  "bounds": [
   [
    -0.2909,
-   -0.2082,
-   -0.0024
+   -0.2086,
+   -0.0125
   ],
   [
    0.321,
-   0.2121,
-   0.4328
+   0.2092,
+   0.4348
   ]
  ],
  "lights": [],
@@ -21,6 +21,6 @@
   1.3
  ],
  "part": "Head",
- "triangles": 17441,
- "blocks": 617
+ "triangles": 16695,
+ "blocks": 588
 }

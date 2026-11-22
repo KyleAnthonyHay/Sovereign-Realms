@@ -1,0 +1,21 @@
+{
+ "name": "SM_Granary_L1",
+ "faces": 10985,
+ "collision": "none",
+ "bounds": [
+  [
+   -6.6875,
+   -5.25,
+   0.0
+  ],
+  [
+   6.5625,
+   5.25,
+   10.25
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_Granary",
+ "voxel": 0.25,
+ "triangles": 21970
+}

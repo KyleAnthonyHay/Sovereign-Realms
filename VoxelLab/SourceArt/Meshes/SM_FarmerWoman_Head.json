@@ -1,12 +1,12 @@
 {
  "name": "SM_FarmerWoman_Head",
- "faces": 12300,
+ "faces": 12247,
  "collision": "none",
  "bounds": [
   [
    -0.3328,
    -0.21,
-   -0.4272
+   -0.4302
   ],
   [
    0.3303,
@@ -22,6 +22,6 @@
  ],
  "part": "Head",
  "parent": "Chest",
- "triangles": 24600,
- "blocks": 881
+ "triangles": 24495,
+ "blocks": 877
 }

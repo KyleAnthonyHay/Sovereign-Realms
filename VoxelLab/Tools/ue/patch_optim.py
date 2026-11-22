@@ -15,7 +15,7 @@ mel = unreal.MaterialEditingLibrary
 les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 
-MAPS = globals().get("MAPS") or ["L_Realm", "L_Highlands", "L_Town", "L_VoxelVillage", "L_Flatlands"]
+MAPS = globals().get("MAPS") or ["L_Realm", "L_Highlands", "L_RealmV2", "L_Flatlands"]
 PARTS = globals().get("PARTS") or ["lamps", "wheat", "sway"]
 DRY = bool(globals().get("DRY"))
 LAMP_DRAW, LAMP_FADE = 30000.0, 8000.0          # cm: as build_level.P lamp_draw / lamp_fade

@@ -3,13 +3,20 @@
     Blender -b --factory-startup --python Tools/blender/assets/flatlands.py
 
 Writes
-  SourceArt/flatlands.json      the plan (same instance format as layout.json, plus name labels, the spawn, the camera)
+  SourceArt/flatlands.json      the plan (same instance format as layout.json, plus name labels, the spawn, the camera,
+                                the figures of the line-up)
   SM_Flat_<i>_<j>               the ground: quarter-block grass, a cobbled road sunk one step along the fronts,
-                                a spur of it to every door (SourceArt/Meshes/flat_tiles.json lists the tiles)
+                                a spur of it to every door, the harbour's pond with shelved banks, the line-up's
+                                cobbled patch (SourceArt/Meshes/flat_tiles.json lists the tiles)
+  SM_FlatPond                   the pond's water (slot "water": M_VoxWater)
 Tools/ue/build_flatlands.py turns it into /Game/Maps/L_Flatlands.
 
 The buildings stand at the size they have in the village (SourceArt/layout.json), fronts (-Y) on one line facing
-the road, in the order of BUILDINGS.
+the road, in the order of BUILDINGS. Across the road (south, toward the camera): King David and every troop in a line
+(FIGURES: each figure's parts in the pose they were modelled in, static), the harbour (SM_Dock running out into a
+pond, the grain ship SM_Boat moored at the dock's "moor"), and the props of Realm v2 (PROPS: the ruins, the port).
+The farm's two hands (the farmer woman and man) are not placed: the game gives every finished farm its pair
+(UVLConstruction::TickFarmhands) once the match runs, so they work the Flatlands farm too; they also stand in the line.
 """
 import json
 import math
@@ -36,15 +43,38 @@ BUILDINGS = [
     (("SM_WatchTower",), "Watch Tower", 0.0),
     (("SM_MineCliff",), "Gold Mine", 2.5),
     (("SM_Farmstead", "SM_FarmCottage_A"), "Farm", 0.0),
+    (("SM_Treasury",), "Treasury", 1.75),
+    (("SM_Granary",), "Granary", 1.75),
     (("SM_Bridge",), "Bridge", 0.0),
 ]
+# the line-up, left to right as seen from the road: (figure json in SourceArt/Meshes, its parts' folder, its name)
+FIGURES = [
+    ("SM_KingB", "/Game/Voxel/King", "King David"),
+    ("SM_Swordsman", "/Game/Voxel/Troops/Swordsman", "Swordsman"),
+    ("SM_Archer", "/Game/Voxel/Troops/Archer", "Archer"),
+    ("SM_Spy", "/Game/Voxel/Troops/Spy", "Spy"),
+    ("SM_Builder", "/Game/Voxel/Troops/Builder", "Builder"),
+    ("SM_FarmerWoman", "/Game/Voxel/Troops/FarmerWoman", "Farmer"),
+    ("SM_FarmerMan", "/Game/Voxel/Troops/FarmerMan", "Farmer"),
+]
+LINE = (0.0, -20.0)       # the line-up's middle
+LINE_GAP = 2.2            # metres between figures
+HARBOUR_X = 78.0          # the dock's land end (x), on the road's south side (across from the treasury and the granary)
+DOCK_Y = -15.5
+WATER_Z = -1.0            # the pond's water: a metre under the dock's deck, as at sea
+POND = (HARBOUR_X - 13.0, -39.0, HARBOUR_X + 13.0, -16.5)          # x0, y0, x1, y1 of the pond's water edge (rounded)
+# the newest props, in a row west of the line-up (left to right): (mesh, gap after it); the port's pieces only once built
+PROPS = [("SM_Port_Tower", 3.0), ("SM_Port_Warehouse", 3.0), ("SM_Port_Arch", 3.0), ("SM_Port_Crane", 5.0),
+         ("SM_Ruin_Arch", 2.0), ("SM_Ruin_Pillar_A", 1.5), ("SM_Ruin_Pillar_B", 1.5), ("SM_Ruin_Pillar_C", 2.0), ("SM_Ruin_Block", 0.0)]
+PROPS_X1 = -14.0          # where the props' row ends (east)
+PROPS_Y = -26.0           # the line their fronts stand on
 GAP = 7.0                 # metres between buildings
 FRONT = -6.0              # the line the fronts stand on
 ROAD = (-11.0, -8.0)      # the road along the fronts (y from, to)
 CELL = 0.25
-W, D = 196.0, 96.0        # the field
-CY = 10.0                 # its middle in y
-DEPTH = 1.0               # metres of ground
+W, D = 196.0, 104.0       # the field (at least: it grows to hold the row)
+CY = 6.0                  # its middle in y
+DEPTH = 3.0               # metres of ground (the pond is 2.5 m deep)
 # A mine never stands alone on flat ground: the Gold Mine stands in SM_MineMound, the terraced hill of References/Remake/
 # mine_mound.png (assets/mine_mound.py), placed at the mine's own place and turn; the row leaves room for its wings.
 MOUND = "SM_MineMound"
@@ -107,13 +137,65 @@ def plan():
         dx = cx + door * s
         labels.append(dict(text=title, pos=[round(dx, 2), ROAD[0] - 3.2, 0.0], door=round(dx, 2)))
         x += w + GAP
+    figures, extra_labels = extras(items, foot)
+    labels += extra_labels
     if not any(it["mesh"] == "SM_TrainingDummy" for it in items):
         # the old barracks has no yard: dummies by the road in front of it, for the sword
         bx = [it for it in items if it["mesh"] == "SM_Barracks"][0]["pos"][0]
         for k, (ox, oy) in enumerate(((-3.0, -13.5), (0.0, -14.5), (3.0, -13.5))):
             items.append(dict(mesh="SM_TrainingDummy", pos=[bx + ox, oy, 0.0], yaw=float(180 + 15 * (k - 1)), scale=1.0, group="props"))
             foot.append((bx + ox - 0.8, oy - 0.8, bx + ox + 0.8, oy + 0.8))
-    return layout, items, labels, foot, total
+    return layout, items, labels, foot, total, figures
+
+
+def extras(items, foot):
+    """The line-up of figures, the harbour (dock, ship, pond) and the row of the newest props, south of the road."""
+    figures, labels = [], []
+    n = len(FIGURES)
+    for i, (key, folder, title) in enumerate(FIGURES):
+        if not os.path.exists(os.path.join(MESHES, key + ".json")):
+            continue
+        x = LINE[0] + (i - (n - 1) / 2.0) * LINE_GAP
+        parts = meta(key)["parts"]
+        figures.append(dict(name=title, folder=folder, pos=[round(x, 3), LINE[1], 0.0],
+                            parts=[dict(mesh=d["mesh"], pivot=d["pivot"]) for d in parts.values()]))
+    hx = (n - 1) / 2.0 * LINE_GAP + 1.4
+    foot.append((LINE[0] - hx, LINE[1] - 2.6, LINE[0] + hx, LINE[1] + 1.6))
+    labels.append(dict(text="King and troops", pos=[LINE[0], LINE[1] - 4.2, 0.0], door=None))
+    # the harbour: the dock runs out (-Y) from the road's edge into the pond, the ship lies at its mooring
+    if os.path.exists(os.path.join(MESHES, "SM_Dock.json")):
+        dm = meta("SM_Dock")
+        items.append(dict(mesh="SM_Dock", pos=[HARBOUR_X, DOCK_Y, 0.0], yaw=0.0, scale=1.0, group="buildings"))
+        for pr in dm.get("props", []):
+            px, py, pz = pr["pos"]
+            items.append(dict(mesh=pr["mesh"], pos=[round(HARBOUR_X + px, 3), round(DOCK_Y + py, 3), pz], yaw=float(pr.get("yaw", 0.0)),
+                              scale=float(pr.get("scale", 1.0)), group="props"))
+        mx, my, _mz, myaw = dm.get("moor", [0.0, -14.8, -1.0, 0.0])
+        items.append(dict(mesh="SM_Boat", pos=[HARBOUR_X + mx, DOCK_Y + my, WATER_Z + 0.02], yaw=myaw, scale=1.0, group="props"))
+        labels.append(dict(text="Harbour", pos=[HARBOUR_X - 3.6, ROAD[0] - 3.2, 0.0], door=None))
+    x0, y0, x1, y1 = POND
+    foot.append((x0 - 2.0, y0 - 2.0, x1 + 2.0, y1 + 2.0))
+    # the newest props, right to left from PROPS_X1, fronts on PROPS_Y
+    x = PROPS_X1
+    built_props = [(mesh, gap) for mesh, gap in PROPS if os.path.exists(os.path.join(MESHES, mesh + ".json"))]
+    for k, (mesh, _gap) in enumerate(reversed(built_props)):
+        (bx0, by0, _), (bx1, by1, _) = bounds(mesh)
+        x -= bx1
+        items.append(dict(mesh=mesh, pos=[round(x, 3), round(PROPS_Y - by0, 3), 0.0], yaw=0.0, scale=1.0, group="props"))
+        foot.append((x + bx0, PROPS_Y, x + bx1, PROPS_Y + (by1 - by0)))
+        left = len(built_props) - 2 - k                       # the gap after the piece to its left
+        x += bx0 - (built_props[left][1] if left >= 0 else 0.0)
+    if x < PROPS_X1:
+        labels.append(dict(text="Ruins and port", pos=[round((x + PROPS_X1) / 2.0, 2), PROPS_Y - 2.6, 0.0], door=None))
+    return figures, labels
+
+
+def pond_depth(X, Y, rag):
+    """How far inside the pond's edge each cell is (metres; < 0 outside): a rectangle with rounded corners."""
+    x0, y0, x1, y1 = POND
+    r = 4.0
+    cx, cy = np.clip(X, x0 + r, x1 - r), np.clip(Y, y0 + r, y1 - r)
+    return r - np.hypot(X - cx, Y - cy) + rag * 1.5
 
 
 def field(labels):
@@ -127,9 +209,21 @@ def field(labels):
     rag = (rag + np.roll(rag, 1, 0) + np.roll(rag, 1, 1) + np.roll(rag, -1, 0)) / 4.0       # ragged, not noisy
     road = (Y + rag > ROAD[0]) & (Y + rag < ROAD[1]) & (np.abs(X) < W / 2 - 6)
     for lb in labels:                                                                       # a spur to every door
-        road |= (np.abs(X - lb["door"]) + rag < 1.2) & (Y > ROAD[0]) & (Y < FRONT + 0.2)
+        if lb.get("door") is not None:
+            road |= (np.abs(X - lb["door"]) + rag < 1.2) & (Y > ROAD[0]) & (Y < FRONT + 0.2)
+    road |= (np.abs(X - HARBOUR_X) + rag < 1.6) & (Y > DOCK_Y - 0.5) & (Y < ROAD[0] + 0.5)       # ... and to the dock
     h = np.where(road, -CELL, 0.0)
-    return X, Y, h, road
+    # the line-up's cobbled patch (level with the grass: the figures stand at z = 0)
+    hx = (len(FIGURES) - 1) / 2.0 * LINE_GAP + 1.3
+    plaza = (np.abs(X - LINE[0]) + rag < hx) & (np.abs(Y - (LINE[1] - 0.4)) + rag < 1.7)
+    # the pond: banks of quarter-block shelves (0.6 m each) down to the water, then the bed falls away under it
+    d = pond_depth(X, Y, rag)
+    shelf = np.where(d < 0, 0.0, -CELL * np.minimum(np.ceil(d / 0.6), 4))
+    deep = np.where(d > 3.0, -2.5, np.where(d > 2.4, -1.5, shelf))
+    h = np.where(d > 0, np.minimum(h, deep), h)
+    surf = np.where(road | plaza, 1, 0)
+    surf = np.where(d > 0, np.where(h < WATER_Z - 0.01, 3, 2), surf)                       # 2 gravel shore, 3 stone bed
+    return X, Y, h, surf
 
 
 def scatter(items, foot, labels, road_xy):
@@ -141,7 +235,7 @@ def scatter(items, foot, labels, road_xy):
             return False
         if ROAD[0] - 1.0 - pad < y < ROAD[1] + 1.0 + pad:
             return False
-        if any(abs(x - lb["door"]) < 2.5 + pad and y < FRONT + 0.5 for lb in labels):
+        if any(lb.get("door") is not None and abs(x - lb["door"]) < 2.5 + pad and y < FRONT + 0.5 for lb in labels):
             return False
         if any(abs(x - lb["pos"][0]) < 3.0 and abs(y - lb["pos"][1]) < 1.5 for lb in labels):
             return False
@@ -183,8 +277,9 @@ def scatter(items, foot, labels, road_xy):
     sprinkle(260, ["SM_Flowers_A", "SM_Flowers_B", "SM_Flowers_C", "SM_Flowers_D"], 1.2, "plants")
     sprinkle(520, ["SM_GrassTuft_A", "SM_GrassTuft_B", "SM_GrassTuft_C"], 0.7, "plants", (0.9, 1.5))
     # lanterns along the road, between the buildings
-    for i, lb in enumerate(labels[:-1]):
-        x = (lb["door"] + labels[i + 1]["door"]) / 2.0
+    doors = [lb for lb in labels if lb.get("door") is not None]
+    for i, lb in enumerate(doors[:-1]):
+        x = (lb["door"] + doors[i + 1]["door"]) / 2.0
         items.append(dict(mesh="SM_LanternPost", pos=[round(x, 2), ROAD[1] + 0.9, 0.0], yaw=0.0, scale=1.0, group="village"))
 
 
@@ -200,20 +295,29 @@ def build_ground(X, Y, h, road):
     K = np.arange(nz, dtype=np.int32)[None, None, :]
     solid = K < top[:, :, None]
     depth = top[:, :, None] - 1 - K
-    surf = np.where(road, IDS["cobble"], IDS["grass"]).astype(np.uint8)
+    surf = np.choose(road, [IDS["grass"], IDS["cobble"], IDS["gravel"], IDS["stone"]]).astype(np.uint8)
     v.m[:] = np.where(solid, np.where(depth == 0, surf[:, :, None], IDS["dirt"]), 0).astype(np.uint8)
     tiles = V.split(v, "SM_Flat", 28.0)
     for ob in tiles:
         V.export_gltf(ob)
     with open(os.path.join(MESHES, "flat_tiles.json"), "w") as f:
         json.dump([o.name for o in tiles], f)
+    # the pond's water: one layer of water voxels whose top is the water line, over the cells deeper than it
+    wet = (road == 3) | ((road == 2) & (h < WATER_Z - 0.01))
+    if wet.any():
+        V.reset_scene()
+        w = Vox(nx, ny, 1, CELL, origin=(nx / 2.0, ny / 2.0 - CY / CELL, 1.0 - WATER_Z / CELL), name="pond")
+        w.m[:, :, 0] = np.where(wet, IDS["water"], 0).astype(np.uint8)
+        V.export_gltf(V.join([w], "SM_FlatPond"), collision="none")
     return tiles
 
 
 def main():
-    layout, items, labels, foot, total = plan()
-    X, Y, h, road = field(labels)
-    scatter(items, foot, labels, (X, Y, road))
+    global W
+    layout, items, labels, foot, total, figures = plan()
+    W = max(W, round(total + 24.0))
+    X, Y, h, surf = field(labels)
+    scatter(items, foot, labels, (X, Y, surf == 1))
     mid = 0.0
     out = dict(
         instances=items,
@@ -221,12 +325,14 @@ def main():
         spawn=dict(pos=[mid, (ROAD[0] + ROAD[1]) / 2.0, 0.0], yaw=90.0),
         camera=dict(target=[mid, 4.0, 2.0], az=-8.0, el=30.0, dist=max(60.0, total * 0.98), hfov=60.0, width=1600, height=900),
         ground=dict(w=W, d=D, cy=CY),
+        figures=figures,
+        water=dict(mesh="SM_FlatPond", z=WATER_Z),
     )
     with open(os.path.join(SRC, "flatlands.json"), "w") as f:
         json.dump(out, f, indent=1)
     print("flatlands: %d buildings over %.0f m, %d instances" % (len(BUILDINGS), total, len(items)))
     if "--plan-only" not in sys.argv:
-        tiles = build_ground(X, Y, h, road)
+        tiles = build_ground(X, Y, h, surf)
         print("flatlands ground: %d tiles" % len(tiles))
 
 
