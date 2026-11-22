@@ -230,6 +230,10 @@ public:
 	void CancelPlacement();
 	bool IsPlacing() const { return Placing != EVLBuilding::None; }
 	EVLBuilding GetPlacing() const { return Placing; }
+	/** T while placing: the ghost turns a quarter turn clockwise (on top of facing the view). The turn is kept for the
+	 *  next ghost of a Shift placing and for the next placing of the same kind. Mines are never placed. */
+	void TurnPlacement();
+	int32 GetPlaceTurns() const { return PlaceTurns; }
 	const FVLPlacement& GetPlacement() const { return Current; }
 	bool HasPlacementUnderPointer() const { return bPointerOnGround; }
 	/** Esc: the placement, then the menu. True if it took the key. */
@@ -364,6 +368,9 @@ private:
 	bool bPointerOnGround = false;
 	FIntPoint LastSnap = FIntPoint(MAX_int32, MAX_int32);
 	float LastYaw = -1.f;
+	int32 PlaceTurns = 0;                       // quarter turns clockwise the player gave the ghost (T)
+	EVLBuilding PlaceTurnsKind = EVLBuilding::None;
+	bool bLogTurn = false;
 	bool bRightDown = false;
 	FVector2D RightPress = FVector2D::ZeroVector;
 	TWeakObjectPtr<AActor> AskedDemolish;

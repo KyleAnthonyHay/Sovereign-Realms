@@ -214,7 +214,10 @@ Treasury have no voxel model, and the main game never built a town hall, so they
   the hero view's key here), cards with the price, the limit used, the key 1-6, the refusal (limit, gold, no Builder).
 - **Placing**: a ghost of the building follows the pointer (`M_PlacementGhost`, `Tools/ue/build_ghost_material.py`: green
   glass where it fits, red where not), snapped to the half-metre blocks, **its front (gate, yard) toward the view**: turn
-  the view (Q / E) to turn it, in steps of 90 degrees (the main game had no rotation). Plates of a metre on the ground show
+  the view (Q / E) to turn it, in steps of 90 degrees, and **T** turns the ghost a quarter turn clockwise on top of that
+  (R stays the view's "back to north"); the footprint, its plates, the ghost's colour and the site laid all follow the
+  turn, and it is kept for the next ghost of a Shift placing and the next placing of the same kind (`vl.Place turn`).
+  Mines are never placed or turned. Plates of a metre on the ground show
   which ground refuses it (red: uneven by more than 30 cm, water, something standing there; a pale fringe of 2 m round
   it, red where blocked); a pill at the pointer says why, or how many trees it clears. Also refused: within 1 m of another
   building, enemy troops on it, the map's edge, a gate opening onto ground nobody can walk to. LMB places it (paid
@@ -232,9 +235,13 @@ Treasury have no voxel model, and the main game never built a town hall, so they
   Builders all get the same queue and work through it together (two on a site: twice as fast); an item that has
   lapsed by its turn (the site cancelled or fallen, the building mended) is passed over. A plain order replaces the
   queue, **Esc** (after a placing or an armed click) or **Stop** clears it; a Builder with a queue is never taken for
-  an idle Builder's own work or as "the nearest free Builder". While they are selected a numbered chain of markers
-  shows it (walks blue, buildings gold); the panel says "N orders queued (Esc clears)". A site laid over a queued
-  Builder steps him aside and keeps his queue.
+  an idle Builder's own work or as "the nearest free Builder". While they are selected (overview only) a dashed path
+  shows the order: from each Builder along the way he walks to what he is on now (**1**: the building he works on, or
+  the walk he is on), then on to each queued order in turn (**2**, **3**, ...), walks blue and buildings gold, each
+  numbered on a plate over its point; lapsed orders drop out and the numbers close up as items are done. A crew
+  sharing one queue draws the chain once. With **Shift held while placing**, a pale pulsing segment runs from the end
+  of the chain to the ghost with the number the site would get (red where it cannot go). The panel says "N orders
+  queued (Esc clears)". A site laid over a queued Builder steps him aside and keeps his queue.
 - **Builders at work**: right click one of your sites or damaged buildings with Builders selected (the rest of the
   selection takes the order as usual); **X**: the nearest damaged building. An idle Builder goes to work by himself on a
   site or a building below 90% health within 26 m (the enemy's: anywhere), but not on one hit in the last 10 s. A
@@ -661,7 +668,7 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
   difficulty, and on `L_Flatlands` with `vl.TestBase`.
 - **HUD**: see *The interface* below.
 - **Console** (`Tools/pie.py run "..."`): `vl.StartMatch [0|1|2]`, `vl.Restart [d]`, `vl.Menu main|new|pause|settings|controls|end|0`,
-  `vl.UIClick U V [right]` (a click on the interface at that point of the view), `vl.HUD` (the buttons drawn, by id),
+  `vl.UIClick U V [right]` (a click on the interface at that point of the view), `vl.HUD` (the buttons drawn, by id; the route lines drawn, the Builders' chains and numbers, the Shift preview, hidden in the hero view; whom the mode box shows),
   `vl.Battle` (both sides, every building), `vl.Give gold|food N [enemy]`, `vl.TrainAt <building> [enemy] [n]`,
   `vl.Upgrade <building> [enemy]`, `vl.Damage <building> [enemy] N`, `vl.Kill <unit> | castle enemy|player`,
   `vl.SpawnTeam Swordsman|Archer 0|1 X Y [n]`, `vl.SetTeam <building> 0|1|neutral`, `vl.TestBase [DX DY]` (an enemy
@@ -705,7 +712,8 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
   icon swells when income lands, amber when the stores are full), troops `alive+training/cap` (amber at the cap), the
   then the **hero, Builders and Spy chips** (`T_UI_Portraits`: King David's health, or "back in 0:12" while fallen; the
   Builders alive/limit and +in training; the Spy 0/1, the wait before the next, greyed below castle level 3; a click
-  selects them, a double click also looks at them), the clock, the enemy ("Enemy ready in 3:12" dim, amber under a
+  selects them, a double click also looks at them; on the hero's chip a double click enters his hero view, as Enter
+  with him selected), the clock, the enemy ("Enemy ready in 3:12" dim, amber under a
   minute; "Enemy watching"; "Enemy attacking!" pulsing). Tooltips on each. Top right: Controls (F1) and Pause.
 - **Build button and menu** (left of the selection panel, B): see *Building*. Sites show a hammer bar over them (red
   "needs a Builder" while nobody works at one), repairs a green one.
@@ -740,10 +748,14 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
   every view: always in the red (under 34 %), else for 3 s after a hit or a heal and fading over 0.8 s, and always while
   selected; on buildings lately hurt or selected and damaged; training and upgrade bars with icons over buildings at work; "+N" payouts with the coin or grain;
   numbered platoon tags; dashed blue pathways and rally lines, a patrol's loop in orange and an attack-move's way in
-  red; while an order is armed, its hint under the top bar and a crosshair pointer; the selected troops' sight (dashed blue) and bow range
+  red, the Builders' numbered queue (all of these overview only: the hero view hides every pathway, follow and queue
+  line, and keeps the order markers); while an order is armed, its hint under the top bar and a crosshair pointer; the selected troops' sight (dashed blue) and bow range
   (solid orange) and a tower's / the castle's reach; team-coloured pips over troops zoomed far out; the order markers;
   the green selection box.
-- **This game's own**: the mode box top left (HERO / OVERVIEW, who is played, King David's fall), the hero view's
+- **This game's own**: the mode box top left (HERO / OVERVIEW; the unit in focus with its portrait, name and health:
+  the first selected troop, "+N selected" for a group, in the hero view the first besides the unit played, else an
+  enemy's unit looked at, else the unit played, so King David when nothing is selected; who is played, King David's
+  fall), the hero view's
   crosshair, its line of controls along the bottom and, over it, the played unit's health bar (portrait, name, bar,
   numbers; it flashes red on a hit).
 - **Title backdrop**: the overview camera circles the middle of the map's ground (`UVLGrid` bounds, so any size of map)

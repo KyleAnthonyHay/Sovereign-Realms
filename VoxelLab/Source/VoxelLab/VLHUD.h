@@ -175,6 +175,14 @@ private:
 	void DrawPayoutPopups();
 	void DrawTrainingBars();
 	void DrawRouteLines();
+	/** What DrawRouteLines drew last frame (vl.HUD): line segments, the Builders' chains and their numbers, the Shift
+	 *  preview to the ghost, and whether the hero view hid them. */
+	struct FLineStats { int32 Segments = 0; int32 Chains = 0; int32 Badges = 0; bool bPreview = false; bool bHidden = false; };
+	FLineStats LineStats;
+	/** Who the mode box (top left) showed last frame, for vl.HUD. */
+	FString ModeBoxUnit;
+	/** The hero chip was double-clicked: his hero view, once this frame's drawing is done. */
+	TWeakObjectPtr<AVLKing> PendingHeroView;
 	void DrawRangeCircles();
 	void DrawFarPips();
 	void DrawPlatoonTags();

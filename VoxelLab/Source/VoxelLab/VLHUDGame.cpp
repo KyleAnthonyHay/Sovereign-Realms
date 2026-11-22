@@ -373,7 +373,7 @@ float AVLHUD::DrawHints(float Y)
 	}
 	if (const UVLConstruction* Construction = UVLConstruction::Get(this); Construction && Construction->IsPlacing())
 	{
-		Hint = FString::Printf(TEXT("Placing: %s    LMB place   ·   Shift + LMB place more   ·   RMB / Esc cancel   ·   Q / E: it turns with the view"), VLRules::Name(Construction->GetPlacing()));
+		Hint = FString::Printf(TEXT("Placing: %s    LMB place   ·   Shift + LMB place more   ·   T rotate   ·   RMB / Esc cancel   ·   Q / E: it turns with the view"), VLRules::Name(Construction->GetPlacing()));
 		Which = EVLIcon::Hammer;
 		Accent = Gold;
 	}
@@ -1610,8 +1610,33 @@ void AVLHUD::DrawHeroBits()
 			}
 		}
 	}
-	// the mode box, top left: which view, who is played, and his health
+	// the mode box, top left: which view, the unit in focus (its portrait, name and health) and who is played. The unit
+	// in focus is the first of the selection (in the hero view: the first besides the unit played), else a unit
+	// looked at (an enemy's), else the unit played: King David when nothing is selected or he is.
 	{
+		const UVLCommand* Command = UVLCommand::Get(this);
+		TArray<AVLKing*> Sel;
+		if (Command)
+		{
+			Command->GetSelection(Sel);
+		}
+		Sel.RemoveAll([this, bHero](const AVLKing* U2) { return !U2 || U2->IsDead() || (bHero && U2 == King); });
+		AVLKing* Focus = Sel.Num() > 0 ? Sel[0] : nullptr;
+		if (!Focus && !bHero)
+		{
+			if (AVLKing* One = Cast<AVLKing>(King->GetSelected()); One && One != King && One->IsAlive())
+			{
+				Focus = One;
+			}
+		}
+		const bool bFocusSelected = Focus != nullptr;
+		if (!Focus)
+		{
+			Focus = King;
+		}
+		const bool bFocusEnemy = Battle && Focus->Team != King->Team;
+		ModeBoxUnit = Focus->GetDisplayName() + (bFocusSelected ? FString::Printf(TEXT(" (selected, %d in all)"), FMath::Max(1, Sel.Num())) : FString(TEXT(" (played)")));
+
 		FString Info;
 		FLinearColor InfoCol = Parchment;
 		if (King->IsDead())
@@ -1623,7 +1648,7 @@ void AVLHUD::DrawHeroBits()
 		else if (bHero)
 		{
 			// (only King David draws and sheathes a sword: a swordsman always holds his, a builder carries a hammer)
-			Info = King->GetDisplayName() + ((!King->IsTroop() && King->IsArmed()) ? TEXT("  ·  sword drawn") : TEXT(""));
+			Info = TEXT("Playing ") + King->GetDisplayName() + ((!King->IsTroop() && King->IsArmed()) ? TEXT("  ·  sword drawn") : TEXT(""));
 		}
 		else
 		{
@@ -1633,34 +1658,49 @@ void AVLHUD::DrawHeroBits()
 		FString Commanding;
 		if (bHero && !King->IsDead())
 		{
-			const UVLCommand* Command = UVLCommand::Get(this);
-			TArray<AVLKing*> Units;
-			if (Command)
-			{
-				Command->GetSelection(Units);
-			}
-			Units.Remove(King);
 			const int32 P = Command ? Command->PlatoonIndexOf(King) : INDEX_NONE;
 			const bool bLeads = P != INDEX_NONE && Command->GetPlatoonLeader(P) == King;
 			const TCHAR* OrderKey = King->bRightMouseAims ? TEXT("Ctrl+click") : TEXT("Right click");
-			Commanding = Units.Num() > 0
-				? FString::Printf(TEXT("Commanding %d  ·  %s: move / attack  ·  G: follow me  ·  Alt+click ground: let go"), Units.Num(), OrderKey)
+			Commanding = Sel.Num() > 0
+				? FString::Printf(TEXT("Commanding %d  ·  %s: move / attack  ·  G: follow me  ·  Alt+click ground: let go"), Sel.Num(), OrderKey)
 				: FString(TEXT("Click a troop under the crosshair (or 1-6) to command it"));
 			if (bLeads)
 			{
 				Commanding = FString::Printf(TEXT("Leader of platoon %d  ·  "), P + 1) + Commanding;
 			}
 		}
-		const float W = FMath::Max(U(250.f), FMath::Max(TextSize(Info, U(14.f)).X, TextSize(Commanding, U(13.f)).X) + U(36.f)), H = U(Commanding.IsEmpty() ? 60.f : 80.f);
+		const FString Name = Focus->GetDisplayName();
+		const FString More = Sel.Num() > 1 ? FString::Printf(TEXT("+%d selected"), Sel.Num() - 1) : FString();
+		const float PS = U(38.f), RowY = U(34.f);
+		const float RowW = PS + U(10.f) + TextSize(Name, U(15.f), Bold).X + (More.IsEmpty() ? 0.f : U(10.f) + TextSize(More, U(13.f)).X) + U(16.f) + TextSize(TEXT("100 / 100"), U(13.f), Bold).X;
+		const float W = FMath::Max(U(300.f), FMath::Max(RowW, FMath::Max(TextSize(Info, U(14.f)).X, TextSize(Commanding, U(13.f)).X)) + U(36.f));
+		const float H = U(Commanding.IsEmpty() ? 102.f : 124.f);
 		// top left; under the resource bar's row when a narrow window would have them overlap
 		const float BY = (TopBarRect.bIsValid && U(14.f) + W > TopBarRect.Min.X - U(8.f)) ? TopBarRect.Max.Y + U(8.f) : U(10.f);
 		const FBox2D Box(FVector2D(U(14.f), BY), FVector2D(U(14.f) + W, BY + H));
 		HudPanel(Box);
 		Text(bHero ? TEXT("HERO") : TEXT("OVERVIEW"), Box.Min.X + U(16.f), Box.Min.Y + U(8.f), U(18.f), GoldBright, AlignLeft, Bold, U(3.f));
-		Text(Info, Box.Min.X + U(16.f), Box.Min.Y + U(33.f), U(14.f), InfoCol);
+		Text(bFocusSelected ? (bFocusEnemy ? TEXT("LOOKED AT") : TEXT("SELECTED")) : TEXT("PLAYED"), Box.Max.X - U(16.f), Box.Min.Y + U(12.f), U(12.f), Dim, AlignRight, Bold, U(2.f));
+		// the unit in focus: portrait, name (and how many more are selected), health
+		{
+			const float PX = Box.Min.X + U(16.f), PY = Box.Min.Y + RowY;
+			const bool bDown = Focus->IsDead();
+			Portrait(VLPortraitOf(Focus->GetKind()), PX, PY, PS, bDown ? FLinearColor(0.5f, 0.45f, 0.45f, 0.8f) : FLinearColor::White, bFocusEnemy);
+			const float TX = PX + PS + U(10.f), MW = Box.Max.X - U(16.f) - TX;
+			const float NW = Text(Name, TX, PY - U(1.f), U(15.f), bFocusEnemy ? Refuse : GoldBright, AlignLeft, Bold);
+			if (!More.IsEmpty())
+			{
+				Text(More, TX + NW + U(10.f), PY + U(1.f), U(13.f), Dim);
+			}
+			const float Frac = bDown ? 0.f : Focus->GetHealthFrac();
+			Text(FString::Printf(TEXT("%.0f / %.0f"), FMath::CeilToFloat(bDown ? 0.f : Focus->GetHealth()), Focus->MaxHealth), Box.Max.X - U(16.f), PY + U(1.f), U(13.f), Frac < HealthBarRed ? Refuse : Parchment, AlignRight, Bold);
+			const float Hit = FMath::Clamp(1.f - float(GetWorld()->GetTimeSeconds() - Focus->LastHurtTime) / 0.4f, 0.f, 1.f);
+			Meter(TX, PY + U(24.f), MW, U(9.f), Frac, FMath::Lerp(Health(Frac), Refuse, Hit * 0.7f));
+		}
+		Text(Info, Box.Min.X + U(16.f), Box.Min.Y + RowY + PS + U(6.f), U(14.f), InfoCol);
 		if (!Commanding.IsEmpty())
 		{
-			Text(Commanding, Box.Min.X + U(16.f), Box.Min.Y + U(55.f), U(13.f), Dim);
+			Text(Commanding, Box.Min.X + U(16.f), Box.Min.Y + RowY + PS + U(28.f), U(13.f), Dim);
 		}
 	}
 	// the controls of the hero view along the bottom

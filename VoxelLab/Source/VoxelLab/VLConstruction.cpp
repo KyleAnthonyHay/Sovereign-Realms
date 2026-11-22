@@ -2475,6 +2475,11 @@ void UVLConstruction::BeginPlacement(EVLBuilding Kind)
 		UE_LOG(LogVoxelLab, Log, TEXT("build: %s refused (%s)"), VLRules::Name(Kind), *Why);
 		return;
 	}
+	if (Kind != PlaceTurnsKind)
+	{
+		PlaceTurns = 0;             // (another kind: it faces the view again; the same kind keeps the turn it was given)
+		PlaceTurnsKind = Kind;
+	}
 	Placing = Kind;
 	Current = FVLPlacement();
 	LastSnap = FIntPoint(MAX_int32, MAX_int32);
@@ -2494,6 +2499,22 @@ void UVLConstruction::CancelPlacement()
 	bPointerOnGround = false;
 	bRightDown = false;
 	HideGhost();
+}
+
+void UVLConstruction::TurnPlacement()
+{
+	if (!IsPlacing() || Placing == EVLBuilding::Mine)
+	{
+		return;                     // (a mine is part of its map: never placed, never turned)
+	}
+	PlaceTurns = (PlaceTurns + 1) % 4;
+	LastSnap = FIntPoint(MAX_int32, MAX_int32);     // checked again at once, on the turned footprint
+	if (UVLBattle* Battle = UVLBattle::Get(this))
+	{
+		Battle->Play2D(TEXT("S_UIClick"), 0.4f);
+	}
+	bLogTurn = true;                // (the turned footprint is logged once the ghost has been checked on it)
+	UE_LOG(LogVoxelLab, Log, TEXT("build: placing a %s turned to %d quarter turn(s)"), VLRules::Name(Placing), PlaceTurns);
 }
 
 bool UVLConstruction::OnEscape()
@@ -2539,7 +2560,8 @@ void UVLConstruction::UpdateGhost(APlayerController* PC, AVLHUD* HUD, AVLKing* M
 	bPointerOnGround = true;
 	// its front (the gate, the yard) to the view: the camera looks along Cam, the front faces back along it
 	const float CamYaw = PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraRotation().Yaw : 0.f;
-	const float Yaw = FRotator::NormalizeAxis(FMath::GridSnap(CamYaw + 90.f, 90.f));
+	// (T: the player's quarter turns on top of that, clockwise as T turns a finished building)
+	const float Yaw = FRotator::NormalizeAxis(FMath::GridSnap(CamYaw + 90.f, 90.f) + 90.f * PlaceTurns);
 	const FIntPoint Snap(FMath::RoundToInt(Ground.X / VLBuild::SnapStep), FMath::RoundToInt(Ground.Y / VLBuild::SnapStep));
 	const double Now = GetWorld()->GetRealTimeSeconds();
 	if (Snap != LastSnap || Yaw != LastYaw || Now - CheckedAt > 0.3)
@@ -2552,6 +2574,12 @@ void UVLConstruction::UpdateGhost(APlayerController* PC, AVLHUD* HUD, AVLKing* M
 		if (CVarPlacementLog.GetValueOnGameThread() != 0)
 		{
 			UE_LOG(LogVoxelLab, Log, TEXT("PLACEMENT check: %.3f ms (%d plates, %s)"), (FPlatformTime::Seconds() - T0) * 1000.0, Current.Cells.Num(), Current.bValid ? TEXT("fits") : *Current.Reason);
+		}
+		if (bLogTurn)
+		{
+			bLogTurn = false;
+			UE_LOG(LogVoxelLab, Log, TEXT("build: the turned ghost at %.0f %.0f yaw %.0f: footprint axes %s / %s, %d plates, %s"), Current.Location.X, Current.Location.Y, Current.Yaw,
+				*Current.AxisX.ToCompactString(), *Current.AxisY.ToCompactString(), Current.Cells.Num(), Current.bValid ? TEXT("fits") : *Current.Reason);
 		}
 	}
 	// the ghost: the building itself as glowing glass, green where it fits, red where it does not
@@ -2677,6 +2705,11 @@ bool UVLConstruction::OverviewInput(APlayerController* PC, AVLHUD* HUD, AVLKing*
 	if (!IsPlacing())
 	{
 		return false;
+	}
+	// T while placing: the ghost turns a quarter turn clockwise (R stays the view's "back to north")
+	if (PC->WasInputKeyJustPressed(EKeys::T) && !bCtrl && !bAlt)
+	{
+		TurnPlacement();
 	}
 	UpdateGhost(PC, HUD, Me);
 	float MX = 0.f, MY = 0.f;
@@ -2924,7 +2957,7 @@ namespace
 			C->BenchPlacement(KindArg(Args[0]), P, Args.Num() > 3 ? FCString::Atoi(*Args[3]) : 40);
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdPlace(TEXT("vl.Place"), TEXT("vl.Place barracks|range|farm|mine|tower | off: the player's placing, as a click on the build menu's card"),
+	FAutoConsoleCommandWithWorldAndArgs CmdPlace(TEXT("vl.Place"), TEXT("vl.Place barracks|range|farm|mine|tower | off | turn: the player's placing, as a click on the build menu's card (turn: as T while placing)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (UVLConstruction* C = UVLConstruction::Get(World))
@@ -2936,6 +2969,10 @@ namespace
 				else if (Args[0] == TEXT("menu"))
 				{
 					C->ToggleMenu();
+				}
+				else if (Args[0] == TEXT("turn"))
+				{
+					C->TurnPlacement();     // (as T while placing)
 				}
 				else
 				{

@@ -582,7 +582,7 @@ float AVLHUD::TopChipsWidth() const
 void AVLHUD::DrawTopChips(float X, float Y, float H)
 {
 	// The main game's Builders and Scout counters, and the hero: a portrait chip each with its count or state. A click
-	// selects them, a second within 0.35 s also looks at them.
+	// selects them, a second within 0.35 s also looks at them (the hero's: his hero view).
 	UVLBattle* Battle = UVLBattle::Get(this);
 	UVLConstruction* C = UVLConstruction::Get(this);
 	UVLCommand* Command = UVLCommand::Get(this);
@@ -630,7 +630,7 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 				Count = TEXT("-");
 				Col = Dim;
 			}
-			Lines.Add(TEXT("Click: select him   ·   twice: look at him."));
+			Lines.Add(TEXT("Click: select him   ·   twice: his hero view."));
 		}
 		else if (i == 1)
 		{
@@ -708,13 +708,17 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 			{
 				King->SelectByName(i == 0 ? FString(TEXT("king")) : Who[0]->GetDisplayName());
 				Command->Select(Who);
-				if (bDouble)
+				if (bDouble && i == 0)
+				{
+					PendingHeroView = Who[0];      // the hero: his hero view (as Enter with him selected), once the frame is drawn
+				}
+				else if (bDouble)
 				{
 					FVector Mid = FVector::ZeroVector;
 					for (const AVLKing* U2 : Who) { Mid += U2->GetFeet() / Who.Num(); }
 					King->LookAt(Mid, -1.f, 1e31f);
 				}
-				UE_LOG(LogVoxelLab, Log, TEXT("hud: top bar %s: %d selected%s"), *Title, Who.Num(), bDouble ? TEXT(", looking at them") : TEXT(""));
+				UE_LOG(LogVoxelLab, Log, TEXT("hud: top bar %s: %d selected%s"), *Title, Who.Num(), bDouble ? (i == 0 ? TEXT(", his hero view") : TEXT(", looking at them")) : TEXT(""));
 			}
 		}
 		CX += Wide[i];

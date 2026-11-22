@@ -401,6 +401,9 @@ void AVLHUD::LogButtons() const
 	}
 	UE_LOG(LogVoxelLab, Log, TEXT("hud: screen %d (base %d, sub %d)%s%s, %d panels"), int32(GetScreen()), int32(Base), int32(Sub), bConfirm ? TEXT(", confirm") : TEXT(""),
 		bLegend ? TEXT(", controls overlay") : TEXT(""), Blockers.Num());
+	UE_LOG(LogVoxelLab, Log, TEXT("hud: %s; route lines %s: %d segment(s), %d Builder chain(s), %d number(s)%s; mode box shows %s"), King && King->IsHeroMode() ? TEXT("hero view") : TEXT("overview"),
+		LineStats.bHidden ? TEXT("hidden (hero view)") : TEXT("shown"), LineStats.Segments, LineStats.Chains, LineStats.Badges, LineStats.bPreview ? TEXT(", the Shift preview to the ghost") : TEXT(""),
+		ModeBoxUnit.IsEmpty() ? TEXT("-") : *ModeBoxUnit);
 }
 
 void AVLHUD::Click(bool bError)
@@ -537,6 +540,16 @@ void AVLHUD::DrawHUD()
 	default: if (bLegend) { DrawLegendOverlay(); } break;
 	}
 	EndFrame();
+	// the hero chip's double click: King David's hero view (as Enter with him selected), after the frame's drawing
+	if (AVLKing* Hero = PendingHeroView.Get())
+	{
+		PendingHeroView = nullptr;
+		if (King && Hero->IsAlive())
+		{
+			King->TakeControlOf(Hero);
+			UE_LOG(LogVoxelLab, Log, TEXT("hud: top bar King David double-clicked: his hero view"));
+		}
+	}
 }
 
 void AVLHUD::UpdateTitleBackdrop()
@@ -1538,22 +1551,32 @@ void AVLHUD::DrawRouteLines()
 {
 	// Dashed ground lines: the pathway of the selected troops (blue), their patrol (orange) or attack-move (red), and a
 	// selected barracks' or range's rally point.
+	LineStats = FLineStats();
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const UVLCommand* Command = UVLCommand::Get(this);
 	if (!Battle || !Command || !King)
 	{
-		return;         // (in the hero view too: the selection there is commanded with the crosshair)
+		return;
 	}
-	auto Dashed = [this](const FVector& A0, const FVector& B0, const FLinearColor& Color, bool bEnds)
+	if (King->IsHeroMode())
+	{
+		// the hero view: no pathways, follow, patrol or queue lines (troops following the hero, as their platoon's
+		// leader or the unit they were sent after, would trail lines across the view); the order markers still show
+		// where an order from the crosshair went. Back in the overview.
+		LineStats.bHidden = true;
+		return;
+	}
+	auto Dashed = [this](const FVector& A0, const FVector& B0, const FLinearColor& Color, bool bEnds, float Width = 2.f)
 	{
 		const FVector Lift(0.f, 0.f, 20.f);
-		const int32 N = FMath::Clamp(int32(FVector::Dist(A0, B0) / 60.f) * 2, 2, 48);
+		const int32 N = FMath::Clamp(int32(FVector::Dist(A0, B0) / 60.f) * 2, 2, 64);
+		++LineStats.Segments;
 		for (int32 i = 0; i < N; i += 2)
 		{
 			const FVector S0 = Project(FMath::Lerp(A0, B0, float(i) / N) + Lift);
 			const FVector S1 = Project(FMath::Lerp(A0, B0, float(i + 1) / N) + Lift);
 			if (S0.Z <= 0.f || S1.Z <= 0.f) { continue; }
-			DrawLine(S0.X, S0.Y, S1.X, S1.Y, Color, FMath::Max(1.f, U(2.f)));
+			DrawLine(S0.X, S0.Y, S1.X, S1.Y, Color, FMath::Max(1.f, U(Width)));
 		}
 		if (bEnds)
 		{
@@ -1615,64 +1638,139 @@ void AVLHUD::DrawRouteLines()
 		{
 			continue;               // (a patrol's or attack-move's leg: its route is drawn above)
 		}
+		if (const UVLBuilderWork* W = UVLBuilderWork::For(Un, false); W && (W->GetJob() || W->HasTasks()))
+		{
+			continue;               // (a Builder on a job or with a queue: its chain below draws its way)
+		}
 		// from the troop along the route it is walking to the point it is heading for, then the legs after it
 		FVector From = Un->GetFeet();
 		for (const FVector& P : Route) { Dashed(From, P, Blue, false); From = P; }
 		Dashed(From, Legs[0], Blue, true);
 		for (int32 k = 1; k < Legs.Num(); ++k) { Dashed(Legs[k - 1], Legs[k], Blue, true); }
 	}
-	// a Builder's queue (Shift orders): from what it is on now, a numbered chain of its walks (blue) and the
-	// buildings it is to raise or mend (gold); a crew sharing one queue draws it once
+	// a Builder's queue (Shift orders): a numbered chain from the Builder through what it is on now (1: the building it
+	// works on, or the walk it is on) and then each order of its queue in turn (2, 3, ...), walks blue and buildings
+	// gold; an order that has lapsed (the site cancelled or fallen) is left out. A crew sharing one queue draws the
+	// chain once, each Builder its own line to the first. While placing with Shift held (and Builders selected), a pale
+	// segment from the end of the chain to the ghost, with the number the site would get.
 	{
-		const FLinearColor Work(1.f, 0.82f, 0.3f, 0.9f);
+		const FLinearColor Work(1.f, 0.82f, 0.3f, 0.95f);
+		const FLinearColor WalkCol(0.55f, 0.8f, 1.f, 0.95f);
 		auto Ground = [this](const FVector& P) { return FVector(P.X, P.Y, GroundZ(FVector2D(P), P.Z)); };
-		TSet<const AActor*> FirstDrawn;
-		TArray<FVector2D> MovesDrawn;
+		struct FItem { FVector At = FVector::ZeroVector; bool bMove = false; const AActor* Building = nullptr; };
+		struct FBadge { FVector At; int32 N; FLinearColor Col; };
+		TArray<TArray<FItem>> Chains;
+		TArray<FBadge> Badges;
+		TArray<FItem> First;            // the first selected Builder's chain (the Shift preview goes on from its end)
+		const AVLKing* FirstBuilder = nullptr;
+		auto Same = [](const FItem& A0, const FItem& B0)
+		{
+			return A0.bMove == B0.bMove && (A0.bMove ? FVector::Dist2D(A0.At, B0.At) < 450.f : A0.Building == B0.Building);
+		};
 		for (AVLKing* Un : Units)
 		{
+			if (!UVLBuilderWork::IsBuilder(Un) || !Un->IsAlive())
+			{
+				continue;
+			}
+			if (!FirstBuilder)
+			{
+				FirstBuilder = Un;
+			}
 			const UVLBuilderWork* W = UVLBuilderWork::For(Un, false);
-			if (!W || !W->HasTasks())
+			if (!W || (!W->GetJob() && !W->HasTasks()))
 			{
 				continue;
 			}
-			const TArray<UVLBuilderWork::FTask>& Tasks = W->GetTasks();
-			// (the crew's shared queue: the same first building, or a first walk to nearly the same point)
-			const UVLBuilderWork::FTask& T0 = Tasks[0];
-			if (!T0.bMove && T0.Building.IsValid() && FirstDrawn.Contains(T0.Building.Get()))
+			TArray<FItem> Items;
+			if (const AActor* Job = W->GetJob())
 			{
-				continue;
+				Items.Add({ Ground(Job->GetActorLocation()), false, Job });
 			}
-			if (T0.bMove && MovesDrawn.ContainsByPredicate([&T0](const FVector2D& P) { return FVector2D::Distance(P, FVector2D(T0.Point)) < 450.f; }))
+			else if (Un->HasOrder() && Un->GetWaypoints().Num() > 0)
 			{
-				continue;
+				Items.Add({ Ground(Un->GetWaypoints().Last()), true, nullptr });       // (the queued walk it is on)
 			}
-			if (!T0.bMove) { FirstDrawn.Add(T0.Building.Get()); } else { MovesDrawn.Add(FVector2D(T0.Point)); }
-			FVector From = W->GetJob() ? Ground(W->GetJob()->GetActorLocation()) : (Un->HasOrder() && Un->GetWaypoints().Num() > 0 ? Ground(Un->GetWaypoints().Last()) : Ground(Un->GetFeet()));
-			if (W->GetJob())
+			for (const UVLBuilderWork::FTask& T : W->GetTasks())
 			{
-				Dashed(Ground(Un->GetFeet()), From, Work, false);      // (to the job it is on now)
-			}
-			for (int32 k = 0; k < Tasks.Num(); ++k)
-			{
-				const UVLBuilderWork::FTask& T = Tasks[k];
-				const AActor* B = T.Building.Get();
-				if (!T.bMove && !B)
+				if (T.bMove)
 				{
-					continue;       // (lapsed: passed over in its turn)
+					Items.Add({ Ground(T.Point), true, nullptr });
 				}
-				const FVector To = T.bMove ? Ground(T.Point) : Ground(B->GetActorLocation());
-				const FLinearColor C = T.bMove ? Blue : Work;
-				Dashed(From, To, C, true);
-				const FVector S = Project(To + FVector(0.f, 0.f, 20.f));
-				if (S.Z > 0.f)
+				else if (const AActor* B = T.Building.Get())
 				{
-					const float R = U(9.f);
-					Fill(S.X - R, S.Y - R - U(14.f), 2.f * R, 2.f * R, FLinearColor(0.02f, 0.03f, 0.06f, 0.85f));
-					TextIn(FBox2D(FVector2D(S.X - R, S.Y - R - U(14.f)), FVector2D(S.X + R, S.Y + R - U(14.f))), FString::FromInt(k + 1), U(14.f), C, AlignCentre, Bold);
+					Items.Add({ Ground(B->GetActorLocation()), false, B });
 				}
-				From = To;
+			}
+			if (Items.Num() == 0)
+			{
+				continue;
+			}
+			if (Un == FirstBuilder)
+			{
+				First = Items;
+			}
+			// its own line to the first: along the route it is walking now
+			const FLinearColor C0 = Items[0].bMove ? WalkCol : Work;
+			FVector From = Ground(Un->GetFeet());
+			if (Un->HasOrder())
+			{
+				for (const FVector& P : Un->GetWaypoints()) { Dashed(From, P, C0, false, 3.f); From = P; }
+			}
+			Dashed(From, Items[0].At, C0, true, 3.f);
+			// the chain, once per crew
+			if (Chains.ContainsByPredicate([&](const TArray<FItem>& C)
+				{
+					if (C.Num() != Items.Num()) { return false; }
+					for (int32 k = 0; k < C.Num(); ++k) { if (!Same(C[k], Items[k])) { return false; } }
+					return true;
+				}))
+			{
+				continue;
+			}
+			Chains.Add(Items);
+			for (int32 k = 0; k < Items.Num(); ++k)
+			{
+				const FLinearColor C = Items[k].bMove ? WalkCol : Work;
+				if (k > 0)
+				{
+					Dashed(Items[k - 1].At, Items[k].At, C, true, 3.f);
+				}
+				Badges.Add({ Items[k].At, k + 1, C });
 			}
 		}
+		// Shift held while placing: where the next site goes in the order
+		const UVLConstruction* Construction = UVLConstruction::Get(this);
+		const bool bShiftHeld = PCtrl && (PCtrl->IsInputKeyDown(EKeys::LeftShift) || PCtrl->IsInputKeyDown(EKeys::RightShift));
+		if (FirstBuilder && bShiftHeld && Construction && Construction->IsPlacing() && Construction->HasPlacementUnderPointer())
+		{
+			const FVLPlacement& P = Construction->GetPlacement();
+			const float Pulse = 0.5f + 0.5f * FMath::Sin(float(Now) * 5.f);
+			const FLinearColor C = P.bValid ? FLinearColor(1.f, 0.93f, 0.7f, 0.55f + 0.3f * Pulse) : FLinearColor(1.f, 0.35f, 0.3f, 0.5f + 0.25f * Pulse);
+			const FVector From = First.Num() > 0 ? First.Last().At : Ground(FirstBuilder->GetFeet());
+			Dashed(From, Ground(P.Location), C, true, 2.f);
+			Badges.Add({ Ground(P.Location), First.Num() + 1, C });
+			LineStats.bPreview = true;
+		}
+		// the numbers last, over the lines: a dark plate edged in the order's colour, on a stalk to its point
+		for (const FBadge& B : Badges)
+		{
+			const FVector S = Project(B.At + FVector(0.f, 0.f, 20.f));
+			if (S.Z <= 0.f)
+			{
+				continue;
+			}
+			const FString Num = FString::FromInt(B.N);
+			const float R = U(10.f), E = FMath::Max(1.f, U(2.f));
+			const float BW = FMath::Max(2.f * R, TextSize(Num, U(14.f), Bold).X + U(8.f));
+			const float BX = FMath::RoundToFloat(S.X - BW * 0.5f), BY = FMath::RoundToFloat(S.Y - 2.f * R - U(18.f));
+			DrawLine(S.X, BY + 2.f * R, S.X, S.Y, B.Col, FMath::Max(1.f, U(1.5f)));
+			Fill(BX - E, BY - E, BW + 2.f * E, 2.f * R + 2.f * E, B.Col);
+			Fill(BX, BY, BW, 2.f * R, FLinearColor(0.02f, 0.03f, 0.06f, 0.92f));
+			TextIn(FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + 2.f * R)), Num, U(14.f), B.Col, AlignCentre, Bold);
+		}
+		LineStats.Badges = Badges.Num();
+		LineStats.Chains = Chains.Num();
 	}
 	if (const FVLBuildingState* St = Battle->FindBuilding(SelectedBuilding()); St && St->Trains() && St->Team == UVLBattle::Player)
 	{
