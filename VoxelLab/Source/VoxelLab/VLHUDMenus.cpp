@@ -104,7 +104,7 @@ namespace
 		TEXT("The bigger battle: bluffs, a gorge, the Crown."),
 		TEXT("Balance test: both sides start maxed out, on Realm v2.") };
 
-	const int32 Caps[5] = { 30, 40, 60, 120, 0 };
+	const int32 MenuFpsCaps[5] = { 30, 40, 60, 120, 0 };
 
 	FString ClockText(float Seconds)
 	{
@@ -426,7 +426,7 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 	if (Choice(VLId::Setting + 10, UVLGraphics::DynamicResName(UVLGraphics::GetDynamicRes()), nullptr)) { UVLGraphics::CycleDynamicRes(GetWorld()); }
 	RY += RowH;
 	Label(TEXT("Frame rate limit"));
-	if (Choice(VLId::Setting + 4, Caps[FrameCap] > 0 ? FString::Printf(TEXT("%d fps"), Caps[FrameCap]) : FString(TEXT("Unlimited")), nullptr)) { FrameCap = (FrameCap + 1) % 5; ApplySettings(); }
+	if (Choice(VLId::Setting + 4, MenuFpsCaps[FrameCap] > 0 ? FString::Printf(TEXT("%d fps"), MenuFpsCaps[FrameCap]) : FString(TEXT("Unlimited")), nullptr)) { FrameCap = (FrameCap + 1) % 5; ApplySettings(); }
 	RY += RowH;
 	// the window (saved in GameUserSettings by UVLGraphics, as F11 / Alt+Enter and a dragged edge are; the editor's
 	// play window is the editor's own)
