@@ -170,11 +170,14 @@ public:
 	bool bAttackMove = false;
 	/** The attack it is on was its own idea (a foe in its sight), not an order: it lets go by its stance. */
 	bool bAutoAttack = false;
+	/** At a castle's walls on its commander's order (a siege): only a foe at its side (or one that struck it) draws it
+	 *  off the walls, not every troop within its reach (UVLBattle::TickAutoCombat). Cleared by its next order. */
+	bool bSiege = false;
 	/** H (UVLCommand::OrderHold): it stands where it is and strikes only what is in reach, until its next order. */
 	bool bHoldOrder = false;
 	/** Holding its ground: the Hold stance, or a hold order. */
 	bool IsHolding() const { return bHoldOrder || Stance == EVLStance::Hold; }
-	/** March together (UVLCommand::UpdateMarchPace): no faster than this on its order (cm/s; 0 = its own pace). */
+	/** March together (UVLCommand::UpdateMarchPace): its speed on its order (cm/s, never over its run; 0 = its own pace). */
 	float PaceCap = 0.f;
 	/** The march it walks with (UVLCommand::OrderMove gives every group order that marches together one; 0 = none,
 	 *  its own pace). Any walk not given as a march (FollowPath: a chase, a Builder's errand) clears it; the legs of
@@ -604,12 +607,17 @@ public:
 	 * (attack unit 1, then 2, then a building, then walk). Those under his command: the selection (not the unit
 	 * played), else those following him (who fall in behind him again after an attack), else his platoon. The sky,
 	 * or King David himself with the pointer shown: the selection is let go (Esc too).
+	 * With troops selected, one of his own that is NOT among them is guarded by them instead (HeroGuardsOnClick):
+	 * its platoon if it is in one (UVLCommand::OrderGuardPlatoon), else the unit itself.
 	 */
 	void HeroSelect(APlayerController* PC, bool bShift);
+	/** Would an Option + click on Aimed (one of his own) have the selection guard it, rather than select it? */
+	bool HeroGuardsOnClick(const AVLKing* Aimed) const;
 	/** Whom an Alt + click in the hero view commands (see HeroSelect); bOutFollowers: they are his followers. */
 	void HeroCommanded(TArray<AVLKing*>& Out, bool* bOutFollowers = nullptr) const;
 	/** The hero view's commands (select, order, platoon keys, follow me). True: this frame's left click was one. */
-	bool HeroCommands(APlayerController* PC);
+	/** bClickSpent: this frame's left click went to the interface (the pointer shown: the minimap, the platoon panel). */
+	bool HeroCommands(APlayerController* PC, bool bClickSpent = false);
 	/**
 	 * Is a left click now a command (HeroSelect), not the unit's own blow? Only with Alt / Option held (not with Ctrl /
 	 * Cmd: that is an order, the right click's): a plain left click is always the blow. OutUnit: one of the player's
@@ -621,6 +629,8 @@ public:
 	/** What the crosshair is on in the hero view (a unit, updated each frame there), for the HUD's hint. */
 	AVLKing* GetHeroHover() const { return HeroHover.Get(); }
 	bool IsHeroHoverSelect() const { return bHeroHoverSelect; }
+	/** The yaw both cameras start at and R goes back to (the level's postcard camera's): the minimap's "up". */
+	float GetHomeYaw() const { return HomeYaw; }
 	/** Tests (vl.HeroAim): the crosshair is taken to be on this world point for Seconds. */
 	void SetHeroTestAim(const FVector& Point, float Seconds) { HeroTestAim = Point; HeroTestAimTime = Seconds; }
 

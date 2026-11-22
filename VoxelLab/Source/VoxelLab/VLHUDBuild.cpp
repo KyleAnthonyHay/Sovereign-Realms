@@ -110,6 +110,13 @@ void AVLHUD::DrawBuildMenu(float X, float Bottom)
 	const float PW = Pad * 2.f + 4.f * CardW + 3.f * Gap, PH = Pad * 2.f + TabH + Gap + CardH + U(24.f);   // room for four cards a tab
 	const float PX = Toggle.Max.X + U(10.f), PY = Bottom - U(152.f) - U(10.f) - PH;
 	const FBox2D Box(FVector2D(PX, PY), FVector2D(PX + PW, PY + PH));
+	// a click off it (another panel, the world: AVLKing::OverviewCommands does the world's too) puts the menu away and
+	// the Build button goes dark; the click itself is still the usual one (on the ground it lets the selection go)
+	if (PCtrl && PCtrl->WasInputKeyJustPressed(EKeys::LeftMouseButton) && bMouse && !Box.IsInside(Mouse) && !Toggle.IsInside(Mouse) && !T.bClicked)
+	{
+		C->SetMenu(false);
+		return;
+	}
 	HudPanel(Box);
 	static const EVLIcon TabIcons[3] = { EVLIcon::Coin, EVLIcon::Swords, EVLIcon::Tower };
 	const float TW = (PW - 2.f * Pad - 2.f * Gap) / 3.f;
@@ -663,7 +670,7 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 			Lines.Add(FString::Printf(TEXT("Builders / most you may have (%d; raising the castle allows more). %d at work."), Max, Busy));
 			Lines.Add(TEXT("Only Builders build: they raise buildings (B) and repair them (X)."));
 			Lines.Add(FString::Printf(TEXT("Trained at the castle: %s. They take no housing."), *CostLine(VLRules::Troop(TEXT("Builder")).Cost)));
-			Lines.Add(TEXT("Click: select them   ·   twice: look at them."));
+			Lines.Add(TEXT("Click: the list of them and what each is doing (click one to go to it)."));
 		}
 		else
 		{
@@ -687,7 +694,7 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 			if (bLocked) { Lines.Add(FString::Printf(TEXT("Locked: raise the castle to level %d to train one."), VLRules::SpyCastleLevel)); }
 			else
 			{
-				Lines.Add(Alive > 0 ? TEXT("Your Spy is in the field. Click to select it, twice to look at it.") : (Queued > 0 ? TEXT("Your Spy is in training.") : TEXT("No Spy in the field.")));
+				Lines.Add(Alive > 0 ? TEXT("Your Spy is in the field. Click: its row (what it is doing; click it to go to it).") : (Queued > 0 ? TEXT("Your Spy is in training.") : TEXT("No Spy in the field.")));
 				if (Wait > 0.f) { Lines.Add(FString::Printf(TEXT("The next can be trained in %s."), *Countdown(Wait))); }
 			}
 			Lines.Add(TEXT("Trained at the castle: one at a time. Fast, sees far, hard to notice."));
@@ -708,8 +715,25 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 			const float CW = TextIn(Row(TX), Count, Count.Len() > 5 ? U(15.f) : U(21.f), Col, AlignLeft, Bold);
 			if (!SubText.IsEmpty()) { TextIn(Row(TX + CW + U(5.f)), SubText, U(14.f), Dim, AlignLeft); }
 		}
-		if (B.bHover) { SetTooltip(FBox2D(FVector2D(CX, Y), FVector2D(CX, Y + H + U(4.f))), Title, Lines); }
-		if (B.bClicked)
+		if (i > 0 && ChipList == i)
+		{
+			// (its list is open under it: lit, with a chevron)
+			Fill(Seg.Min.X, Seg.Max.Y - U(9.f), Seg.Max.X - Seg.Min.X, U(3.f), GoldBright);
+			ChipListChip = Seg;
+		}
+		if (B.bHover && ChipList == 0) { SetTooltip(FBox2D(FVector2D(CX, Y), FVector2D(CX, Y + H + U(4.f))), Title, Lines); }
+		if (B.bClicked && i > 0)
+		{
+			// the Builders' and the Spy's chips open a list of them (each with what it is doing): DrawChipList
+			Click();
+			if (!King->IsHeroMode())
+			{
+				ChipList = ChipList == i ? 0 : i;
+				ChipListChip = Seg;
+				UE_LOG(LogVoxelLab, Log, TEXT("hud: top bar %s: list %s (%d)"), *Title, ChipList == i ? TEXT("opened") : TEXT("closed"), Who.Num());
+			}
+		}
+		else if (B.bClicked)
 		{
 			const bool bDouble = LastChip == i && Now - LastChipTime < 0.35;
 			LastChip = i;

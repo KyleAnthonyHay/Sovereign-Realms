@@ -96,9 +96,9 @@ def main(a):
     if "yard" in a:
         m = mark()
         cmd("vl.TrainAt Barracks 3")
-        ok = wait_for(r"waits in the yard", m, 20)
+        ok = wait_for(r"waits in the yard", m, 30)        # (18 s a swordsman since the times were doubled, 2026-11-22)
         check("a recruit waits in the yard", ok is not None, ok.split("LogVoxelLab: ")[-1] if ok else "")
-        time.sleep(26)
+        time.sleep(44)
         out = cmd("vl.Construction")
         y = [l for l in out if "Barracks (team 0" in l]
         check("three wait in the barracks' yard", any("3 waiting in the yard" in l for l in y), " ".join(l.split("LogVoxelLab: ")[-1] for l in y))

@@ -66,6 +66,7 @@ struct FVLAIProfile
 	bool bKite = true;             // archers step back behind the swords from a swordsman at their throat
 	float PullBack = 0.25f;        // a troop below this share of its health leaves the fight for the castle (0 = never)
 	bool bAvoidTowers = true;      // keeps its holding points and raids out of the foe's tower reach
+	float PushAfter = 1500.f;      // the clock (s) from which, about even or ahead, it goes for the castle (FinalPush)
 
 	static FVLAIProfile For(int32 Difficulty);
 };
@@ -149,6 +150,7 @@ struct FVLSquad
 	TArray<FVector> Via;                // a route's points before the goal (a flank bridge)
 	float TargetHealth = -1.f;          // the target's health when it last fell (an attack that does no harm for long ends)
 	float ProgressAt = 0.f;
+	float ProgressDealt = -1.f;         // its side's damage to the foe's buildings and kills when it last made headway
 
 	void Prune();
 	int32 Num() const { return Units.Num(); }
@@ -261,7 +263,23 @@ struct FVLCommander
 	void Step(UVLBattle* Battle, float Dt);
 	/** Seconds until its next main attack may leave (negative once it is due). */
 	float NextWaveIn() const { return NextWaveTime - Clock; }
+	/** While an attack is out its next one has no time yet: NextWaveTime is Clock + WaveHeld until the attack ends. */
+	static constexpr float WaveHeld = 1e6f;
+	/** The longest it ever waits for its next attack with none out (s): the longer of its first attack's time and its
+	 *  pause between two. Step holds NextWaveTime to that, whatever left it further off. */
+	float MaxWaveWait() const { return FMath::Max(Prof.FirstAttack, Prof.Regroup); }
 	bool IsAttacking() const;
+	/** How many troops its next main attack wants (balance runs, 2026-11-22): its attack cap for this wave (AttackCap,
+	 *  + AttackCapGrowth a wave sent), at most 60% of what it can house. Below that it waits, unless its housing is full
+	 *  or the odds are overwhelming (twice what it wants): attacks of four or five into a defended base bled both
+	 *  armies and no match ever ended. */
+	int32 AttackWant(const UVLBattle* B) const;
+	/** The final push (balance runs, 2026-11-22: no match between two commanders ever ended, not in 90 minutes): from
+	 *  PushAfter of the clock on, with an army about the foe's (ArmyRatio 0.9 or more), its attacks go for the foe's
+	 *  castle and do not fall back until they are down to two fifths. */
+	bool FinalPush() const;
+	/** Its field army is out on the final push, at the foe's castle. */
+	bool IsPushing(const UVLBattle* B) const;
 	FString Describe() const;
 	/** The full picture for the log (vl.AI): posture and utilities, squads and their members, the map's points, recent
 	 *  events, the influence map (bMap). */

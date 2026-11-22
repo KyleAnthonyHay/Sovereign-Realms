@@ -207,6 +207,8 @@ namespace VLBuild
 	{
 		// the main game's FSRBuildingStats: price (gold), build time with one Builder (Treasury: TreasuryStats,
 		// 140 gold, 16 s; Granary: GranaryStats, 120 gold, 14 s). The town hall was never built in the main game.
+		// The times are twice the main game's (the owner's call, 2026-11-22: everything takes twice as long), the watch
+		// tower's three times (54 s: "archer towers need a lot longer to build").
 		static const TArray<FSpec> S = [] {
 			TArray<FSpec> L;
 			auto Add = [&L](EVLBuilding K, const TCHAR* Mesh, int32 Gold, float Sec, int32 InTab, const TCHAR* Blurb)
@@ -215,15 +217,15 @@ namespace VLBuild
 				X.Kind = K; X.Mesh = Mesh; X.Cost.Gold = Gold; X.Seconds = Sec; X.Tab = InTab; X.Blurb = Blurb;
 				L.Add(X);
 			};
-			Add(EVLBuilding::Farm, TEXT("SM_Farmstead"), 90, 14.f, 0, TEXT("Grows food for troops and houses them."));
-			Add(EVLBuilding::Treasury, TEXT("SM_Treasury"), 140, 16.f, 0, TEXT("Holds gold on top of the castle's stores."));
-			Add(EVLBuilding::Granary, TEXT("SM_Granary"), 120, 14.f, 0, TEXT("Holds food on top of the castle's stores, so no harvest is lost."));
+			Add(EVLBuilding::Farm, TEXT("SM_Farmstead"), 90, 28.f, 0, TEXT("Grows food for troops and houses them."));
+			Add(EVLBuilding::Treasury, TEXT("SM_Treasury"), 140, 32.f, 0, TEXT("Holds gold on top of the castle's stores."));
+			Add(EVLBuilding::Granary, TEXT("SM_Granary"), 120, 28.f, 0, TEXT("Holds food on top of the castle's stores, so no harvest is lost."));
 			// (not in the menu, Tab -1: a mine is never built. A free one of the map is claimed, at this price and in this
 			// time: UVLConstruction::ClaimMine)
-			Add(EVLBuilding::Mine, TEXT("SM_MineCliff"), 140, 16.f, -1, TEXT("Digs gold. Claimed, not built: order Builders onto a free mine."));
-			Add(EVLBuilding::Barracks, TEXT("SM_BarracksYard"), 110, 16.f, 1, TEXT("Trains swordsmen. They wait in its yard."));
-			Add(EVLBuilding::Range, TEXT("SM_ArcheryHall"), 125, 16.f, 1, TEXT("Trains archers. They wait in its yard."));
-			Add(EVLBuilding::Tower, TEXT("SM_WatchTower"), 160, 18.f, 2, TEXT("Shoots at foes in reach; archers can man its lookout."));
+			Add(EVLBuilding::Mine, TEXT("SM_MineCliff"), 140, 32.f, -1, TEXT("Digs gold. Claimed, not built: order Builders onto a free mine."));
+			Add(EVLBuilding::Barracks, TEXT("SM_BarracksYard"), 110, 32.f, 1, TEXT("Trains swordsmen. They wait in its yard."));
+			Add(EVLBuilding::Range, TEXT("SM_ArcheryHall"), 125, 32.f, 1, TEXT("Trains archers. They wait in its yard."));
+			Add(EVLBuilding::Tower, TEXT("SM_WatchTower"), 160, 54.f, 2, TEXT("Shoots at foes in reach; archers can man its lookout."));
 			return L;
 		}();
 		return S;
@@ -1419,6 +1421,19 @@ void UVLConstruction::Finish(FVLBuildingState& B)
 			Battle->PushAlert(FString::Printf(TEXT("%s completed"), *B.Name), EVLAlert::Good, &At);
 		}
 	}
+}
+
+bool UVLConstruction::FinishNow(AActor* Building)
+{
+	UVLBattle* Battle = UVLBattle::Get(this);
+	FVLBuildingState* B = Battle ? Battle->FindBuilding(Building) : nullptr;
+	if (!B || !B->IsAlive() || !B->IsSite())
+	{
+		return false;
+	}
+	B->Health = B->MaxHealth;
+	Finish(*B);
+	return true;
 }
 
 bool UVLConstruction::CancelSite(AActor* Building)

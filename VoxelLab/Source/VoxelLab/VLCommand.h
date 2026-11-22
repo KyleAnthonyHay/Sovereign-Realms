@@ -122,10 +122,20 @@ public:
 	void ExtendPatrol(const TArray<AVLKing*>& Units, const FVector& Point, EVLFormation Shape = EVLFormation::Line);
 	/** bQueue: one more point of the attack-move these units are on together (Shift + click). */
 	void OrderAttackMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun = false, EVLFormation Shape = EVLFormation::Line, bool bQueue = false);
-	/** Returns how many took a post (Builders do not guard; nobody guards itself). */
-	int32 OrderGuard(const TArray<AVLKing*>& Units, AActor* Ward);
-	/** Can units of Team guard it: a standing building of theirs, or a living Builder or King of theirs. */
-	bool CanBeGuarded(const AActor* Ward, int32 Team) const;
+	/** Returns how many took a post (Builders do not guard; nobody guards itself). bTroops: Ward may be any living unit
+	 *  of their side (the hero view's Option + click, V + click). Platoon: the guard is of that platoon: when Ward
+	 *  falls it passes to the platoon's leader, else its nearest member, and ends only with the platoon. */
+	int32 OrderGuard(const TArray<AVLKing*>& Units, AActor* Ward, bool bTroops = false, int32 Platoon = INDEX_NONE);
+	/** The selection-style call for a whole platoon: its leader (else the member nearest its middle) is the ward, the
+	 *  platoon's own members among Units are left out. Returns how many took a post. */
+	int32 OrderGuardPlatoon(const TArray<AVLKing*>& Units, int32 Platoon);
+	/** Can units of Team guard it: a standing building of theirs, or a living Builder or King of theirs; bTroops: any
+	 *  living unit of theirs that can be ordered (not a tower's own archer). */
+	bool CanBeGuarded(const AActor* Ward, int32 Team, bool bTroops = false) const;
+	/** The platoon a guard was posted to (OrderGuardPlatoon), or INDEX_NONE. */
+	int32 GuardPlatoonOf(const AVLKing* Unit) const;
+	/** Every unit that the player's units guard (the HUD's shield over a ward). */
+	void GetGuardedUnits(TArray<AVLKing*>& Out) const;
 	/** Returns how many Spies set out. */
 	int32 OrderRoam(const TArray<AVLKing*>& Units);
 	/** Troops gone for good, quietly (no refund; the king cannot be dismissed). Returns how many. */
@@ -202,15 +212,23 @@ public:
 	 * legs of a patrol or an attack-move, a Shift pathway, followers sent after their leader) gives its units one
 	 * AVLKing::MarchId. Each unit on a march walks no faster than the slowest of those marching with it: its march's,
 	 * and, a platoon member, the platoon's members on a march (walking or running, each at the speed it was sent at).
+	 * And the march closes up as it goes: those ahead of the body along the way slow down, those behind hurry (up to
+	 * their run), since troops of one pace never close a gap by themselves (the constants below).
 	 * A unit in a fight or a chase, played by hand, or no longer on an order is at its own pace and counts for
 	 * nobody's. Called when an order is given, when a platoon's members change or one falls, and four times a
 	 * second (TickOrders) so a march follows whoever drops out of it or joins it.
 	 */
 	void UpdateMarchPace();
+	// A march closes up along its way (UpdateMarchPace; cm of the way left to walk):
+	static constexpr float MarchSlack = 250.f;         // this far ahead of / behind the body nothing changes
+	static constexpr float MarchSlowest = 0.4f;        // the slowest those ahead go, as a share of the march's pace
+	static constexpr float MarchStraggler = 6000.f;    // one further behind the body's middle than this is not waited for
+	static constexpr float MarchSettle = 900.f;        // the last of the way: each to its own place, at the march's pace
 	// the player's armed clicks
 	void Arm(EVLArm Mode);
 	EVLArm GetArmed() const;
-	/** A: attack-move (archers only: attack-ground first); pressed again while armed, the other one. */
+	/** A: attack-move. (Attack-ground is no longer the player's: no key and no button; OrderAttackGround and
+	 *  vl.ArmGround are kept for tests.) */
 	void CycleAttackArm();
 	/** K: the first press asks (an alert), a second within DismissAskSeconds dismisses the selection's troops. */
 	void DismissCommand();
@@ -342,6 +360,7 @@ private:
 		FVector2D Offset = FVector2D::ZeroVector;   // from the ward's middle (a unit) / the post itself (a building)
 		FVector2D SentFor = FVector2D(1e9f, 1e9f);  // where the ward was when it was last sent to its post
 		bool bSent = false;
+		int32 Platoon = INDEX_NONE;                 // a platoon's guard: the ward is one of its members (see OrderGuard)
 	};
 	struct FRoamer
 	{

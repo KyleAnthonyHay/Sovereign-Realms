@@ -52,6 +52,7 @@ FVLAIProfile FVLAIProfile::For(int32 Difficulty)
 		P.GuardMax = 1;  P.GuardShare = 0.1f;  P.BuilderGuards = 0;  P.PicketFrom = 12;
 		P.MaxRaids = 0;  P.bFlank = false;  P.InterceptOdds = 0.f;
 		P.MicroEvery = 0.f;  P.FocusFire = 0;  P.bKite = false;  P.PullBack = 0.f;
+		P.PushAfter = 2400.f;
 	}
 	else if (Difficulty >= 2)
 	{
@@ -67,6 +68,7 @@ FVLAIProfile FVLAIProfile::For(int32 Difficulty)
 		P.GuardMax = 4;  P.BuilderGuards = 2;  P.PicketFrom = 9;
 		P.MaxRaids = 2;  P.RaidSize = 4;  P.bFlank = true;  P.InterceptOdds = 1.25f;  P.InterceptRange = 9000.f;
 		P.MicroEvery = 0.5f;  P.FocusFire = 2;  P.bKite = true;  P.PullBack = 0.3f;
+		P.PushAfter = 1200.f;
 	}
 	return P;
 }
@@ -181,6 +183,37 @@ float FVLCommander::ExpectedDefence(UVLBattle* B, const FVector& At, bool bSeenO
 }
 
 // ------------------------------------------------------------------------------------------------ places
+
+namespace
+{
+	TAutoConsoleVariable<float> CVarPushAfter(TEXT("vl.AI.PushAfter"), -1.f, TEXT("> = 0: the clock (s) from which the commanders make their final push (tests); < 0: the difficulty's"));
+}
+
+bool FVLCommander::IsPushing(const UVLBattle* B) const
+{
+	const AActor* FoeCastle = B->GetCastle(Foe());
+	for (const FVLSquad& S : Squads)
+	{
+		if (S.Role == EVLSquadRole::Field && S.Task == EVLSquadTask::Attack && FoeCastle && S.Target.Get() == FoeCastle && FinalPush())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool FVLCommander::FinalPush() const
+{
+	const float After = CVarPushAfter.GetValueOnGameThread() >= 0.f ? CVarPushAfter.GetValueOnGameThread() : Prof.PushAfter;
+	return Clock >= After && ArmyRatio >= 0.9f;
+}
+
+int32 FVLCommander::AttackWant(const UVLBattle* B) const
+{
+	const int32 Cap = FMath::Min3(Prof.AttackCap + Prof.AttackCapGrowth * WavesSent, Prof.AttackCapMax, WaveSizeMax);
+	const int32 Housing = FMath::RoundToInt(0.6f * B->GetPopulationCap(Team));
+	return FMath::Max(MinAttackSize, FMath::Min(Cap, Housing));
+}
 
 FVector2D FVLCommander::TowardFoe(UVLBattle* B) const
 {
@@ -484,6 +517,15 @@ AActor* FVLCommander::PickTarget(UVLBattle* B, const FVector& From, float Power,
 	{
 		Others += (S.Team == Foe() && S.IsAlive() && S.Kind != EVLBuilding::Castle) ? 1 : 0;
 	}
+	// the final push (FinalPush): the castle, whatever stands round it
+	if (!bRaid && FinalPush() && FoeCastle && !(Skip && Skip->Contains(FoeCastle)))
+	{
+		if (OutDefence)
+		{
+			*OutDefence = ExpectedDefence(B, FoeCastle->GetActorLocation(), false);
+		}
+		return const_cast<AActor*>(FoeCastle);
+	}
 	for (const FVLBuildingState& S : B->GetBuildings())
 	{
 		if (S.Team != Foe() || !S.IsAlive() || (Skip && Skip->Contains(S.Actor.Get())))
@@ -520,6 +562,12 @@ AActor* FVLCommander::PickTarget(UVLBattle* B, const FVector& From, float Power,
 			{
 				continue;
 			}
+		}
+		else if (S.Kind == EVLBuilding::Castle && ArmyRatio >= 1.5f && Power >= D)
+		{
+			// its army well ahead of the foe's and the body a match for what stands there: finish it (balance runs,
+			// 2026-11-22: attacks went for the outlying mines for 90 minutes and no castle ever fell)
+			Value *= 2.f;
 		}
 		else if (S.Kind == EVLBuilding::Castle && D > Power * 0.8f && Others > 0)
 		{
@@ -645,6 +693,17 @@ void FVLCommander::Think(UVLBattle* B)
 	}
 	ManageSquads(B, Pool);
 	RunSquads(B);
+	// With no attack out and no main body waiting for its flank, the next attack's time is a real one: never the
+	// "while it is out" mark, never further off than its longest pause (whichever way an attack came to an end).
+	if (NextWaveTime - Clock > MaxWaveWait() && !IsAttacking())
+	{
+		const FVLSquad* Field = FindSquad(EVLSquadRole::Field);
+		if (!Field || Field->Departs <= 0.f)
+		{
+			UE_LOG(LogVoxelLab, Log, TEXT("AI %d: its next attack was %.0f s off with none out: in %.0f s"), Team, NextWaveTime - Clock, Prof.Regroup);
+			NextWaveTime = Clock + Prof.Regroup;
+		}
+	}
 	if (bLook && VLAIDebugLevel() >= 1)
 	{
 		TArray<FString> Parts;
@@ -1000,6 +1059,13 @@ void FVLCommander::ChooseStrategy(UVLBattle* B)
 		const float Cover = HomePower + TowerHelp;
 		const bool bCastle = Castle && B->DistanceTo(Castle, HomeThreatAt) < 3200.f;
 		U[int32(EVLPosture::Defend)] = HomeThreat < Cover * 0.6f ? 0.3f : 0.6f + 0.4f * FMath::Clamp(HomeThreat / FMath::Max(Cover, 0.5f) - 0.6f, 0.f, 1.f) + (bCastle ? 0.25f : 0.f);
+		// its final push out at the foe's castle: a raid on an outlying mine or farm is the patrol's and the guard's, not a
+		// reason to call the push home (balance runs, 2026-11-22: a push with twice the foe's army was recalled to an
+		// outlying mine again and again, and never took the castle)
+		if (!bCastle && IsPushing(B))
+		{
+			U[int32(EVLPosture::Defend)] = FMath::Min(U[int32(EVLPosture::Defend)], 0.3f);
+		}
 		Why.Add(FString::Printf(TEXT("threat %.1f vs home %.1f%s"), HomeThreat, Cover, bCastle ? TEXT(" at the castle") : TEXT("")));
 	}
 	else if (Posture == EVLPosture::Defend && Clock - LastFoeAttack < 12.f)
@@ -1015,7 +1081,7 @@ void FVLCommander::ChooseStrategy(UVLBattle* B)
 		U[int32(EVLPosture::Regroup)] = 0.6f + 0.5f * FMath::Clamp(LostShare - 0.3f, 0.f, 0.6f) + 0.3f * FMath::Clamp(1.f - ArmyRatio, 0.f, 1.f);
 		Why.Add(FString::Printf(TEXT("lost %.0f%% of its army in a minute"), LostShare * 100.f));
 	}
-	else if (ArmyRatio < 0.55f && Clock > 150.f)
+	else if (ArmyRatio < 0.55f && Clock > 300.f)       // (300: twice the 150 s it was, as every build and training time is)
 	{
 		U[int32(EVLPosture::Regroup)] = 0.42f;
 		Why.Add(TEXT("outnumbered"));
@@ -1031,11 +1097,14 @@ void FVLCommander::ChooseStrategy(UVLBattle* B)
 			const float Odds = Power / FMath::Max(Defence, 0.3f);
 			const bool bMaxed = B->GetPopulation(Team) >= B->GetPopulationCap(Team) - 1;
 			const bool bWaitedLong = Prof.bImpatient && Clock > NextWaveTime + 150.f && Odds >= 0.85f;
+			const bool bReady = Body.Num() >= AttackWant(B) || bMaxed || Odds >= 2.f * Prof.Advantage;
 			float A = 0.25f + 0.6f * FMath::Clamp((Odds - 1.f) / FMath::Max(Prof.Advantage - 1.f, 0.1f), 0.f, 1.2f);
 			if (Odds >= Prof.Advantage) { A = FMath::Max(A, 0.85f); }
 			if (bMaxed) { A += 0.3f; }
 			if (bWaitedLong) { A = FMath::Max(A, 0.72f); }
 			if (Odds < 0.85f && !bMaxed) { A *= 0.3f; }
+			if (!bReady) { A *= 0.3f; }            // (not in force yet: it gathers)
+			if (bReady && FinalPush() && Body.Num() >= AttackWant(B)) { A = FMath::Max(A, 0.9f); }     // (the final push)
 			U[int32(EVLPosture::Attack)] = A;
 			Why.Add(FString::Printf(TEXT("attack odds %.2f (wants %.2f)%s"), Odds, Prof.Advantage, bMaxed ? TEXT(", housing full") : TEXT("")));
 		}
@@ -1369,7 +1438,7 @@ void FVLCommander::ManageBuilding(UVLBattle* B, const TArray<AVLKing*>& Mine)
 	// attacked early and often: a tower before the rest of the plan
 	if (FoeAttacks >= 2 && Towers == 0 && Clock - LastFoeAttack < 120.f) { Want(EVLBuilding::Tower, TEXT("attacked")); }
 	// its army behind the foe's: train faster (the kind its mix lacks first)
-	if (ArmyRatio < 0.8f && Clock > 150.f && Gold > 250 && Barracks > 0 && Ranges > 0)
+	if (ArmyRatio < 0.8f && Clock > 300.f && Gold > 250 && Barracks > 0 && Ranges > 0)       // (300: twice the 150 s it was)
 	{
 		if (Barracks < 2 && ShieldRatio >= 0.5f) { Want(EVLBuilding::Barracks, TEXT("army behind")); }
 		if (Ranges < 2) { Want(EVLBuilding::Range, TEXT("army behind")); }
@@ -1471,7 +1540,9 @@ bool FVLCommander::TryBuild(UVLBattle* B, EVLBuilding Kind, const FVector* Near)
 			}
 			const float D = float(FVector::Dist2D(At, Base));
 			const bool bHeld = Near && FVector::Dist2D(At, *Near) < 4000.f;
-			if (D > 26000.f || (!bHeld && (!Safe(At) || (Prof.bAvoidTowers && InFoeReach(B, At, 300.f)))))
+			// (380 m: it was 260, and on Realm v2 the west castle then had no neutral vein it would ever claim: its nearest
+			// is 325 m off, while the east castle's is 154 m)
+			if (D > 38000.f || (!bHeld && (!Safe(At) || (Prof.bAvoidTowers && InFoeReach(B, At, 300.f)))))
 			{
 				continue;
 			}
@@ -1541,6 +1612,15 @@ bool FVLCommander::TryBuild(UVLBattle* B, EVLBuilding Kind, const FVector* Near)
 		default: break;
 		}
 		bFound = C->FindPlacementNear(Kind, Team, At, Radius, FacingCastle(At), P, 70) && Safe(P.Location);
+		// No room there (a castle with the sea or a cliff behind it: Realm v2's east castle has its port there, and its
+		// commander laid one farm in twenty minutes while the west one laid four): either side of the castle, then
+		// anywhere round it further out.
+		for (int32 Try = 0; Try < 3 && !bFound; ++Try)
+		{
+			const FVector Alt = Try < 2 ? Base + Side * (Try == 0 ? 3000.f : -3000.f) - Fwd * 600.f : Base;
+			const float R = Try < 2 ? 4500.f : 7500.f;
+			bFound = C->FindPlacementNear(Kind, Team, Alt, R, FacingCastle(Alt), P, Try < 2 ? 50 : 90) && Safe(P.Location);
+		}
 	}
 	if (!bFound)
 	{
@@ -1885,6 +1965,84 @@ namespace
 				return;
 			}
 			C->LogReport(Battle, !Args.Contains(TEXT("nomap")));
+		}));
+
+	// Test hooks for the commander's attack clock (Tools/feedback_test.py): an attack forced now, a flank bridge added
+	// where a map has none, the flank party struck down, and the clock's state logged.
+	FAutoConsoleCommandWithWorldAndArgs CmdAIForce(TEXT("vl.AIForce"), TEXT("vl.AIForce <team> attack | flank X0 Y0 X1 Y1 | killflank | killfield | state | off | on: test hooks for the commander's attacks (attack: its next attack is due now and it has waited; flank: a flank bridge from X0 Y0 (team 0's end) to X1 Y1)"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UVLBattle* Battle = UVLBattle::Get(World);
+			const int32 Team = Args.Num() > 0 ? FMath::Clamp(FCString::Atoi(*Args[0]), 0, 1) : 1;
+			FVLCommander* C = Battle ? Battle->GetCommander(Team) : nullptr;
+			const FString What = Args.Num() > 1 ? Args[1].ToLower() : FString(TEXT("state"));
+			if (C && (What == TEXT("off") || What == TEXT("on")))
+			{
+				C->bActive = What == TEXT("on");        // (off: its troops stand as they are, for tests of the player's orders)
+				UE_LOG(LogVoxelLab, Log, TEXT("aiforce: team %d's commander %s"), Team, C->bActive ? TEXT("on") : TEXT("off"));
+				return;
+			}
+			if (!C || !C->bActive)
+			{
+				UE_LOG(LogVoxelLab, Log, TEXT("aiforce: no active commander for team %d"), Team);
+				return;
+			}
+			auto Ground = [World](float X, float Y) -> FVector
+			{
+				FHitResult Hit;
+				FCollisionQueryParams Q;
+				if (World->LineTraceSingleByChannel(Hit, FVector(X, Y, 60000.f), FVector(X, Y, -60000.f), ECC_WorldStatic, Q))
+				{
+					return Hit.ImpactPoint;
+				}
+				return FVector(X, Y, 0.f);
+			};
+			if (What == TEXT("attack"))
+			{
+				C->NextWaveTime = C->Clock - 200.f;      // (due, and it has waited: it goes at near-even odds)
+				C->StrategyClock = C->Clock;
+			}
+			else if (What == TEXT("flank") && Args.Num() >= 6)
+			{
+				FVLAIPoint P;
+				P.Kind = EVLAIPoint::Flank;
+				P.Name = TEXT("Test flank");
+				P.End[0] = Ground(FCString::Atof(*Args[2]), FCString::Atof(*Args[3]));
+				P.End[1] = Ground(FCString::Atof(*Args[4]), FCString::Atof(*Args[5]));
+				P.Pos = 0.5f * (P.End[0] + P.End[1]);
+				P.Value = 0.3f;
+				C->Map.Points.Add(P);
+				UE_LOG(LogVoxelLab, Log, TEXT("aiforce: team %d's map has a flank from %s to %s"), Team, *P.End[0].ToCompactString(), *P.End[1].ToCompactString());
+			}
+			else if (What == TEXT("killflank") || What == TEXT("killfield"))
+			{
+				const EVLSquadRole Role = What == TEXT("killflank") ? EVLSquadRole::Flank : EVLSquadRole::Field;
+				int32 N = 0;
+				for (FVLSquad& S : C->Squads)
+				{
+					if (S.Role != Role)
+					{
+						continue;
+					}
+					for (const TWeakObjectPtr<AVLKing>& U : S.Units)
+					{
+						if (U.IsValid() && U->IsAlive())
+						{
+							Battle->Damage(U.Get(), 1e6f, nullptr, 1 - Team);
+							++N;
+						}
+					}
+				}
+				UE_LOG(LogVoxelLab, Log, TEXT("aiforce: team %d's %s struck down (%d)"), Team, FVLCommander::RoleName(Role), N);
+			}
+			FString Sq;
+			for (const FVLSquad& S : C->Squads)
+			{
+				Sq += FString::Printf(TEXT(" %s#%d %d %s%s"), FVLCommander::RoleName(S.Role), S.Id, S.Num(), FVLCommander::TaskName(S.Task),
+					S.Departs > 0.f ? *FString::Printf(TEXT(" (departs in %.0f s)"), S.Departs - C->Clock) : TEXT(""));
+			}
+			UE_LOG(LogVoxelLab, Log, TEXT("aiforce: team %d clock %.0f next attack in %.0f s (max wait %.0f), attacking %d, waves %d, posture %s, status \"%s\" |%s"), Team, C->Clock, C->NextWaveIn(),
+				C->MaxWaveWait(), C->IsAttacking() ? 1 : 0, C->WavesSent, FVLCommander::PostureName(C->Posture), Team == 1 ? *Battle->EnemyStatus() : TEXT("-"), *Sq);
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdTimeScale(TEXT("vl.TimeScale"), TEXT("vl.TimeScale N: the game runs N times as fast (tests of whole matches; 1 = normal)"),

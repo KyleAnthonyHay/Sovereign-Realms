@@ -7,6 +7,7 @@
 #include "VLGrid.h"
 #include "VLHUD.h"
 #include "VLKing.h"
+#include "VLSwordsmanCombat.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
@@ -124,6 +125,14 @@ int32 UVLArcherCombat::OrderAttack(const TArray<AVLKing*>& Units, AActor* InTarg
 		}
 		if (UVLArcherCombat* Combat = For(U))
 		{
+			// An attack takes the place of the walk she is on (as a swordsman's does: its route to the foe replaces
+			// it). Left walking, TickOrders took the walk for another order and dropped the attack, every quarter of
+			// a second: an archer on an attack-move walked on to its end before she shot. (Not one on her way up a
+			// tower: that walk is the tower's.)
+			if (U->HasOrder() && !U->IsGarrisoned() && !U->PendingGarrison.IsValid())
+			{
+				U->StopOrder();
+			}
 			Combat->Begin(InTarget, bRun);
 			++Ordered;
 		}
@@ -629,7 +638,10 @@ void UVLArcherCombat::Approach(AVLKing* Unit, const FVector& At)
 	bInternalOrder = true;          // (UVLCommand::OrderMove ends attacks: not this one)
 	{
 		TGuardValue<bool> Inner(Command->bInnerOrder, true);    // nor a patrol or a guard she is on
-		Command->OrderMove({ Unit }, Dest, bOrderRun, EVLFormation::Line);
+		// At a run when it is more than a few steps (UVLSwordsmanCombat::ChargeBeyond, as the swordsmen close with a
+		// foe): archers and swordsmen sent at the same foe travel together, and she stops at her range. (She walked
+		// unless the order said run, while the swordsmen ran their foe down: the archers fell behind.)
+		Command->OrderMove({ Unit }, Dest, bOrderRun || FVector::Dist2D(Me, Dest) > UVLSwordsmanCombat::ChargeBeyond, EVLFormation::Line);
 	}
 	bInternalOrder = false;
 	bApproaching = Unit->HasOrder();
@@ -739,6 +751,11 @@ void UVLArcherCombat::TickOrders(AVLKing* Unit, float Dt)
 	}
 	AimPoint = At + ShotScatter;
 	bHasAim = true;
+	// The wait between two shots runs from one shot's start to the next's, through the draw (reach, nock, draw,
+	// loose: 1.1 s) as well: ShotInterval is her rhythm. It used to run only while she stood at rest, so a shot came
+	// every 3.5 s, not 2.4, and she dealt 11 damage a second, not the 17 her arrow was set for (balance runs,
+	// 2026-11-22: ten swordsmen beat twelve archers without a loss).
+	Cooldown -= Dt;
 	if (Phase != EPhase::Rest || bLooseQueued)
 	{
 		return;                     // a shot is on its way
@@ -748,7 +765,6 @@ void UVLArcherCombat::TickOrders(AVLKing* Unit, float Dt)
 		Stop();                     // an attack-ground order: done
 		return;
 	}
-	Cooldown -= Dt;
 	if (Cooldown <= 0.f)
 	{
 		Cooldown = FMath::Max(ShotInterval, 0.2f) * (1.f + FMath::FRandRange(-ShotJitter, ShotJitter));

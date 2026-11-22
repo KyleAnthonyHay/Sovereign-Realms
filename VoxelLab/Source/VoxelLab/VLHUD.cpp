@@ -142,19 +142,24 @@ void AVLHUD::SaveSettings()
 
 FString AVLHUD::MapPath(int32 Map)
 {
-	static const TCHAR* Paths[NumMaps] = { TEXT("/Game/Maps/L_RealmV2"), TEXT("/Game/Maps/L_Realm"), TEXT("/Game/Maps/L_Flatlands"), TEXT("/Game/Maps/L_Highlands") };
+	// (4, the Test World, is Realm v2 opened with ?TestWorld=1: OpenMatch)
+	static const TCHAR* Paths[NumMaps] = { TEXT("/Game/Maps/L_RealmV2"), TEXT("/Game/Maps/L_Realm"), TEXT("/Game/Maps/L_Flatlands"), TEXT("/Game/Maps/L_Highlands"), TEXT("/Game/Maps/L_RealmV2") };
 	return Paths[FMath::Clamp(Map, 0, NumMaps - 1)];
 }
 
 const TCHAR* AVLHUD::MapName(int32 Map)
 {
-	static const TCHAR* Names[NumMaps] = { TEXT("Realm v2"), TEXT("Realm"), TEXT("Flatlands"), TEXT("Highlands") };
+	static const TCHAR* Names[NumMaps] = { TEXT("Realm v2"), TEXT("Realm"), TEXT("Flatlands"), TEXT("Highlands"), TEXT("Test World") };
 	return Names[FMath::Clamp(Map, 0, NumMaps - 1)];
 }
 
 int32 AVLHUD::CurrentMap() const
 {
 	const FString Name = GetWorld() ? GetWorld()->GetMapName() : FString();
+	if (const AVLGameMode* Mode = GetWorld() ? GetWorld()->GetAuthGameMode<AVLGameMode>() : nullptr; Mode && Mode->IsTestWorld())
+	{
+		return 4;                   // the Test World (Realm v2 with both sides at their most)
+	}
 	// ("L_RealmV2" contains "Realm": it is asked first)
 	return Name.Contains(TEXT("RealmV2")) ? 0 : (Name.Contains(TEXT("Highlands")) ? 3 : (Name.Contains(TEXT("Flatlands")) ? 2 : 1));
 }
@@ -167,7 +172,7 @@ bool AVLHUD::InFlatlands() const
 void AVLHUD::OpenMatch(const UObject* WorldContext, int32 Map, int32 Difficulty)
 {
 	UGameplayStatics::SetGamePaused(WorldContext, false);
-	UGameplayStatics::OpenLevel(WorldContext, FName(*MapPath(Map)), true, FString::Printf(TEXT("Match=1?Difficulty=%d"), FMath::Clamp(Difficulty, 0, 2)));
+	UGameplayStatics::OpenLevel(WorldContext, FName(*MapPath(Map)), true, FString::Printf(TEXT("Match=1?Difficulty=%d%s"), FMath::Clamp(Difficulty, 0, 2), Map == 4 ? TEXT("?TestWorld=1") : TEXT("")));
 }
 
 // ------------------------------------------------------------------------------------------------ screens
@@ -270,6 +275,12 @@ void AVLHUD::OnEscape()
 	if (bLegend)
 	{
 		bLegend = false;
+		return;
+	}
+	if (Base == EVLScreen::None && (ChipList != 0 || bAssignOpen))
+	{
+		ChipList = 0;               // (the Builders' / Spy's list, the Assign picker: put away first)
+		bAssignOpen = false;
 		return;
 	}
 	if (Base == EVLScreen::None)
@@ -425,7 +436,16 @@ void AVLHUD::LogButtons() const
 	UE_LOG(LogVoxelLab, Log, TEXT("hud: %s; route lines %s: %d segment(s), %d Builder chain(s), %d number(s)%s; mode box shows %s"), King && King->IsHeroMode() ? TEXT("hero view") : TEXT("overview"),
 		LineStats.bHidden ? TEXT("hidden (hero view)") : TEXT("shown"), LineStats.Segments, LineStats.Chains, LineStats.Badges, LineStats.bPreview ? TEXT(", the Shift preview to the ghost") : TEXT(""),
 		ModeBoxUnit.IsEmpty() ? TEXT("-") : *ModeBoxUnit);
-	UE_LOG(LogVoxelLab, Log, TEXT("hud: troops' order chains drawn: %d, %d number(s)"), LineStats.OrderChains, LineStats.OrderBadges);
+	UE_LOG(LogVoxelLab, Log, TEXT("hud: troops' order chains drawn: %d, %d number(s); pathways drawn: %d (%d of them one line for a group)"), LineStats.OrderChains, LineStats.OrderBadges, LineStats.Pathways, LineStats.Grouped);
+	UE_LOG(LogVoxelLab, Log, TEXT("hud: tooltips %s; Builders' / Spy's list %d; Assign picker %s; minimap %s, platoon panel %s"), AltHeld() ? TEXT("shown (Option held)") : TEXT("hidden (Option not held)"), ChipList,
+		bAssignOpen ? TEXT("open") : TEXT("closed"), MapRect.bIsValid ? TEXT("drawn") : TEXT("not drawn"), PlatoonRect.bIsValid ? TEXT("drawn") : TEXT("not drawn"));
+	if (MapRect.bIsValid)
+	{
+		const FVector2D V(FMath::Max(View.X, 1.f), FMath::Max(View.Y, 1.f));
+		UE_LOG(LogVoxelLab, Log, TEXT("hud: minimap at %.4f %.4f .. %.4f %.4f, world %.0f %.0f .. %.0f %.0f, up yaw %.0f; view box middle at %.4f %.4f, the player's castle at %.4f %.4f"),
+			MapRect.Min.X / V.X, MapRect.Min.Y / V.Y, MapRect.Max.X / V.X, MapRect.Max.Y / V.Y, MapWorld.Min.X, MapWorld.Min.Y, MapWorld.Max.X, MapWorld.Max.Y, MapYaw,
+			MapViewMid.X / V.X, MapViewMid.Y / V.Y, MapCastleAt.X / V.X, MapCastleAt.Y / V.Y);
+	}
 }
 
 void AVLHUD::Click(bool bError)
@@ -544,6 +564,8 @@ void AVLHUD::DrawHUD()
 			DrawHealthBars();
 		}
 		DrawPlatoonTags();
+		DrawGuardMarks();
+		DrawUnitHighlight();
 		DrawTrainingBars();
 		DrawBuildFeedback();
 		DrawRangeCircles();
@@ -990,9 +1012,15 @@ void AVLHUD::SetTooltip(const FBox2D& Anchor, const FString& Title, const TArray
 	TooltipLines = Lines;
 }
 
+bool AVLHUD::AltHeld() const
+{
+	return PCtrl && (PCtrl->IsInputKeyDown(EKeys::LeftAlt) || PCtrl->IsInputKeyDown(EKeys::RightAlt));
+}
+
 void AVLHUD::DrawTooltip()
 {
-	if (!bTooltip)
+	// (the owner's call, 2026-11-22: the cards over buttons show only while Option / Alt is held)
+	if (!bTooltip || !AltHeld())
 	{
 		return;
 	}
@@ -1366,13 +1394,81 @@ void AVLHUD::DrawPayoutPopups()
 	}
 }
 
-void AVLHUD::DrawFarPips()
+namespace
+{
+	TAutoConsoleVariable<float> CVarHeroPipNear(TEXT("vl.HeroPips.Near"), 500.f, TEXT("cm from the unit played within which a foe has no diamond over it in the hero view"));
+	TAutoConsoleVariable<float> CVarHeroPipFull(TEXT("vl.HeroPips.Full"), 1200.f, TEXT("cm from the unit played from which a foe's diamond is fully shown in the hero view"));
+	TAutoConsoleVariable<int32> CVarRouteGroup(TEXT("vl.RouteLines.GroupOver"), 7, TEXT("a platoon (or one group order) of more than this many walkers draws one pathway line, its leader's, not one each"));
+}
+
+void AVLHUD::DrawGuardMarks()
 {
 	const UVLCommand* Command = UVLCommand::Get(this);
-	if (!PCtrl || !King || King->IsHeroMode() || !PCtrl->PlayerCameraManager)
+	if (!Command || !King)
 	{
 		return;
 	}
+	TArray<AVLKing*> Wards;
+	Command->GetGuardedUnits(Wards);
+	const bool bHero = King->IsHeroMode();
+	for (const AVLKing* W : Wards)
+	{
+		if (bHero && W == King)
+		{
+			continue;               // (never over the head of the unit played)
+		}
+		const FVector S = Project(W->GetActorLocation() + FVector(0.f, 0.f, 175.f));
+		if (S.Z <= 0.f || S.X < -40.f || S.Y < -40.f || S.X > View.X + 40.f || S.Y > View.Y + 40.f)
+		{
+			continue;
+		}
+		// a gold-edged plate with the shield, beside where a platoon's tag would be
+		const float Sz = U(22.f), X = FMath::RoundToFloat(S.X - Sz - U(12.f)), Y = FMath::RoundToFloat(S.Y - Sz);
+		Fill(X - U(3.f), Y - U(3.f), Sz + U(6.f), Sz + U(6.f), A(GoldBright, 0.75f + 0.25f * FMath::Sin(float(Now) * 4.f)));
+		Fill(X - U(1.f), Y - U(1.f), Sz + U(2.f), Sz + U(2.f), FLinearColor(0.02f, 0.03f, 0.06f, 0.92f));
+		Icon(EVLIcon::Shield, X, Y, Sz);
+	}
+}
+
+void AVLHUD::DrawUnitHighlight()
+{
+	// (HoverUnit is last frame's: the list is drawn after the world's feedback)
+	const AVLKing* Un = HoverUnit.Get();
+	if (!Un || !Un->IsAlive() || !King || King->IsHeroMode())
+	{
+		return;
+	}
+	const float Pulse = 0.5f + 0.5f * FMath::Sin(float(Now) * 7.f);
+	const FLinearColor Col(GoldBright.R, GoldBright.G, GoldBright.B, 0.75f + 0.25f * Pulse);
+	const FVector Feet = Un->GetFeet() + FVector(0.f, 0.f, 6.f);
+	Ring(Feet, 70.f + 14.f * Pulse, Col, FMath::Max(2.f, U(3.f)), 28);
+	Ring(Feet, 110.f + 20.f * Pulse, FLinearColor(Col.R, Col.G, Col.B, 0.45f), FMath::Max(1.f, U(2.f)), 28);
+	const FVector S = Project(Un->GetActorLocation() + FVector(0.f, 0.f, 170.f));
+	if (S.Z > 0.f)
+	{
+		// an arrow pointing down at it, bobbing
+		const float Bob = U(6.f) * Pulse, AH = U(14.f);
+		for (float k = 0.f; k < AH; k += 1.f)
+		{
+			const float w = AH - k;
+			Fill(FMath::RoundToFloat(S.X - w), FMath::RoundToFloat(S.Y - AH - Bob + k), FMath::Max(1.f, 2.f * w), 1.f, Col);
+		}
+		Fill(FMath::RoundToFloat(S.X - U(4.f)), FMath::RoundToFloat(S.Y - AH - Bob - U(12.f)), U(8.f), U(12.f), Col);
+	}
+}
+
+void AVLHUD::DrawFarPips()
+{
+	const UVLCommand* Command = UVLCommand::Get(this);
+	if (!PCtrl || !King || !PCtrl->PlayerCameraManager)
+	{
+		return;
+	}
+	// The hero view: the enemy's troops only, each under its diamond from HeroPipNear to HeroPipFull of the unit
+	// played (nearer, the figure itself is plain to see), so foes read at a glance among trees and at a distance.
+	const bool bHero = King->IsHeroMode();
+	const float HeroNear = CVarHeroPipNear.GetValueOnGameThread(), HeroFull = FMath::Max(CVarHeroPipFull.GetValueOnGameThread(), HeroNear + 1.f);
+	const FVector HeroAt = King->GetActorLocation();
 	// Zoomed far out, a team-coloured pip over each troop so armies read at a glance: it fades in from 75 m of camera
 	// distance to full at 110 m, by when a voxel troop is only a few pixels tall.
 	const FVector Eye = PCtrl->PlayerCameraManager->GetCameraLocation();
@@ -1384,11 +1480,13 @@ void AVLHUD::DrawFarPips()
 	BeginRects();
 	for (AVLKing* Unit : Frame.Live)
 	{
-		if (Unit->IsDead())
+		// (a tower's own archer never leaves its lookout: no diamond, as it has no outline through walls)
+		if (Unit->IsDead() || Unit->bTowerGuard || (bHero && Unit->Team != UVLBattle::Enemy))
 		{
 			continue;
 		}
-		const float Alpha = FMath::GetMappedRangeValueClamped(FVector2f(7500.f, 11000.f), FVector2f(0.f, 1.f), float(FVector::Dist(Eye, Unit->GetActorLocation())));
+		const float Alpha = bHero ? FMath::GetMappedRangeValueClamped(FVector2f(HeroNear, HeroFull), FVector2f(0.f, 1.f), float(FVector::Dist(HeroAt, Unit->GetActorLocation())))
+			: FMath::GetMappedRangeValueClamped(FVector2f(7500.f, 11000.f), FVector2f(0.f, 1.f), float(FVector::Dist(Eye, Unit->GetActorLocation())));
 		if (Alpha <= 0.01f)
 		{
 			continue;
@@ -1657,26 +1755,108 @@ void AVLHUD::DrawRouteLines()
 			}
 		}
 	}
-	TArray<FVector> Route, Legs;
-	for (AVLKing* Un : Units)
+	// The pathways. Each walker's own, unless it walks in a big group: a platoon's members on the way, or (in no
+	// platoon) those of one group order (one march, AVLKing::MarchId; else those heading for the same place). A group
+	// of more than vl.RouteLines.GroupOver (7) draws ONE line, its leader's (a platoon's leader if he walks with them,
+	// else whoever is nearest their middle), a little heavier: thirty lines side by side said nothing more.
 	{
-		Un->GetPathway(Route, Legs);
-		TArray<FVector> RoutePoints;
-		bool bRouteLoop = false;
-		int32 RouteNext = 0;
-		if (Legs.Num() == 0 || Command->GetRoute(Un, RoutePoints, bRouteLoop, RouteNext))
+		struct FWalker { AVLKing* Unit = nullptr; TArray<FVector> Route, Legs; int32 Group = INDEX_NONE; };
+		TArray<FWalker> Walkers;
+		for (AVLKing* Un : Units)
 		{
-			continue;               // (a patrol's or attack-move's leg: its route is drawn above)
+			FWalker W;
+			W.Unit = Un;
+			Un->GetPathway(W.Route, W.Legs);
+			TArray<FVector> RoutePoints;
+			bool bRouteLoop = false;
+			int32 RouteNext = 0;
+			if (W.Legs.Num() == 0 || Command->GetRoute(Un, RoutePoints, bRouteLoop, RouteNext))
+			{
+				continue;               // (a patrol's or attack-move's leg: its route is drawn above)
+			}
+			if (const UVLBuilderWork* Work = UVLBuilderWork::For(Un, false); Work && (Work->GetJob() || Work->HasTasks()))
+			{
+				continue;               // (a Builder on a job or with a queue: its chain below draws its way)
+			}
+			Walkers.Add(MoveTemp(W));
 		}
-		if (const UVLBuilderWork* W = UVLBuilderWork::For(Un, false); W && (W->GetJob() || W->HasTasks()))
+		// groups: walkers of one group order (one march), of one platoon, or (neither) heading for the same place, are
+		// one group; and so are two groups that share a walker's march or platoon (a selection of a platoon and some
+		// loose troops sent together is one group)
+		const FUnitFrame& Frame = UnitsThisFrame();
+		TArray<int32> Platoons;
+		for (FWalker& W : Walkers)
 		{
-			continue;               // (a Builder on a job or with a queue: its chain below draws its way)
+			const int32* InPlatoon = Frame.Platoon.Find(W.Unit);
+			Platoons.Add(InPlatoon ? *InPlatoon : INDEX_NONE);
 		}
-		// from the troop along the route it is walking to the point it is heading for, then the legs after it
-		FVector From = Un->GetFeet();
-		for (const FVector& P : Route) { Dashed(From, P, Blue, false); From = P; }
-		Dashed(From, Legs[0], Blue, true);
-		for (int32 k = 1; k < Legs.Num(); ++k) { Dashed(Legs[k - 1], Legs[k], Blue, true); }
+		int32 NumGroups = 0;
+		for (int32 i = 0; i < Walkers.Num(); ++i)
+		{
+			FWalker& W = Walkers[i];
+			for (int32 j = 0; j < i; ++j)
+			{
+				const FWalker& O = Walkers[j];
+				const bool bSame = (W.Unit->MarchId != 0 && W.Unit->MarchId == O.Unit->MarchId) || (Platoons[i] != INDEX_NONE && Platoons[i] == Platoons[j])
+					|| (W.Unit->MarchId == 0 && O.Unit->MarchId == 0 && Platoons[i] == INDEX_NONE && Platoons[j] == INDEX_NONE && FVector::DistSquared2D(W.Legs.Last(), O.Legs.Last()) < FMath::Square(2500.f));
+				if (!bSame || W.Group == O.Group)
+				{
+					continue;
+				}
+				if (W.Group == INDEX_NONE)
+				{
+					W.Group = O.Group;
+				}
+				else
+				{
+					const int32 From = O.Group, To = W.Group;       // (two groups it joins: one now)
+					for (int32 k = 0; k < i; ++k) { if (Walkers[k].Group == From) { Walkers[k].Group = To; } }
+				}
+			}
+			if (W.Group == INDEX_NONE)
+			{
+				W.Group = NumGroups++;
+			}
+		}
+		struct FGroup { TArray<int32> Members; };
+		TArray<FGroup> Groups;
+		Groups.SetNum(NumGroups);
+		for (int32 i = 0; i < Walkers.Num(); ++i) { Groups[Walkers[i].Group].Members.Add(i); }
+		auto DrawWay = [&](const FWalker& W, float Width)
+		{
+			// from the troop along the route it is walking to the point it is heading for, then the legs after it
+			FVector From = W.Unit->GetFeet();
+			for (const FVector& P : W.Route) { Dashed(From, P, Blue, false, Width); From = P; }
+			Dashed(From, W.Legs[0], Blue, true, Width);
+			for (int32 k = 1; k < W.Legs.Num(); ++k) { Dashed(W.Legs[k - 1], W.Legs[k], Blue, true, Width); }
+			++LineStats.Pathways;
+		};
+		const int32 GroupOver = FMath::Max(CVarRouteGroup.GetValueOnGameThread(), 1);
+		for (const FGroup& G : Groups)
+		{
+			if (G.Members.Num() == 0)
+			{
+				continue;               // (a group merged into another)
+			}
+			if (G.Members.Num() <= GroupOver)
+			{
+				for (const int32 i : G.Members) { DrawWay(Walkers[i], 2.f); }
+				continue;
+			}
+			// its line: a platoon's leader walking with them, else whoever is nearest their middle
+			FVector Mid = FVector::ZeroVector;
+			for (const int32 i : G.Members) { Mid += Walkers[i].Unit->GetFeet() / G.Members.Num(); }
+			int32 Pick = G.Members[0];
+			float Best = TNumericLimits<float>::Max();
+			for (const int32 i : G.Members)
+			{
+				const bool bLeads = Platoons[i] != INDEX_NONE && Command->GetPlatoonLeader(Platoons[i]) == Walkers[i].Unit;
+				const float D = bLeads ? -1.f : float(FVector::DistSquared2D(Walkers[i].Unit->GetFeet(), Mid));
+				if (D < Best) { Best = D; Pick = i; }
+			}
+			DrawWay(Walkers[Pick], 3.f);
+			++LineStats.Grouped;
+		}
 	}
 	// a Builder's queue (Shift orders): a numbered chain from the Builder through what it is on now (1: the building it
 	// works on, or the walk it is on) and then each order of its queue in turn (2, 3, ...), walks blue and buildings

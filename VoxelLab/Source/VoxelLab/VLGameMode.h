@@ -93,11 +93,17 @@ public:
 	// them the title screen comes up over it (AVLHUD)
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	bool HasMatchOption() const { return bMatchOption; }
+	/** Opened as the Test World (?TestWorld=1: UVLBattle::SetupTestWorld right after the match starts). */
+	bool IsTestWorld() const { return bTestWorldOption; }
 
 private:
 	float PollTimer = 0.f;
 	bool bMatchOption = false;
 	int32 OptionDifficulty = 1;
+	bool bTestWorldOption = false;
+	int32 OptionAIvsAI = -1;            // ?AIvsAI=<difficulty>: a commander for the player's side too (balance runs)
+	float OptionTimeScale = 0.f;        // ?TimeScale=N
+	bool bDuelsOption = false;          // ?Duels=1[?DuelAt=X,Y]: the standard duels (FVLDuels), then quit
 	bool bMatchStarted = false;
 
 	UPROPERTY(Transient)

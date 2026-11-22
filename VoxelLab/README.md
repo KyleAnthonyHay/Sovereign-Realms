@@ -2,7 +2,8 @@
 
 A separate Unreal 5.8 project inside the Sovereign Realms repo for trying the Minecraft-like look before porting it to
 the game. Nothing here touches the main game. Four levels, chosen on the New Game screen (or M while the Esc menu is
-open: the next one round); the packaged game starts on the realm's title screen. The town (`L_Town`) and the village
+open: the next one round), and a fifth entry there, the **Test World** (Realm v2 with both sides at their most: see
+*The battle > The Test World*); the packaged game starts on the realm's title screen. The town (`L_Town`) and the village
 (`L_VoxelVillage`) were removed on 2026-11-22 (their maps, and the assets only they used: see *Realm v2*, the end).
 
 - `L_RealmV2`: **Realm v2**, the third and biggest battle map, an island 640 m square: a mountain 184 m high with the
@@ -33,11 +34,13 @@ There are two ways to play, switched with **Tab**.
 | Shift, or double-tap a direction | run (after a double tap he runs until the keys are let go) |
 | Space | jump |
 | F | draw / sheathe the sword |
-| Option (Alt) + left click on one of your units (the crosshair on it) | select it (Shift + Option: add it / take it out; twice quickly: take control of it). **A plain left click never selects: it is always your own blow** |
+| Option (Alt) + left click on one of your units (the crosshair on it) | **nobody selected** (or the unit is one of the selection): select it. **Troops selected and it is not one of them: they guard it** (`UVLCommand::OrderGuard`): they take posts round it, keep with it as it moves and fight whatever comes within 18 m of it or strikes it; **a unit in a platoon: the whole platoon is guarded** (`OrderGuardPlatoon`: the ward is its leader, and when the ward falls the guard passes to another member; it ends only with the platoon). An alert says "3 guard platoon 2" / "3 guard Swordsman 4", the order marker closes on the ward, and **a gold-edged shield floats beside the head of every guarded unit** while the guard lasts (both views); the selection panel reads "Guarding platoon 2". Shift + Option: add it to / take it out of the selection (to pick a different troop while others are selected: Shift + Option, or let go with Esc first); twice quickly: take control of it. Option + click on a platoon's row of the platoon panel (the pointer shown) guards that platoon too. **A plain left click never selects: it is always your own blow** |
 | Option + left click on a foe's unit or building | those under your command attack it: the selection (never the unit you play), else the troops following you (they fall in behind you again when the attack is done), else your platoon. Shift + Option + click: **queued** after what they are doing (attack unit 1, then unit 2, then a building, then walk: each in turn, the next as soon as the target falls or is razed; one fallen meanwhile is passed over) |
 | Option + left click on the ground | they go there in formation (twice quickly: at a run); Shift + Option: queued after the attacks (or a point of their pathway when they have no chain) |
 | Option + left click on the sky, Esc, or (pointer shown) on King David himself | let the selection go (Esc first lets go, a second Esc opens the menu) |
-| | The crosshair says what a click does there (gold "Option+click: select ...", red "Option+click: attack ..."), the mode box top left whom you command; a queue shows small numbered plates over its targets and points (no lines across the hero view) |
+| | The crosshair says what a click does there (gold "Option+click: select ..." or "Option+click: guard ...", red "Option+click: attack ..."), the mode box top left whom you command; a queue shows small numbered plates over its targets and points (no lines across the hero view) |
+| (minimap, platoon panel) | **both stay up in the hero view** (bottom left and bottom right, as in the overview; the line of controls and the health bar sit between them). The pointer is hidden while the mouse looks round, so they are for reading; with the pointer shown (C's postcard) their clicks work as in the overview: a platoon's row selects it, a click on the minimap goes to the overview there |
+| (enemy diamonds) | every enemy troop from 5 m of the unit you play (full from 12 m: `vl.HeroPips.Near` / `.Full`, cm) carries the red diamond the overview shows from afar, so foes read among trees and at a distance. Your own troops carry none here |
 | Right click (Ctrl / Cmd + click; an archer or spy played: Ctrl / Cmd + click only) | the selected troops (never the unit you play) go where the crosshair points, or attack the foe's unit or building under it, with the overview's order marker and click; twice quickly: at a run; Shift: queued as with Option (on a foe: after what they are doing; on the ground: their pathway, or the walk after their attacks; Builders: their queue). On one of your troops: the others follow it. 1..6 select platoon N; **G**: follow me (the selection, or else your platoon, falls in behind you) |
 | Left click | attack (draws first if need be): the training dummies by the barracks rock when hit. He drops into a battle stance (`References/king_stance.png`: a lunge, the sword across his body) for the swing and holds it 1 s after the last one, then carries the sword low at his side; 4 s later he sheathes it. Clicks while he is in the stance go through a combo: a side slash, a diagonal cut, then an up-down-up (three blows); a click during a swing queues the next. Once the stance has lapsed the next click starts at the side slash again |
 
@@ -56,21 +59,23 @@ There are two ways to play, switched with **Tab**.
 | Right click on the Watch Tower | the archers of the selection walk to its door and appear on the lookout (8 posts); anyone else waits by the door |
 | Select the Watch Tower | its panel (the selection panel, bottom middle) shows who mans it; its **Lookout** button brings them down. An archer on the lookout can also be selected and sent somewhere: it comes down first |
 | F | the next formation: Line, Column, Wedge, Square, Loose (melee in front, archers behind) |
-| A (a tap), then left click | attack-move: the selection marches there fighting what it meets, and marches on after each fight (Shift + click: one more point of the way; a click on a foe attacks it). Archers alone: A arms attack-ground first; with others, A twice |
-| A (archers), then left click on the ground | attack-ground: the selection's archers shoot at that spot three times (walking into range first). It lapses after 5 s or on a right click |
-| S (a tap) / H | stop (drop every order) / hold ground (until the next order, strike only what is in reach). With units selected a tap of A or S is the order and a hold (over 0.17 s) pans, as in the main game; with nobody selected they pan at once |
+| A (a tap), then left click | attack-move: the selection marches there fighting what it meets, and marches on after each fight (Shift + click: one more point of the way; a click on a foe attacks it). **No attack-ground for archers any more** (the owner's call, 2026-11-22: no key, no button; `vl.ArmGround` and `UVLCommand::OrderAttackGround` are kept for tests) |
+| S (a tap) | stop (drop every order). With units selected a tap of A or S is the order and a hold (over 0.17 s) pans, as in the main game; with nobody selected they pan at once. **H (hold ground) is gone**: the stance cycle (G) has Hold ground. Neither A nor S has a button on the command card now |
+| Option (Alt), held | **the cards over buttons** (the tooltip of whatever the pointer is on: "Upgrade the Castle [U]" with what it brings and costs, a build card, a command) **show only while Option is held**; without it hovering shows nothing |
 | P, then left click | patrol between where they stand and there, round and round, fighting what they meet; Shift + click: one more point of the loop (P stays armed). P is the pause key only when nobody is selected |
-| V, then left click (or right click on it) | guard one of your buildings, a Builder or King David: posts in a ring round it, fighting what comes within 18 m of it; the order ends when it falls. Troops cannot be guarded. With no troops selected V is the camera angle |
+| V, then left click (or right click on it) | guard one of your buildings, a Builder or King David: posts in a ring round it, fighting what comes within 18 m of it; the order ends when it falls. **V + left click on a troop guards it too** (one in a platoon: the whole platoon, as the hero view's Option + click); a right click on a troop is still "follow it". With no troops selected V is the camera angle |
 | O | the selected Spy roams (struck, it runs home to the castle) |
 | M | march together on / off (the slowest sets the pace; in a formation always, so it only matters with Loose) |
 | K K | dismiss the selected troops (the first press asks; no refund; not King David) |
 | Alt / Option + click | every unit of that kind in view (Shift: added) |
 | Space / Home | centre the view on the selection (or the selected building) |
 | Left click on a training dummy (archers selected) | they walk to within about 27 m with a clear shot, face it and shoot every 2.4 s until given another order. Archers on the watch tower shoot from the lookout (to 55 m) |
-| Ctrl / Cmd / Alt + 1..6 | make the selection platoon N (a platoon keeps its own formation; they are listed in the platoon panel, bottom right) |
-| 1..6 | select platoon N (twice quickly: look at it). Shift + 1..6 adds the selection to it |
+| Ctrl / Cmd / Alt / Shift + 1..6 | **the selection joins platoon N, which keeps the members it has** (an empty slot: they form it; a troop already in another platoon leaves that one). It was: Ctrl + N re-formed the platoon of the selection alone, putting everyone else out. (A platoon keeps its own formation; they are listed in the platoon panel, bottom right) |
+| Assign (command card) | the same, by mouse: the button opens a picker of the six platoons over it (a formed one shows "5 in it", an empty one "new"); a click on one and the selection joins it. A click anywhere else, or Esc, puts the picker away |
+| 1..6 | select platoon N (twice quickly: look at it) |
+| Builders / Spy (top bar) | a click on the count opens **a list of them under the bar**: a row each with its portrait, name, health and what it is doing ("Idle" in amber, "Walking", "Walking to build the Farm", "Building the Farm (42%)", "Repairing the Barracks", "Claiming the Gold Mine (10%)", "+2 queued"; the Spy: "Roaming", "Walking", "Fighting", "Idle"). **A click on a row takes the camera to it and selects it; hovering a row marks it in the world** (a pulsing gold ring at its feet and an arrow over it). "All N Builders" selects the lot. The chip again, a click elsewhere or Esc closes it |
 | Delete | disband the selected platoon (the troops stay selected) |
-| (platoon leaders) | a platoon gets a leader when it is formed (King David if he is in it, else its longest-serving troop that is not a Builder); the platoon's tag floats over the leader with a crown, the platoon panel's row and the selection panel show it ("led by ..." / "no leader"). The leader takes the front-middle slot of its ranks on every move, so the formation forms up on it. **If it falls the platoon has no leader** ("The leader of platoon N has fallen"): nobody steps up. A member becomes leader when you take control of it (the platoon's idle members then fall in behind it) or when the platoon's members are ordered to follow it. Re-forming with Ctrl + N gives the new platoon its senior member |
+| (platoon leaders) | a platoon gets a leader when it is formed (King David if he is in it, else its longest-serving troop that is not a Builder); the platoon's tag floats over the leader with a crown, the platoon panel's row and the selection panel show it ("led by ..." / "no leader"). The leader takes the front-middle slot of its ranks on every move, so the formation forms up on it. **If it falls the platoon has no leader** ("The leader of platoon N has fallen"): nobody steps up. A member becomes leader when you take control of it (the platoon's idle members then fall in behind it) or when the platoon's members are ordered to follow it. Troops added with Ctrl + N leave the leader as he is |
 | U | upgrade the selected building (nothing selected: the castle) |
 | F1 | the controls overlay (every key; also the **?** button top right) |
 | Enter / double click on a unit | take control of it (back to hero) |
@@ -126,7 +131,9 @@ bow), `vl.Arrows`, `vl.ArcherLog 1`, `vl.Bow draw 0|1 | shoot | lock | cancel | 
 
 **Both**: mouse wheel zooms (the view steepens as it pulls back; far out to 219 m in the hero view and 680 m in the
 overview, which takes in most of the realm: `ArmFar`, `PitchFar`, `OverviewFar`, `OverviewPitchFar`, `ZoomStep` on the actor, Voxel > Camera; zooming
-while the postcard view is up goes back to the view that zooms), Q / E or a right-button drag turn the view, R turns
+while the postcard view is up goes back to the view that zooms), Q / E or a right-button drag turn the view (**Q turns
+it clockwise seen from above, to the right, and E the other way**: each the opposite of what it did before 2026-11-22, the
+owner's call, in both views; `vl.Cam.KeyTurn -1` is the old way round), R turns
 it back, V cycles the camera angle (Classic steep / Low / Battlefield shallow, as in the main game; saved), C shows the postcard view (the reference picture's camera), Esc (or P) opens the pause menu (an armed
 attack-ground is cancelled first; see *The interface*; in it Enter resumes, M goes to the next map, U music, V camera
 angle, L look speed, I invert look, X quits).
@@ -138,7 +145,8 @@ Ctrl- or Cmd-click also sends the selected king.
 **Sound underfoot.** Each time one of King David's feet comes down a recorded step plays, chosen by what the foot is
 on: dirt (grass, earth, farm soil, the yards), cement (stone, cobble, gravel, the castle steps, the plaza) or wood (the
 bridge, the dock, plank paths, decks, the tower's lookout); softer at a walk, louder and a little higher at a run, and
-a firm one when he lands. Troops on the march make a soft shuffle as a group, and a move order given by hand in the
+a firm one when he lands. **His steps fade with distance as the troops' do**: full within 9 m of where you are looking
+(the overview's focus), silent from 45 m; in the hero view the unit you play is always at full volume. Troops on the march make a soft shuffle as a group, and a move order given by hand in the
 overview (right click, Ctrl / Cmd + click, "Send them out") clicks. See *Sounds* below.
 
 At a run his feet raise puffs of dust (also on landing and on braking hard out of a run). When he is hurt he flashes
@@ -193,7 +201,7 @@ played by hand, a left click swings the hammer (the sword's swings; it knocks th
 he picks no fights, cannot be ordered to attack, and the enemy commander counts him as nothing. Spawn some for testing
 with `vl.SpawnUnit Builder [count] [enemy]` (in front of that side's castle; any kind works). Import:
 `python3 Tools/ue_py.py -c "KING='SM_Builder'; DST='/Game/Voxel/Troops/Builder'; DA='DA_Builder'; exec(open(r'<abs>/Tools/ue/import_king.py').read())"`.
-As in the main game he is trained at the **castle** (its panel's Builder button): 120 gold + 80 food, 14 s, 110 health,
+As in the main game he is trained at the **castle** (its panel's Builder button): 120 gold + 80 food, 28 s, 110 health,
 no housing but a limit of his own by the castle's level (2, 3, 3, 4, 4, 5, 6); he joins no platoon from recruitment.
 **Only Builders build**: see *Building* below. At his work he swings the hammer (the up-down-up blows) and the main
 game's hammer and saw sounds play.
@@ -207,17 +215,37 @@ only while a Builder works at it.
 
 | Building (menu tab) | Model | Cost | Time (one Builder) | Limit |
 | --- | --- | --- | --- | --- |
-| Farm (Economy) | `SM_Farmstead_A/B/C` in turn (each side round robin, so neighbours differ; `SM_Farmstead` while they are not imported) | 90 gold | 14 s | 3, +1 a castle level |
-| Treasury (Economy) | `SM_Treasury` (gold vault, `Tools/blender/assets/treasury.py`) | 140 gold | 16 s | - |
-| Granary (Economy) | `SM_Granary` (thatched food storehouse, `Tools/blender/assets/granary.py`, after `References/Remake/granary.png`) | 120 gold | 14 s | - |
-| Gold Mine (Economy) | `SM_MineCliff`, on a gold vein only: a neutral mine (taken over) or the ruin of a fallen one | 140 gold | 16 s | - |
-| Barracks (Military) | `SM_BarracksYard` | 110 gold | 16 s | - |
-| Archery Range (Military) | `SM_ArcheryHall` | 125 gold | 16 s | - |
-| Watch Tower (Defence) | `SM_WatchTower` (its lookout tag added when done) | 160 gold | 18 s | 2, +1 a castle level |
+| Farm (Economy) | `SM_Farmstead_A/B/C` in turn (each side round robin, so neighbours differ; `SM_Farmstead` while they are not imported) | 90 gold | 28 s | 3, +1 a castle level |
+| Treasury (Economy) | `SM_Treasury` (gold vault, `Tools/blender/assets/treasury.py`) | 140 gold | 32 s | - |
+| Granary (Economy) | `SM_Granary` (thatched food storehouse, `Tools/blender/assets/granary.py`, after `References/Remake/granary.png`) | 120 gold | 28 s | - |
+| Gold Mine (Economy) | `SM_MineCliff`, on a gold vein only: a neutral mine (taken over) or the ruin of a fallen one | 140 gold | 32 s | - |
+| Barracks (Military) | `SM_BarracksYard` | 110 gold | 32 s | - |
+| Archery Range (Military) | `SM_ArcheryHall` | 125 gold | 32 s | - |
+| Watch Tower (Defence) | `SM_WatchTower` (its lookout tag added when done) | 160 gold | 54 s | 2, +1 a castle level |
 
 Limits count only what a side raised in the match (the map's own farms and tower are its endowment). The main game
-never built a town hall, so it is not in the menu. Prices and times are the main game's (`GranaryStats` 120 gold / 14 s,
-`TreasuryStats` 140 / 16). Each side may raise one of each storehouse, as in the main game (`StoreLimitBase` 1). The
+never built a town hall, so it is not in the menu. Prices are the main game's (`GranaryStats` 120 gold, `TreasuryStats`
+140). **Every time is twice the main game's** (the owner's call, 2026-11-22: "if something takes 30 seconds, it should
+take 1 minute"): every site, every troop's training and every level raised; the Watch Tower takes three times as long
+(54 s, was 18: "archer towers need a lot longer to build"). The build menu's cards and tooltips, the recruit buttons
+and the upgrade tooltips read the times from the rules (`VLBuild::Specs`, `VLRules::Troop`, `VLRules::Level`), so
+they show the new ones.
+
+| | Was | Now |
+| --- | --- | --- |
+| Farm, Granary (site, one Builder) | 14 s | 28 s |
+| Treasury, Barracks, Archery Range, a mine's claim | 16 s | 32 s |
+| Watch Tower | 18 s | 54 s |
+| Swordsman / Archer (level-1 trainer) | 9 s / 8 s | 18 s / 16 s |
+| Builder / Spy (at the castle) | 14 s / 12 s | 28 s / 24 s |
+| Castle to level 2 ... 7 | 40, 45, 55, 65, 75, 90 s | 80, 90, 110, 130, 150, 180 s |
+| Any other building to level 2 / 3 | 30 s / 40 s | 60 s / 80 s |
+| King David rises again after | 20 s | 100 s (five times) |
+
+The enemy commander builds and trains by the same rules, so it is slowed as much; its two "the army has had time to
+form" marks (150 s: regroup when outnumbered, a second barracks / range when its army is behind) are 300 s. Its
+attack and raid times per difficulty are unchanged (they are the earliest it may go; it still waits for its odds).
+Each side may raise one of each storehouse, as in the main game (`StoreLimitBase` 1). Each side may raise one of each storehouse, as in the main game (`StoreLimitBase` 1). The
 storehouse adds its level's storage on top of the castle's stores, so a side holds more by raising it a level. The
 enemy builds each storehouse once its stock of that resource reaches 80% of what it can hold.
 
@@ -227,8 +255,8 @@ level the upgrade needs):
 | Level | Granary (food) | Treasury (gold) |
 | --- | --- | --- |
 | 1 | 900 hp, holds 400 | 1100 hp, holds 400 |
-| 2 | 1200 hp, holds 900; 180 gold, 30 s; castle 2 | 1450 hp, holds 900; 200 gold, 30 s; castle 2 |
-| 3 | 1500 hp, holds 1600; 320 gold + 80 food, 40 s; castle 3 | 1800 hp, holds 1600; 340 gold + 80 food, 40 s; castle 3 |
+| 2 | 1200 hp, holds 900; 180 gold, 60 s; castle 2 | 1450 hp, holds 900; 200 gold, 60 s; castle 2 |
+| 3 | 1500 hp, holds 1600; 320 gold + 80 food, 80 s; castle 3 | 1800 hp, holds 1600; 340 gold + 80 food, 80 s; castle 3 |
 
 What they hold is added to the castle's own stores (600 food and 600 gold at castle level 1, 1000 / 1500 / 2200 / 3000
 / 4000 / 5500 at levels 2 to 7), and income beyond the total is lost (`UVLBattle::GetStorage` / `AddStock`). A side
@@ -290,7 +318,7 @@ a little more than a level-3 castle's own 1500, so one fully raised Granary doub
   the build menu has none. A free mine (a neutral one, or one that has fallen: it is not taken away, it stands
   **abandoned**) is claimed by Builders: select them and **right-click the mine**, or select the mine and press
   **Claim** on its panel (the nearest free Builder goes). `UVLConstruction::ClaimMine` charges the old mine price (140
-  gold) and makes it a site by the usual rules: it does nothing until Builders have worked it through (16 s with one,
+  gold) and makes it a site by the usual rules: it does nothing until Builders have worked it through (32 s with one,
   each further Builder adds `ExtraSpeed`, up to 4), Cancel gives 75% back and it is free again. Nothing rises and the
   mesh never moves: the map's mine stands as it is, and takes its new side's look when the claim is done. The enemy
   commander claims through the same calls (`FVLCommander::TryBuild` > `CheckPlacement` + `PlaceBuilding`); its build
@@ -727,14 +755,37 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
   or defeat screen comes 1.6 s later (time, map, difficulty, troops recruited / lost, enemies slain, buildings lost /
   razed; Play Again, Main Menu, Keep Watching). Esc pauses (Resume, Restart, New Game, Controls, Settings, Quit to Main
   Menu, Quit Game; those that end something ask first). A map with no enemy castle is a sandbox: the economy runs, no commander.
+- **The Test World** (New Game > Test World; `UVLBattle::SetupTestWorld`; the owner's call, 2026-11-22). Realm v2
+  opened with `?TestWorld=1`: a match that starts with both sides at their most, for trying the balance. Each side: its
+  castle at level 7; two barracks, two archery ranges, a Granary, a Treasury, and farms and watch towers up to their
+  limits (9 and 8), on rings round the castle by the construction's own placing (`FindPlacementNear`,
+  `PlaceBuilding`, finished at once with `UVLConstruction::FinishNow`); every building at its top level, the map's
+  own mine and tower too; its stores full; troops up to the ceiling of 120, three swordsmen to two archers (the
+  player's in six platoons of 20); all six Builders. Neutral mines stay neutral. The enemy commander plays on as
+  usual, at the difficulty chosen. A test ground: its layout is not tidied (a building with no room at its place on its
+  ring goes anywhere round the castle). With eight level-3 towers a side, the commander reckons the defence high: on
+  Easy it attacks when its first attack is due (housing full), on Hard it held the crossing for the 11 minutes tried. Console: `vl.Map test`, or `vl.TestWorld
+  [0|1|2]` on any battle map.
+- **The enemy's clock** (the HUD's "Enemy ready in 3:12"). While an attack is out the commander's next one has no
+  time yet (`NextWaveTime` is the clock plus `FVLCommander::WaveHeld`, a million seconds), and the attack's end sets
+  it. On Hard, the one difficulty that flanks, an attack whose flank party ended while the main body was not out
+  never set it: the HUD read "Enemy ready in 16650:28" and the commander never attacked again. Fixed in
+  `FVLCommander::EndAttack` (a flank's end ends the attack when the main body is not out). And with no attack out the
+  wait is never longer than the longer of its first attack's time and its pause between two
+  (`FVLCommander::MaxWaveWait`: 7:00 Easy, 4:00 Normal, 2:24 Hard), in `FVLCommander::Step` and in the HUD's text.
 - **Teams.** `AVLKing::Team` (0 the player, 1 the enemy); buildings by their tag `Team:0|1|Neutral` (a game building
   without one is the player's). Health bars on hurt or selected units and on damaged buildings (the ring of the side's
   colour under every unit is off by default, `vl.TeamRings 1` brings it back). The player selects, commands and takes control of only their own units.
-- **Troops.** Swordsman (the Shieldbearer): 280 health, 29 a swing (split over its blows), 100 food, 9 s at the
-  Barracks. Archer: 125 health, 40 an arrow (x0.35 against buildings: 14; raised from the main game's 29, +38%, so
-  archers are worth fielding: 17 damage a second against a swordsman's 23), 85 food, 8 s at the Archery Range, bow
-  range 31 m. King David: 600 health, 45 a swing, no housing, a troop's pace (4.2 m/s on the march, 7.6 at a run; it
-  was 5.2 / 9.5); **if he falls he rises again at his castle 20 s later** (not if it has fallen).
+- **Troops.** Swordsman (the Shieldbearer): 280 health, 29 a swing (split over its blows), 100 food, 18 s at the
+  Barracks. Archer: 125 health, 40 an arrow (x0.5 against buildings: 20; raised from the main game's 29, +38%, so
+  archers are worth fielding: 17 damage a second against a swordsman's 23), 85 food, 16 s at the Archery Range, bow
+  range 31 m. **Her shot comes every 2.4 s from the start of one to the start of the next** (`UVLArcherCombat`, the
+  balance runs of 2026-11-22): the wait used to run only while she stood at rest, not through the 1.1 s draw, so she
+  shot every 3.5 s and dealt 11 damage a second, not 17; ten swordsmen then beat twelve archers without a loss (see
+  *Computer against computer and the balance*). King David: 600 health, 45 a swing, no housing, a troop's pace (4.2 m/s on the march, 7.6 at a run; it
+  was 5.2 / 9.5); **if he falls he rises again at his castle 100 s later** (not if it has fallen;
+  `VLRules::KingRespawnSeconds`, five times the 20 s it was: the owner's call, 2026-11-22. It is his only cooldown:
+  he has no ability on a timer, and his sword's swing is as it was).
   Troops not on an order go for any foe within their reach (`Acquire`: 40 m, archers 42 m; raised from 16.9 / 19.5 m,
   about 2.4x / 2.15x, on 2026-11-22; on a lookout the bow's reach), troops before buildings, and answer whoever strikes
   them; friends within 12 m (13 m of a building) come to help, and an idle troop with no foe in its reach goes for the
@@ -750,7 +801,7 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
   after a dozen that get no closer) and go for a building's walls; archers lead a moving foe and walk into range
   again when it leaves it. Arrows strike the bodies of foes they pass (never friends). The dead topple and are gone.
 - **The Spy** (the main game's Scout, `ESRUnitType::Scout`; `VLRules::Troop("Spy")`, `UVLSpy`): 90 health, 8 a blow
-  (x0.2 against buildings), 350 gold + 200 food, 12 s at the **Castle**, 1 housing. Three rules, checked when it is
+  (x0.2 against buildings), 350 gold + 200 food, 24 s at the **Castle**, 1 housing. Three rules, checked when it is
   queued (`UVLBattle::SpyRefusal`): the castle at **level 3**, **one at a time** (alive or in training), and a
   **5-minute wait** between two, counted from the moment the last was queued and paid for; no batches. The castle's
   panel has its recruit button (the Scout's: "Castle level 3" / "In training" / "In the field · 3:12" / "Ready in
@@ -774,7 +825,8 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
 - **Buildings** (health, then by level): Castle 12000 (houses 8, troop ceiling 36, stores 600 each, 1 archer on its
   walls: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500 and 4 archers), Barracks 1600, Archery Range 1400 (levels:
   training x1.35 / x1.8), Farm 1000 (14 food every 6 s, houses 4; levels 20 / 27, 6 / 8), Gold Mine 1250 (10 gold
-  every 6 s; levels 16 / 23), Watch Tower 1800 (shoots 50 every 1.2 s to 24 m; levels 85 / 120, 0.95 / 0.8 s, 27 / 30 m;
+  every 6 s; levels 16 / 23), Watch Tower 1800 (shoots 35 every 1.2 s to 24 m; levels 60 / 85, 0.95 / 0.8 s, 27 / 30 m; it was 50 / 85 / 120
+  until the balance runs of 2026-11-22;
   archers on its lookout shoot too; **its own archers**: see below), Granary 900 / 1200 / 1500 and Treasury 1100 / 1450 / 1800 (+400 / 900 / 1600 storage; built from the Economy tab). The selected
   building's panel (bottom middle): health, what it does, the recruit button (Shift 5, Ctrl 10: each paid for and
   housed when queued, no queue limit), the upgrade button (U), its lookout. Right click with a barracks / range selected: its rally point;
@@ -782,14 +834,15 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
   stock beyond what is left is lost).
 - **The watch towers' own archers** (`UVLBattle::TickTowerGuards`, `AVLKing::bTowerGuard`; the owner's call,
   2026-11-22). Every watch tower of either side, the map's and those raised in the match, has archers of its own on
-  its lookout: 2 at level 1, 3 at level 2, 4 at level 3 (`VLRules::TowerGuards`); one more steps up the moment the
+  its lookout: 1 at level 1, 2 at level 2, 3 at level 3 (`VLRules::TowerGuards`; 2 / 3 / 4 until the balance runs of
+  2026-11-22: with them a level-3 tower held off 16 swordsmen and took 24 to raze; now 13-14); one more steps up the moment the
   tower is raised a level, and a finished tower is manned at once. They take no housing and are not counted in the
   troops (the top bar, the cap, the commander's army or squads), cannot be selected, ordered or played (a click on
   one is a click on its tower), and stay up when the Lookout button sends the others down. They shoot as far as the
   tower does (its level's reach plus 3 m: 27 / 30 / 33 m), so the tower's reach is what the enemy commander reckons
   with; enemy archers (and the towers) can shoot them down, and one that falls is replaced **40 s** later, one at a
   time (`VLRules::TowerGuardRestock`; not while the tower is under repair). They go with their tower (razed, pulled
-  down, changing hands); their deaths are not counted as troops lost. The tower's panel shows them ("archers 2 / 2",
+  down, changing hands); their deaths are not counted as troops lost. The tower's panel shows them ("archers 1 / 1",
   "next in 31 s"); its own shot is as before. On the commander's side they count as manning the tower (its
   `TowerArchers` 2 / 3 are mostly met by them).
 - **The enemy commander** (`FVLCommander`; the main game's `SRAISubsystem` grown into a commander of three layers over
@@ -844,11 +897,29 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
        (below 22% / 30%): an archer up a tower with room, else to guard the castle; a **tower in the way** of an attack
        is taken down first with 2.2x its strength, else the target is dropped. A troop that has made no way for 25 s
        leaves the attack (and the squads while it stands there).
+     - **In force, and to the end** (the balance runs of 2026-11-22, when no match between two commanders ever ended,
+       not in 90 minutes; `FVLCommander::AttackWant`, `FinalPush`, `IsPushing`): a main attack waits until it has
+       its wave's size (`AttackCap` + `AttackCapGrowth` a wave, at most 60% of its housing) unless its housing is full
+       or the odds are twice what it wants (attacks of four or five into a defended base bled both armies). From
+       `PushAfter` of the clock (Hard 20 min, Normal 25, Easy 40; `vl.AI.PushAfter S` for tests), with an army about
+       the foe's or better (`ArmyRatio` 0.9), it makes its **final push**: its attacks go for the foe's castle, with
+       the patrol, the picket, the reserve and all but two of the guard; it is not turned aside by a tower on the way,
+       not called home by a raid on an outlying farm or mine (only by foes at its castle), its hurt are not pulled
+       out, it falls back only when down to two fifths, and its reserve joins it in bodies of ten. Swordsmen at the
+       castle's walls (`AVLKing::bSiege`) are drawn off them only by a foe at their side or one that struck them, not
+       by every troop within 40 m. An attack makes headway while its side is knocking down the foe's buildings, not
+       only its target (a siege that razed the barracks round the castle was called off as "no headway"). With the
+       foe's army 1.5 times smaller and the body a match for its defence, the castle is worth twice as much as a
+       target at any time.
   4. **Economy and building** (`ManageBuilding`, `TryBuild`): the main game's build order (barracks and range first,
      then farm, tower, mine, farm) and wants, one site per Builder, driven by the strategy: a **tower by a farm or mine
      that was raided**, a tower when attacked early and often, a **second barracks / range when its army is behind**
      (and a longer training queue), **mines on the safest free veins** (near, rich, the Crown's while it holds it; none
-     where the foe is stronger or under its towers), **no site where the foe is clearly stronger**; trains toward a
+     where the foe is stronger or under its towers; within 380 m of its castle, it was 260: on Realm v2 the west castle
+     then had no neutral vein it would ever claim, its nearest being 325 m off while the east castle's is 154),
+     **farms, trainers and storehouses where there is room** (behind the castle first, then either side of it, then
+     anywhere within 75 m: Realm v2's east castle has its port behind it, and its commander laid one farm in twenty
+     minutes while the west one laid four), **no site where the foe is clearly stronger**; trains toward a
      swordsman share that answers the player's army; raises its castle when housing runs short or gold piles up, then
      its mines and barracks / range (a tower first while pressed); mans its towers (hurt archers first, counting those
      on their way); its Spy (Normal, Hard) as before.
@@ -870,12 +941,13 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
 | Picket from a field army of | 12 | 10 | 9 |
 | Intercepts a foe body at, within | never | 1.6x, 60 m | 1.25x, 90 m |
 | Flank by the side bridges | no | no | yes |
+| Final push on the castle from (army 0.9x the foe's or more) | 40:00 | 25:00 | 20:00 |
 | Micro: every, focus fire, step back, pull out below | none | 1 s, archers, yes, 22% | 0.5 s, all, yes, 30% |
 
   The knobs are `FVLAIProfile` (`VLEnemyAI.h`, one comment each; set per difficulty in `FVLAIProfile::For`):
   `StrategyEvery`, `ReactionDelay`, `Commitment`, `ContestWeight`, `ExpandWeight`, `PatrolMax` / `PatrolShare` /
   `PatrolRadius`, `GuardMax` / `GuardShare`, `BuilderGuards`, `PicketFrom`, `MaxRaids`, `RaidSize`, `bFlank`,
-  `InterceptOdds` / `InterceptRange`, `MicroEvery`, `FocusFire`, `bKite`, `PullBack`, `bAvoidTowers`, and the main
+  `InterceptOdds` / `InterceptRange`, `MicroEvery`, `FocusFire`, `bKite`, `PullBack`, `bAvoidTowers`, `PushAfter`, and the main
   game's (`FirstAttack`, `Advantage`, `Regroup`, `AttackCap*`, raids, `AdaptWeight`, `IncomeScale`, `RecruitQueue`,
   `Think`, `RetreatHold`, `TowerArchers`, `Builders`, `BuildCadence`, ...).
 - **Watching the commander**: `vl.AIDebug 1` logs every look at the strategy (`AI 1 [Normal 4:03] posture ATTACK
@@ -889,13 +961,69 @@ main game's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s) 
   player's side a commander (at its own difficulty); `vl.TimeScale N` runs the game N times as fast for whole-match
   tests. Tested (PIE, 4-5x, logs): AI against an idle player and AI against AI on `L_Realm` and `L_Highlands` at each
   difficulty, and on `L_Flatlands` with `vl.TestBase`.
+- **Computer against computer and the balance** (2026-11-22; `VLMatchLog.*`, `Tools/aivsai.py`). `vl.AIvsAI 1 [d]`, or
+  `?AIvsAI=<d>` on the map's URL, gives the player's side a commander of its own (`FVLCommander` is written for either
+  team). For an even match **King David is benched** (team -1, which nobody fights or counts, hidden, still, off the
+  map's corner: the enemy has no hero and no commander plays him; `vl.AIvsAI.King 1` keeps him) and the player's
+  platoons are disbanded (their cohesion would pull troops about under the commander's squads). The rest of the URL:
+  `?Difficulty=<d of team 1>?MaxMinutes=N` (a draw then) `?Quit=1` (quit when the log is written; never the editor)
+  `?TimeScale=N` `?Tag=name` `?King=1`. **The match log** (`vl.MatchLog 1`, on by itself with AI against AI): every 10 s
+  of the match's clock both sides' gold and food (in stock, earned, lost to full stores, spent), income, housing,
+  castle level, troops by kind (alive, trained, lost), buildings by kind, sites, the commander's posture and power;
+  every second the sites laid, buildings finished, levels raised, mines claimed, buildings lost, attacks, flanks and
+  raids sent and back; and at the end damage to units and to buildings and kills by who dealt them (sword, bow, a
+  tower's own archer, a building's shot). Written to `Saved/Balance/<id>.json`, `<id>_series.csv` and a line of
+  `Saved/Balance/matches.csv`. **The runner**: `python3 Tools/aivsai.py run --tag base --minutes 45 HvHx3 NvN HvN NvH`
+  (team 0 first; each a headless run of the editor's binary, `-game -nullrhi -benchmark -fps=30`: a fixed step of
+  1/30 s as fast as the machine goes, a 45-minute match in 2-3 minutes; take `Saved/editor.lock` and quit the editor
+  first) and `python3 Tools/aivsai.py report --tag base`. **Duels** (`vl.Duel S0 A0 S1 A1 [repeats] [s]`, `vl.Duel
+  standard`, `vl.Duel at X Y`; or `?Duels=1` / `?Duels=10.0.0.12_t3.16.0.2?DuelAt=12400,18800` on the URL, then quit):
+  bodies of troops 36 m apart on open ground, the commanders off, fighting it out by themselves, each duel fought
+  with the sides swapped; `t<level>.S.A.n` is S swordsmen and A archers against a watch tower of that level (its own
+  archers on it). Results in `Saved/Balance/duels.csv`. Test hooks: `vl.AIForce <team> attack | flank X0 Y0 X1 Y1 |
+  killflank | killfield | state | off | on`, `vl.AI.PushAfter S`. **What the runs found** is under *Balance (2026-11-22)*
+  below. The batch's own checks (cohesion, the march's pace, mixed attacks, archers' attack-move, guard, Ctrl + N,
+  Assign, the minimap, the Hard clock with a flank struck down): `python3 Tools/feedback_test.py` in PIE.
+- **Balance (2026-11-22)**: 67 computer-against-computer matches on Realm v2 (Hard and Normal, each side of the map,
+  45-90 minutes) and ~200 duels. What they showed, what was changed, and what is left:
+  - **The doubled times are not what slows the game.** The same matches with every time halved back gave the same
+    curves to within noise (gold earned by 20 min 2970 against 2618 doubled, food 7046 against 6622, housing, castle
+    level, buildings): gold (one mine, 100 a minute, 150-290 by the end) sets the pace, not the sites' and recruits'
+    times. The opening is not dead: first farm 0:33, barracks 1:35, range 2:50, first recruit about 1:55, Hard's
+    first attack 2:26. So every time stays twice the main game's and the tower's three times.
+  - **Each side's commander was crippled by the map** (fixed): the east castle has its port behind it and its
+    commander found no room for farms (one farm in twenty minutes against four), and the west castle had no neutral
+    vein within its 260 m. Before: the west side lost no building in five matches, the east nine a match. After: 10.5
+    against 11.2 (kills 165 / 170), and in the last batch 10.5 against 12.4. The map itself is uneven for mines: the
+    east castle's nearest neutral vein is 154 m off, the west's 325 m (for the map's designer).
+  - **Archers were under their own numbers** (fixed, `UVLArcherCombat`): a shot every 3.5 s, not 2.4. Duels at equal
+    food (36 m apart, no orders): before, 10 swordsmen beat 12 archers without a loss and 6 + 5 mixed lost to 10
+    swordsmen; after, the swords still win but with 4-7 of 10 left, 20 swordsmen against 24 archers win 3 of 4, the
+    mixed bodies (6 + 5, 12 + 10) beat pure archers every time and pure swordsmen 3 of 4 and 4 of 4, and about 13
+    archers hold 10 swordsmen. In matches (with the commander's micro) an archer deals three times a swordsman's
+    damage to troops; the swordsman is the wall that lets her.
+  - **Towers were too much** (`VLRules::Level`, `TowerGuards`): a level-1 tower with its two archers held off five
+    swordsmen and took about seven, a level-3 one sixteen (24 to raze: 2400 food of troops against 780 gold, and no
+    housing). Now 35 / 60 / 85 a shot (was 50 / 85 / 120) and 1 / 2 / 3 archers of its own (was 2 / 3 / 4): about
+    4-5, 8 and 13-14 swordsmen. Price (160, +250, +370 gold) and times (54 s, 60 s, 80 s) unchanged: still well
+    worth it, not a wall.
+  - **No match ended** (all 59 before the last batch drew, the 90-minute ones too, and with the old times): the
+    commanders traded small attacks at the outlying mines (a mine fell 15-50 times a match) and never went for a
+    castle. The commander's rules above (in force, the final push, the siege at the walls, headway) bring the
+    castles under attack (35 attacks on a castle in the last eight matches, none before) and two castles fell (at
+    38:45 and 45:03, one each side); six of eight still drew at 50 minutes, and Hard did not beat Normal (one win to
+    Normal, three draws). What holds a castle now: the defenders fight at home, beside their towers and their
+    barracks' new recruits, at the end of a 580 m march, and a push that wins the field reaches the walls with a
+    third of itself. Not yet changed (for the next pass): the commander's own defence at home (the guard, the
+    patrol, towers manned) against its push, and Hard's edge over Normal in a long game (its income is 100% against
+    90%, its odds 1.15 against 1.5: not enough to tell over 50 minutes).
 - **HUD**: see *The interface* below.
 - **Console** (`Tools/pie.py run "..."`): `vl.StartMatch [0|1|2]`, `vl.Restart [d]`, `vl.Menu main|new|pause|settings|controls|end|0`,
-  `vl.UIClick U V [right]` (a click on the interface at that point of the view), `vl.HUD` (the buttons drawn, by id; the route lines drawn, the Builders' chains and numbers, the Shift preview, hidden in the hero view; whom the mode box shows),
+  `vl.UIClick U V [right]` (a click on the interface at that point of the view), `vl.HUD` (the buttons drawn, by id; the route lines drawn, the Builders' chains and numbers, the Shift preview, hidden in the hero view; whom the mode box shows; the minimap's rect, world box and up yaw, and where its view box's middle and the player's castle are drawn on it),
   `vl.Battle` (both sides, every building), `vl.Give gold|food N [enemy]`, `vl.TrainAt <building> [enemy] [n]`,
   `vl.Upgrade <building> [enemy]`, `vl.Damage <building> [enemy] N`, `vl.Kill <unit> | castle enemy|player`,
   `vl.SpawnTeam Swordsman|Archer 0|1 X Y [n]`, `vl.SetTeam <building> 0|1|neutral`, `vl.TestBase [DX DY]` (an enemy
-  base on any map: copies of its buildings, mirrored), `vl.AIvsAI 1`, `vl.BattleLog 1`. `vl.Order`, `vl.SelectUnits`,
+  base on any map: copies of its buildings, mirrored), `vl.TestWorld [0|1|2]`, `vl.Cohesion`, `vl.AIvsAI 1`, `vl.BattleLog 1`. `vl.Order`, `vl.SelectUnits`,
   `vl.Units` and the like take `enemy` for the enemy's units; the group words mean the player's own.
 - **Not ported** (the user's to design): the Medic, the Catapult,
   the Horseman (no voxel model yet); also deferred: fog of war, saved games. (Guard, patrol, march together and the
@@ -934,35 +1062,44 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
 - **Resource bar**: gold and food (amount / what the stores hold, income a minute; shakes red on a refused purchase, the
   icon swells when income lands, amber when the stores are full), troops `alive+training/cap` (amber at the cap), the
   then the **hero, Builders and Spy chips** (`T_UI_Portraits`: King David's health, or "back in 0:12" while fallen; the
-  Builders alive/limit and +in training; the Spy 0/1, the wait before the next, greyed below castle level 3; a click
-  selects them, a double click also looks at them; on the hero's chip a double click enters his hero view, as Enter
-  with him selected), the clock, the enemy ("Enemy ready in 3:12" dim, amber under a
-  minute; "Enemy watching"; "Enemy attacking!" pulsing). Tooltips on each. Top right: Controls (F1) and Pause.
-- **Build button and menu** (left of the selection panel, B): see *Building*. Sites show a hammer bar over them (red
+  Builders alive/limit and +in training; the Spy 0/1, the wait before the next, greyed below castle level 3; **a click
+  on the Builders' or the Spy's chip opens the list of them** (`AVLHUD::DrawChipList`: what each is doing; click a row to
+  go to it and select it, hover to mark it in the world); a click on the hero's chip selects him and a double click
+  enters his hero view, as Enter with him selected), the clock, the enemy ("Enemy ready in 3:12" dim, amber under a
+  minute; "Enemy watching"; "Enemy attacking!" pulsing). Tooltips on each, **shown only while Option (Alt) is held**
+  (every tooltip of the interface: `AVLHUD::DrawTooltip`). Top right: Controls (F1) and Pause.
+- **Build button and menu** (left of the selection panel, B): see *Building*. **A click off the menu** (the world, or
+  another panel) **puts it away** and the Build button goes dark; the click is still the usual one, so on the ground it
+  also lets the selection go. Sites show a hammer bar over them (red
   "needs a Builder" while nobody works at one), repairs a green one.
 - **Alerts**: plates with an icon and an accent per kind (attack / lost red, done green, housing amber, info gold);
   in over 150 ms, out over the last second of six. Those with a place ping the minimap.
 - **Minimap** (bottom left): a picture of the map from straight above (its unlit colours, captured once when the overview
   first shows, units hidden), your buildings blue and the enemy's red (castles larger with a gold core), contested mines gold, troops
-  as dots (selected white, King David with a gold rim), alert pings, and the camera's view of the ground. +X is up.
+  as dots (selected white, King David with a gold rim), alert pings, and the camera's view of the ground. **Up the map is
+  the way the default camera looks**, to the nearest quarter turn (`AVLHUD::MapYaw` from `AVLKing::GetHomeYaw`, the
+  postcard camera's yaw: the picture, the dots, the pings, the view box and the clicks all go through one pair of
+  functions); it was +X up, a quarter turn off the view. The map is fixed: Q / E turn the view box on it, not the map.
   Left click (drag): look there. Right click: the selection goes there (a barracks / range selected: its rally point).
 - **Selection panel** (bottom middle, with a selection): troops (portrait and count per kind, health, how many are
   fighting, the circles' key, the standing order it is on ("Patrolling", "Guarding the Castle", ...), and the main
-  game's command card: Attack-move [A], Attack ground [A] with archers, Stop [S], Hold [H], Patrol [P], Guard [V],
+  game's command card, trimmed on 2026-11-22: **Assign** (to a platoon: a picker of the six over the button), Patrol [P], Guard [V],
   Roam [O] with a Spy, Stance [G], Formation [F; right click too], March together [M] (Together / Free), Disband [Del]
-  for a platoon, Dismiss [K] (asks first: Sure?), Control [Enter] for one unit; the row packs tighter when long); an enemy's units read-only; a building (icon,
+  for a platoon, Dismiss [K] (asks first: Sure?), Control [Enter] for one unit; the row packs tighter when long. No
+  Attack, Attack ground, Stop or Hold buttons: attacking is a right click, hold is a stance; A and S keep their keys); an enemy's units read-only; a building (icon,
   name, side, level of N, health and "badly damaged" below half, what it does) with its buttons on the right: the
   **upgrade button** (next level, gold / food price in red when short, what it brings in a few words and in full in its
   tooltip, a progress meter and time while it is raised, "Castle level N" when a storehouse's level waits for the
-  castle; U), a barracks' / range's **recruit button** (portrait, price, "Trains in 9 s" / "Housing full"; Shift 5,
+  castle; U), a barracks' / range's **recruit button** (portrait, price, "Trains in 18 s" / "Housing full"; Shift 5,
   Ctrl 10; flashes gold or red) with the queue, its progress and the **Joins** chips (none / 1-6) on the left, and the
   watch tower's **Lookout** (who mans it; click: send them out). Farms and mines show their payout meter, storehouses
   the kingdom's stores, the castle its archers.
 - **Platoon panel** (bottom right): six slots; a formed platoon shows its number in its colour, its kind, counts,
   health, a burning edge while it fights, and buttons for formation, stance, **the recruits' flag** (lit on the one
   platoon new troops join; a click sets it there, a second clears it; the platoon's tag over the troops carries a small
-  flag too) and disband; click selects, twice within 0.35 s also looks at it; empty slots read "Ctrl+N to form". The
-  header folds it away (remembered).
+  flag too) and disband; click selects, twice within 0.35 s also looks at it; **Option + click: the selection guards
+  that platoon**; empty slots read "Ctrl+N to form". The
+  header folds it away (remembered). **It and the minimap stay up in the hero view.**
 - **Castle card**: raising the castle a level shows what the level brings (14 s, or **Onward**).
 - **Portraits**: every troop portrait (selection panel, queue, recruit and lookout buttons, training bars, platoon rows,
   the hero's bar) is a render of the voxel character's head and shoulders; an enemy's is reddened.
@@ -972,7 +1109,10 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
   building's footprint; health bars over units of both sides in
   every view: always in the red (under 34 %), else for 3 s after a hit or a heal and fading over 0.8 s, and always while
   selected; on buildings lately hurt or selected and damaged; training and upgrade bars with icons over buildings at work; "+N" payouts with the coin or grain;
-  numbered platoon tags; dashed blue pathways and rally lines, a patrol's loop in orange and an attack-move's way in
+  numbered platoon tags; **a shield beside every unit your troops guard**; **no diamond over a tower's own archers and no
+  outline of them through walls** (they never leave the lookout: stencil 2, `AVLKing::RefreshSilhouette`); **the enemy's
+  diamonds in the hero view too** (from 5 m of the unit played); dashed blue pathways (**a platoon, or one group order,
+  of more than 7 walkers draws one line, its leader's, a little heavier, not one each**: `vl.RouteLines.GroupOver`) and rally lines, a patrol's loop in orange and an attack-move's way in
   red, the Builders' numbered queue (all of these overview only: the hero view hides every pathway, follow and queue
   line, and keeps the order markers); while an order is armed, its hint under the top bar and a crosshair pointer; the selected troops' sight (dashed blue) and bow range
   (solid orange) and a tower's / the castle's reach; team-coloured pips over troops zoomed far out; the order markers;
@@ -999,7 +1139,7 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
   `vl.Cam.Clearance <cm>`, `vl.Cam.Overhang 0|1`, `vl.Cam.Log 1` (logs a camera being held up).
 
 **Menus.** Title screen (the live map drifting behind; crown, title lettering, NEW GAME, HOW TO PLAY, SETTINGS, QUIT;
-Enter: New Game). New Game: the map (The Realm, Realm v2, Highlands, Flatlands) and Easy / Normal / Hard, BEGIN. Pause (Esc):
+Enter: New Game). New Game: the map (The Realm, Realm v2, Highlands, Flatlands, Test World) and Easy / Normal / Hard, BEGIN. Pause (Esc):
 RESUME, RESTART, NEW GAME (another map), CONTROLS, SETTINGS, QUIT TO MAIN MENU, QUIT GAME; restart and the quits ask
 first (CANCEL / yes). Settings: master volume, effects, music (sliders; music on, 100 %, until the player turns it
 down), interface scale (applied when the slider is let go), Graphics (Quality High / Medium / Low, Render scale 100-50 %,
@@ -1022,7 +1162,7 @@ answered by the `Button()` under it while the HUD draws, and never reaches the w
 same path; `vl.HUD` lists the buttons drawn last frame with their ids (`VLHUDStyle.h`, `VLId`).
 
 **Changed from the main game** (layout): the mode box top left and the hero view's help line and health bar are new;
-the top bar's chips show the hero as well as the Builders and the Spy (no builders' list), and the enemy's status after
+the top bar's chips show the hero as well as the Builders and the Spy (the Builders' and the Spy's open a list), and the enemy's status after
 the clock; the build menu's tabs are clicked (no Tab key); the castle's panel is wider (Builder, Spy, upgrade); the recruit buttons have no hotkey cap; the platoon rows have the main
 game's four small buttons (formation, stance, the recruits' flag, disband; a building's own Joins chips come before the
 flag); the watch tower's panel has a Lookout button; the castle's panel has the Spy's recruit button; the
@@ -1084,11 +1224,57 @@ doings on one (a fight it picks up, an archer walking into range, a defensive un
 | `OrderHold(Units)` | stands fast until the next order (`AVLKing::bHoldOrder`, `IsHolding()`: the Hold stance too): strikes only what is in reach, lets go of a foe that leaves it and steps back |
 | `OrderPatrol(Units, Points, bRun, Shape)`, `ExtendPatrol(Units, Point, Shape)` | from where they stand through the points and back, round and round, attack-moving; the next leg once nobody walks or fights, a leg cut short by a fight walked again (up to 3 times) |
 | `OrderAttackMove(Units, Ground, bRun, Shape, bQueue)` | march there fighting what they meet, on again after each fight; bQueue: one more point. (`UVLBattle::AttackMove`, the commander's, does not resume.) |
-| `OrderGuard(Units, Ward)`, `CanBeGuarded(Ward, Team)` | posts in rings round a building (170 cm outside its walls), a Builder or King David (230 cm), 120 cm between rings; foes within `GuardLeash` 18 m of the ward (an archer: her bow's reach), 1.8 times that for one that struck the guard or the ward; a struck ward calls its guards in; the order ends when the ward falls. Builders do not guard; troops cannot be guarded |
+| `OrderGuard(Units, Ward, bTroops, Platoon)`, `OrderGuardPlatoon(Units, N)`, `CanBeGuarded(Ward, Team, bTroops)` | posts in rings round a building (170 cm outside its walls), a Builder or King David (230 cm), 120 cm between rings; foes within `GuardLeash` 18 m of the ward (an archer: her bow's reach), 1.8 times that for one that struck the guard or the ward; a struck ward calls its guards in; the order ends when the ward falls. Builders do not guard. `bTroops` (the hero view's Option + click on a friend, V + left click, `vl.Guard`): any unit of their side may be the ward, not a tower's own archer; the enemy's commander and a right click still guard only buildings, Builders and the king. `Platoon`: the ward is that platoon's leader (else the member nearest its middle), the platoon's own members are left out of the guard, and when the ward falls it passes to the leader or the nearest member: it ends only when the platoon has nobody left. `GetGuardedUnits`, `GuardPlatoonOf` for the HUD |
 | `OrderRoam(Units)` | the Spies wander 20-70 m at a time, to ground not visited lately, clear of foes' towers and castles; a leg over 40 s is dropped; struck: to the castle's door at a run, with an alert |
 | `Dismiss(Units)` | troops gone for good, quietly, not counted as lost (never King David) |
-| `MarchTogether(Units, Shape)`, `ToggleMarchTogether()` | in a formation the slowest always sets the pace (`AVLKing::PaceCap`); Loose: per platoon / loose-selection setting, on by default; fights are at full speed |
+| `MarchTogether(Units, Shape)`, `ToggleMarchTogether()` | in a formation the slowest always sets the pace and the march closes up as it goes (`AVLKing::PaceCap`; see *Marching together* below); Loose: per platoon / loose-selection setting, on by default; fights are at full speed |
 | `GuardWardOf`, `GetGuards`, `IsRoaming`, `GetRoute`, `DescribeOrders`, `ClearStanding` | what a unit is on; ends it |
+
+**Marching together** (`UVLCommand::UpdateMarchPace`, four times a second). Every troop walks 4.2 m/s and runs 7.6,
+so "the slowest sets the pace" alone kept nobody together: a gap that was there when the order came (members standing
+apart, some just back from a chase, a file through a narrow way) stayed for the whole march. So a march also
+**closes up along its way**. By the way each has left to walk: the body's place is halfway between its middle member
+and its rearmost; a unit more than 2.5 m ahead of that slows down, to 40% of the pace by 10.5 m ahead; a unit more
+than 2.5 m behind hurries, up to its run by 8.5 m behind. One more than 60 m behind the middle is not waited for (it
+runs to catch up). Nothing changes over the last 9 m, where each walks to its own place in the formation. A unit in a
+fight, a chase or the player's hands is at its own speed and counts for nobody's. It holds for every order that
+marches together (a move, the legs of a patrol or an attack-move, a Shift pathway, followers sent after their leader;
+the enemy's squads too). `vl.Orders` shows each unit's speed and pace.
+
+**Attacking together.** Fighters sent at a foe (an attack order, or a fight they pick up) go at a run when they have
+more than 7 m to go (`UVLSwordsmanCombat::ChargeBeyond`): the swordsmen's first walk and every fresh route of their
+chase, and the archers' walk into range. So archers and swordsmen sent at the same foe travel together; the archers
+stop at their range (26-28 m) and shoot, the swordsmen go on. (Before, the archers walked unless the order said run,
+while the swordsmen ran a moving foe down: the archers fell behind.) An attack also takes the place of the walk an
+archer is on (`UVLArcherCombat::OrderAttack`), as it always did for a swordsman: an archer on an attack-move used to
+walk on to the end of it before she shot, the fight she picked up being dropped every quarter of a second.
+
+**Platoons keep together** (`UVLBattle::TickCohesion`, twice a second; the owner's call, 2026-11-22: "a platoon
+should operate as a group"). The rule, for each member of a platoon that stands idle (no order, no fight):
+
+- **To the fight.** If a member of its platoon is fighting further than 20 m away (`VLRules::CohesionLeash`), it runs
+  to the nearest such member, fighting what it meets on the way (an attack-move), and joins in. It goes no further
+  than 50 m from where it stood (`AggressiveLeash`), and that spot stays its post, so its own leash is measured from
+  there.
+- **Back to the body.** With no fight on, a member further than 30 m (`RegroupLeash`) from the platoon's body walks
+  back to it. The body is the member with the most of the others within 15 m of it (the leader on a tie).
+
+Who is left alone:
+
+- **Defensive and Hold** platoons: a defensive member stays by its post and fights what it can strike within its
+  20 m leash, as before; one holding its ground stands. Only an Aggressive member is moved.
+- **Members ordered apart.** A member given an order without the rest of its platoon (a move, an attack, a patrol, a
+  guard, the tower: anything that is not the unit's own doing) is apart on purpose. It is not pulled back, and its
+  fights do not draw the platoon. It is one of the platoon again once it stands idle within 20 m of a member that is
+  not apart, or when the whole platoon is ordered together.
+- **Members far off when they join**: a platoon formed from troops standing apart, a recruit on its way from the
+  barracks. Each is apart on purpose until it has come to the body.
+- Anyone **on an order** (walking, on a patrol or attack-move route, a chain, following, guarding, roaming), on a
+  **lookout** or on the way to one, a tower's own archers, **Builders and Spies**, the unit the player plays, and
+  **King David** (he counts as part of the body, but is never sent anywhere by himself).
+
+`vl.Cohesion` logs each platoon's members, its spread, who is apart on purpose and who is on its way to a fight;
+`vl.BattleLog 1` logs each move it makes ("cohesion: ... runs to join ...").
 
 Console (the four of 2026-11-21's second pass): `vl.Leaders` (each platoon's leader and who follows whom),
 `vl.Follow <who> <unit name | king>`, `vl.HeroAim <unit name> | X Y [Z] [seconds]` (the hero view's crosshair taken to
@@ -1097,7 +1283,7 @@ swing / Option + click at the crosshair, add: with Shift), `vl.Chains` (every or
 rejoins), `vl.Queue <who> X Y | work <building name> | clear | log`, `vl.Build ... queue`.
 
 Console: `vl.Stop [who]`, `vl.Hold [who]`, `vl.Patrol <who> X Y [X Y ...] [run]`, `vl.AttackMove <who> X Y [queue]
-[run]`, `vl.Guard <who> <building name | unit name>`, `vl.Roam [who]`, `vl.Dismiss [who]`, `vl.March`, `vl.Orders`
+[run]`, `vl.Guard <who> <building name | unit name | platoon N>`, `vl.Roam [who]`, `vl.Dismiss [who]`, `vl.March`, `vl.Orders`
 (every unit's standing order, speed and pace). The audit of what the main game had and where each is now:
 `Docs/PORT_AUDIT.md`.
 
@@ -1146,7 +1332,10 @@ reaching the hilt (`UpdateSword`). Tuning is on the actor (Details, category Vox
   gait's cycle in which it is lifted, so the sound is on the visible foot at any speed: one step every
   stride / (2 x speed) seconds (about 0.16 s at his walk, 0.12 s at his run). A short trace down under that foot hits the
   mesh's own triangles; the material of the one hit (`MI_Vox_<slot>`) is looked up in `FootstepSurfaces`. A random
-  clip of that surface, never the same twice running. On the actor (Details, category Voxel > Footsteps):
+  clip of that surface, never the same twice running. Its volume fades with the distance from where the player is
+  looking (`GetListenFocus`: the overview's focus) exactly as the shuffle's does, by the game mode's `ShuffleNear` 900 /
+  `ShuffleRange` 4500 cm, and a step out of range is not played; the unit played in the hero view is always at full
+  volume (`vl.StepLog 1` logs the distance and the fade). On the actor (Details, category Voxel > Footsteps):
   `bFootsteps`, `FootstepWalkVolume` 0.32, `FootstepRunVolume` 0.6, `FootstepRunPitch` 1.1, `FootstepPitchJitter` 0.06,
   `FootstepVolumeJitter` 0.15, `FootstepSurfaces` (slot -> Dirt / Cement / Wood), `FootstepDefault` Dirt.
 - **The troops' shuffle** (`AVLGameMode::TickShuffle`, the Carpet steps): troops that are moving are gathered into
@@ -1186,7 +1375,7 @@ Console commands for testing (in the game's console, or `Tools/pie.py run "<cmd>
 | `vl.Units` | log every unit: position, state, distance to its goal (each finished order also logs `arrived` / `GAVE UP`) |
 | `vl.Path X0 Y0 X1 Y1`, `vl.ShowPaths [s]`, `vl.Grid [X Y [R]] \| rebuild` | log and draw a route / the units' routes / the grid's nodes |
 | `vl.Look X Y [Zoom] [Yaw]`, `vl.Map realm\|realmv2\|highlands\|flatlands` | the overview camera over a point; open a map |
-| `vl.Input click\|rclick [U V]`, `vl.Input wheel D`, `vl.Input pinch D`, `vl.Input scroll DX DY`, `vl.Input key NAME` | a real mouse / trackpad / key event, put in where the operating system's would be (through Slate, the pointer moved to the middle of the game's view or to U V: it moves the real pointer). It logs what is under the pointer; the game's window has to be in front. `vl.InputLog 1` logs the clicks, wheel steps and gestures the player's unit sees, with the zoom |
+| `vl.Input click\|rclick [U V]`, `vl.Input wheel D`, `vl.Input pinch D`, `vl.Input scroll DX DY`, `vl.Input key NAME`, `vl.Input chord MOD KEY` (a modifier held while a key is pressed: `vl.Input chord LeftControl Five` is Ctrl + 5) | a real mouse / trackpad / key event, put in where the operating system's would be (through Slate, the pointer moved to the middle of the game's view or to U V: it moves the real pointer). It logs what is under the pointer; the game's window has to be in front. `vl.InputLog 1` logs the clicks, wheel steps and gestures the player's unit sees, with the zoom |
 | `vl.StepLog 0\|1` | log the step sounds (see *Sounds*) |
 | `vl.Record Name Frames [Fps]`, `vl.At Frame <cmd>` | save a frame sequence at a fixed time step, running commands at given frames |
 

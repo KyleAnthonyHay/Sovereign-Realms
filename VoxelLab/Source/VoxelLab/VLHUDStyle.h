@@ -83,6 +83,8 @@ namespace VLId
 		Build = 240,      // + 0 the Build button, 1..3 the menu's tabs, 4..9 its cards (VLHUDBuild.cpp)
 		SiteCancel = 252, Demolish, RecruitBuilder, Rotate, ClaimMine,
 		TopChip = 260,    // + 0 the hero, 1 the Builders, 2 the Spy (the top bar)
+		ChipRow = 264,    // + 0 "all of them", 1.. a Builder / the Spy (the list under the Builders' and the Spy's chip)
+		Assign = 292,     // + platoon 0..5 (the command card's Assign picker)
 		Menu = 300,       // + entry
 		Screen = 340,     // + control on a sub-screen
 		Setting = 400     // + row

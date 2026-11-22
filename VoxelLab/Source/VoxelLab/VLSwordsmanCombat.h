@@ -139,6 +139,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel|Combat")
 	float GiveUpBeyond = 600.f;
 
+	/** The charge: further than this (cm) from where it is going, a fighter sent at a foe goes at a run, the first
+	 *  walk as well as every fresh route of a chase. The archers' walk into range keeps the same rule
+	 *  (UVLArcherCombat::Approach), so a mixed group sent at one foe travels together. */
+	static constexpr float ChargeBeyond = 700.f;
+
 	/** Degrees a second it turns to face the dummy; it swings once within FaceWithin degrees of it. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Combat")
 	float TurnRate = 540.f;

@@ -29,6 +29,7 @@ namespace
 		{ TEXT("Alt / Option + LMB"), TEXT("All of that kind in view") },
 		{ TEXT("Enter / double-click"), TEXT("Take control of the unit (the hero view)") },
 		{ TEXT("Space"), TEXT("Centre the view on the selection") },
+		{ TEXT("Builders / Spy (top bar)"), TEXT("Their list: click one to go to it, hover marks it") },
 		{ nullptr, TEXT("ORDERS") },
 		{ TEXT("RMB"), TEXT("Move in formation / attack a foe") },
 		{ TEXT("RMB twice"), TEXT("The same, at a run") },
@@ -37,43 +38,43 @@ namespace
 		{ TEXT("Shift (Builders)"), TEXT("Queue walks, builds, repairs, claims (Esc clears)") },
 		{ TEXT("LMB a dummy"), TEXT("The fighters attack it (Shift: at a run)") },
 		{ TEXT("A, then LMB"), TEXT("Attack-move: fight what you meet on the way") },
-		{ TEXT("A A, then LMB"), TEXT("Archers shoot that spot (archers alone: A)") },
-		{ TEXT("S (tap) / H"), TEXT("Stop / hold ground (only what is in reach)") },
+		{ TEXT("S (tap)"), TEXT("Stop (to hold ground: the Hold stance, G)") },
+		{ TEXT("Option (held)"), TEXT("Shows a button's card while the pointer is on it") },
 		{ TEXT("P, then LMB"), TEXT("Patrol there and back (Shift: more points)") },
-		{ TEXT("V, then LMB"), TEXT("Guard a building, Builder or King (or RMB it)") },
+		{ TEXT("V, then LMB"), TEXT("Guard a building or a unit (in a platoon: all of it)") },
 		{ TEXT("RMB the tower"), TEXT("Archers man the watch tower's lookout") },
 		{ TEXT("F / G / M"), TEXT("Formation / stance / march together") },
 		{ TEXT("O / K K"), TEXT("The Spy roams / dismiss (press twice)") },
 		{ nullptr, TEXT("CAMERA") },
 		{ TEXT("WASD / Arrows"), TEXT("Pan (hold A or S: a tap is the order)") },
 		{ TEXT("Mouse wheel"), TEXT("Zoom (trackpad: pinch)") },
-		{ TEXT("Q / E, RMB drag"), TEXT("Turn the view (R: back)") },
+		{ TEXT("Q / E, RMB drag"), TEXT("Turn the view right / left (R: back)") },
 		{ TEXT("V / C"), TEXT("Camera angle (no troops chosen) / postcard") },
 		{ TEXT("Trackpad"), TEXT("Two fingers pan, twist turns, Ctrl+click = RMB") },
 		{ TEXT("Minimap"), TEXT("LMB look there (drag), RMB send troops") },
 	};
 	const FControlRow ControlsRight[] = {
 		{ nullptr, TEXT("PLATOONS") },
-		{ TEXT("Ctrl / Cmd / Alt + 1-6"), TEXT("Form a platoon from the selection") },
+		{ TEXT("Ctrl / Shift + 1-6"), TEXT("The selection joins platoon N (empty: forms it)") },
 		{ TEXT("1-6"), TEXT("Select the platoon (twice: go to it)") },
-		{ TEXT("Shift + 1-6"), TEXT("Add the selection to the platoon") },
+		{ TEXT("Assign (command card)"), TEXT("The same, picked from the six platoons") },
 		{ TEXT("Delete"), TEXT("Disband the selected platoon") },
 		{ TEXT("Flag (platoon row)"), TEXT("New recruits join that platoon (again: off)") },
 		{ nullptr, TEXT("BUILDINGS") },
 		{ TEXT("U"), TEXT("Upgrade the selected building") },
 		{ TEXT("T"), TEXT("Turn the selected building a quarter turn") },
 		{ TEXT("RMB a free mine"), TEXT("The selected Builders claim it (140 gold)") },
-		{ TEXT("Train"), TEXT("One recruit (Shift: 5, Ctrl / Option: 10)") },
+		{ TEXT("Train"), TEXT("One recruit (Shift: 5, Ctrl / Cmd: 10)") },
 		{ TEXT("RMB"), TEXT("Rally point (Barracks or Range selected)") },
 		{ TEXT("Ctrl + 1-6"), TEXT("Its recruits join that platoon (again: none)") },
 		{ nullptr, TEXT("HERO") },
 		{ TEXT("Tab"), TEXT("Hero view / overview") },
 		{ TEXT("WASD, Shift, Space"), TEXT("Walk, run (or double-tap), jump") },
 		{ TEXT("F"), TEXT("Draw or sheathe the sword") },
-		{ TEXT("Hold RMB"), TEXT("An archer draws; let go: she shoots") },
-		{ TEXT("Hold RMB (a spy)"), TEXT("The spyglass: the view looks far ahead") },
+		{ TEXT("Hold RMB"), TEXT("Archer: draw (let go: shoot). Spy: the spyglass") },
 		{ TEXT("LMB"), TEXT("Attack: always your own blow, never a selection") },
 		{ TEXT("Option + LMB troop"), TEXT("Select it (Shift: add / remove; twice: play it)") },
+		{ TEXT("... with troops selected"), TEXT("They guard it (in a platoon: the whole platoon)") },
 		{ TEXT("Option + LMB foe"), TEXT("Attack: the selection, else followers, else platoon") },
 		{ TEXT("Option + LMB ground"), TEXT("They go there (twice quickly: at a run)") },
 		{ TEXT("Shift + Option + LMB"), TEXT("Queue: foe 1, then foe 2, a building, a walk") },
@@ -94,13 +95,14 @@ namespace
 		TEXT("The enemy strikes early, raids often, adapts fully.") };
 
 	// the maps of New Game, in the order shown: the battles first, then the sandboxes
-	const int32 MapOrder[AVLHUD::NumMaps] = { 1, 0, 3, 2 };
-	const TCHAR* MapTitles[AVLHUD::NumMaps] = { TEXT("Realm v2"), TEXT("The Realm"), TEXT("Flatlands"), TEXT("Highlands") };
+	const int32 MapOrder[AVLHUD::NumMaps] = { 1, 0, 3, 2, 4 };
+	const TCHAR* MapTitles[AVLHUD::NumMaps] = { TEXT("Realm v2"), TEXT("The Realm"), TEXT("Flatlands"), TEXT("Highlands"), TEXT("Test World") };
 	const TCHAR* MapNotes[AVLHUD::NumMaps] = {
 		TEXT("The great battle: a mountain, two rivers, five mines, the ruins."),
 		TEXT("The battle: two kingdoms with a river between."),
 		TEXT("Sandbox: every building side by side."),
-		TEXT("The bigger battle: bluffs, a gorge, the Crown.") };
+		TEXT("The bigger battle: bluffs, a gorge, the Crown."),
+		TEXT("Balance test: both sides start maxed out, on Realm v2.") };
 
 	const int32 Caps[5] = { 30, 40, 60, 120, 0 };
 
@@ -456,7 +458,7 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 void AVLHUD::DrawNewGamePanel(float CentreX)
 {
 	// the maps side by side above the difficulties
-	const float W = U(960.f), RowH = U(76.f), MapH = U(104.f);
+	const float W = U(1170.f), RowH = U(76.f), MapH = U(104.f);     // (1170: five maps side by side at the width four had in 960)
 	const float H = U(92.f) + MapH + U(16.f) + 3.f * (RowH + U(10.f)) + U(98.f);
 	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);

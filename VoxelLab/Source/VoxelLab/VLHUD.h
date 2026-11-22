@@ -81,8 +81,9 @@ public:
 	/** The building review field, L_Flatlands (every building side by side), rather than the village. */
 	bool InFlatlands() const;
 	/** The maps of the menu: 0 Realm v2 (the biggest battle map, L_RealmV2), 1 the realm (the battle map, L_Realm), 2 the
-	 *  flatlands (the building review field), 3 the highlands (L_Highlands). The town and the village are gone. */
-	static const int32 NumMaps = 4;
+	 *  flatlands (the building review field), 3 the highlands (L_Highlands), 4 the Test World (Realm v2 with both sides
+	 *  at their most: UVLBattle::SetupTestWorld). The town and the village are gone. */
+	static const int32 NumMaps = 5;
 	static FString MapPath(int32 Map);
 	static const TCHAR* MapName(int32 Map);
 	int32 CurrentMap() const;
@@ -179,7 +180,8 @@ private:
 	void DrawRouteLines();
 	/** What DrawRouteLines drew last frame (vl.HUD): line segments, the Builders' chains and their numbers, the Shift
 	 *  preview to the ghost, and whether the hero view hid them. */
-	struct FLineStats { int32 Segments = 0; int32 Chains = 0; int32 Badges = 0; bool bPreview = false; bool bHidden = false; int32 OrderChains = 0; int32 OrderBadges = 0; };
+	struct FLineStats { int32 Segments = 0; int32 Chains = 0; int32 Badges = 0; bool bPreview = false; bool bHidden = false; int32 OrderChains = 0; int32 OrderBadges = 0;
+		int32 Pathways = 0; int32 Grouped = 0; };       // (pathways drawn; of them, one line standing for a group of more than 7)
 	FLineStats LineStats;
 	/** The troops' order chains (Shift + click: UVLCommand::OrderChain) of the selection, and in the hero view of those
 	 *  he commands: numbered plates over each queued foe and point, in the overview also a dashed line through them
@@ -192,6 +194,11 @@ private:
 	void DrawRangeCircles();
 	void DrawFarPips();
 	void DrawPlatoonTags();
+	/** A shield over every unit the player's troops guard (the hero view's Option + click on a friend, V + click). */
+	void DrawGuardMarks();
+	/** The unit a row of the Builders' / Spy's list is hovered over: a pulsing ring at its feet and an arrow over it. */
+	void DrawUnitHighlight();
+	TWeakObjectPtr<AVLKing> HoverUnit;
 	void DrawOrderMarkers();
 	void Ring(const FVector& Centre, float Radius, const FLinearColor& Colour, float Thickness, int32 Sides = 24);
 	/** The ground under a point (a trace down), or Fallback. */
@@ -229,6 +236,17 @@ private:
 	void DrawBuilderButton(const FBox2D& R, AActor* Castle);
 	float TopChipsWidth() const;
 	void DrawTopChips(float X, float Y, float H);
+	/** The list under the Builders' chip (1) or the Spy's (2): a row per unit with what it is doing; a click goes to it
+	 *  and selects it, hovering marks it in the world (HoverUnit). 0: closed. */
+	void DrawChipList();
+	int32 ChipList = 0;
+	FBox2D ChipListChip = FBox2D(ForceInit);
+	/** The command card's Assign picker (six platoon chips over the Assign button); drawn by DrawTroopSelection. */
+	void DrawAssignPicker(const TArray<AVLKing*>& Units, const FBox2D& Anchor, float Bottom);
+	bool bAssignOpen = false;
+	bool bAssignDrawn = false;
+	/** Is Option / Alt held (the tooltips show only then; Option + click on a platoon's row: guard it)? */
+	bool AltHeld() const;
 	/** Plates on the ground (world centres, each half-plate axis), filled with a colour each (sRGB): one canvas batch. */
 	void GroundPlates(const TArray<FVector>& Centres, const FVector& AxisX, const FVector& AxisY, const TArray<FLinearColor>& Colours);
 	int32 LastChip = -1;
@@ -358,6 +376,12 @@ private:
 	int32 LastSlotClicked = -1;
 	double LastSlotClickTime = -10.0;
 	FBox2D MapRect = FBox2D(ForceInit);
+	FBox2D PlatoonRect = FBox2D(ForceInit);     // the platoon panel as drawn this frame (the hero view's help line keeps clear of it)
 	FBox2D TopBarRect = FBox2D(ForceInit);
 	FBox2D MapWorld = FBox2D(ForceInit);
+	/** The minimap's "up" as a world yaw: the default camera's (AVLKing::GetHomeYaw) snapped to a quarter turn, so the
+	 *  map lies as the world is first seen. Fixed for the match: it does not turn with Q / E (the view box does). */
+	float MapYaw = 0.f;
+	// (for vl.HUD: where the view box's middle and the player's castle were drawn on the minimap, px)
+	FVector2D MapViewMid = FVector2D::ZeroVector, MapCastleAt = FVector2D::ZeroVector;
 };

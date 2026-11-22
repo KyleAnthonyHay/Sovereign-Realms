@@ -1,4 +1,5 @@
 #include "VLGameMode.h"
+#include "VLMatchLog.h"
 #include "VoxelLab.h"
 #include "VLKing.h"
 #include "VLHUD.h"
@@ -645,7 +646,7 @@ namespace
 
 	// The real thing, for testing the controls: the event goes in where the operating system's would (Slate, with the
 	// pointer over the middle of the game's view, or at U V), so that it passes focus, capture and the input mode.
-	FAutoConsoleCommandWithWorldAndArgs CmdInput(TEXT("vl.Input"), TEXT("vl.Input click|rclick|wheel D|pinch D|scroll DX DY|key NAME [U V]: a real mouse / trackpad / key event through Slate"),
+	FAutoConsoleCommandWithWorldAndArgs CmdInput(TEXT("vl.Input"), TEXT("vl.Input click|rclick|wheel D|pinch D|scroll DX DY|key NAME | chord MOD KEY [U V]: a real mouse / trackpad / key event through Slate"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UGameViewportClient* GVC = World ? World->GetGameViewport() : nullptr;
@@ -656,7 +657,7 @@ namespace
 			}
 			FSlateApplication& Slate = FSlateApplication::Get();
 			const FString What = Args[0].ToLower();
-			const int32 Extra = (What == TEXT("click") || What == TEXT("rclick")) ? 1 : (What == TEXT("scroll") ? 3 : 2);
+			const int32 Extra = (What == TEXT("click") || What == TEXT("rclick")) ? 1 : (What == TEXT("scroll") || What == TEXT("chord") ? 3 : 2);
 			const FGeometry& Geo = Widget->GetTickSpaceGeometry();
 			const FVector2D At = Geo.LocalToAbsolute(Geo.GetLocalSize() * FVector2D(Arg(Args, Extra, 0.5f), Arg(Args, Extra + 1, 0.5f)));
 			Slate.SetCursorPos(At);
@@ -698,6 +699,27 @@ namespace
 				Slate.OnKeyDown(C, Ch, false);
 				FTimerHandle Handle;
 				World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([C, Ch]() { FSlateApplication::Get().OnKeyUp(C, Ch, false); }), 0.08f, false);
+			}
+			else if (What == TEXT("chord") && Args.Num() > 2)
+			{
+				// a modifier held while a key is pressed (vl.Input chord LeftControl One: Ctrl + 1)
+				auto Codes = [](const FString& Name, uint32& OutC, uint32& OutCh)
+				{
+					const uint32* Code = nullptr; const uint32* Char = nullptr;
+					FInputKeyManager::Get().GetCodesFromKey(FKey(*Name), Code, Char);
+					OutC = Code ? *Code : 0; OutCh = Char ? *Char : 0;
+				};
+				uint32 MC, MCh, KC, KCh;
+				Codes(Args[1], MC, MCh);
+				Codes(Args[2], KC, KCh);
+				Slate.OnKeyDown(MC, MCh, false);
+				Slate.OnKeyDown(KC, KCh, false);
+				FTimerHandle Handle;
+				World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([MC, MCh, KC, KCh]()
+				{
+					FSlateApplication::Get().OnKeyUp(KC, KCh, false);
+					FSlateApplication::Get().OnKeyUp(MC, MCh, false);
+				}), 0.15f, false);
 			}
 			UE_LOG(LogVoxelLab, Log, TEXT("input: %s at %.0f %.0f"), *What, At.X, At.Y);
 		}));
@@ -798,12 +820,12 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map realm|realmv2|highlands|flatlands: open that map"),
+	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map realm|realmv2|highlands|flatlands|test: open that map (test: the Test World, Realm v2 with both sides at their most)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (Args.Num() > 0 && World)
 			{
-				const int32 Map = Args[0].Contains(TEXT("2")) ? 0 : (Args[0].StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 3 : (Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : 1));
+				const int32 Map = Args[0].StartsWith(TEXT("t"), ESearchCase::IgnoreCase) ? 4 : Args[0].Contains(TEXT("2")) ? 0 : (Args[0].StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 3 : (Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : 1));
 				const UVLBattle* Battle = UVLBattle::Get(World);
 				AVLHUD::OpenMatch(World, Map, Battle ? Battle->GetDifficulty() : 1);       // a match there at once (no title screen)
 			}
@@ -871,6 +893,37 @@ void AVLGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	Super::InitGame(MapName, Options, ErrorMessage);
 	bMatchOption = UGameplayStatics::HasOption(Options, TEXT("Match"));
 	OptionDifficulty = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("Difficulty"), 1), 0, 2);
+	bTestWorldOption = UGameplayStatics::HasOption(Options, TEXT("TestWorld"));     // (New Game > Test World: both sides start at their most)
+	// balance runs (Tools/aivsai.py): ?AIvsAI=<difficulty of the player's side>?TimeScale=N?MatchLog=1?MaxMinutes=N?Quit=1?Tag=name?King=1
+	bDuelsOption = UGameplayStatics::HasOption(Options, TEXT("Duels"));
+	OptionAIvsAI = UGameplayStatics::HasOption(Options, TEXT("AIvsAI")) ? FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("AIvsAI"), 1), 0, 2) : -1;
+	OptionTimeScale = UGameplayStatics::HasOption(Options, TEXT("TimeScale")) ? FCString::Atof(*UGameplayStatics::ParseOption(Options, TEXT("TimeScale"))) : 0.f;
+	auto SetVar = [&Options](const TCHAR* Option, const TCHAR* Var)
+	{
+		if (UGameplayStatics::HasOption(Options, Option))
+		{
+			if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(Var))
+			{
+				const FString Value = UGameplayStatics::ParseOption(Options, Option);
+				V->Set(Value.IsEmpty() ? TEXT("1") : *Value, ECVF_SetByCode);
+			}
+		}
+	};
+	SetVar(TEXT("MatchLog"), TEXT("vl.MatchLog"));
+	SetVar(TEXT("MaxMinutes"), TEXT("vl.MatchLog.MaxMinutes"));
+	SetVar(TEXT("Quit"), TEXT("vl.MatchLog.Quit"));
+	SetVar(TEXT("King"), TEXT("vl.AIvsAI.King"));
+	if (OptionAIvsAI >= 0)
+	{
+		if (IConsoleVariable* V = IConsoleManager::Get().FindConsoleVariable(TEXT("vl.MatchLog")))
+		{
+			V->Set(1, ECVF_SetByCode);      // (a computer-against-computer match is always logged)
+		}
+	}
+	if (UGameplayStatics::HasOption(Options, TEXT("Tag")))
+	{
+		FVLMatchLog::Tag = UGameplayStatics::ParseOption(Options, TEXT("Tag"));
+	}
 }
 
 void AVLGameMode::BeginPlay()
@@ -1211,6 +1264,55 @@ void AVLGameMode::Tick(float DeltaSeconds)
 		if (UVLBattle* Battle = UVLBattle::Get(this))
 		{
 			Battle->StartMatch(OptionDifficulty);
+			if (bTestWorldOption)
+			{
+				Battle->SetupTestWorld();
+			}
+			if (OptionAIvsAI >= 0)
+			{
+				Battle->SetPlayerAI(true, OptionAIvsAI);
+			}
+			if (bDuelsOption)
+			{
+				// (balance: the standard duels on the map's middle ground, then quit: Tools/aivsai.py duels)
+				const FString W = UGameplayStatics::ParseOption(OptionsString, TEXT("DuelAt"));
+				TArray<FString> XY;
+				W.ParseIntoArray(XY, TEXT(","));
+				if (XY.Num() == 2)
+				{
+					FVLDuels::Where = FVector(FCString::Atof(*XY[0]), FCString::Atof(*XY[1]), 0.f);
+				}
+				// ?Duels=1: the standard set; ?Duels=10.0.0.16_6.5.10.0: those (swordsmen.archers of team 0, then of team 1)
+				const FString Set = UGameplayStatics::ParseOption(OptionsString, TEXT("Duels"));
+				TArray<FString> Each;
+				Set.ParseIntoArray(Each, TEXT("_"));
+				bool bAny = false;
+				for (const FString& E : Each)
+				{
+					TArray<FString> N;
+					E.ParseIntoArray(N, TEXT("."));
+					if (N.Num() == 4 && N[0].StartsWith(TEXT("t")))
+					{
+						// t<level>.S.A.repeats: swordsmen and archers against a watch tower of that level
+						FVLDuels::QueueTower(FCString::Atoi(*N[0].Mid(1)), FCString::Atoi(*N[1]), FCString::Atoi(*N[2]), FMath::Max(1, FCString::Atoi(*N[3])));
+						bAny = true;
+					}
+					else if (N.Num() == 4)
+					{
+						FVLDuels::Queue(FCString::Atoi(*N[0]), FCString::Atoi(*N[1]), FCString::Atoi(*N[2]), FCString::Atoi(*N[3]), 4);
+						bAny = true;
+					}
+				}
+				if (!bAny)
+				{
+					FVLDuels::QueueStandard();
+				}
+				FVLDuels::QuitWhenDone();
+			}
+			if (OptionTimeScale > 0.f && GetWorld()->GetWorldSettings())
+			{
+				GetWorld()->GetWorldSettings()->SetTimeDilation(FMath::Clamp(OptionTimeScale, 0.1f, 8.f));
+			}
 		}
 	}
 	if (GetWorld()->IsPaused())

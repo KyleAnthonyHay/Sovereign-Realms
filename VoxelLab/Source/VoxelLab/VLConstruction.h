@@ -199,6 +199,9 @@ public:
 	/** Pays and lays the site (trees cleared, the grid sampled again, troops on it step aside). Builders: who goes to
 	 *  work on it (none: the nearest free Builder of its side). Returns the building, or null (OutWhy). */
 	AActor* PlaceBuilding(const FVLPlacement& Where, const TArray<AVLKing*>& Builders, FString* OutWhy = nullptr, bool bQuiet = false, bool bQueue = false);
+	/** A site is finished at once, as if its Builders had worked it through (the Test World's start). False if it is
+	 *  no site. */
+	bool FinishNow(AActor* Building);
 	/** A site's walls are pulled down: CancelRefund of its price back. */
 	bool CancelSite(AActor* Building);
 	/** A finished building (not the castle) is pulled down: DemolishRefund of everything paid for it back. */

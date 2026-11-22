@@ -226,11 +226,12 @@ namespace
 	/** A part's look by its side. Every unit writes custom depth, with its side in the stencil: 1 the player's (which
 	 *  M_Silhouette shows through trees and buildings), 2 the enemy's (never shown; but, being in the custom depth, a
 	 *  unit standing in front of another does not bring the silhouette out). The enemy's cloth is red. */
-	void VLTeamLook(UStaticMeshComponent* Mesh, int32 Team, bool bDepth, bool bAmbient = false)
+	void VLTeamLook(UStaticMeshComponent* Mesh, int32 Team, bool bDepth, bool bAmbient = false, bool bNoOutline = false)
 	{
 		const bool bEnemy = Team != 0;
 		Mesh->SetRenderCustomDepth(bDepth);          // (off behind the title screen and far from the camera: AVLKing::RigLate)
-		Mesh->SetCustomDepthStencilValue(bEnemy ? 2 : 1);   // (a figure of the scenery: 2, never shown through walls)
+		// (a figure of the scenery: 2, never shown through walls; so too a tower's own archer, who never leaves it)
+		Mesh->SetCustomDepthStencilValue(bEnemy || bNoOutline ? 2 : 1);
 		const UStaticMesh* Asset = Mesh->GetStaticMesh();
 		for (int32 i = 0; Asset && i < Asset->GetStaticMaterials().Num(); ++i)
 		{
@@ -245,7 +246,7 @@ void AVLKing::RefreshSilhouette()
 	{
 		if (Mesh)
 		{
-			VLTeamLook(Mesh, Team, bDepthOn, bAmbient);
+			VLTeamLook(Mesh, Team, bDepthOn, bAmbient, bTowerGuard);
 		}
 	}
 }
@@ -324,7 +325,7 @@ void AVLKing::BuildFigure()
 			Mesh->bAffectDynamicIndirectLighting = false;
 			Mesh->IndirectLightingCacheQuality = ILCQ_Off;
 		}
-		VLTeamLook(Mesh, Team, bDepthOn, bAmbient);    // custom depth + stencil for M_Silhouette; the enemy's red cloth
+		VLTeamLook(Mesh, Team, bDepthOn, bAmbient, bTowerGuard);    // custom depth + stencil for M_Silhouette; the enemy's red cloth
 		Mesh->RegisterComponent();
 		Meshes.Add(Mesh);
 		RigNodes[NodeIndex].Mesh = Mesh;
@@ -1584,6 +1585,32 @@ void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
 		}
 		HeroLastClicked = HitUnit;
 		HeroLastClickTime = Now;
+		if (!bShift && HeroGuardsOnClick(HitUnit))
+		{
+			// troops selected, and this one is not among them: they guard it (its platoon, if it is in one): they keep
+			// by it and fight what comes at it
+			TArray<AVLKing*> Guards;
+			Command->GetSelection(Guards);
+			Guards.Remove(this);
+			const int32 P = Command->PlatoonIndexOf(HitUnit);
+			const bool bPlatoon = P != INDEX_NONE && Guards.ContainsByPredicate([Command, P](const AVLKing* U) { return Command->PlatoonIndexOf(U) != P; });
+			const int32 N = bPlatoon ? Command->OrderGuardPlatoon(Guards, P) : Command->OrderGuard(Guards, HitUnit, true);
+			UE_LOG(LogVoxelLab, Log, TEXT("hero guard: %d of %d unit(s) guard %s%s"), N, Guards.Num(), *HitUnit->GetDisplayName(), bPlatoon ? *FString::Printf(TEXT(" (platoon %d)"), P + 1) : TEXT(""));
+			if (Battle)
+			{
+				if (N > 0)
+				{
+					Battle->PushAlert(bPlatoon ? FString::Printf(TEXT("%d guard platoon %d"), N, P + 1) : FString::Printf(TEXT("%d guard %s"), N, *HitUnit->GetDisplayName()));
+					AVLGameMode::PlayOrderSound(this);
+				}
+				else
+				{
+					Battle->PushAlert(TEXT("Builders do not guard"));
+					Battle->Play2D(TEXT("S_UIError"), 0.4f);
+				}
+			}
+			return;
+		}
 		if (bShift)
 		{
 			Command->Toggle(HitUnit);
@@ -1633,7 +1660,20 @@ void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
 	}
 }
 
-bool AVLKing::HeroCommands(APlayerController* PC)
+bool AVLKing::HeroGuardsOnClick(const AVLKing* Aimed) const
+{
+	const UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command || !Aimed || Aimed == this || Aimed->Team != Team || !Aimed->IsAlive() || !Command->CanBeGuarded(Aimed, Team, true))
+	{
+		return false;
+	}
+	TArray<AVLKing*> Sel;
+	Command->GetSelection(Sel);
+	Sel.Remove(const_cast<AVLKing*>(this));
+	return Sel.Num() > 0 && !Sel.Contains(Aimed) && Sel.ContainsByPredicate([](const AVLKing* U) { return !UVLBuilderWork::IsBuilder(U); });
+}
+
+bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 {
 	UVLCommand* Command = UVLCommand::Get(this);
 	if (!Command)
@@ -1664,8 +1704,12 @@ bool AVLKing::HeroCommands(APlayerController* PC)
 		HeroClickSelects(PC, &Own);
 		bHeroHoverSelect = Own != nullptr;  // (the hint: Option + click selects it)
 	}
-	bool bTook = false;
-	if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	bool bTook = bClickSpent;
+	if (bClickSpent)
+	{
+		HeroClickFrame = GFrameCounter;      // (the interface's click: not a swing, a bash or a lock)
+	}
+	else if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
 	{
 		if (bCtrl)
 		{
@@ -2017,14 +2061,23 @@ bool AVLKing::ClickAt(const FVector2D& Point, bool bShift)
 		Command->Arm(EVLArm::None);
 		if (Armed == EVLArm::Guard)
 		{
-			if (Hit && Command->CanBeGuarded(Hit, Team) && Command->OrderGuard(Sel, Hit) > 0)
+			// (a troop too, since 2026-11-22: its platoon if it is in one and the guards are not all of it)
+			if (HitUnit && HitUnit->Team == Team && HitUnit->IsTroop() && Command->CanBeGuarded(Hit, Team, true))
+			{
+				const int32 P = Command->PlatoonIndexOf(HitUnit);
+				const bool bPlatoon = P != INDEX_NONE && Sel.ContainsByPredicate([Command, P](const AVLKing* U) { return Command->PlatoonIndexOf(U) != P; });
+				if ((bPlatoon ? Command->OrderGuardPlatoon(Sel, P) : Command->OrderGuard(Sel, Hit, true)) > 0)
+				{
+					return true;
+				}
+			}
+			else if (Hit && Command->CanBeGuarded(Hit, Team) && Command->OrderGuard(Sel, Hit) > 0)
 			{
 				return true;
 			}
 			if (Battle)
 			{
-				Battle->PushAlert(HitUnit && HitUnit->Team == Team ? TEXT("Troops cannot be guarded: only buildings, Builders and King David")
-					: TEXT("Guard: click one of your buildings, a Builder or King David"));
+				Battle->PushAlert(TEXT("Guard: click one of your buildings or units"));
 				Battle->Play2D(TEXT("S_UIError"), 0.4f);
 			}
 			return false;
@@ -2234,6 +2287,12 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		}
 		else
 		{
+			// a click off the build menu (on the world) puts it away; the click is then the usual one (the ground lets
+			// the selection go)
+			if (UVLConstruction* Construction = UVLConstruction::Get(this); Construction && Construction->IsMenuOpen())
+			{
+				Construction->SetMenu(false);
+			}
 			bLeftDown = true;
 			bBoxing = false;
 			PressPos = DragPos = Mouse;
@@ -2307,7 +2366,7 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		}
 	}
 
-	// platoons: Ctrl / Cmd / Alt + 1..6 makes the selection platoon N, Shift + N adds it, N selects it (twice: look at it)
+	// platoons: Ctrl / Cmd / Alt / Shift + 1..6 adds the selection to platoon N (forming it if it is empty), N selects it (twice: look at it)
 	static const FKey Digits[UVLCommand::MaxPlatoons] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
 	for (int32 i = 0; i < UVLCommand::MaxPlatoons; ++i)
 	{
@@ -2321,12 +2380,10 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 			const FVLBuildingState* B = Battle->FindBuilding(SelBuilding);
 			Battle->SetFeedPlatoon(SelBuilding, (B && B->FeedPlatoon == i) ? INDEX_NONE : i);
 		}
-		else if (bCtrl || bAlt)
+		else if (bCtrl || bAlt || bShift)
 		{
-			Command->AssignPlatoon(i, Units);
-		}
-		else if (bShift)
-		{
+			// Ctrl / Cmd / Alt / Shift + N: the selection JOINS platoon N, which keeps its members (an empty one is
+			// formed of them; a troop leaves the platoon it was in). It was: Ctrl re-formed the platoon of the selection only.
 			Command->AddToPlatoon(i, Units);
 		}
 		else
@@ -2370,7 +2427,7 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 	auto UIClick = [Battle]() { if (Battle) { Battle->Play2D(TEXT("S_UIClick"), 0.4f); } };
 	if (PC->WasInputKeyJustReleased(EKeys::A) && !bTapKeyPanned[0] && TapKeyDownAt[0] >= 0.0 && !bCtrl && !bAlt && Units.Num() > 0)
 	{
-		Command->CycleAttackArm();      // a tap: attack-move (archers alone: attack ground); again: the other
+		Command->CycleAttackArm();      // a tap: attack-move
 		UIClick();
 	}
 	if (PC->WasInputKeyJustReleased(EKeys::S) && !bTapKeyPanned[1] && TapKeyDownAt[1] >= 0.0 && !bCtrl && !bAlt && Units.Num() > 0)
@@ -2378,11 +2435,7 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		Command->OrderStop(Units);      // a tap: stop (a hold pans)
 		AVLGameMode::PlayOrderSound(this);
 	}
-	if (PC->WasInputKeyJustPressed(EKeys::H) && Units.Num() > 0)
-	{
-		Command->OrderHold(Units);      // stand fast: only what is in reach
-		AVLGameMode::PlayOrderSound(this);
-	}
+	// (H, hold ground, is gone: the stance's cycle, G, has Hold ground)
 	if (PC->WasInputKeyJustPressed(EKeys::P) && Units.Num() > 0)
 	{
 		Command->Arm(EVLArm::Patrol);   // then a click (Shift: more points)
@@ -2390,11 +2443,11 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::V) && Command->SelectionCanGuard())
 	{
-		Command->Arm(EVLArm::Guard);    // then a click on a building, a Builder or the king
+		Command->Arm(EVLArm::Guard);    // then a click on a building or a unit of one's own
 		UIClick();
 		if (Battle)
 		{
-			Battle->PushAlert(TEXT("Guard: click one of your buildings, a Builder or King David"));
+			Battle->PushAlert(TEXT("Guard: click one of your buildings or units"));
 		}
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::O) && Units.Num() > 0)
@@ -2452,6 +2505,7 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 
 namespace
 {
+	TAutoConsoleVariable<int32> CVarKeyTurn(TEXT("vl.Cam.KeyTurn"), 1, TEXT("1: Q turns the view clockwise (seen from above) and E anticlockwise, in both views. -1: the other way round (as before 2026-11-22)"));
 	TAutoConsoleVariable<int32> CVarInputLog(TEXT("vl.InputLog"), 0, TEXT("1: log the clicks, wheel steps and trackpad gestures the player's unit sees, with the zoom and the attack's state"));
 }
 
@@ -2467,7 +2521,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 			GetCharacterMovement()->MaxWalkSpeed = bAutoRun ? RunSpeed : WalkSpeed;
 			if (PaceCap > 0.f)
 			{
-				GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, PaceCap);     // marching together
+				GetCharacterMovement()->MaxWalkSpeed = FMath::Min(PaceCap, FMath::Max(RunSpeed, WalkSpeed));     // marching together (slower ahead of the body, hurrying behind it)
 			}
 			if (!YieldWish.IsNearlyZero())
 			{
@@ -2594,7 +2648,11 @@ void AVLKing::PollInput(float DeltaSeconds)
 	PC->GetInputMouseDelta(MouseX, MouseY);
 	const float StickX = PC->GetInputAnalogKeyState(EKeys::Gamepad_RightX);
 	const float StickY = PC->GetInputAnalogKeyState(EKeys::Gamepad_RightY);
-	float Turn = ((PC->IsInputKeyDown(EKeys::E) ? 1.f : 0.f) - (PC->IsInputKeyDown(EKeys::Q) ? 1.f : 0.f) + StickX) * 80.f * DeltaSeconds;
+	// Q / E: the owner's call of 2026-11-22 turned them round (Q now turns the view clockwise seen from above, E
+	// anticlockwise: each the opposite of what it did), in both views; vl.Cam.KeyTurn -1 is the old way. The stick,
+	// the mouse and the trackpad are as they were.
+	const float KeyTurn = CVarKeyTurn.GetValueOnGameThread() < 0 ? -1.f : 1.f;
+	float Turn = (KeyTurn * ((PC->IsInputKeyDown(EKeys::Q) ? 1.f : 0.f) - (PC->IsInputKeyDown(EKeys::E) ? 1.f : 0.f)) + StickX) * 80.f * DeltaSeconds;
 	if (PC->WasInputKeyJustPressed(EKeys::RightMouseButton))
 	{
 		float MX = 0.f, MY = 0.f;
@@ -2762,7 +2820,22 @@ void AVLKing::PollInput(float DeltaSeconds)
 		// commanding from here: Alt / Option + click selects his own and orders those under his command (a foe:
 		// attack; the ground: go there; Shift: queued), right click (Ctrl / Cmd + click) orders the selection, 1..6
 		// the platoons, G follow me (a command's click is not a swing; a plain click always is)
-		const bool bCommandClick = HeroCommands(PC);
+		// (the pointer shown in the hero view, C's postcard or mouse look off: the minimap and the platoon panel take
+		// their clicks first, as in the overview)
+		bool bHudClick = false;
+		if (HUD && !bMouseLookActive)
+		{
+			float HX = 0.f, HY = 0.f;
+			if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) && PC->GetMousePosition(HX, HY))
+			{
+				bHudClick = HUD->OnMousePress(FVector2D(HX, HY), false);
+			}
+			else if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && PC->GetMousePosition(HX, HY))
+			{
+				HUD->OnMousePress(FVector2D(HX, HY), true);
+			}
+		}
+		const bool bCommandClick = HeroCommands(PC, bHudClick);
 		if (PC->GetPawn() != this)
 		{
 			return;                 // took control of another unit
@@ -2810,7 +2883,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 	GetCharacterMovement()->MaxWalkSpeed = bRun ? RunSpeed : WalkSpeed;
 	if (PaceCap > 0.f && bAutoWalk && !bHeroMode)
 	{
-		GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, PaceCap);     // on an order with his troops: their pace
+		GetCharacterMovement()->MaxWalkSpeed = FMath::Min(PaceCap, FMath::Max(RunSpeed, WalkSpeed));     // on an order with his troops: the march's speed for him
 	}
 	if (MoveSpeedCap > 0.f && bHeroMode)
 	{
@@ -4213,13 +4286,36 @@ void AVLKing::PlayFootstep(const FVector& At, float RunBlend)
 		return;
 	}
 	const float Run = FMath::Clamp(RunBlend, 0.f, 1.f);
-	const float Volume = FMath::Lerp(FootstepWalkVolume, FootstepRunVolume, Run) * (1.f - FMath::FRandRange(0.f, FootstepVolumeJitter));
+	// As the troops' shuffle (AVLGameMode::TickShuffle): full within ShuffleNear of where the player is looking (the
+	// unit played in the hero view, the overview's focus), fading to nothing at ShuffleRange. The unit the player
+	// plays in the hero view is always at full volume.
+	float Fade = 1.f, Far = 0.f;
+	{
+		const APlayerController* LPC = GetWorld()->GetFirstPlayerController();
+		const AVLKing* Listener = LPC ? Cast<AVLKing>(LPC->GetPawn()) : nullptr;
+		const AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
+		if (Listener && !(Listener == this && bHeroMode))
+		{
+			const float Near = GM ? GM->ShuffleNear : 900.f, Range = GM ? GM->ShuffleRange : 4500.f;
+			Far = FVector::Dist2D(At, Listener->GetListenFocus());
+			Fade = FMath::Square(FMath::GetMappedRangeValueClamped(FVector2D(Near, FMath::Max(Range, Near + 1.f)), FVector2D(1.f, 0.f), Far));
+		}
+	}
+	if (Fade <= 0.004f)
+	{
+		if (bLog)
+		{
+			UE_LOG(LogVoxelLab, Log, TEXT("step t=%.3f %s (out of range: %.0f cm from the focus)"), GetWorld()->GetTimeSeconds(), *GetDisplayName(), Far);
+		}
+		return;
+	}
+	const float Volume = Fade * FMath::Lerp(FootstepWalkVolume, FootstepRunVolume, Run) * (1.f - FMath::FRandRange(0.f, FootstepVolumeJitter));
 	const float Pitch = FMath::Lerp(1.f, FootstepRunPitch, Run) * (1.f + FMath::FRandRange(-FootstepPitchJitter, FootstepPitchJitter));
 	UGameplayStatics::PlaySoundAtLocation(this, Sound, At, Volume, Pitch);
 	if (bLog)
 	{
-		UE_LOG(LogVoxelLab, Log, TEXT("step t=%.3f %s (%s) clip %d vol %.2f pitch %.2f speed %.0f run %.2f at %.0f %.0f %.0f"), GetWorld()->GetTimeSeconds(),
-			StepSurfaceName(EVLStepSurface(Set)), *Material, Clip, Volume, Pitch, GetVelocity().Size2D(), Run, At.X, At.Y, At.Z);
+		UE_LOG(LogVoxelLab, Log, TEXT("step t=%.3f %s (%s) clip %d vol %.2f pitch %.2f speed %.0f run %.2f at %.0f %.0f %.0f, %.0f cm from the focus (fade %.2f)"), GetWorld()->GetTimeSeconds(),
+			StepSurfaceName(EVLStepSurface(Set)), *Material, Clip, Volume, Pitch, GetVelocity().Size2D(), Run, At.X, At.Y, At.Z, Far, Fade);
 	}
 }
 

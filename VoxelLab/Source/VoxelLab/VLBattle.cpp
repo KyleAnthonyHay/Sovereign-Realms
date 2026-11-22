@@ -10,6 +10,7 @@
 #include "VLArcherCombat.h"
 #include "VLCharacterData.h"
 #include "VLConstruction.h"
+#include "VLMatchLog.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -52,8 +53,11 @@ namespace VLRules
 		// while a fight went on just ahead of them); the stances still hold them (UVLBattle::TickAutoCombat). The
 		// archer's arrow is 40 (was 29, the main game's damage a second): +38%, so archers are worth fielding; a
 		// swordsman still wins up close (23 damage a second against 17, 280 health against 125).
-		static const FTroop Sword = [] { FTroop T; T.Health = 280.f; T.Damage = 29.f; T.BuildingScale = 1.f; T.Acquire = 4000.f; T.Sight = 1690.f; T.Pop = 1; T.Cost.Food = 100; T.TrainSeconds = 9.f; return T; }();
-		static const FTroop Bow = [] { FTroop T; T.Health = 125.f; T.Damage = 40.f; T.BuildingScale = 0.5f; T.Acquire = 4200.f; T.Sight = 1950.f; T.Pop = 1; T.Cost.Food = 85; T.TrainSeconds = 8.f; return T; }();
+		// Every time here is twice the main game's (the owner's call, 2026-11-22: "if something takes 30 seconds, it
+		// should take 1 minute"): training 18 / 16 s (was 9 / 8), the Spy 24 s, the Builder 28 s; so are the levels'
+		// times below and the sites' (VLBuild::Specs; the watch tower three times).
+		static const FTroop Sword = [] { FTroop T; T.Health = 280.f; T.Damage = 29.f; T.BuildingScale = 1.f; T.Acquire = 4000.f; T.Sight = 1690.f; T.Pop = 1; T.Cost.Food = 100; T.TrainSeconds = 18.f; return T; }();
+		static const FTroop Bow = [] { FTroop T; T.Health = 125.f; T.Damage = 40.f; T.BuildingScale = 0.5f; T.Acquire = 4200.f; T.Sight = 1950.f; T.Pop = 1; T.Cost.Food = 85; T.TrainSeconds = 16.f; return T; }();
 		// King David: the hero (the main game had none). Worth two swordsmen and a half; he takes no housing. His pace
 		// is a troop's, 420 / 760 cm/s (the owner's call, 2026-11-22: he walks with his men; it was 520 / 950).
 		static const FTroop King = [] { FTroop T; T.Health = 600.f; T.Damage = 45.f; T.BuildingScale = 1.f; T.Acquire = 4000.f; T.Sight = 1690.f; T.Pop = 0; T.TrainSeconds = 0.f;
@@ -62,7 +66,7 @@ namespace VLRules
 		// acquire range), sees 26 m, noticed at 45% of the usual distance, 875 cm/s (a Shieldbearer did 450: 1.94x),
 		// 350 gold + 200 food, 12 s at the castle.
 		static const FTroop Spy = [] { FTroop T; T.Health = 90.f; T.Damage = 8.f; T.BuildingScale = 0.2f; T.Acquire = 0.f; T.Pop = 1; T.Cost.Gold = 350; T.Cost.Food = 200;
-			T.TrainSeconds = 12.f; T.Sight = 3380.f; T.Notice = 0.45f; T.WalkSpeed = 875.f; T.RunSpeed = 1100.f; return T; }();
+			T.TrainSeconds = 24.f; T.Sight = 3380.f; T.Notice = 0.45f; T.WalkSpeed = 875.f; T.RunSpeed = 1100.f; return T; }();
 		if (Kind == EVLUnitKind::Archer)
 		{
 			return Bow;
@@ -76,7 +80,7 @@ namespace VLRules
 		// the castle; no housing: its own limit is the castle's level (VLBuild::MaxBuilders). It raises and repairs
 		// buildings (VLConstruction.*).
 		static const FTroop Builder = [] { FTroop T; T.Health = 110.f; T.Damage = 8.f; T.BuildingScale = 0.5f; T.Acquire = 0.f; T.Sight = 1690.f; T.Pop = 0; T.Cost.Gold = 120; T.Cost.Food = 80;
-			T.TrainSeconds = 14.f; return T; }();
+			T.TrainSeconds = 28.f; return T; }();
 		if (Kind == EVLUnitKind::Builder)
 		{
 			return Builder;
@@ -103,9 +107,9 @@ namespace VLRules
 			{
 				// the Citadel (FSRCastleLevel): price, time, housing, troop ceiling, walls, stores, archers, arrow
 				struct { int32 G, F; float S; int32 H, C; float Hp; int32 St, A; float D; } C[7] = {
-					{ 0, 0, 0.f, 8, 36, 12000.f, 600, 1, 36.f }, { 300, 0, 40.f, 16, 48, 15000.f, 1000, 2, 36.f }, { 550, 150, 45.f, 24, 60, 18000.f, 1500, 2, 40.f },
-					{ 850, 300, 55.f, 32, 75, 21000.f, 2200, 3, 40.f }, { 1200, 450, 65.f, 42, 90, 24000.f, 3000, 3, 44.f }, { 1650, 650, 75.f, 52, 105, 27000.f, 4000, 4, 44.f },
-					{ 2200, 900, 90.f, 64, 120, 30000.f, 5500, 4, 48.f } };
+					{ 0, 0, 0.f, 8, 36, 12000.f, 600, 1, 36.f }, { 300, 0, 80.f, 16, 48, 15000.f, 1000, 2, 36.f }, { 550, 150, 90.f, 24, 60, 18000.f, 1500, 2, 40.f },
+					{ 850, 300, 110.f, 32, 75, 21000.f, 2200, 3, 40.f }, { 1200, 450, 130.f, 42, 90, 24000.f, 3000, 3, 44.f }, { 1650, 650, 150.f, 52, 105, 27000.f, 4000, 4, 44.f },
+					{ 2200, 900, 180.f, 64, 120, 30000.f, 5500, 4, 48.f } };
 				for (const auto& X : C)
 				{
 					FLevel L = Make(X.G, X.F, X.S, X.Hp);
@@ -113,7 +117,7 @@ namespace VLRules
 					Castle.Add(L);
 				}
 				// the Watchtower: 50 / 85 / 120 damage every 1.2 / 0.95 / 0.8 s, reach 24 / 27 / 30 m
-				struct { int32 G; float S, D, I, R, Hp; } T[3] = { { 0, 0.f, 50.f, 1.2f, 2400.f, 1800.f }, { 250, 30.f, 85.f, 0.95f, 2700.f, 2300.f }, { 370, 40.f, 120.f, 0.8f, 3000.f, 2800.f } };
+				struct { int32 G; float S, D, I, R, Hp; } T[3] = { { 0, 0.f, 35.f, 1.2f, 2400.f, 1800.f }, { 250, 60.f, 60.f, 0.95f, 2700.f, 2300.f }, { 370, 80.f, 85.f, 0.8f, 3000.f, 2800.f } };
 				for (const auto& X : T)
 				{
 					FLevel L = Make(X.G, 0, X.S, X.Hp);
@@ -121,14 +125,14 @@ namespace VLRules
 					Tower.Add(L);
 				}
 				// farms: food a harvest and housing; mines: gold a delivery
-				struct { int32 G, F; float S; int32 Y, H; float Hp; } Fa[3] = { { 0, 0, 0.f, 14, 4, 1000.f }, { 200, 0, 30.f, 20, 6, 1300.f }, { 340, 60, 40.f, 27, 8, 1600.f } };
+				struct { int32 G, F; float S; int32 Y, H; float Hp; } Fa[3] = { { 0, 0, 0.f, 14, 4, 1000.f }, { 200, 0, 60.f, 20, 6, 1300.f }, { 340, 60, 80.f, 27, 8, 1600.f } };
 				for (const auto& X : Fa)
 				{
 					FLevel L = Make(X.G, X.F, X.S, X.Hp);
 					L.Yield = X.Y; L.Housing = X.H;
 					Farm.Add(L);
 				}
-				struct { int32 G, F; float S; int32 Y; float Hp; } Mi[3] = { { 0, 0, 0.f, 10, 1250.f }, { 220, 0, 30.f, 16, 1600.f }, { 360, 100, 40.f, 23, 2000.f } };
+				struct { int32 G, F; float S; int32 Y; float Hp; } Mi[3] = { { 0, 0, 0.f, 10, 1250.f }, { 220, 0, 60.f, 16, 1600.f }, { 360, 100, 80.f, 23, 2000.f } };
 				for (const auto& X : Mi)
 				{
 					FLevel L = Make(X.G, X.F, X.S, X.Hp);
@@ -136,7 +140,7 @@ namespace VLRules
 					Mine.Add(L);
 				}
 				// the barracks and the range (FSRTrainerLevel): faster training, sturdier walls (x1, x1.2, x1.4)
-				struct { int32 G, F; float S, Speed, Scale; } Tr[3] = { { 0, 0, 0.f, 1.f, 1.f }, { 200, 100, 30.f, 1.35f, 1.2f }, { 380, 180, 40.f, 1.8f, 1.4f } };
+				struct { int32 G, F; float S, Speed, Scale; } Tr[3] = { { 0, 0, 0.f, 1.f, 1.f }, { 200, 100, 60.f, 1.35f, 1.2f }, { 380, 180, 80.f, 1.8f, 1.4f } };
 				for (const auto& X : Tr)
 				{
 					FLevel B = Make(X.G, X.F, X.S, 1600.f * X.Scale);
@@ -147,8 +151,8 @@ namespace VLRules
 					Range.Add(R);
 				}
 				// storehouses (FSRStoreLevel): what they hold on top of the castle's stores
-				struct { int32 G, F; float S; int32 Cap; float Hp; int32 Castle; } Gr[3] = { { 0, 0, 0.f, 400, 900.f, 0 }, { 180, 0, 30.f, 900, 1200.f, 2 }, { 320, 80, 40.f, 1600, 1500.f, 3 } };
-				struct { int32 G, F; float S; int32 Cap; float Hp; int32 Castle; } Te[3] = { { 0, 0, 0.f, 400, 1100.f, 0 }, { 200, 0, 30.f, 900, 1450.f, 2 }, { 340, 80, 40.f, 1600, 1800.f, 3 } };
+				struct { int32 G, F; float S; int32 Cap; float Hp; int32 Castle; } Gr[3] = { { 0, 0, 0.f, 400, 900.f, 0 }, { 180, 0, 60.f, 900, 1200.f, 2 }, { 320, 80, 80.f, 1600, 1500.f, 3 } };
+				struct { int32 G, F; float S; int32 Cap; float Hp; int32 Castle; } Te[3] = { { 0, 0, 0.f, 400, 1100.f, 0 }, { 200, 0, 60.f, 900, 1450.f, 2 }, { 340, 80, 80.f, 1600, 1800.f, 3 } };
 				for (int32 i = 0; i < 3; ++i)
 				{
 					FLevel G = Make(Gr[i].G, Gr[i].F, Gr[i].S, Gr[i].Hp);
@@ -231,6 +235,7 @@ namespace VLRules
 
 namespace
 {
+	TAutoConsoleVariable<int32> CVarAIvsAIKing(TEXT("vl.AIvsAI.King"), 0, TEXT("1: with vl.AIvsAI, King David stays in the match (he fights by himself near his castle); 0 (default): he is benched"));
 	TAutoConsoleVariable<int32> CVarBattleLog(TEXT("vl.BattleLog"), 0, TEXT("1: log every hit on a unit or a building, every engagement and every death"));
 
 	bool BattleLog()
@@ -267,6 +272,13 @@ namespace
 		OutT = SMC->GetComponentTransform();
 		OutLocal = SMC->GetStaticMesh()->GetBoundingBox();
 		return true;
+	}
+
+	/** Who dealt a blow, for the match's books (FVLKingdom::DamageBy). */
+	int32 StrikerClass(const AActor* By)
+	{
+		const AVLKing* K = Cast<AVLKing>(By);
+		return K ? (K->bTowerGuard ? 6 : FMath::Min(int32(K->KindId()), 5)) : 7;
 	}
 
 	bool InPlayersHands(const AVLKing* U)
@@ -1129,6 +1141,10 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 			}
 			Command->OnStruck(U, By);
 		}
+		if (ByTeam == 0 || ByTeam == 1)
+		{
+			Kingdoms[ByTeam].DamageBy[StrikerClass(By)] += FMath::Min(Amount, U->GetHealth());
+		}
 		U->ReceiveDamage(Amount, By);       // (at 0 it calls OnUnitKilled)
 		return Amount;
 	}
@@ -1144,6 +1160,10 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 	else
 	{
 		Amount *= VLRules::Troop(EVLUnitKind::Archer).BuildingScale;         // a tower's arrows
+	}
+	if (ByTeam == 0 || ByTeam == 1)
+	{
+		Kingdoms[ByTeam].BuildingDamageBy[StrikerClass(By)] += FMath::Min(Amount, B->Health);
 	}
 	B->Health = FMath::Max(0.f, B->Health - Amount);
 	B->LastHit = Now;
@@ -1214,13 +1234,15 @@ void UVLBattle::OnUnitKilled(AVLKing* Unit, AActor* By)
 		return;
 	}
 	const int32 ByTeam = TeamOf(By);
-	if (Unit->IsTroop() && !Unit->bTowerGuard)
+	if (Unit->IsTroop() && !Unit->bTowerGuard && (Unit->Team == 0 || Unit->Team == 1))
 	{
-		++Kingdoms[FMath::Clamp(Unit->Team, 0, 1)].Lost;
+		++Kingdoms[Unit->Team].Lost;
+		++Kingdoms[Unit->Team].LostKind[FMath::Min(int32(Unit->KindId()), 5)];
 	}
 	if (ByTeam == 0 || ByTeam == 1)
 	{
 		++Kingdoms[ByTeam].Killed;
+		++Kingdoms[ByTeam].KillsBy[StrikerClass(By)];
 	}
 	UE_LOG(LogVoxelLab, Log, TEXT("%s (team %d) falls to %s"), *Unit->GetDisplayName(), Unit->Team, By ? *By->GetName() : TEXT("-"));
 	PlayAt(TEXT("S_Death"), Unit->GetActorLocation(), 0.5f, 4500.f, 0.15f);
@@ -1416,6 +1438,8 @@ bool UVLBattle::TrySpend(int32 Team, const FVLCost& Cost, bool bQuiet)
 	}
 	K.Gold -= Cost.Gold;
 	K.Food -= Cost.Food;
+	K.Spent[0] += Cost.Gold;
+	K.Spent[1] += Cost.Food;
 	return true;
 }
 
@@ -1527,7 +1551,14 @@ void UVLBattle::TickEconomy(float Dt)
 		B.Payout -= VLRules::PayoutInterval;
 		const bool bGold = B.Kind == EVLBuilding::Mine;
 		const int32 Amount = FMath::RoundToInt(VLRules::Level(B.Kind, B.Level).Yield * IncomeScale(B.Team));
-		AddStock(B.Team, bGold ? EVLRes::Gold : EVLRes::Food, Amount);
+		if (B.Team == 0 || B.Team == 1)
+		{
+			FVLKingdom& K = Kingdoms[B.Team];
+			const int32 Was = bGold ? K.Gold : K.Food;
+			AddStock(B.Team, bGold ? EVLRes::Gold : EVLRes::Food, Amount);
+			K.Earned[bGold ? 0 : 1] += Amount;
+			K.Wasted[bGold ? 0 : 1] += Amount - ((bGold ? K.Gold : K.Food) - Was);       // (beyond the stores: lost)
+		}
 		if (B.Team == Player && Amount > 0)
 		{
 			FVector Origin, Extent;
@@ -1825,6 +1856,7 @@ void UVLBattle::SpawnRecruit(FVLBuildingState& B, const FString& Kind)
 		return;
 	}
 	++Kingdoms[FMath::Clamp(B.Team, 0, 1)].Recruited;
+	++Kingdoms[FMath::Clamp(B.Team, 0, 1)].RecruitedKind[FMath::Min(int32(T->KindId()), 5)];
 	UVLCommand* Command = UVLCommand::Get(this);
 	FVector Goal = B.bHasRally ? B.Rally : Rally;
 	bool bToPlatoon = false;
@@ -2208,6 +2240,7 @@ bool UVLBattle::SpawnTowerGuard(int32 Slot)
 		return false;
 	}
 	T->bTowerGuard = true;
+	T->RefreshSilhouette();         // (a tower's own archer never leaves it: no outline through walls; the HUD leaves its diamond out too)
 	const FString Prefix = Team == Enemy ? TEXT("Enemy ") : TEXT("");
 	--Numbers.FindOrAdd(Prefix + TEXT("Archer"));      // (its own count: the trained archers' names run on without a gap)
 	T->SetDisplayName(FString::Printf(TEXT("%sTower Archer %d"), *Prefix, ++Numbers.FindOrAdd(Prefix + TEXT("Tower Archer"))));
@@ -2403,7 +2436,12 @@ void UVLBattle::TickAutoCombat(float Dt)
 			// fighting a building of its own accord: a troop that comes into sight comes first
 			if (!Cast<AVLKing>(Current))
 			{
-				if (AActor* Foe = FindFoe(U, U->IsHolding() ? Reach : (bDefensive ? DefRange : Sight), true))
+				// (at a castle's walls on its commander's order: only a foe at its side, or one that struck it, draws it
+				// off: with every troop in 40 m coming first, a siege fought the defenders' recruits for thirteen
+				// minutes and never touched the walls)
+				AActor* Striker = U->LastStruckBy.Get();
+				const bool bStruck = Striker && Now - U->LastStruckTime < 3.0 && IsHostile(Striker, U->Team) && DistanceTo(Striker, U->GetFeet()) < 1500.f;
+				if (AActor* Foe = U->bSiege ? (bStruck ? Striker : FindFoe(U, U->IsRanged() ? 1200.f : 700.f, true)) : FindFoe(U, U->IsHolding() ? Reach : (bDefensive ? DefRange : Sight), true))
 				{
 					Engage(U, Foe);
 					continue;
@@ -2545,6 +2583,282 @@ void UVLBattle::TickAutoCombat(float Dt)
 	}
 }
 
+// ------------------------------------------------------------------------------------------------ platoons keep together
+
+namespace
+{
+	/** A platoon member the cohesion reckons with: a fighter in the field (no Builder or Spy, nobody on a lookout or
+	 *  on the way to one, none of a tower's own archers). */
+	bool CohesionMember(const AVLKing* U)
+	{
+		return U && U->IsAlive() && UVLCommand::CanAttack(U) && !U->bTowerGuard && !U->IsGarrisoned() && !U->PendingGarrison.IsValid();
+	}
+}
+
+void UVLBattle::NoteOrdered(const TArray<AVLKing*>& Units)
+{
+	const UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command || Command->bInnerOrder || Units.Num() == 0)
+	{
+		return;
+	}
+	TArray<AVLKing*> Members;
+	for (int32 P = 0; P < UVLCommand::MaxPlatoons; ++P)
+	{
+		Command->GetPlatoon(P, Members);
+		bool bAny = false, bAll = true;
+		for (const AVLKing* M : Members)
+		{
+			if (CohesionMember(M) && !InPlayersHands(M))
+			{
+				const bool bIn = Units.Contains(M);
+				bAny |= bIn;
+				bAll &= bIn;
+			}
+		}
+		if (!bAny)
+		{
+			continue;
+		}
+		for (AVLKing* M : Members)
+		{
+			if (bAll || Units.Contains(M))
+			{
+				FVLCohesion& C = Cohesion.FindOrAdd(M);
+				C.Platoon = P;
+				C.bApart = !bAll;       // the whole platoon ordered: together again; some of it: those are apart on purpose
+				C.bSent = false;
+			}
+		}
+	}
+}
+
+void UVLBattle::TickCohesion(float Dt)
+{
+	CohesionTimer -= Dt;
+	if (CohesionTimer > 0.f)
+	{
+		return;
+	}
+	CohesionTimer = 0.5f;
+	UWorld* World = GetWorld();
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!World || !Command)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	for (auto It = Cohesion.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid() || !It.Key()->IsAlive())
+		{
+			It.RemoveCurrent();
+		}
+	}
+	struct FOne
+	{
+		AVLKing* Unit;
+		FVLCohesion* State;
+		FVector Feet;
+		bool bFighting;
+		bool bNew;
+	};
+	TArray<AVLKing*> Members;
+	TArray<FOne, TInlineAllocator<32>> Body;
+	for (int32 P = 0; P < UVLCommand::MaxPlatoons; ++P)
+	{
+		Command->GetPlatoon(P, Members);
+		Body.Reset();
+		for (AVLKing* M : Members)
+		{
+			if (!CohesionMember(M) || Command->PlatoonIndexOf(M) != P)
+			{
+				continue;
+			}
+			FVLCohesion& C = Cohesion.FindOrAdd(M);
+			const bool bNew = C.Platoon != P;
+			if (bNew)
+			{
+				C = FVLCohesion();
+				C.Platoon = P;
+			}
+			bool bFighting = false;
+			CombatTarget(M, &bFighting);
+			Body.Add({ M, &C, M->GetFeet(), bFighting, bNew });
+		}
+		if (Body.Num() < 2)
+		{
+			continue;
+		}
+		// ---- the body: the member (not apart on purpose) with the most of the others near it; the leader on a tie
+		const AVLKing* Leader = Command->GetPlatoonLeader(P);
+		int32 Anchor = INDEX_NONE, AnchorNear = -1;
+		for (int32 i = 0; i < Body.Num(); ++i)
+		{
+			if (Body[i].State->bApart)
+			{
+				continue;
+			}
+			int32 Near = 0;
+			for (int32 j = 0; j < Body.Num(); ++j)
+			{
+				Near += (j != i && !Body[j].State->bApart && FVector::DistSquared2D(Body[i].Feet, Body[j].Feet) < FMath::Square(VLRules::CohesionBody)) ? 1 : 0;
+			}
+			if (Near > AnchorNear || (Near == AnchorNear && Body[i].Unit == Leader))
+			{
+				Anchor = i;
+				AnchorNear = Near;
+			}
+		}
+		if (Anchor == INDEX_NONE)
+		{
+			continue;               // (every one of them is off on an order of its own)
+		}
+		const FVector AnchorAt = Body[Anchor].Feet;
+		for (FOne& B : Body)
+		{
+			FVLCohesion& C = *B.State;
+			// a newcomer far from the body (a platoon formed from troops standing apart, a recruit on its way) is apart
+			// on purpose until it has come to the body
+			if (B.bNew && FVector::DistSquared2D(B.Feet, AnchorAt) > FMath::Square(VLRules::RegroupLeash))
+			{
+				C.bApart = true;
+			}
+			// apart on purpose, and now standing with the body again: one of it
+			else if (C.bApart && !B.Unit->IsOnOrder() && !B.bFighting)
+			{
+				for (const FOne& O : Body)
+				{
+					if (O.Unit != B.Unit && !O.State->bApart && FVector::DistSquared2D(O.Feet, B.Feet) < FMath::Square(VLRules::CohesionLeash))
+					{
+						C.bApart = false;
+						break;
+					}
+				}
+			}
+			// sent to the platoon's fight: its post stays where it stood, so its leash is measured from there; once it
+			// has met a foe (or has arrived) it is no longer on an attack-move, and its stance has it again
+			if (C.bSent)
+			{
+				B.Unit->Post = C.Home;
+				if (B.bFighting || !B.Unit->HasOrder())
+				{
+					B.Unit->bAttackMove = false;
+				}
+				if (!B.bFighting && !B.Unit->IsOnOrder())
+				{
+					C.bSent = false;
+				}
+			}
+		}
+		// ---- those standing idle away from the fight, or from the body
+		for (FOne& B : Body)
+		{
+			AVLKing* M = B.Unit;
+			FVLCohesion& C = *B.State;
+			TArray<FVector> RoutePoints;
+			bool bLoop = false;
+			int32 RouteNext = 0;
+			if (C.bApart || B.bFighting || M->IsOnOrder() || M->Stance != EVLStance::Aggressive || M->IsHolding() || M->KindId() == EVLUnitKind::King || InPlayersHands(M)
+				|| Now - C.SentAt < 2.0 || Command->FollowedBy(M) || Command->GuardWardOf(M) || Command->HasChain(M) || Command->IsRoaming(M)
+				|| Command->GetRoute(M, RoutePoints, bLoop, RouteNext))
+			{
+				continue;
+			}
+			// the nearest member in a fight (those apart on purpose fight their own)
+			const FOne* Fight = nullptr;
+			float FightD = TNumericLimits<float>::Max();
+			for (const FOne& O : Body)
+			{
+				if (O.Unit != M && O.bFighting && !O.State->bApart)
+				{
+					const float D = float(FVector::Dist2D(O.Feet, B.Feet));
+					if (D < FightD)
+					{
+						FightD = D;
+						Fight = &O;
+					}
+				}
+			}
+			if (Fight)
+			{
+				if (FightD <= VLRules::CohesionLeash)
+				{
+					continue;       // near the fight: what it goes for is its own look-out (UVLBattle::TickAutoCombat)
+				}
+				// to the fight, fighting what it meets on the way; no further than its stance lets it go from here
+				FVector Dest = Fight->Feet;
+				const FVector2D Way(Dest - B.Feet);
+				if (Way.Size() > VLRules::AggressiveLeash)
+				{
+					const FVector2D To = FVector2D(B.Feet) + Way.GetSafeNormal() * VLRules::AggressiveLeash;
+					Dest = FVector(To.X, To.Y, B.Feet.Z);
+				}
+				C.SentAt = Now;
+				C.bSent = true;
+				C.Home = B.Feet;
+				{
+					TGuardValue<bool> Inner(Command->bInnerOrder, true);
+					AttackMove({ M }, Dest, true, uint8(EVLFormation::Line));
+				}
+				if (BattleLog())
+				{
+					UE_LOG(LogVoxelLab, Log, TEXT("cohesion: %s of platoon %d runs to join %s, %.0f m off"), *M->GetDisplayName(), P + 1, *Fight->Unit->GetDisplayName(), FightD / 100.f);
+				}
+				continue;
+			}
+			// no fight: back to the body when it has ended up far from it
+			if (&B != &Body[Anchor] && FVector::DistSquared2D(B.Feet, AnchorAt) > FMath::Square(VLRules::RegroupLeash))
+			{
+				C.SentAt = Now;
+				{
+					TGuardValue<bool> Inner(Command->bInnerOrder, true);
+					Command->OrderMove({ M }, AnchorAt, false, EVLFormation::Line);
+				}
+				if (BattleLog())
+				{
+					UE_LOG(LogVoxelLab, Log, TEXT("cohesion: %s of platoon %d walks back to its platoon, %.0f m off"), *M->GetDisplayName(), P + 1, FVector::Dist2D(B.Feet, AnchorAt) / 100.f);
+				}
+			}
+		}
+	}
+}
+
+void UVLBattle::LogCohesion() const
+{
+	const UVLCommand* Command = UVLCommand::Get(this);
+	if (!Command)
+	{
+		return;
+	}
+	TArray<AVLKing*> Members;
+	for (int32 P = 0; P < UVLCommand::MaxPlatoons; ++P)
+	{
+		Command->GetPlatoon(P, Members);
+		if (Members.Num() == 0)
+		{
+			continue;
+		}
+		FVector2D Min(1e9f, 1e9f), Max(-1e9f, -1e9f);
+		for (const AVLKing* M : Members)
+		{
+			const FVector2D At(M->GetFeet());
+			Min = FVector2D::Min(Min, At);
+			Max = FVector2D::Max(Max, At);
+		}
+		UE_LOG(LogVoxelLab, Log, TEXT("cohesion: platoon %d, %d member(s), %s, spread %.0f m"), P + 1, Members.Num(), UVLCommand::StanceName(Command->PlatoonStance(P)), (Max - Min).Size() / 100.f);
+		for (AVLKing* M : Members)
+		{
+			const FVLCohesion* C = Cohesion.Find(M);
+			bool bFighting = false;
+			CombatTarget(M, &bFighting);
+			UE_LOG(LogVoxelLab, Log, TEXT("  %s at %s: %s%s%s%s speed %.0f"), *M->GetDisplayName(), *M->GetFeet().ToCompactString(), bFighting ? TEXT("fighting") : (M->IsOnOrder() ? TEXT("walking") : TEXT("idle")),
+				!CohesionMember(M) ? TEXT(", not reckoned with") : TEXT(""), C && C->bApart ? TEXT(", apart on purpose") : TEXT(""), C && C->bSent ? TEXT(", sent to the fight") : TEXT(""),
+				M->GetVelocity().Size2D());
+		}
+	}
+}
+
 void UVLBattle::AttackMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun, uint8 Shape)
 {
 	UVLCommand* Command = UVLCommand::Get(this);
@@ -2622,6 +2936,42 @@ void UVLBattle::SetPlayerAI(bool bOn, int32 InDifficulty)
 		if (bOn)
 		{
 			C->Reset(this, Player, InDifficulty >= 0 ? InDifficulty : Difficulty);
+			// Computer against computer (balance tests): the sides even. The player's platoons go (the commander has
+			// squads; a platoon's cohesion would pull its troops about under it), and King David, whom the enemy has no
+			// match for and no commander plays, is benched: nobody's (team -1, which nobody fights or counts), hidden,
+			// out of the way in the sea off the map's corner. vl.AIvsAI.King 1 keeps him (he then fights by himself
+			// near the castle, as an idle troop).
+			if (UVLCommand* Command = UVLCommand::Get(this))
+			{
+				for (int32 P = 0; P < UVLCommand::MaxPlatoons; ++P)
+				{
+					Command->DisbandPlatoon(P);
+				}
+			}
+			static const IConsoleVariable* KeepKing = IConsoleManager::Get().FindConsoleVariable(TEXT("vl.AIvsAI.King"));
+			if (!KeepKing || KeepKing->GetInt() == 0)
+			{
+				for (AVLKing* K : AllUnits())
+				{
+					if (!K->IsTroop() && K->Team == Player)
+					{
+						FBox2D Bounds(FVector2D(-30000.f, -30000.f), FVector2D(30000.f, 30000.f));
+						if (UVLGrid* Grid = UVLGrid::Get(this); Grid && Grid->EnsureBuilt())
+						{
+							Bounds = Grid->GetBounds();
+						}
+						K->Team = -1;
+						K->SetActorHiddenInGame(true);
+						K->GetCharacterMovement()->DisableMovement();      // (no collision: he would fall through the world)
+						K->GetCharacterMovement()->GravityScale = 0.f;
+						K->SetActorEnableCollision(false);
+						K->SetActorLocation(FVector(Bounds.Min.X - 2000.f, Bounds.Min.Y - 2000.f, K->GetActorLocation().Z), false, nullptr, ETeleportType::TeleportPhysics);
+						bHashDirty = true;
+						UE_LOG(LogVoxelLab, Log, TEXT("AI vs AI: %s benched (vl.AIvsAI.King 1 keeps him)"), *K->GetDisplayName());
+					}
+				}
+			}
+			UE_LOG(LogVoxelLab, Log, TEXT("AI vs AI: team 0 %s, team 1 %s"), DifficultyName(C->Difficulty), Commanders[1].IsValid() ? DifficultyName(Commanders[1]->Difficulty) : TEXT("-"));
 		}
 		C->bActive = bOn;
 	}
@@ -2642,6 +2992,7 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 	}
 	SpyCooldownLeft[0] = SpyCooldownLeft[1] = 0.f;
 	ScanBuildings();
+	MatchLog.Reset();           // (a new match, a new log: vl.MatchLog)
 	State = EVLMatch::Playing;
 	Clock = 0.f;
 	Winner = -1;
@@ -2730,6 +3081,155 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 		DifficultyName(Difficulty), Buildings.Num());
 }
 
+void UVLBattle::SetupTestWorld()
+{
+	bTestWorld = true;
+	UWorld* World = GetWorld();
+	UVLConstruction* Construction = UVLConstruction::Get(this);
+	UVLCommand* Command = UVLCommand::Get(this);
+	UVLGrid* Grid = UVLGrid::Get(this);
+	if (!World || !Construction || !bBattle || State != EVLMatch::Playing)
+	{
+		UE_LOG(LogVoxelLab, Warning, TEXT("test world: no battle here (the map needs both castles)"));
+		return;
+	}
+	const bool bGrid = Grid && Grid->EnsureBuilt();
+	for (int32 t = 0; t < 2; ++t)
+	{
+		AActor* Castle = GetCastle(t);
+		if (!Castle)
+		{
+			continue;
+		}
+		// ---- the castle at its top level (the limits, the housing, the ceiling and the stores all hang on it)
+		if (FVLBuildingState* C = FindBuilding(Castle))
+		{
+			C->Level = VLRules::NumLevels(EVLBuilding::Castle);
+			C->UpgradeLeft = -1.f;
+			ApplyLevel(*C, true);
+		}
+		Kingdoms[t].Gold = 1000000;         // (to pay for the sites; set to the full stores below)
+		// ---- its buildings, each kind on its own ring round the castle, by the construction's own placing
+		FVector Door, Rally, Front;
+		FrontOf(Castle, Door, Rally, Front);
+		const FVector Home = Castle->GetActorLocation();
+		const float FrontAngle = FMath::Atan2(Front.Y, Front.X);
+		struct FWant
+		{
+			EVLBuilding Kind;
+			int32 Count;
+			float Ring;             // cm from the castle
+			float Turn;             // radians: where on its ring the first goes, from the castle's front
+		};
+		const FWant Wants[] = {
+			{ EVLBuilding::Barracks, 2, 4200.f, 0.9f }, { EVLBuilding::Range, 2, 4200.f, 2.2f }, { EVLBuilding::Granary, 1, 3400.f, 1.57f }, { EVLBuilding::Treasury, 1, 3400.f, -1.57f },
+			{ EVLBuilding::Farm, 99, 5600.f, 0.35f }, { EVLBuilding::Tower, 99, 7000.f, 0.f } };
+		int32 Laid = 0, Missed = 0;
+		for (const FWant& W : Wants)
+		{
+			const int32 Limit = Construction->BuildLimit(W.Kind, t);
+			const int32 N = Limit == INDEX_NONE ? W.Count : FMath::Min(W.Count, Limit - Construction->CountRaised(W.Kind, t));
+			for (int32 i = 0; i < N; ++i)
+			{
+				const float Angle = FrontAngle + W.Turn + 2.f * PI * float(i) / float(FMath::Max(N, 1));
+				const FVector Near = Home + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * W.Ring;
+				// (its front away from the castle, on the quarter turns a placing has)
+				const float Yaw = FMath::RoundToFloat((FMath::RadiansToDegrees(Angle) - 90.f) / 90.f) * 90.f;
+				FVLPlacement Where;
+				FString Why;
+				// (its place on the ring; where the map has no room there, anywhere round the castle)
+				const bool bFound = Construction->FindPlacementNear(W.Kind, t, Near, 5000.f, Yaw, Where, 220) || Construction->FindPlacementNear(W.Kind, t, Home, 11000.f, Yaw, Where, 700);
+				AActor* Made = bFound ? Construction->PlaceBuilding(Where, {}, &Why, true) : nullptr;
+				if (Made && Construction->FinishNow(Made))
+				{
+					++Laid;
+				}
+				else
+				{
+					++Missed;
+					UE_LOG(LogVoxelLab, Warning, TEXT("test world: no place for a %s of team %d near %.0f %.0f (%s)"), VLRules::Name(W.Kind), t, Near.X, Near.Y, Why.IsEmpty() ? TEXT("no spot") : *Why);
+				}
+			}
+		}
+		// ---- every building of the side at its top level (the map's own too: its mine, its tower)
+		for (FVLBuildingState& B : Buildings)
+		{
+			if (B.Team == t && B.IsAlive() && !B.IsSite())
+			{
+				B.Level = VLRules::NumLevels(B.Kind);
+				B.UpgradeLeft = -1.f;
+				ApplyLevel(B, true);
+			}
+		}
+		// ---- full stores
+		Kingdoms[t].Gold = GetStorage(t, EVLRes::Gold);
+		Kingdoms[t].Food = GetStorage(t, EVLRes::Food);
+		// ---- troops up to the ceiling, in a block in front of the gathering point; every Builder it may have
+		FVector Where = Rally;
+		const FName StartTag(*FString::Printf(TEXT("TeamStart:%d"), t));
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->ActorHasTag(StartTag))
+			{
+				Where = It->GetActorLocation();
+				break;
+			}
+		}
+		const FVector Side(-Front.Y, Front.X, 0.f);
+		auto Stand = [&](const FVector& Want)
+		{
+			FVector P = Want;
+			if (bGrid)
+			{
+				const int32 Node = Grid->NearestNode(FVector(P.X, P.Y, P.Z + 300.f), 40, Grid->MainRegion());
+				if (Node != INDEX_NONE)
+				{
+					P = Grid->NodePos(Node);
+				}
+			}
+			return P;
+		};
+		TArray<AVLKing*> Army;
+		GetUnits(t, Army, true);
+		Army.RemoveAll([](const AVLKing* U) { return U->KindRules().Pop <= 0 || !UVLCommand::CanAttack(U); });
+		const int32 Had = Army.Num();
+		const int32 Room = GetPopulationCap(t) - GetPopulation(t);
+		const int32 Columns = 14;
+		for (int32 i = 0; i < Room; ++i)
+		{
+			const FVector P = Stand(Where + Front * (700.f + float(i / Columns) * 150.f) + Side * ((float(i % Columns) - 0.5f * float(Columns - 1)) * 150.f));
+			if (AVLTroop* Tr = SpawnTroop(i % 5 < 3 ? TEXT("Swordsman") : TEXT("Archer"), t, P, Front.Rotation().Yaw))
+			{
+				Army.Add(Tr);
+			}
+		}
+		const int32 Builders = VLBuild::MaxBuilders(GetCastleLevel(t)) - Construction->CountBuilders(t);
+		for (int32 i = 0; i < Builders; ++i)
+		{
+			SpawnTroop(TEXT("Builder"), t, Stand(Where + Side * (520.f + float(i) * 130.f) - Front * 200.f), Front.Rotation().Yaw);
+		}
+		if (t == Player && Command)
+		{
+			// the player's army in six platoons, each with swordsmen and archers (the starting five are in the first)
+			const int32 Per = FMath::DivideAndRoundUp(Army.Num(), UVLCommand::MaxPlatoons);
+			for (int32 P = 0; P < UVLCommand::MaxPlatoons; ++P)
+			{
+				TArray<AVLKing*> Members;
+				for (int32 i = P * Per; i < FMath::Min((P + 1) * Per, Army.Num()); ++i)
+				{
+					Members.Add(Army[i]);
+				}
+				if (Members.Num() > 0)
+				{
+					Command->AssignPlatoon(P, Members);
+				}
+			}
+		}
+		UE_LOG(LogVoxelLab, Log, TEXT("test world: team %d has its castle at level %d, %d building(s) laid (%d found no place), %d troops (%d new) of %d housed, %d Builders, %d gold and %d food"),
+			t, GetCastleLevel(t), Laid, Missed, Army.Num(), Army.Num() - Had, GetPopulationCap(t), Construction->CountBuilders(t), Kingdoms[t].Gold, Kingdoms[t].Food);
+	}
+}
+
 void UVLBattle::CheckEnd()
 {
 	if (!bBattle || State != EVLMatch::Playing)
@@ -2776,7 +3276,7 @@ FString UVLBattle::EnemyStatus(FLinearColor* OutColour) const
 		S = TEXT("Enemy attacking!");
 		Col = FLinearColor(1.f, 0.3f, 0.2f);
 	}
-	else if (C->NextWaveIn() > 0.f)
+	else if (C->NextWaveIn() > 0.f && C->NextWaveIn() <= C->MaxWaveWait())      // (never a wait longer than it can have)
 	{
 		S = FString::Printf(TEXT("Enemy ready in %s"), *ClockText(C->NextWaveIn()));
 		if (C->NextWaveIn() < 60.f)
@@ -2818,11 +3318,21 @@ void UVLBattle::Tick(float DeltaSeconds)
 	}
 	TickKings(DeltaSeconds);
 	TickAutoCombat(DeltaSeconds);
+	TickCohesion(DeltaSeconds);
 	if (UVLCommand* Command = UVLCommand::Get(this))
 	{
 		Command->TickOrders(DeltaSeconds);     // patrols, attack-moves, guards, roaming Spies
 	}
 	TickDefence(DeltaSeconds);
+	if (bBattle && !MatchLog.IsValid() && State == EVLMatch::Playing && FVLMatchLog::Wanted())
+	{
+		MatchLog = MakeShared<FVLMatchLog>();
+	}
+	if (MatchLog.IsValid())
+	{
+		MatchLog->Tick(this, DeltaSeconds);
+	}
+	FVLDuels::Tick(this, DeltaSeconds);
 	if (State == EVLMatch::Ended)
 	{
 		static double Sounded = -1.0;
@@ -3109,6 +3619,25 @@ namespace
 				const int32 Team = Args.Num() > 2 ? 1 : 0;
 				Battle->AddStock(Team, Args[0].StartsWith(TEXT("g"), ESearchCase::IgnoreCase) ? EVLRes::Gold : EVLRes::Food, FCString::Atoi(*Args[1]), true);
 				UE_LOG(LogVoxelLab, Log, TEXT("give: team %d now has %d gold %d food"), Team, Battle->GetStock(Team, EVLRes::Gold), Battle->GetStock(Team, EVLRes::Food));
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdTestWorld(TEXT("vl.TestWorld"), TEXT("vl.TestWorld [0|1|2]: both sides at their most on this map, as New Game > Test World (starts the match if none is on)"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (UVLBattle* Battle = UVLBattle::Get(World))
+			{
+				Battle->StartMatch(Args.Num() > 0 ? FCString::Atoi(*Args[0]) : Battle->GetDifficulty());
+				Battle->SetupTestWorld();
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdCohesion(TEXT("vl.Cohesion"), TEXT("vl.Cohesion: log each platoon's members, its spread, who is apart on purpose and who is on its way to the platoon's fight"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (const UVLBattle* Battle = UVLBattle::Get(World))
+			{
+				Battle->LogCohesion();
 			}
 		}));
 

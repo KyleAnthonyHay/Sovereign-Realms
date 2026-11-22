@@ -667,7 +667,7 @@ AActor* FVLCommander::PlanAttack(UVLBattle* B, TArray<AVLKing*>& OutBody, FVecto
 	OutFrom = Sum / OutBody.Num();
 	const int32 Cap = FMath::Min3(Prof.AttackCap + Prof.AttackCapGrowth * WavesSent, Prof.AttackCapMax, WaveSizeMax);
 	OutBody.Sort([](const AVLKing& X, const AVLKing& Y) { return X.GetHealthFrac() > Y.GetHealthFrac(); });
-	if (OutBody.Num() > Cap)
+	if (OutBody.Num() > Cap && !FinalPush())        // (the final push: everyone it can spare)
 	{
 		OutBody.SetNum(Cap);
 	}
@@ -683,7 +683,7 @@ AActor* FVLCommander::PlanAttack(UVLBattle* B, TArray<AVLKing*>& OutBody, FVecto
 			break;
 		}
 		const float OnTheWay = RouteDefence(B, OutFrom, AttackSpot(B, T)) * 0.8f;
-		if (OnTheWay <= Defence * 1.3f || OutPower >= OnTheWay * Prof.Advantage)
+		if (OnTheWay <= Defence * 1.3f || OutPower >= OnTheWay * Prof.Advantage || (FinalPush() && T == B->GetCastle(Foe())))
 		{
 			OutDefence = FMath::Max(Defence, OnTheWay);
 			return T;
@@ -715,6 +715,32 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 	{
 		return false;
 	}
+	// the final push on the castle: the patrol, the picket, the reserve and all but two of the guard go too
+	const bool bAllIn = FinalPush() && Target == B->GetCastle(Foe()) && !Field.Target.IsValid();
+	if (bAllIn)
+	{
+		for (FVLSquad& Sq : Squads)
+		{
+			if (Sq.Role != EVLSquadRole::Patrol && Sq.Role != EVLSquadRole::Picket && Sq.Role != EVLSquadRole::Reserve && Sq.Role != EVLSquadRole::Guard)
+			{
+				continue;
+			}
+			TArray<AVLKing*> SW;
+			FVector SC;
+			Sq.Gather(SW, SC);
+			SW.Sort([](const AVLKing& X, const AVLKing& Y) { return X.GetHealthFrac() < Y.GetHealthFrac(); });     // (the guard keeps its most hurt)
+			const int32 Keep = Sq.Role == EVLSquadRole::Guard ? FMath::Min(2, SW.Num()) : 0;
+			for (int32 i = Keep; i < SW.Num(); ++i)
+			{
+				if (!VLAI::Engaged(SW[i]) && SW[i]->GetHealthFrac() > 0.5f && !Free.Contains(SW[i]))
+				{
+					Free.Add(SW[i]);
+					Sq.Units.Remove(SW[i]);
+				}
+			}
+		}
+		Power = SumPower(Free);
+	}
 	// the picket's chosen ones join the field army; the field army's others wait in reserve
 	for (FVLSquad& Sq : Squads)
 	{
@@ -742,7 +768,13 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 	const bool bMaxed = B->GetPopulation(Team) >= B->GetPopulationCap(Team) - 1;
 	const bool bGood = Power >= Defence * Prof.Advantage;
 	const bool bWaitedLong = Prof.bImpatient && Clock > NextWaveTime + 150.f && Power >= Defence * 0.85f;
-	if (!bGood && !bMaxed && !bWaitedLong && !Field.Target.IsValid())
+	const bool bPush = FinalPush() && Target == B->GetCastle(Foe()) && Free.Num() >= AttackWant(B);
+	if (!bGood && !bMaxed && !bWaitedLong && !bPush && !Field.Target.IsValid())
+	{
+		return false;
+	}
+	// in force: the wave's size, unless its housing is full or the odds are overwhelming (AttackWant)
+	if (!Field.Target.IsValid() && !bMaxed && Free.Num() < AttackWant(B) && Power < Defence * 2.f * Prof.Advantage)
 	{
 		return false;
 	}
@@ -750,7 +782,7 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 	const FVLBuildingState* TS = B->FindBuilding(Target);
 	const FString TName = TS ? TS->Name : Target->GetName();
 	// ---- Hard: a second body round by a flank bridge, the main body leaving later so that both arrive together
-	if (Prof.bFlank && Free.Num() >= 8 && !FindSquad(EVLSquadRole::Flank) && !Field.Target.IsValid())
+	if (Prof.bFlank && !bAllIn && Free.Num() >= 8 && !FindSquad(EVLSquadRole::Flank) && !Field.Target.IsValid())
 	{
 		const float Direct = VLAI::RouteLength(B, C, Goal);
 		const FVLAIPoint* Best = nullptr;
@@ -783,6 +815,7 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 			}
 			Flank.Target = Target;
 			Flank.ProgressAt = Clock;
+			Flank.ProgressDealt = -1.f;
 			Flank.Via = { Best->End[Team], Best->End[Foe()] };
 			Flank.StartSize = NFlank;
 			Flank.LastFight = Clock;
@@ -799,7 +832,7 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 			UE_LOG(LogVoxelLab, Log, TEXT("AI %d [%s] flank: %d troops to %s round by %s (%.0f m against %.0f m); the main body leaves in %.0f s"), Team, *Clk(Clock), NFlank, *TName, *Best->Name,
 				BestLen / 100.f, Direct / 100.f, F.Departs - Clock);
 			++WavesSent;
-			NextWaveTime = Clock + 1e6f;
+			NextWaveTime = Clock + WaveHeld;
 			return true;
 		}
 	}
@@ -824,6 +857,7 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 	F.Target = Target;
 	F.TargetHealth = -1.f;
 	F.ProgressAt = Clock;
+	F.ProgressDealt = -1.f;
 	F.StartSize = Go.Num();
 	F.StartPower = SumPower(Go);
 	F.LastFight = Clock;
@@ -837,7 +871,7 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 	{
 		++WavesSent;
 	}
-	NextWaveTime = Clock + 1e6f;        // set for real when this attack ends
+	NextWaveTime = Clock + WaveHeld;        // set for real when this attack ends
 	UE_LOG(LogVoxelLab, Log, TEXT("AI %d [%s] attacks (#%d): %d troops, power %.1f vs expected %.1f at %s%s"), Team, *Clk(Clock), WavesSent, Go.Num(), F.StartPower, Defence, *TName,
 		bFollowsFlank ? TEXT(" [after its flank]") : (bGood ? TEXT("") : (bMaxed ? TEXT(" [maxed]") : TEXT(" [impatient]"))));
 	return true;
@@ -1037,7 +1071,7 @@ void FVLCommander::RunReserve(UVLBattle* B, FVLSquad& S)
 	}
 	// reinforce an attack that is going well, as a body (a trickle of three dies to the first tower on the way)
 	FVLSquad* Field = FindSquad(EVLSquadRole::Field);
-	if (Field && Field->Task == EVLSquadTask::Attack && Prof.bReinforce && W.Num() >= 5 && Clock - LastReinforce > 20.f)
+	if (Field && Field->Task == EVLSquadTask::Attack && Prof.bReinforce && W.Num() >= (IsPushing(B) ? 10 : 5) && Clock - LastReinforce > 20.f)     // (the push: in tens, not a trickle of five into the grinder)
 	{
 		TArray<AVLKing*> FW;
 		FVector FC;
@@ -1298,6 +1332,24 @@ void FVLCommander::EndAttack(UVLBattle* B, FVLSquad& S, const FString& Why)
 			EndAttack(B, *Flank, TEXT("the main body fell back"));
 		}
 	}
+	else if (S.Role == EVLSquadRole::Flank)
+	{
+		// The flank ended and the main body is not out (it was still waiting for the flank to get ahead, or was called
+		// to something else meanwhile): the attack is over. LaunchAttack left NextWaveTime at its "while it is out"
+		// mark (Clock + WaveHeld) when the flank set off, and only the main body's own end set it for real: so on
+		// Hard, the one difficulty that flanks, the commander never attacked again and the HUD read "Enemy ready in
+		// 16650:28" (a million seconds, counting down).
+		FVLSquad* Field = FindSquad(EVLSquadRole::Field);
+		if (!Field || !Field->IsOut())
+		{
+			NextWaveTime = Clock + Prof.Regroup;
+			if (Field)
+			{
+				Field->Departs = 0.f;
+				Field->Target.Reset();
+			}
+		}
+	}
 }
 
 bool FVLCommander::StepAttack(UVLBattle* B, FVLSquad& S)
@@ -1320,8 +1372,10 @@ bool FVLCommander::StepAttack(UVLBattle* B, FVLSquad& S)
 		S.LastFight = Clock;
 	}
 	// losing: fall back and regroup rather than feed the foe one troop at a time (a raid gives up sooner)
-	const float Hold = bRaid ? 0.9f : Prof.RetreatHold;
-	if (Theirs > 0.f && Ours < Theirs * Hold && (bRaid || W.Num() <= FMath::CeilToInt(S.StartSize * 0.7f)))
+	// (the final push, FinalPush: it goes on until it is down to two fifths of what set out)
+	const bool bPushing = !bRaid && FinalPush() && S.Target.IsValid() && S.Target.Get() == B->GetCastle(Foe());
+	const float Hold = bRaid ? 0.9f : Prof.RetreatHold * (bPushing ? 0.6f : 1.f);
+	if (Theirs > 0.f && Ours < Theirs * Hold && (bRaid || W.Num() <= FMath::CeilToInt(S.StartSize * (bPushing ? 0.4f : 0.7f))))
 	{
 		EndAttack(B, S, FString::Printf(TEXT("outmatched %.1f vs %.1f"), Ours, Theirs));
 		return false;
@@ -1339,7 +1393,18 @@ bool FVLCommander::StepAttack(UVLBattle* B, FVLSquad& S)
 	// no harm done to the target for long (fights on the way, a hero who keeps rising, a way that does not get there)
 	if (const FVLBuildingState* TS = B->FindBuilding(S.Target.Get()))
 	{
-		if (S.TargetHealth < 0.f || TS->Health < S.TargetHealth - 1.f)
+		// headway: the target hurt, or the side knocking down the foe's other buildings meanwhile
+		// (an attack on the castle fights its way through the barracks, farms and towers round it, and its recruits:
+		// it was called off as making "no headway" while it razed the foe's base)
+		const FVLKingdom& K = B->GetKingdom(Team);
+		float Dealt = 0.f;
+		for (const float D : K.BuildingDamageBy)
+		{
+			Dealt += D;
+		}
+		const bool bDealt = !bRaid && S.ProgressDealt >= 0.f && Dealt > S.ProgressDealt + 1.f && bFighting;
+		S.ProgressDealt = Dealt;
+		if (S.TargetHealth < 0.f || TS->Health < S.TargetHealth - 1.f || bDealt)
 		{
 			S.TargetHealth = TS->Health;
 			S.ProgressAt = Clock;
@@ -1404,8 +1469,10 @@ bool FVLCommander::StepAttack(UVLBattle* B, FVLSquad& S)
 			return true;
 		}
 	}
-	// a tower in the way that is not the target: taken down first with enough strength, else the target is dropped
-	if (Prof.bAvoidTowers && S.Target.IsValid())
+	// a tower in the way that is not the target: taken down first with enough strength, else the target is dropped.
+	// Not on the final push (it goes for the walls: on Realm v2 the east castle's hill tower turned every push aside to a
+	// tower it never reached, for fifteen minutes)
+	if (Prof.bAvoidTowers && S.Target.IsValid() && !bPushing)
 	{
 		const AActor* Tower = nullptr;
 		if (InFoeReach(B, C, 0.f, &Tower) && Tower && Tower != S.Target.Get() && Tower != B->GetCastle(Foe()))
@@ -1426,6 +1493,23 @@ bool FVLCommander::StepAttack(UVLBattle* B, FVLSquad& S)
 				return false;
 			}
 		}
+	}
+	// (a siege's picture now and then: how far from the walls, how many fighting, idle, at the walls)
+	if (S.Target.IsValid() && S.Target.Get() == B->GetCastle(Foe()) && FMath::Fmod(Clock, 20.f) < Prof.Think)
+	{
+		int32 NFight = 0, NIdle = 0, NWalls = 0;
+		float Near = 1e9f;
+		for (AVLKing* U : W)
+		{
+			NFight += VLAI::Engaged(U) ? 1 : 0;
+			NIdle += VLAI::Idle(U) ? 1 : 0;
+			const float D = B->DistanceTo(S.Target.Get(), U->GetFeet());
+			NWalls += D < 400.f ? 1 : 0;
+			Near = FMath::Min(Near, D);
+		}
+		const FVLBuildingState* CS = B->FindBuilding(S.Target.Get());
+		UE_LOG(LogVoxelLab, Log, TEXT("AI %d [%s] siege: %d troops, middle %.0f m from the castle (nearest %.0f m), %d fighting, %d idle, %d at the walls; castle %.0f; theirs here %.1f, ours %.1f"),
+			Team, *Clk(Clock), W.Num(), B->DistanceTo(S.Target.Get(), C) / 100.f, Near / 100.f, NFight, NIdle, NWalls, CS ? CS->Health : -1.f, Theirs, Ours);
 	}
 	// the target fell: on to the next, chosen from here; at the target with nothing to fight: knock it down
 	S.Reorder -= Prof.Think;
@@ -1480,9 +1564,11 @@ bool FVLCommander::StepAttack(UVLBattle* B, FVLSquad& S)
 		if (Near.Num() > 0)
 		{
 			Command->OrderAttack(Near, S.Target.Get(), false, false);
+			const bool bCastle = S.Target.Get() == B->GetCastle(Foe());
 			for (AVLKing* U : Near)
 			{
 				U->bAutoAttack = true;      // (a foe that comes at them is still answered first)
+				U->bSiege = bCastle && !U->IsRanged();     // (swordsmen at the castle: only a foe at their side)
 			}
 		}
 		if (Far.Num() > 0)
@@ -1723,6 +1809,10 @@ void FVLCommander::PullBack(UVLBattle* B, FVLSquad& S, const TArray<AVLKing*>& W
 	if (Prof.PullBack <= 0.f || !Command || !Castle || W.Num() < 2)
 	{
 		return;
+	}
+	if (S.Role == EVLSquadRole::Field && S.Task == EVLSquadTask::Attack && FinalPush() && S.Target.Get() == B->GetCastle(Foe()))
+	{
+		return;         // (the final push fights it out: the hurt walking 500 m home bled every siege away)
 	}
 	const double Now = B->GetWorld()->GetTimeSeconds();
 	const int32 SquadId = S.Id;

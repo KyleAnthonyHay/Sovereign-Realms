@@ -321,7 +321,8 @@ int32 UVLSwordsmanCombat::OrderAttack(const TArray<AVLKing*>& InUnits, AActor* T
 			Path = { Slot };
 		}
 		UVLSwordsmanCombat* Combat = For(U);
-		U->FollowPath(Path, bRun);
+		// (at a run when it is more than a few steps: the same rule as the chase's and the archers' walk into range)
+		U->FollowPath(Path, bRun || FVector::Dist2D(U->GetFeet(), Slot) > ChargeBeyond);
 		Combat->Begin(Target);
 	}
 	UE_LOG(LogVoxelLab, Log, TEXT("attack: %d swordsman(men) on %s at %s"), N, *Target->GetName(), *Centre.ToCompactString());
@@ -499,7 +500,7 @@ void UVLSwordsmanCombat::Chase(AVLKing* Unit, const AVLKing* Foe)
 	{
 		Path = { Goal };
 	}
-	Unit->FollowPath(Path, FVector::Dist2D(Me, There) > 700.f);
+	Unit->FollowPath(Path, FVector::Dist2D(Me, There) > ChargeBeyond);
 	bChasing = true;
 	bEngaged = false;
 	RepathIn = RepathSeconds * FMath::FRandRange(0.8f, 1.2f);

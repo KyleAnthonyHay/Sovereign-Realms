@@ -1429,6 +1429,12 @@ namespace
 
 void UVLCommand::ClearStanding(const TArray<AVLKing*>& Units)
 {
+	// (every order given to units, as opposed to their own doings, comes through here: the platoons' cohesion leaves
+	// alone those ordered apart from their platoon)
+	if (UVLBattle* Battle = UVLBattle::Get(this))
+	{
+		Battle->NoteOrdered(Units);
+	}
 	for (AVLKing* U : Units)
 	{
 		if (!U)
@@ -1436,6 +1442,7 @@ void UVLCommand::ClearStanding(const TArray<AVLKing*>& Units)
 			continue;
 		}
 		U->bHoldOrder = false;
+		U->bSiege = false;
 		GuardPosts.RemoveAll([U](const FGuardPost& G) { return G.Unit.Get() == U; });
 		Followers.RemoveAll([U](const FFollower& F) { return F.Unit.Get() == U; });
 		Roamers.RemoveAll([U](const FRoamer& R) { return R.Unit.Get() == U; });
@@ -1632,7 +1639,7 @@ void UVLCommand::OrderAttackMove(const TArray<AVLKing*>& InUnits, const FVector&
 	UE_LOG(LogVoxelLab, Log, TEXT("attack-move: %d unit(s) to %s"), Units.Num(), *Ground.ToCompactString());
 }
 
-bool UVLCommand::CanBeGuarded(const AActor* Ward, int32 Team) const
+bool UVLCommand::CanBeGuarded(const AActor* Ward, int32 Team, bool bTroops) const
 {
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	if (!Ward || !Battle)
@@ -1641,8 +1648,9 @@ bool UVLCommand::CanBeGuarded(const AActor* Ward, int32 Team) const
 	}
 	if (const AVLKing* U = Cast<AVLKing>(Ward))
 	{
-		// Builders (as in the main game) and King David; not troops
-		return U->IsAlive() && U->Team == Team && (!U->IsTroop() || U->KindId() == EVLUnitKind::Builder);
+		// Builders (as in the main game) and King David; troops only where the caller allows it (the hero view's
+		// Option + click, V + click), and never a tower's own archer
+		return U->IsAlive() && U->Team == Team && !U->bAmbient && (!U->IsTroop() || U->KindId() == EVLUnitKind::Builder || (bTroops && !U->bTowerGuard));
 	}
 	const FVLBuildingState* B = Battle->FindBuilding(Ward);
 	return B && B->IsAlive() && B->Team == Team;
@@ -1684,12 +1692,51 @@ void UVLCommand::GuardPostWorld(const FGuardPost& G, FVector2D& Out) const
 	}
 }
 
-int32 UVLCommand::OrderGuard(const TArray<AVLKing*>& InUnits, AActor* Ward)
+int32 UVLCommand::OrderGuardPlatoon(const TArray<AVLKing*>& InUnits, int32 Platoon)
+{
+	TArray<AVLKing*> Members;
+	GetPlatoon(Platoon, Members);
+	TArray<AVLKing*> Guards = Living(InUnits);
+	Guards.RemoveAll([&Members](const AVLKing* U) { return Members.Contains(U); });
+	if (Members.Num() == 0 || Guards.Num() == 0)
+	{
+		return 0;
+	}
+	AVLKing* Ward = GetPlatoonLeader(Platoon);
+	if (!Ward)
+	{
+		const FVector Mid = Centroid(Members);
+		Members.Sort([&Mid](const AVLKing& A, const AVLKing& B) { return FVector::DistSquared2D(A.GetFeet(), Mid) < FVector::DistSquared2D(B.GetFeet(), Mid); });
+		Ward = Members[0];
+	}
+	return OrderGuard(Guards, Ward, true, Platoon);
+}
+
+int32 UVLCommand::GuardPlatoonOf(const AVLKing* Unit) const
+{
+	const FGuardPost* G = GuardPosts.FindByPredicate([Unit](const FGuardPost& X) { return X.Unit.Get() == Unit; });
+	return G ? G->Platoon : INDEX_NONE;
+}
+
+void UVLCommand::GetGuardedUnits(TArray<AVLKing*>& Out) const
+{
+	Out.Reset();
+	for (const FGuardPost& G : GuardPosts)
+	{
+		AVLKing* W = Cast<AVLKing>(G.Ward.Get());
+		if (W && W->IsAlive() && G.Unit.IsValid() && G.Unit->IsAlive() && G.Unit->Team == UVLBattle::Player)
+		{
+			Out.AddUnique(W);
+		}
+	}
+}
+
+int32 UVLCommand::OrderGuard(const TArray<AVLKing*>& InUnits, AActor* Ward, bool bTroops, int32 Platoon)
 {
 	TArray<AVLKing*> Guards;
 	for (AVLKing* U : Living(InUnits))
 	{
-		if (U != Ward && U->KindId() != EVLUnitKind::Builder && CanBeGuarded(Ward, U->Team))
+		if (U != Ward && U->KindId() != EVLUnitKind::Builder && !U->bTowerGuard && CanBeGuarded(Ward, U->Team, bTroops))
 		{
 			Guards.Add(U);
 		}
@@ -1751,7 +1798,9 @@ int32 UVLCommand::OrderGuard(const TArray<AVLKing*>& InUnits, AActor* Ward)
 		FGuardPost& G = GuardPosts.AddDefaulted_GetRef();
 		G.Unit = U;
 		G.Ward = Ward;
+		G.Platoon = Platoon;
 		G.Offset = bUnitWard ? Posts[i] - C2 : Posts[i];
+		Detach(U);                  // (one on the lookout comes down; one walking to the tower stays down)
 		// off it goes (the order is given here so that whatever it was doing ends now; it is a leg of the guard)
 		{
 			TGuardValue<bool> Inner(bInnerOrder, true);
@@ -2462,14 +2511,76 @@ void UVLCommand::UpdateMarchPace()
 		}
 		On.Add({ U, P, Own });
 	}
+	// Closing up. Every troop has the same pace (420 / 760 cm/s), so the slowest one's pace alone kept nobody
+	// together: a gap that was there when the order came (members standing apart, some just back from a fight, a
+	// file through a narrow way) stayed for the whole march. So each march also closes up along its way: by the way
+	// each has left to walk, those ahead of the body slow down (to MarchSlowest of the pace) and those behind hurry
+	// (up to their run). The body's place is halfway between its middle member and its rearmost; one more than
+	// MarchStraggler behind the middle is not waited for (he runs to catch up). Nothing changes over the last
+	// MarchSettle of the way, where everyone walks to his own place in the formation.
+	struct FWay
+	{
+		TArray<float, TInlineAllocator<32>> Left;
+		float Ref = 0.f;
+		bool bSettling = true;
+	};
+	TMap<int32, FWay> Ways;
+	TArray<float, TInlineAllocator<64>> LeftOf;
 	for (const FOn& O : On)
 	{
+		const TArray<FVector>& Points = O.Unit->GetWaypoints();
+		float Left = 0.f;
+		FVector From = O.Unit->GetFeet();
+		for (const FVector& P : Points)
+		{
+			Left += float(FVector::Dist2D(From, P));
+			From = P;
+		}
+		LeftOf.Add(Left);
+		Ways.FindOrAdd(O.Unit->MarchId).Left.Add(Left);
+	}
+	for (TPair<int32, FWay>& W : Ways)
+	{
+		TArray<float, TInlineAllocator<32>>& L = W.Value.Left;
+		if (L.Num() < 2)
+		{
+			continue;
+		}
+		L.Sort();
+		const float Middle = L.Num() % 2 ? L[L.Num() / 2] : 0.5f * (L[L.Num() / 2 - 1] + L[L.Num() / 2]);
+		float Rear = Middle;
+		for (const float X : L)
+		{
+			if (X <= Middle + MarchStraggler)
+			{
+				Rear = FMath::Max(Rear, X);
+			}
+		}
+		W.Value.Ref = 0.5f * (Middle + Rear);
+		W.Value.bSettling = Middle < MarchSettle;
+	}
+	for (int32 i = 0; i < On.Num(); ++i)
+	{
+		const FOn& O = On[i];
 		float Pace = MarchPace.FindRef(O.Unit->MarchId);
 		if (O.Platoon != INDEX_NONE)
 		{
 			Pace = FMath::Min(Pace, PlatoonPace[O.Platoon]);
 		}
-		O.Unit->PaceCap = Pace < O.Own - 1.f ? Pace : 0.f;
+		float Speed = Pace;
+		if (const FWay* W = Ways.Find(O.Unit->MarchId); W && !W->bSettling && LeftOf[i] > MarchSettle)
+		{
+			const float Ahead = W->Ref - LeftOf[i];       // (cm of the way: > 0 ahead of the body, < 0 behind it)
+			if (Ahead > MarchSlack)
+			{
+				Speed = Pace * FMath::GetMappedRangeValueClamped(FVector2D(MarchSlack, MarchSlack + 800.f), FVector2D(1.f, MarchSlowest), Ahead);
+			}
+			else if (Ahead < -MarchSlack)
+			{
+				Speed = FMath::GetMappedRangeValueClamped(FVector2D(MarchSlack, MarchSlack + 600.f), FVector2D(Pace, FMath::Max(Pace, O.Unit->RunSpeed)), -Ahead);
+			}
+		}
+		O.Unit->PaceCap = FMath::Abs(Speed - O.Own) > 1.f ? Speed : 0.f;
 	}
 }
 
@@ -2507,23 +2618,8 @@ EVLArm UVLCommand::GetArmed() const
 
 void UVLCommand::CycleAttackArm()
 {
-	TArray<AVLKing*> Units;
-	GetSelection(Units);
-	const bool bArchers = Units.ContainsByPredicate([](const AVLKing* U) { return UVLArcherCombat::CanFight(U); });
-	const bool bOthers = Units.ContainsByPredicate([](const AVLKing* U) { return CanAttack(U) && !UVLArcherCombat::CanFight(U); });
-	const EVLArm Now = GetArmed();
-	if (Now == EVLArm::AttackMove && bArchers)
-	{
-		Arm(EVLArm::AttackGround);
-	}
-	else if (Now == EVLArm::AttackGround)
-	{
-		Arm(EVLArm::AttackMove);
-	}
-	else
-	{
-		Arm(bArchers && !bOthers ? EVLArm::AttackGround : EVLArm::AttackMove);
-	}
+	// (the archers' attack-ground went with the owner's call of 2026-11-22: A is attack-move for everyone)
+	Arm(EVLArm::AttackMove);
 }
 
 bool UVLCommand::SelectionCanGuard() const
@@ -2570,6 +2666,10 @@ FString UVLCommand::DescribeOrders(const TArray<AVLKing*>& Units) const
 	{
 		const UVLBattle* Battle = UVLBattle::Get(this);
 		const FVLBuildingState* B = Battle ? Battle->FindBuilding(Ward) : nullptr;
+		if (const int32 GP = GuardPlatoonOf(U); GP != INDEX_NONE)
+		{
+			return FString::Printf(TEXT("Guarding platoon %d"), GP + 1);
+		}
 		return FString::Printf(TEXT("Guarding %s"), B ? *(TEXT("the ") + B->Name) : (Cast<AVLKing>(Ward) ? *Cast<AVLKing>(Ward)->GetDisplayName() : TEXT("")));
 	}
 	if (IsRoaming(U))
@@ -2672,6 +2772,31 @@ void UVLCommand::TickOrders(float Dt)
 		FGuardPost& G = GuardPosts[i];
 		AVLKing* U = G.Unit.Get();
 		FVector Ward;
+		if (U && U->IsAlive() && !PlayedByHand(U) && G.Platoon != INDEX_NONE && !WardPos(G.Ward.Get(), Ward))
+		{
+			// a platoon's guard whose ward fell: on to the platoon's leader, else its member nearest the guard
+			TArray<AVLKing*> Members;
+			GetPlatoon(G.Platoon, Members);
+			Members.Remove(U);
+			AVLKing* Next = GetPlatoonLeader(G.Platoon);
+			if (!Next || Next == U)
+			{
+				Next = nullptr;
+				float Best = TNumericLimits<float>::Max();
+				for (AVLKing* M : Members)
+				{
+					const float D = FVector::DistSquared2D(M->GetFeet(), U->GetFeet());
+					if (D < Best) { Best = D; Next = M; }
+				}
+			}
+			if (Next)
+			{
+				G.Ward = Next;
+				G.bSent = false;
+				G.SentFor = FVector2D(1e9f, 1e9f);
+				UE_LOG(LogVoxelLab, Log, TEXT("guard: %s now guards %s of platoon %d"), *U->GetDisplayName(), *Next->GetDisplayName(), G.Platoon + 1);
+			}
+		}
 		if (!U || U->IsDead() || PlayedByHand(U) || !WardPos(G.Ward.Get(), Ward))
 		{
 			if (U && U->IsAlive() && !G.Ward.IsValid())
@@ -2881,7 +3006,7 @@ namespace
 			C->OrderAttackMove(Units, GroundAt(World, FCString::Atof(*Args[1]), FCString::Atof(*Args[2])), bRun, Units.Num() > 1 ? C->SelectionFormation() : EVLFormation::Line, bQueue);
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdGuard(TEXT("vl.Guard"), TEXT("vl.Guard <who> <building name | unit name | king>: guard it"),
+	FAutoConsoleCommandWithWorldAndArgs CmdGuard(TEXT("vl.Guard"), TEXT("vl.Guard <who> <building name | unit name | king | platoon N>: guard it (a troop or a platoon too, as the hero view's Option + click)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVLCommand* C = UVLCommand::Get(World);
@@ -2891,6 +3016,12 @@ namespace
 			}
 			TArray<AVLKing*> Units;
 			WhoOf(World, Args[0], Units);
+			if (Args.Num() >= 3 && Args[1].Equals(TEXT("platoon"), ESearchCase::IgnoreCase))
+			{
+				const int32 P = FCString::Atoi(*Args[2]) - 1;
+				UE_LOG(LogVoxelLab, Log, TEXT("guard: %d of %d unit(s) guard platoon %d"), C->OrderGuardPlatoon(Units, P), Units.Num(), P + 1);
+				return;
+			}
 			FString Name = Args[1];
 			for (int32 i = 2; i < Args.Num(); ++i)
 			{
@@ -2912,7 +3043,7 @@ namespace
 				WhoOf(World, Name, Who);
 				Ward = Who.Num() > 0 ? Who[0] : nullptr;
 			}
-			UE_LOG(LogVoxelLab, Log, TEXT("guard: %d of %d unit(s) guard %s"), Ward ? C->OrderGuard(Units, Ward) : 0, Units.Num(), *GetNameSafe(Ward));
+			UE_LOG(LogVoxelLab, Log, TEXT("guard: %d of %d unit(s) guard %s"), Ward ? C->OrderGuard(Units, Ward, true) : 0, Units.Num(), *GetNameSafe(Ward));
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdFollow(TEXT("vl.Follow"), TEXT("vl.Follow <who> <unit name | king>: they follow that unit (its platoon's members following it: it leads)"),

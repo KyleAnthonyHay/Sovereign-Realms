@@ -9,6 +9,7 @@ class AVLTroop;
 class USoundBase;
 class USoundAttenuation;
 struct FVLCommander;
+struct FVLMatchLog;
 enum class EVLUnitKind : uint8;         // VLKing.h
 
 /** A list of units on the stack (most queries return a handful; the whole army spills to the heap). */
@@ -119,13 +120,15 @@ namespace VLRules
 	constexpr int32 StartArchers = 2;
 	constexpr int32 RecruitBatch = 5;            // Shift + Train
 	constexpr int32 RecruitBatchLarge = 10;      // Ctrl / Cmd / Alt + Train
-	constexpr float KingRespawnSeconds = 20.f;
+	/** King David rises again at his castle this long after he falls (s). 100: five times the 20 s it was (the owner's
+	 *  call, 2026-11-22: "hero cool down should be 5 times"). His only cooldown: he has no ability on a timer. */
+	constexpr float KingRespawnSeconds = 100.f;
 	constexpr float CorpseSeconds = 2.4f;
 	/** A watch tower's own archers (the owner's call, 2026-11-22): 2 on the lookout at level 1, one more for each
 	 *  level it is raised (3, 4); free (no housing, no army count). One that falls is replaced TowerGuardRestock
 	 *  seconds later, one at a time. They shoot as far as the tower itself does (its level's reach, from its walls),
 	 *  so its reach is as the enemy commander reckons it. */
-	inline int32 TowerGuards(int32 Level) { return 1 + FMath::Clamp(Level, 1, 3); }
+	inline int32 TowerGuards(int32 Level) { return FMath::Clamp(Level, 1, 3); }
 	constexpr float TowerGuardRestock = 40.f;
 	/** How far a defensive unit goes from its post after a foe before it turns back (cm). It goes for foes it can
 	 *  strike within that: a swordsman 22.4 m from where it stands, an archer her full 42 m. (It was 13 m, or the
@@ -143,6 +146,14 @@ namespace VLRules
 	/** An idle unit with no foe in its reach goes for the foe of a friend fighting within its reach, if that foe is
 	 *  no more than this beyond its reach (cm). */
 	constexpr float AssistExtra = 1000.f;
+	/** A platoon keeps together (UVLBattle::TickCohesion; the owner's call, 2026-11-22). An aggressive member
+	 *  standing idle further than CohesionLeash from the nearest member of its platoon that is in a fight runs there
+	 *  and joins in, no further than AggressiveLeash from where it stood; with no fight on, one further than
+	 *  RegroupLeash from the platoon's body walks back to it. The body: the member with the most of the others within
+	 *  CohesionBody of it. See the README (Standing orders > Platoons keep together) for who is left alone. */
+	constexpr float CohesionLeash = 2000.f;
+	constexpr float RegroupLeash = 3000.f;
+	constexpr float CohesionBody = 1500.f;
 	constexpr float EndScreenDelay = 1.6f;
 	// the Spy (the main game's Scout: ScoutCastleLevel, MaxScouts, ScoutCooldown)
 	constexpr int32 SpyCastleLevel = 3;          // the castle level a kingdom needs before it can train its Spy
@@ -207,6 +218,17 @@ struct FVLKingdom
 	int32 Killed = 0;
 	int32 BuildingsLost = 0;
 	bool bHasCastle = false;
+	// the match's books (the balance log, VLMatchLog.*): by EVLUnitKind; by EVLRes
+	int32 RecruitedKind[6] = { 0, 0, 0, 0, 0, 0 };
+	int32 LostKind[6] = { 0, 0, 0, 0, 0, 0 };
+	int32 Earned[2] = { 0, 0 };         // income that came in (farms, mines)
+	int32 Wasted[2] = { 0, 0 };         // income lost for want of storage
+	int32 Spent[2] = { 0, 0 };          // paid out (buildings, troops, levels; refunds not taken off)
+	// what its side dealt, by who dealt it (VLRules::StrikerClass: 0 King, 1 Swordsman, 2 Archer, 3 Spy, 4 Builder,
+	// 5 another unit, 6 a tower's own archer, 7 a building's shot): damage to units, to buildings, and kills
+	float DamageBy[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	float BuildingDamageBy[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	int32 KillsBy[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 };
 
 UENUM()
@@ -391,6 +413,12 @@ public:
 	/** Spies alive, and (OutQueued) in training. */
 	int32 GetSpyCount(int32 Team, int32* OutQueued = nullptr) const;
 	/** Seconds until the kingdom may train another Spy (0 = now). */
+	/** UVLCommand: these units were given an order (not one of their own doing). Those of a platoon ordered without
+	 *  the rest of it are apart on purpose, and the platoon's cohesion leaves them alone until they are back with it or
+	 *  the whole platoon is ordered again. */
+	void NoteOrdered(const TArray<AVLKing*>& Units);
+	/** For the log (vl.Cohesion): each platoon's members, who is apart on purpose, who is on its way to a fight. */
+	void LogCohesion() const;
 	float GetSpyCooldown(int32 Team) const { return SpyCooldownLeft[FMath::Clamp(Team, 0, 1)]; }
 	void SetSpyCooldown(int32 Team, float Seconds) { SpyCooldownLeft[FMath::Clamp(Team, 0, 1)] = FMath::Max(0.f, Seconds); }
 	/** Why the kingdom cannot train a Spy right now (castle level, one already, the wait), or empty. */
@@ -416,6 +444,16 @@ public:
 	// ---- the match
 	/** The New Game screen's start (or vl.StartMatch): kingdoms' stock, starting armies, the commander. */
 	void StartMatch(int32 Difficulty);
+	/**
+	 * The Test World (New Game > Test World: Realm v2 opened with ?TestWorld=1; the owner's call, 2026-11-22): a match
+	 * that starts with both sides at their most, for trying the balance. Called once, right after StartMatch. Each
+	 * side: its castle at level 7; two barracks, two archery ranges, a Granary, a Treasury, and farms and watch towers
+	 * up to their limits, laid round the castle by the construction's own calls (FindPlacementNear, PlaceBuilding)
+	 * and finished at once; every building at its top level; its stores full; troops up to the ceiling (three
+	 * swordsmen to two archers; the player's in six platoons); every Builder it may have. The commander plays on as usual.
+	 */
+	void SetupTestWorld();
+	bool IsTestWorld() const { return bTestWorld; }
 	EVLMatch GetState() const { return State; }
 	bool IsPlaying() const { return State == EVLMatch::Playing; }
 	/** Both castles stand at the start: a real match (a commander, victory and defeat), not a sandbox. */
@@ -429,6 +467,8 @@ public:
 	FVLCommander* GetCommander(int32 Team) const;
 	/** A commander for the player's side too (balance tests: vl.AIvsAI), at a difficulty of its own (< 0: the match's). */
 	void SetPlayerAI(bool bOn, int32 InDifficulty = -1);
+	/** The balance log of this match, if one is kept (vl.MatchLog). */
+	FVLMatchLog* GetMatchLog() const { return MatchLog.Get(); }
 	/** The player's view of the enemy: "Enemy ready in 3:12", "Enemy watching", "Enemy attacking!". */
 	FString EnemyStatus(FLinearColor* OutColour = nullptr) const;
 
@@ -448,6 +488,7 @@ public:
 	// ---- construction (VLConstruction.*)
 	/** Pulls a building down (demolished by its own side: no alert of a loss, not counted as one). */
 	void Raze(AActor* Building);
+	friend struct FVLDuels;      // (balance duels: a tower raised at a level of its choosing)
 	/** Takes a building out of the battle without a fall (a site cancelled, a level's barracks at a match's start). */
 	void Forget(AActor* Building);
 
@@ -474,6 +515,19 @@ private:
 	void DismissTowerGuards(FVLBuildingState& B);
 	void TickCollapse(float Dt);
 	void TickAutoCombat(float Dt);
+	/** Platoons keep together: see VLRules::CohesionLeash. */
+	void TickCohesion(float Dt);
+	struct FVLCohesion
+	{
+		int32 Platoon = INDEX_NONE;     // the platoon it was last seen in
+		bool bApart = false;            // away from its platoon on purpose (an order of its own; joined from afar): left alone
+		bool bSent = false;             // on its way to the platoon's fight: its post stays where it stood (Home)
+		FVector Home = FVector::ZeroVector;
+		double SentAt = -100.0;
+	};
+	TMap<TWeakObjectPtr<AVLKing>, FVLCohesion> Cohesion;
+	float CohesionTimer = 0.f;
+	bool bTestWorld = false;
 	void TickKings(float Dt);
 	void SpawnRecruit(FVLBuildingState& B, const FString& Kind);
 	void Collapse(FVLBuildingState& B, AActor* By, int32 ByTeam, bool bDemolished = false);
@@ -524,6 +578,8 @@ private:
 	TArray<FVLPopup> Popups;
 	TMap<FString, int32> Numbers;          // "Swordsman" / "Enemy Swordsman" -> how many there have been (names)
 	TSharedPtr<FVLCommander> Commanders[2];
+	/** The balance log of this match (vl.MatchLog; VLMatchLog.*), while it is on. */
+	TSharedPtr<FVLMatchLog> MatchLog;
 	bool bRegrid = false;
 
 	UPROPERTY(Transient)

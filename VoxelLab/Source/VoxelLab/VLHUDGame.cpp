@@ -113,8 +113,9 @@ namespace
 	bool ShiftDown(const APlayerController* PC) { return PC && (PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift)); }
 	bool CtrlDown(const APlayerController* PC)
 	{
+		// (not Alt / Option any more: it is held to read a button's card, and a click with it held must stay a plain click)
 		return PC && (PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::LeftCommand)
-			|| PC->IsInputKeyDown(EKeys::RightCommand) || PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt));
+			|| PC->IsInputKeyDown(EKeys::RightCommand));
 	}
 }
 
@@ -139,21 +140,244 @@ void AVLHUD::DrawGameHUD()
 	DrawTopBar();
 	const float Y = DrawHints(U(10.f + 54.f + 8.f));
 	DrawAlerts(Y);
-	if (!King->IsHeroMode())
+	MapRect = PlatoonRect = FBox2D(ForceInit);
+	bAssignDrawn = false;
 	{
 		// bottom row, left to right: minimap, the Build button (its menu over the selection panel), selection panel
-		// ... platoons on the right edge
+		// ... platoons on the right edge. The hero view keeps the minimap and the platoon panel (the owner's call,
+		// 2026-11-22): the build menu and the selection panel are the overview's.
+		const bool bHero = King->IsHeroMode();
 		const float M = U(14.f), MapSize = U(266.f);
 		const FBox2D MapBox(FVector2D(M, View.Y - M - MapSize), FVector2D(M + MapSize, View.Y - M));
 		DrawMinimap(MapBox);
-		DrawBuildMenu(MapBox.Max.X + U(8.f), View.Y - M);
-		const float SX = MapBox.Max.X + U(8.f) + U(76.f) + U(10.f);
-		DrawSelectionPanel(FBox2D(FVector2D(SX, View.Y - M - U(152.f)), FVector2D(SX + U(760.f), View.Y - M)));
+		if (!bHero)
+		{
+			DrawBuildMenu(MapBox.Max.X + U(8.f), View.Y - M);
+			const float SX = MapBox.Max.X + U(8.f) + U(76.f) + U(10.f);
+			DrawSelectionPanel(FBox2D(FVector2D(SX, View.Y - M - U(152.f)), FVector2D(SX + U(760.f), View.Y - M)));
+		}
 		DrawPlatoonPanel();
-		DrawPlacement();
+		if (!bHero)
+		{
+			DrawPlacement();
+		}
+	}
+	if (!bAssignDrawn)
+	{
+		bAssignOpen = false;        // (the command card with its Assign button is not up: the picker is put away)
 	}
 	DrawHeroBits();
 	DrawCastleCard();
+	DrawChipList();
+}
+
+// ---------------------------------------------------------------------------- the Builders' / Spy's list
+
+namespace
+{
+	/** What a unit is doing, for its row of the list: a Builder's job (building, repairing, claiming a mine, walking
+	 *  to it), a walk, a fight, a standing order, or idle. */
+	FString UnitDoing(const UObject* Context, AVLKing* Un)
+	{
+		const UVLBattle* Battle = UVLBattle::Get(Context);
+		const UVLCommand* Command = UVLCommand::Get(Context);
+		if (Cast<APlayerController>(Un->GetController()) && Un->IsHeroMode())
+		{
+			return TEXT("Played by you");
+		}
+		if (UVLBuilderWork::IsBuilder(Un))
+		{
+			const UVLBuilderWork* W = UVLBuilderWork::For(Un, false);
+			FString S = Un->IsOnOrder() ? TEXT("Walking") : TEXT("Idle");
+			if (const AActor* Job = W ? W->GetJob() : nullptr)
+			{
+				const FVLBuildingState* St = Battle ? Battle->FindBuilding(Job) : nullptr;
+				const bool bAt = UVLBuilderWork::IsAtWork(Un);
+				const FString Name = St ? St->Name : FString(TEXT("building"));
+				if (St && St->IsSite())
+				{
+					const bool bMine = St->Kind == EVLBuilding::Mine;
+					S = bAt ? FString::Printf(TEXT("%s the %s (%d%%)"), bMine ? TEXT("Claiming") : TEXT("Building"), *Name, FMath::Clamp(FMath::FloorToInt(St->Build * 100.f), 0, 99))
+						: FString::Printf(TEXT("Walking to %s the %s"), bMine ? TEXT("claim") : TEXT("build"), *Name);
+				}
+				else
+				{
+					S = bAt ? FString::Printf(TEXT("Repairing the %s"), *Name) : FString::Printf(TEXT("Walking to repair the %s"), *Name);
+				}
+			}
+			if (W && W->HasTasks())
+			{
+				S += FString::Printf(TEXT("  ·  +%d queued"), W->GetTasks().Num());
+			}
+			return S;
+		}
+		if (IsFighting(Un))
+		{
+			return TEXT("Fighting");
+		}
+		if (const FString Doing = Command ? Command->DescribeOrders({ Un }) : FString(); !Doing.IsEmpty())
+		{
+			return Doing;
+		}
+		if (Un->IsGarrisoned())
+		{
+			return TEXT("On a watch tower");
+		}
+		return Un->IsOnOrder() ? TEXT("Walking") : TEXT("Idle");
+	}
+}
+
+void AVLHUD::DrawChipList()
+{
+	HoverUnit = nullptr;
+	if (ChipList == 0)
+	{
+		return;
+	}
+	UVLBattle* Battle = UVLBattle::Get(this);
+	UVLConstruction* C = UVLConstruction::Get(this);
+	UVLCommand* Command = UVLCommand::Get(this);
+	if (!Battle || !C || !Command || !King || King->IsHeroMode() || !TopBarRect.bIsValid || Base != EVLScreen::None)
+	{
+		ChipList = 0;
+		return;
+	}
+	const bool bBuilders = ChipList == 1;
+	TArray<AVLKing*> Who;
+	if (bBuilders)
+	{
+		C->GetBuilders(UVLBattle::Player, Who);
+	}
+	else
+	{
+		for (AVLKing* Un : UnitsThisFrame().Live)
+		{
+			if (Un->IsAlive() && Un->Team == UVLBattle::Player && Un->GetKind() == TEXT("Spy"))
+			{
+				Who.Add(Un);
+			}
+		}
+	}
+	Who.Sort([](const AVLKing& A0, const AVLKing& B0) { return A0.GetDisplayName() < B0.GetDisplayName(); });
+	const bool bAll = Who.Num() > 1;
+	const float W = U(400.f), Pad = U(8.f), HeadH = U(30.f), RowH = U(46.f), AllH = U(32.f), Gap = U(4.f);
+	const float H = HeadH + (bAll ? AllH + Gap : 0.f) + FMath::Max(Who.Num(), 1) * (RowH + Gap) + Pad;
+	const float X = FMath::Clamp(FMath::RoundToFloat(ChipListChip.Min.X), U(8.f), FMath::Max(U(8.f), View.X - W - U(8.f))), Y = TopBarRect.Max.Y + U(6.f);
+	const FBox2D Box(FVector2D(X, Y), FVector2D(X + W, Y + H));
+	HudPanel(Box);
+	Text(bBuilders ? TEXT("BUILDERS") : TEXT("SPY"), X + U(14.f), Y + U(7.f), U(15.f), GoldBright, AlignLeft, Bold, U(2.f));
+	Text(TEXT("click: go to and select   ·   hover: mark"), Box.Max.X - U(14.f), Y + U(9.f), U(12.f), Dim, AlignRight);
+	float RY = Y + HeadH;
+	auto GoTo = [&](const TArray<AVLKing*>& Units)
+	{
+		FVector Mid = FVector::ZeroVector;
+		for (const AVLKing* Un : Units) { Mid += Un->GetFeet() / Units.Num(); }
+		King->SelectByName(Units[0]->GetDisplayName());
+		Command->Select(Units);
+		King->LookAt(Mid, -1.f, 1e31f);
+		Click();
+		ChipList = 0;
+		UE_LOG(LogVoxelLab, Log, TEXT("hud: %s list: went to %s%s"), bBuilders ? TEXT("Builders'") : TEXT("Spy's"), *Units[0]->GetDisplayName(), Units.Num() > 1 ? *FString::Printf(TEXT(" and %d more"), Units.Num() - 1) : TEXT(""));
+	};
+	if (bAll)
+	{
+		const FBox2D Row(FVector2D(X + Pad, RY), FVector2D(Box.Max.X - Pad, RY + AllH));
+		const FBtn B = Button(Row, VLId::ChipRow);
+		Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, AllH, FMath::Lerp(Inset, ButtonHot, B.Hot * 0.7f));
+		TextIn(FBox2D(Row.Min + FVector2D(U(12.f), 0.f), Row.Max), FString::Printf(TEXT("All %d Builders"), Who.Num()), U(14.f), B.bHover ? GoldBright : Parchment, AlignLeft, Bold);
+		RY += AllH + Gap;
+		if (B.bClicked) { GoTo(Who); return; }
+	}
+	if (Who.Num() == 0)
+	{
+		const bool bLocked = !bBuilders && Battle->GetCastleLevel(UVLBattle::Player) < VLRules::SpyCastleLevel;
+		TextIn(FBox2D(FVector2D(X + Pad, RY), FVector2D(Box.Max.X - Pad, RY + RowH)), bBuilders ? FString(TEXT("No Builders: train one at the castle"))
+			: (bLocked ? FString::Printf(TEXT("Locked: the castle at level %d trains the Spy"), VLRules::SpyCastleLevel) : FString(TEXT("No Spy in the field: train one at the castle"))), U(14.f), Dim, AlignCentre);
+	}
+	for (int32 i = 0; i < Who.Num() && i < 24; ++i)
+	{
+		AVLKing* Un = Who[i];
+		const FBox2D Row(FVector2D(X + Pad, RY), FVector2D(Box.Max.X - Pad, RY + RowH));
+		RY += RowH + Gap;
+		const FBtn B = Button(Row, VLId::ChipRow + 1 + i);
+		const bool bSel = Command->IsSelected(Un);
+		Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, RowH, bSel ? FLinearColor(0.20f, 0.155f, 0.05f, 0.95f) : FMath::Lerp(Inset, ButtonHot, B.Hot * 0.7f));
+		if (bSel || B.bHover) { Outline(Row, bSel ? Gold : A(GoldBright, 0.8f), FMath::Max(1.f, U(1.f))); }
+		const float PS = U(36.f);
+		Portrait(VLPortraitOf(Un->GetKind()), Row.Min.X + U(6.f), Row.Min.Y + (RowH - PS) * 0.5f, PS);
+		const float TX = Row.Min.X + U(6.f) + PS + U(10.f);
+		const float Frac = Un->GetHealthFrac();
+		Text(Un->GetDisplayName(), TX, Row.Min.Y + U(4.f), U(15.f), Parchment, AlignLeft, Bold);
+		const FString Doing = UnitDoing(this, Un);
+		const bool bIdle = Doing.StartsWith(TEXT("Idle"));
+		Text(Doing, TX, Row.Min.Y + U(24.f), U(13.f), bIdle ? Amber : (Doing.StartsWith(TEXT("Fighting")) ? Refuse : Dim));
+		Text(FString::Printf(TEXT("%.0f / %.0f"), FMath::CeilToFloat(Un->GetHealth()), Un->MaxHealth), Row.Max.X - U(10.f), Row.Min.Y + U(5.f), U(13.f), Frac < HealthBarRed ? Refuse : Parchment, AlignRight, Bold);
+		Meter(Row.Max.X - U(10.f) - U(70.f), Row.Min.Y + U(27.f), U(70.f), U(6.f), Frac, Health(Frac));
+		if (B.bHover)
+		{
+			HoverUnit = Un;         // (marked in the world: DrawUnitHighlight)
+		}
+		if (B.bClicked) { GoTo({ Un }); return; }
+	}
+	// a click anywhere else puts the list away (its own chip toggles it)
+	if (PCtrl && PCtrl->WasInputKeyJustPressed(EKeys::LeftMouseButton) && bMouse && !Box.IsInside(Mouse) && !ChipListChip.IsInside(Mouse))
+	{
+		ChipList = 0;
+	}
+}
+
+// ---------------------------------------------------------------------------- the Assign picker
+
+void AVLHUD::DrawAssignPicker(const TArray<AVLKing*>& Units, const FBox2D& Anchor, float Bottom)
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	bAssignDrawn = true;
+	if (!bAssignOpen || !Command)
+	{
+		return;
+	}
+	// six chips, one per platoon slot, over the Assign button: a formed platoon shows how many it has (the selection
+	// joins it, its members stay), an empty slot reads "new" (the selection forms it)
+	const int32 Num = UVLCommand::MaxPlatoons;
+	const float CW = U(58.f), CH = U(62.f), Gap = U(6.f), Pad = U(10.f), HeadH = U(26.f);
+	const float W = 2.f * Pad + Num * CW + (Num - 1) * Gap, H = HeadH + CH + Pad;
+	const float X = FMath::Clamp(FMath::RoundToFloat(Anchor.GetCenter().X - W * 0.5f), U(8.f), FMath::Max(U(8.f), View.X - W - U(8.f))), Y = Bottom - H;
+	const FBox2D Box(FVector2D(X, Y), FVector2D(X + W, Y + H));
+	HudPanel(Box);
+	Text(TEXT("ASSIGN TO PLATOON"), X + Pad, Y + U(6.f), U(13.f), GoldBright, AlignLeft, Bold, U(2.f));
+	Text(TEXT("or Ctrl + 1-6"), Box.Max.X - Pad, Y + U(7.f), U(12.f), Dim, AlignRight);
+	const int32 Current = Command->PlatoonOf(Units);
+	for (int32 i = 0; i < Num; ++i)
+	{
+		TArray<AVLKing*> Members;
+		Command->GetPlatoon(i, Members);
+		const FBox2D Chip(FVector2D(X + Pad + i * (CW + Gap), Y + HeadH), FVector2D(X + Pad + i * (CW + Gap) + CW, Y + HeadH + CH));
+		const FBtn B = Button(Chip, VLId::Assign + i);
+		const FLinearColor PCol = PlatoonColor(i);
+		ButtonFrame(Chip, B, true, Current == i);
+		TextIn(FBox2D(Chip.Min + FVector2D(0.f, U(4.f)), FVector2D(Chip.Max.X, Chip.Min.Y + U(36.f))), FString::FromInt(i + 1), U(24.f), Members.Num() > 0 ? PCol : A(PCol, 0.55f), AlignCentre, Black);
+		TextIn(FBox2D(FVector2D(Chip.Min.X, Chip.Max.Y - U(24.f)), Chip.Max), Members.Num() > 0 ? FString::Printf(TEXT("%d in it"), Members.Num()) : FString(TEXT("new")), U(12.f),
+			Members.Num() > 0 ? Parchment : Dim, AlignCentre);
+		if (B.bHover)
+		{
+			SetTooltip(Chip, Members.Num() > 0 ? FString::Printf(TEXT("Join platoon %d   [Ctrl+%d]"), i + 1, i + 1) : FString::Printf(TEXT("Form platoon %d   [Ctrl+%d]"), i + 1, i + 1),
+				{ Members.Num() > 0 ? FString::Printf(TEXT("The selected troops join its %d: nobody is put out of it."), Members.Num()) : FString(TEXT("The selected troops become this platoon.")),
+				  TEXT("A troop already in another platoon leaves that one.") });
+		}
+		if (B.bClicked)
+		{
+			Click();
+			Command->AddToPlatoon(i, Units);
+			bAssignOpen = false;
+			UE_LOG(LogVoxelLab, Log, TEXT("hud: Assign: %d unit(s) to platoon %d (it had %d)"), Units.Num(), i + 1, Members.Num());
+			return;
+		}
+	}
+	// a click anywhere else puts it away (the Assign button toggles it)
+	if (PCtrl && PCtrl->WasInputKeyJustPressed(EKeys::LeftMouseButton) && bMouse && !Box.IsInside(Mouse) && !Anchor.IsInside(Mouse))
+	{
+		bAssignOpen = false;
+	}
 }
 
 // ---------------------------------------------------------------------------- the castle's level card
@@ -368,7 +592,7 @@ float AVLHUD::DrawHints(float Y)
 	case EVLArm::AttackGround: Hint = TEXT("Attack ground    LMB the ground: the archers shoot there   ·   A: attack-move   ·   RMB / Esc cancel"); break;
 	case EVLArm::AttackMove: Hint = TEXT("Attack-move    LMB a destination or a foe   ·   Shift + LMB: more points   ·   RMB / Esc cancel"); break;
 	case EVLArm::Patrol: Hint = TEXT("Patrol    LMB: between here and there   ·   Shift + LMB: one more point   ·   RMB / Esc cancel"); Which = EVLIcon::Patrol; Accent = Amber; break;
-	case EVLArm::Guard: Hint = TEXT("Guard    LMB one of your buildings, a Builder or King David   ·   RMB / Esc cancel"); Which = EVLIcon::Shield; Accent = Gold; break;
+	case EVLArm::Guard: Hint = TEXT("Guard    LMB one of your buildings or units (a troop in a platoon: the platoon)   ·   RMB / Esc cancel"); Which = EVLIcon::Shield; Accent = Gold; break;
 	default: break;
 	}
 	if (const UVLConstruction* Construction = UVLConstruction::Get(this); Construction && Construction->IsPlacing())
@@ -476,8 +700,8 @@ void AVLHUD::CaptureMinimap(const FBox2D& World)
 	}
 	const FVector2D C = World.GetCenter();
 	MinimapCapture->OrthoWidth = World.GetSize().X;
-	// looking straight down with +X up the picture and +Y to its right, as the minimap draws it
-	MinimapCapture->SetWorldLocationAndRotation(FVector(C.X, C.Y, 40000.f), FRotator(-90.f, 0.f, 0.f));
+	// looking straight down with the default camera's way (MapYaw, a quarter turn) up the picture, as the minimap draws it
+	MinimapCapture->SetWorldLocationAndRotation(FVector(C.X, C.Y, 40000.f), FRotator(-90.f, MapYaw, 0.f));
 	MinimapCapture->HiddenActors.Reset();
 	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
 	{
@@ -486,7 +710,7 @@ void AVLHUD::CaptureMinimap(const FBox2D& World)
 	MinimapCaptureAt = Now;
 	MinimapShots = 0;
 	bMinimapCaptured = true;
-	UE_LOG(LogVoxelLab, Log, TEXT("minimap: capturing %.0f m round %.0f %.0f"), World.GetSize().X / 100.f, C.X, C.Y);
+	UE_LOG(LogVoxelLab, Log, TEXT("minimap: capturing %.0f m round %.0f %.0f, up is yaw %.0f (the default camera's yaw %.0f)"), World.GetSize().X / 100.f, C.X, C.Y, MapYaw, King ? King->GetHomeYaw() : 0.f);
 }
 
 void AVLHUD::DrawMinimap(const FBox2D& Box)
@@ -510,6 +734,12 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 		WorldBox = FBox2D(C - FVector2D(Half, Half), C + FVector2D(Half, Half));
 	}
 	MapWorld = WorldBox;
+	if (!bMinimapCaptured && King)
+	{
+		// (the owner's call, 2026-11-22: the map lay a quarter turn off the view; it is now the way the default camera
+		// looks, to the nearest quarter turn, and stays so when the view is turned)
+		MapYaw = FRotator::NormalizeAxis(FMath::RoundToFloat(King->GetHomeYaw() / 90.f) * 90.f);
+	}
 	if (!bMinimapCaptured && Grid && Grid->IsBuilt())
 	{
 		CaptureMinimap(WorldBox);
@@ -536,9 +766,19 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 		}
 	}
 	const FVector2D WS = WorldBox.GetSize();
-	// the camera looks along +X at its start: +X is up the map, +Y is right
-	auto ToMap = [&](const FVector2D& W) { return FVector2D(MapRect.Min.X + (W.Y - WorldBox.Min.Y) / WS.Y * Size.X, MapRect.Min.Y + (WorldBox.Max.X - W.X) / WS.X * Size.Y); };
-	auto ToWorld = [&](const FVector2D& M) { return FVector2D(WorldBox.Max.X - (M.Y - MapRect.Min.Y) / Size.Y * WS.X, WorldBox.Min.Y + (M.X - MapRect.Min.X) / Size.X * WS.Y); };
+	// up the map is the way the default camera looks (MapYaw), right is to its right; everything drawn on the map and
+	// every click on it goes through these two
+	const FVector2D MapUp(FMath::Cos(FMath::DegreesToRadians(MapYaw)), FMath::Sin(FMath::DegreesToRadians(MapYaw))), MapRight(-MapUp.Y, MapUp.X);
+	const FVector2D WC = WorldBox.GetCenter();
+	auto ToMap = [&](const FVector2D& W)
+	{
+		const FVector2D D = W - WC;
+		return FVector2D(MapRect.Min.X + (0.5f + FVector2D::DotProduct(D, MapRight) / WS.X) * Size.X, MapRect.Min.Y + (0.5f - FVector2D::DotProduct(D, MapUp) / WS.X) * Size.Y);
+	};
+	auto ToWorld = [&](const FVector2D& M)
+	{
+		return WC + MapRight * (((M.X - MapRect.Min.X) / Size.X - 0.5f) * WS.X) + MapUp * ((0.5f - (M.Y - MapRect.Min.Y) / Size.Y) * WS.X);
+	};
 	auto Dot = [&](const FVector2D& World, float S, const FLinearColor& Color, bool bRim)
 	{
 		const FVector2D P = ToMap(World);
@@ -645,6 +885,11 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 			bOk = PCtrl->DeprojectScreenPositionToWorld(Corners[i].X, Corners[i].Y, Origin, Dir);
 			const float Along = Dir.Z < -0.02f ? FMath::Min(float((PlaneZ - Origin.Z) / Dir.Z), 80000.f) : 80000.f;
 			Points[i] = ToMap(FVector2D(Origin + Dir * Along));
+		}
+		MapViewMid = bOk ? 0.25f * (Points[0] + Points[1] + Points[2] + Points[3]) : FVector2D::ZeroVector;
+		if (const AActor* Castle = Battle->GetCastle(UVLBattle::Player))
+		{
+			MapCastleAt = ToMap(FVector2D(Castle->GetActorLocation()));
 		}
 		for (int32 i = 0; i < 4 && bOk; ++i)
 		{
@@ -757,31 +1002,22 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 	// command buttons, right-aligned (laid out first: the line under the title must stay clear of them). The main
 	// game's card: Attack-move, Stop, Hold, Patrol, Guard, Roam, Stance, Formation, March together, Disband,
 	// Dismiss; and this game's Attack ground and Control.
-	enum ECmd { CmdAttack, CmdGround, CmdStop, CmdHold, CmdPatrol, CmdGuard, CmdRoam, CmdStance, CmdForm, CmdMarch, CmdDisband, CmdDismiss, CmdControl };
+	// (2026-11-22, the owner's call: no Attack-move, Attack ground, Stop or Hold buttons: attacking is a right click,
+	// hold is one of the stances; A and S still do attack-move and stop. In their place: Assign, to a platoon.)
+	enum ECmd { CmdAssign, CmdPatrol, CmdGuard, CmdRoam, CmdStance, CmdForm, CmdMarch, CmdDisband, CmdDismiss, CmdControl };
 	struct FCommand { ECmd Kind; EVLIcon Which; const TCHAR* Key; FString Label; FString Title; FString Line; bool bActive; };
 	TArray<FCommand, TInlineAllocator<14>> Commands;
 	if (!bEnemy)
 	{
 		const EVLArm Armed = Command->GetArmed();
-		const bool bFighters = Units.ContainsByPredicate([](const AVLKing* U) { return UVLCommand::CanAttack(U); });
-		if (bFighters)
-		{
-			Commands.Add({ CmdAttack, EVLIcon::Swords, TEXT("A"), TEXT("Attack"), TEXT("Attack-move   [A]"),
-				TEXT("Then click: march there, fighting what you meet, and on after each fight (Shift + click: more points). A click on a foe attacks it."), Armed == EVLArm::AttackMove });
-		}
-		if (Count[1] > 0)
-		{
-			Commands.Add({ CmdGround, EVLIcon::Bow, TEXT("A"), TEXT("Ground"), TEXT("Attack ground   [A, or A A]"),
-				TEXT("Then click the ground: the archers shoot at that spot three times (walking into range first). A: archers alone; with others, press A twice."), Armed == EVLArm::AttackGround });
-		}
-		Commands.Add({ CmdStop, EVLIcon::Stop, TEXT("S"), TEXT("Stop"), TEXT("Stop   [S]"), TEXT("Halt and drop the current order (a tap of S; holding it pans)."), false });
-		Commands.Add({ CmdHold, EVLIcon::StanceHold, TEXT("H"), TEXT("Hold"), TEXT("Hold ground   [H]"), TEXT("Stand fast until the next order: fight only what is in reach."), First->bHoldOrder });
+		Commands.Add({ CmdAssign, EVLIcon::RecruitFlag, nullptr, TEXT("Assign"), TEXT("Assign to a platoon   [Ctrl + 1-6]"),
+			TEXT("Pick a platoon: the selected troops join it and its members stay (an empty slot: they form it). A troop in another platoon leaves that one."), bAssignOpen });
 		Commands.Add({ CmdPatrol, EVLIcon::Patrol, TEXT("P"), TEXT("Patrol"), TEXT("Patrol   [P]"),
 			TEXT("Then click: walk between here and there, fighting what you meet, until given another order. Hold Shift and click several points: a patrol round all of them."), Armed == EVLArm::Patrol });
 		if (Command->SelectionCanGuard())
 		{
 			Commands.Add({ CmdGuard, EVLIcon::Shield, TEXT("V"), TEXT("Guard"), TEXT("Guard   [V]"),
-				TEXT("Then click one of your buildings, a Builder or King David: stay by it and fight what comes near. Or right-click it. Troops cannot be guarded."), Armed == EVLArm::Guard || Command->GuardWardOf(First) != nullptr });
+				TEXT("Then click one of your buildings or units: stay by it and fight what comes near (a troop in a platoon: the whole platoon). Or right-click a building, a Builder or King David."), Armed == EVLArm::Guard || Command->GuardWardOf(First) != nullptr });
 		}
 		if (Count[3] > 0)
 		{
@@ -838,7 +1074,7 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 	FString SubLine = bEnemy ? FString(TEXT("Enemy troops: right-click to attack"))
 		: (Platoon != INDEX_NONE ? FString::Printf(TEXT("Platoon %d%s  ·  %s  ·  %s"), Platoon + 1, *LedBy, UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance))
 			: (bLeads ? FString::Printf(TEXT("Leader of platoon %d  ·  Stance: %s"), OwnPlatoon + 1, UVLCommand::StanceName(Stance))
-				: FString::Printf(TEXT("Stance: %s   ·   Ctrl+1-6 forms a platoon"), UVLCommand::StanceName(Stance))));
+				: FString::Printf(TEXT("Stance: %s   ·   Ctrl+1-6 joins a platoon"), UVLCommand::StanceName(Stance))));
 	if (Total == 1 && First->IsGarrisoned()) { SubLine = TEXT("On the watch tower's lookout   ·   ") + SubLine; }
 	else if (const FString Doing = bEnemy ? FString() : Command->DescribeOrders(Units); !Doing.IsEmpty()) { SubLine = Doing + TEXT("   ·   ") + SubLine; }
 	// the command row takes the right of the panel: a hint that would run under it is dropped (its first part stays)
@@ -910,6 +1146,11 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 
 	float BX = RowX;
 	const float BY = Box.Min.Y + U(44.f);
+	// (the Assign picker first: it lies over the panel's top edge, and its chips claim their clicks before the row)
+	if (Commands.Num() > 0 && Commands[0].Kind == CmdAssign)
+	{
+		DrawAssignPicker(Units, FBox2D(FVector2D(RowX, BY), FVector2D(RowX + BS, BY + BS)), Box.Min.Y - U(6.f));
+	}
 	for (int32 i = 0; i < Commands.Num(); ++i, BX += BS + Gap)
 	{
 		const FCommand& C = Commands[i];
@@ -922,10 +1163,13 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 		Click();
 		switch (C.Kind)
 		{
-		case CmdAttack: Command->Arm(EVLArm::AttackMove); break;
-		case CmdGround: Command->Arm(EVLArm::AttackGround); break;
-		case CmdStop: Command->OrderStop(Units); AVLGameMode::PlayOrderSound(this); break;
-		case CmdHold: Command->OrderHold(Units); AVLGameMode::PlayOrderSound(this); break;
+		case CmdAssign:
+			bAssignOpen = !bAssignOpen;
+			if (UVLConstruction* Construction = UVLConstruction::Get(this); bAssignOpen && Construction)
+			{
+				Construction->SetMenu(false);       // (the build menu's panel would lie under the picker)
+			}
+			break;
 		case CmdPatrol: Command->Arm(EVLArm::Patrol); break;
 		case CmdGuard: Command->Arm(EVLArm::Guard); break;
 		case CmdRoam: Command->OrderRoam(Units); AVLGameMode::PlayOrderSound(this); break;
@@ -1446,6 +1690,7 @@ void AVLHUD::DrawPlatoonPanel()
 	}
 	const float X = View.X - U(14.f) - W, Y = View.Y - U(14.f) - Height;
 	const FBox2D Box(FVector2D(X, Y), FVector2D(X + W, Y + Height));
+	PlatoonRect = Box;
 	HudPanel(Box);
 
 	// header: click to fold the panel away
@@ -1570,7 +1815,20 @@ void AVLHUD::DrawPlatoonPanel()
 		if (SmallB[1].bHover) { SetTooltip(Small[1], FString::Printf(TEXT("Stance: %s"), UVLCommand::StanceName(Stance)), { TEXT("Click (or G) to change.") }); }
 		if (SmallB[0].bClicked || SmallB[0].bRightClicked) { Click(); Command->CyclePlatoonFormation(i); }
 		if (SmallB[1].bClicked) { Click(); Command->CyclePlatoonStance(i); }
-		if (RB.bClicked)
+		if (RB.bClicked && AltHeld() && Sel.Num() > 0 && Selected != i)
+		{
+			// Option + click on a platoon's row: the selection guards that platoon (keeps by it, fights what comes at it)
+			TArray<AVLKing*> Guards = Sel;
+			if (King->IsHeroMode()) { Guards.Remove(King); }
+			const int32 N = Command->OrderGuardPlatoon(Guards, i);
+			Click(N == 0);
+			if (UVLBattle* Battle = UVLBattle::Get(this))
+			{
+				Battle->PushAlert(N > 0 ? FString::Printf(TEXT("%d guard platoon %d"), N, i + 1) : FString(TEXT("Nobody of the selection can guard that platoon")));
+			}
+			if (N > 0) { AVLGameMode::PlayOrderSound(this); }
+		}
+		else if (RB.bClicked)
 		{
 			// click selects; a second click soon after also brings the camera
 			const bool bDouble = LastSlotClicked == i && Now - LastSlotClickTime < 0.35;
@@ -1584,7 +1842,7 @@ void AVLHUD::DrawPlatoonPanel()
 				UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance)),
 				RowLeader ? FString::Printf(TEXT("Led by %s: the formation forms up on it"), RowLeader == King ? TEXT("you") : *RowLeader->GetDisplayName())
 					: FString(TEXT("No leader: take control of a member, or have the others follow one (right-click it)")),
-				FString::Printf(TEXT("Click or press %d to select; twice to go there."), i + 1) });
+				FString::Printf(TEXT("Click or press %d to select; twice to go there. Option + click: the selection guards it."), i + 1) });
 		}
 	}
 }
@@ -1617,7 +1875,15 @@ void AVLHUD::DrawHeroBits()
 			FLinearColor HintCol = GoldBright;
 			TArray<AVLKing*> Commanded;
 			King->HeroCommanded(Commanded);
-			if (King->IsHeroHoverSelect())
+			if (King->IsHeroHoverSelect() && King->HeroGuardsOnClick(Aimed))
+			{
+				// troops selected and this one is not among them: they guard it (its platoon, if it is in one)
+				const int32 GP = HintCmd ? HintCmd->PlatoonIndexOf(Aimed) : INDEX_NONE;
+				const bool bWhole = GP != INDEX_NONE && Sel.ContainsByPredicate([HintCmd, GP](const AVLKing* U2) { return HintCmd->PlatoonIndexOf(U2) != GP; });
+				Hint = (bWhole ? FString::Printf(TEXT("Option+click: guard platoon %d"), GP + 1) : TEXT("Option+click: guard ") + Aimed->GetDisplayName())
+					+ TEXT("   ·   Shift+Option: add it to the selection");
+			}
+			else if (King->IsHeroHoverSelect())
 			{
 				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? TEXT("Option+click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift+Option+click: let go)")
 					: TEXT("Option+click: select ") + Aimed->GetDisplayName());
@@ -1693,7 +1959,7 @@ void AVLHUD::DrawHeroBits()
 			TArray<AVLKing*> Commanded;
 			King->HeroCommanded(Commanded, &bFollowers);
 			Commanding = Sel.Num() > 0
-				? FString::Printf(TEXT("Commanding %d  ·  Option+click: attack / move (Shift: queue)  ·  G: follow me  ·  Esc: let go"), Sel.Num())
+				? FString::Printf(TEXT("Commanding %d  ·  Option+click: attack / move (Shift: queue), a friend: guard it  ·  G: follow me  ·  Esc: let go"), Sel.Num())
 				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  Option+click: attack / move (Shift: queue)"), Commanded.Num())
 				: (Commanded.Num() > 0 ? FString::Printf(TEXT("Your platoon (%d)  ·  Option+click: attack / move (Shift: queue)  ·  G: follow me"), Commanded.Num())
 				: FString(TEXT("Option+click a troop under the crosshair (or 1-6) to command it"))));
@@ -1748,9 +2014,15 @@ void AVLHUD::DrawHeroBits()
 						? TEXT("WASD move   Shift run   Space jump   Left click: swing the hammer   Tab overview (select the king + Enter to go back to him)   Esc menu")
 						: TEXT("WASD move   Shift run   Space jump   Left click swing   Option+click select / command   Tab overview (select the king + Enter to go back to him)   Esc menu"))))
 			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   Option+click select / command (Shift: queue)   Tab overview   Esc menu");
-		const float P = U(15.f);
+		// between the minimap and the platoon panel (both stay up in the hero view): smaller in a narrow window
+		const float SpanL = MapRect.bIsValid ? MapRect.Max.X + U(16.f) : U(14.f), SpanR = PlatoonRect.bIsValid ? PlatoonRect.Min.X - U(10.f) : View.X - U(14.f);
+		float P = U(15.f);
+		while (P > U(10.f) && TextSize(Help, P).X + U(32.f) > SpanR - SpanL) { P -= 1.f; }
 		const float W = TextSize(Help, P).X + U(32.f), H = U(32.f);
-		const FBox2D Box(FVector2D(FMath::RoundToFloat((View.X - W) * 0.5f), View.Y - U(14.f) - H), FVector2D(FMath::RoundToFloat((View.X + W) * 0.5f), View.Y - U(14.f)));
+		const float Mid = W <= SpanR - SpanL ? (SpanL + SpanR) * 0.5f : View.X * 0.5f;
+		// (still too wide for the gap: over the panels, on the row above them)
+		const float BaseY = W <= SpanR - SpanL ? View.Y - U(14.f) : FMath::Min(MapRect.bIsValid ? MapRect.Min.Y : View.Y, PlatoonRect.bIsValid ? PlatoonRect.Min.Y : View.Y) - U(10.f);
+		const FBox2D Box(FVector2D(FMath::RoundToFloat(Mid - W * 0.5f), BaseY - H), FVector2D(FMath::RoundToFloat(Mid + W * 0.5f), BaseY));
 		Panel(Box, false, 0.85f);
 		TextIn(Box, Help, P, Parchment, AlignCentre);
 
@@ -1759,7 +2031,7 @@ void AVLHUD::DrawHeroBits()
 		{
 			const float Frac = King->GetHealthFrac();
 			const float HW = U(440.f), HH = U(58.f);
-			const FBox2D HB(FVector2D(FMath::RoundToFloat((View.X - HW) * 0.5f), Box.Min.Y - U(10.f) - HH), FVector2D(FMath::RoundToFloat((View.X + HW) * 0.5f), Box.Min.Y - U(10.f)));
+			const FBox2D HB(FVector2D(FMath::RoundToFloat(Mid - HW * 0.5f), Box.Min.Y - U(10.f) - HH), FVector2D(FMath::RoundToFloat(Mid + HW * 0.5f), Box.Min.Y - U(10.f)));
 			Panel(HB, false, 0.9f);
 			Portrait(VLPortraitOf(King->GetKind()), HB.Min.X + U(8.f), HB.Min.Y + U(5.f), U(48.f));
 			const float TX = HB.Min.X + U(66.f), MW = HB.Max.X - U(16.f) - TX;
