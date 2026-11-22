@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_ArmL",
+ "faces": 1447,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1044,
+   -0.1288,
+   -0.2809
+  ],
+  [
+   0.1433,
+   0.129,
+   0.0822
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.2875,
+  0.0,
+  1.175
+ ],
+ "part": "ArmL",
+ "parent": "Chest",
+ "triangles": 2895,
+ "blocks": 128
+}

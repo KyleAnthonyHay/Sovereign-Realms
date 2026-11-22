@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_ShinR",
+ "faces": 830,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1462,
+   -0.2225,
+   -0.35
+  ],
+  [
+   0.1213,
+   0.1225,
+   0.0782
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.35
+ ],
+ "part": "ShinR",
+ "parent": "LegR",
+ "triangles": 1661,
+ "blocks": 82
+}

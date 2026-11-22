@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_Basket",
+ "faces": 4557,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1598,
+   -0.1573,
+   -0.5525
+  ],
+  [
+   0.1678,
+   0.152,
+   0.0175
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.33179,
+  -0.10867,
+  0.98505
+ ],
+ "part": "Basket",
+ "parent": "ForeR",
+ "triangles": 9115,
+ "blocks": 295
+}

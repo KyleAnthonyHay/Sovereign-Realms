@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_LegR",
+ "faces": 1485,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1161,
+   -0.15,
+   -0.375
+  ],
+  [
+   0.1417,
+   0.1159,
+   0.125
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegR",
+ "parent": "",
+ "triangles": 2971,
+ "blocks": 153
+}

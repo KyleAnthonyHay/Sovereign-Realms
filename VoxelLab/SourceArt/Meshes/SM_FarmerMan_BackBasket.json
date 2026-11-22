@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_BackBasket",
+ "faces": 8418,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.4137,
+   -0.2065,
+   -0.256
+  ],
+  [
+   0.3194,
+   0.2922,
+   0.7115
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.3,
+  1.025
+ ],
+ "part": "BackBasket",
+ "parent": "Chest",
+ "triangles": 16837,
+ "blocks": 615
+}

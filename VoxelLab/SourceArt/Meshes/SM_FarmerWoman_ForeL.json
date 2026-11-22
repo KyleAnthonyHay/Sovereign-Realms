@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_ForeL",
+ "faces": 423,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.091,
+   -0.3686,
+   -0.2171
+  ],
+  [
+   0.1159,
+   0.0884,
+   0.0956
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.31625,
+  0.0,
+  0.90151
+ ],
+ "part": "ForeL",
+ "parent": "ArmL",
+ "triangles": 846,
+ "blocks": 38
+}

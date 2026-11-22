@@ -365,7 +365,7 @@ namespace
 		for (TActorIterator<AVLKing> It(World); It; ++It)
 		{
 			const bool bKing = !It->IsTroop();
-			if (It->IsDead())
+			if (It->IsDead() || It->bAmbient)       // (the farms' hands: vl.Farmhands)
 			{
 				continue;
 			}
@@ -994,11 +994,15 @@ void AVLGameMode::ApplyMusicSetting(float Setting)
 	}
 	else if (Music && Music->IsPlaying())
 	{
-		Music->SetVolumeMultiplier(MusicVolume * MusicSetting);
+		Music->SetVolumeMultiplier(MusicVolume * MusicSetting);     // a song is playing: only its volume changes
 	}
 	else if (!bSongLoading)
 	{
-		NextSong();                 // turned on: the next song is loaded and fades in
+		NextSong(true);             // turned on: a song starts now (not after the next timer or the next song)
+	}
+	else if (Music)
+	{
+		Music->SetVolumeMultiplier(MusicVolume * MusicSetting);     // (the one on its way fades in to this volume)
 	}
 }
 
@@ -1019,16 +1023,53 @@ void AVLGameMode::StopMusic()
 	bSongLoading = false;
 }
 
-void AVLGameMode::NextSong()
+void AVLGameMode::StartSong(USoundBase* Sound, float FadeSeconds)
+{
+	SongFailures = 0;
+	SongPlaying = Sound;
+	if (!Music)
+	{
+		Music = UGameplayStatics::CreateSound2D(this, Sound, MusicVolume * MusicSetting, 1.f, 0.f, nullptr, true, false);
+		if (Music)
+		{
+			Music->bIsUISound = true;       // it plays on through the pause menu
+		}
+	}
+	if (Music)
+	{
+		Music->SetSound(Sound);
+		Music->FadeIn(FadeSeconds, MusicVolume * MusicSetting);      // (as loud as a song has always started)
+	}
+}
+
+void AVLGameMode::NextSong(bool bNow)
 {
 	if (MusicSetting <= 0.f || bSongLoading)
 	{
 		return;
 	}
 	Song = (Song + 1) % NumSongs;
-	// loaded in the background (a song is streamed from disk as it plays: Tools/ue/import_audio.py), then played
 	const FString Name = FString::Printf(TEXT("S_Music_%d"), Song + 1);
 	const FSoftObjectPath Path(FString::Printf(TEXT("/Game/Voxel/Audio/%s.%s"), *Name, *Name));
+	if (bNow)
+	{
+		// The player turned the music on: the song is loaded here and now (only the asset: its sound streams from
+		// disk as it plays, so this is quick), its first chunk asked for, and it starts with a short fade.
+		TSharedPtr<FStreamableHandle> Load = UAssetManager::GetStreamableManager().RequestSyncLoad(Path);
+		USoundBase* Sound = Cast<USoundBase>(Path.ResolveObject());
+		if (Sound)
+		{
+			SongLoad = Load;        // (holds the song while it plays; the one before goes with the old handle)
+			UGameplayStatics::PrimeSound(Sound);
+			StartSong(Sound, 0.35f);
+			return;
+		}
+		UE_LOG(LogVoxelLab, Warning, TEXT("music: %s could not be loaded"), *Path.ToString());
+		++SongFailures;             // (the game mode's tick tries the next one)
+		return;
+	}
+	// one song after another: loaded in the background (a song is streamed from disk as it plays:
+	// Tools/ue/import_audio.py), then played
 	bSongLoading = true;
 	TWeakObjectPtr<AVLGameMode> Weak(this);
 	const int32 Wanted = Song;
@@ -1051,21 +1092,7 @@ void AVLGameMode::NextSong()
 			}
 			return;
 		}
-		GM->SongFailures = 0;
-		GM->SongPlaying = Sound;
-		if (!GM->Music)
-		{
-			GM->Music = UGameplayStatics::CreateSound2D(GM, Sound, GM->MusicVolume * GM->MusicSetting, 1.f, 0.f, nullptr, true, false);
-			if (GM->Music)
-			{
-				GM->Music->bIsUISound = true;       // it plays on through the pause menu
-			}
-		}
-		if (GM->Music)
-		{
-			GM->Music->SetSound(Sound);
-			GM->Music->FadeIn(3.f, GM->MusicVolume * GM->MusicSetting);
-		}
+		GM->StartSong(Sound, 3.f);
 	}), FStreamableManager::AsyncLoadHighPriority);
 	// (the hold on the song before this one goes with the old handle)
 	SongLoad = Load;

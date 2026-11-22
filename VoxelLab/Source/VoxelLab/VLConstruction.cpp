@@ -4,6 +4,7 @@
 // this game's tagged buildings (UVLBattle) and path grid (UVLGrid). See VLConstruction.h.
 
 #include "VLConstruction.h"
+#include "VLFarmer.h"
 #include "VoxelLab.h"
 #include "VLBattle.h"
 #include "VLEnemyAI.h"
@@ -43,6 +44,11 @@ namespace
 		const TCHAR* Owner;
 		const TCHAR* Mesh;
 		float X, Y, Z, Yaw, Scale;
+	};
+	struct FVLDoorSpec
+	{
+		const TCHAR* Owner;
+		float X, Y, Z;
 	};
 #include "VLBuildingProps.inl"
 
@@ -2137,6 +2143,10 @@ void UVLConstruction::Tick(float DeltaSeconds)
 			SetMenu(false);
 		}
 	}
+	if (Battle->GetState() != EVLMatch::Idle)
+	{
+		TickFarmhands(DeltaSeconds);    // (a match, or one ended and watched on)
+	}
 	if (Battle->GetState() != EVLMatch::Playing)
 	{
 		return;
@@ -3071,4 +3081,180 @@ namespace
 				}
 			}
 		}));
+}
+
+// ------------------------------------------------------------------------------------------------ the farms' hands
+
+bool UVLConstruction::FarmSpots(const FVLBuildingState& B, FVLFarmSpots& Out) const
+{
+	const AActor* A = B.Actor.Get();
+	const UStaticMeshComponent* C = MeshOf(A);
+	UVLGrid* Grid = UVLGrid::Get(const_cast<UVLConstruction*>(this));
+	if (!A || !C || !C->GetStaticMesh() || !Grid || !Grid->IsBuilt())
+	{
+		return false;
+	}
+	// (the map's own farms have no recorded mesh: their mesh's name; SM_Farmstead is SM_Farmstead_A under another name)
+	const FString Mesh = B.Mesh.IsEmpty() ? C->GetStaticMesh()->GetName() : B.Mesh;
+	const FTransform T = A->GetActorTransform();
+	Out = FVLFarmSpots();
+	Out.Front = T.GetRotation().RotateVector(FVector(0.f, 1.f, 0.f));      // buildings face their local +Y
+	FVector DoorLocal(0.f, -275.f, 50.f);
+	for (const FVLDoorSpec* D = GBuildingDoors; D->Owner; ++D)
+	{
+		if (Mesh == D->Owner)
+		{
+			DoorLocal = FVector(D->X, D->Y, D->Z);
+		}
+	}
+	// a spot of the ground: the node nearest it (of the door's region), if it is near enough and inside the farm
+	int32 Region = 0;
+	auto Ground = [&](const FVector& Local, float Within, FVector& OutAt) -> bool
+	{
+		if (FMath::Abs(Local.X) > 1060.f || FMath::Abs(Local.Y) > 810.f)
+		{
+			return false;
+		}
+		const FVector W = T.TransformPosition(Local);
+		const int32 N = Grid->NearestNode(W + FVector(0.f, 0.f, 60.f), FMath::CeilToInt32(Within / Grid->GetCellSize()) + 1, Region);
+		if (N == INDEX_NONE || FVector::Dist2D(Grid->NodePos(N), W) > Within)
+		{
+			return false;
+		}
+		if (Region == 0)
+		{
+			Region = Grid->RegionOf(N);
+		}
+		OutAt = Grid->NodePos(N);
+		return true;
+	};
+	// the door: a step out in front of it
+	if (!Ground(DoorLocal + FVector(0.f, 110.f, 0.f), 200.f, Out.Door))
+	{
+		return false;
+	}
+	// the crop rows: every other tuft of its wheat (none on a mesh without a props table)
+	FVector Sum = FVector::ZeroVector;
+	int32 Tufts = 0, k = 0;
+	for (const FVLPropSpec* P = GBuildingProps; P->Owner; ++P)
+	{
+		if (Mesh != P->Owner || !FString(P->Mesh).StartsWith(TEXT("SM_Wheat")))
+		{
+			continue;
+		}
+		const FVector L(P->X, P->Y, P->Z);
+		Sum += L;
+		++Tufts;
+		FVector At;
+		if ((k++ % 3) == 0 && Ground(L, 70.f, At))
+		{
+			Out.Field.Add(At);
+		}
+	}
+	Out.FieldCentre = Tufts > 0 ? T.TransformPosition(Sum / Tufts) : Out.Door;
+	// the store: the hay and the barrel beside the farmhouse door, on the side away from the wheat
+	const float Side = (Tufts > 0 && Sum.X / Tufts > DoorLocal.X) ? -1.f : 1.f;
+	bool bStore = false;
+	for (const float Out_ : { 300.f, 220.f, 380.f, 150.f })
+	{
+		if (Ground(DoorLocal + FVector(Side * Out_, 130.f, 0.f), 90.f, Out.Store))
+		{
+			bStore = true;
+			break;
+		}
+	}
+	if (!bStore)
+	{
+		Out.Store = Out.Door;
+	}
+	return true;
+}
+
+void UVLConstruction::DismissCrew(AActor* Farm, FFarmCrew& Crew, const TCHAR* Why)
+{
+	int32 N = 0;
+	for (const TWeakObjectPtr<AVLKing>& H : Crew.Hands)
+	{
+		if (AVLKing* U = H.Get())
+		{
+			U->Destroy();
+			++N;
+		}
+	}
+	Crew.Hands.Reset();
+	UE_LOG(LogVoxelLab, Log, TEXT("FARMHANDS %s: %d sent away (%s)"), Farm ? *Farm->GetName() : TEXT("a farm"), N, Why);
+}
+
+void UVLConstruction::TickFarmhands(float Dt)
+{
+	FarmClock -= Dt;
+	if (FarmClock > 0.f)
+	{
+		return;
+	}
+	FarmClock = 1.f;
+	UVLBattle* Battle = UVLBattle::Get(this);
+	if (!Battle)
+	{
+		return;
+	}
+	TSet<const AActor*> Farms;
+	for (FVLBuildingState& B : Battle->GetBuildingsMutable())
+	{
+		AActor* A = B.Actor.Get();
+		if (B.Kind != EVLBuilding::Farm || !A)
+		{
+			continue;
+		}
+		Farms.Add(A);
+		const bool bWant = AVLFarmer::bEnabled && B.IsAlive() && !B.IsSite() && !A->IsHidden() && !A->ActorHasTag(TEXT("Abandoned"));
+		if (FFarmCrew* Crew = FarmCrews.Find(A))
+		{
+			const bool bLost = Crew->Hands.ContainsByPredicate([](const TWeakObjectPtr<AVLKing>& H) { return !H.IsValid(); });
+			const bool bMoved = !Crew->At.Equals(A->GetActorTransform(), 1.0);
+			if (!bWant || bLost || bMoved)
+			{
+				DismissCrew(A, *Crew, !bWant ? (B.IsAlive() ? TEXT("the farm is out of work") : TEXT("the farm fell")) : (bMoved ? TEXT("the farm was turned") : TEXT("one went missing")));
+				FarmCrews.Remove(A);
+			}
+		}
+		if (!bWant || FarmCrews.Contains(A) || FarmNoSpots.Contains(A))
+		{
+			continue;
+		}
+		FVLFarmSpots Spots;
+		if (!FarmSpots(B, Spots))
+		{
+			FarmNoSpots.Add(A);
+			UE_LOG(LogVoxelLab, Warning, TEXT("FARMHANDS %s: no walkable ground at its door: no hands"), *A->GetName());
+			continue;
+		}
+		FFarmCrew& Crew = FarmCrews.Add(A);
+		Crew.At = A->GetActorTransform();
+		const FVector Side = FVector::CrossProduct(FVector::UpVector, Spots.Front).GetSafeNormal();
+		for (int32 i = 0; i < 2; ++i)
+		{
+			const FVector At = Spots.Door + Side * (i == 0 ? -60.f : 60.f);
+			if (AVLFarmer* F = AVLFarmer::Spawn(GetWorld(), i == 0 ? TEXT("FarmerWoman") : TEXT("FarmerMan"), A, Spots, At))
+			{
+				Crew.Hands.Add(F);
+			}
+		}
+		UE_LOG(LogVoxelLab, Log, TEXT("FARMHANDS %s (%s of team %d): %d spawned at its door %s; %d spots in the field, the store at %s"), *A->GetName(), *B.Name, B.Team,
+			Crew.Hands.Num(), *Spots.Door.ToCompactString(), Spots.Field.Num(), *Spots.Store.ToCompactString());
+		if (Crew.Hands.Num() == 0)
+		{
+			FarmCrews.Remove(A);
+			FarmNoSpots.Add(A);     // (no character data: tried once)
+		}
+	}
+	for (auto It = FarmCrews.CreateIterator(); It; ++It)
+	{
+		AActor* A = It.Key().Get();
+		if (!A || !Farms.Contains(A))
+		{
+			DismissCrew(A, It.Value(), TEXT("the farm is gone"));
+			It.RemoveCurrent();
+		}
+	}
 }

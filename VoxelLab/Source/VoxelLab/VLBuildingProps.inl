@@ -327,3 +327,10 @@ static const FVLPropSpec GBuildingProps[] = {
 	{ TEXT("SM_Farmstead_C"), TEXT("SM_Pig"), 930.0f, -460.0f, 12.5f, -70.0f, 1.000f },
 	{ nullptr, nullptr, 0.f, 0.f, 0.f, 0.f, 1.f }
 };
+// The door of each building that has one: owner mesh, local X Y Z (cm, Unreal axes).
+static const FVLDoorSpec GBuildingDoors[] = {
+	{ TEXT("SM_Farmstead_A"), 0.0f, -275.0f, 50.0f },
+	{ TEXT("SM_Farmstead_B"), 450.0f, -275.0f, 50.0f },
+	{ TEXT("SM_Farmstead_C"), -600.0f, -275.0f, 50.0f },
+	{ nullptr, 0.f, 0.f, 0.f }
+};

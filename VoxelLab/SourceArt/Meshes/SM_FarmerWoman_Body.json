@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_Body",
+ "faces": 715,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2,
+   -0.1575,
+   -0.0531
+  ],
+  [
+   0.1906,
+   0.1375,
+   0.195
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.725
+ ],
+ "part": "Body",
+ "parent": "",
+ "triangles": 1430,
+ "blocks": 80
+}

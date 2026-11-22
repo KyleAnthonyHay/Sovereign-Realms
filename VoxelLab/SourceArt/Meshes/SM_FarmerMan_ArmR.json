@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_ArmR",
+ "faces": 1337,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1615,
+   -0.129,
+   -0.3804
+  ],
+  [
+   0.0822,
+   0.1296,
+   0.0821
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.3125,
+  0.0,
+  1.25
+ ],
+ "part": "ArmR",
+ "parent": "Chest",
+ "triangles": 2675,
+ "blocks": 147
+}

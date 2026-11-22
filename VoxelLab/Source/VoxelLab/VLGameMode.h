@@ -112,7 +112,11 @@ private:
 	int32 SongFailures = 0;         // songs in a row that would not load (all of them: the music gives up)
 	static constexpr int32 NumSongs = 8;        // S_Music_1..8
 	int32 Song = -1;
-	void NextSong();
+	/** The next song. bNow (the player has just turned the music on): loaded at once and started with a short fade;
+	 *  otherwise loaded in the background and faded in (one song after another). */
+	void NextSong(bool bNow = false);
+	/** Plays a loaded song on the music's component (made if need be), fading in over FadeSeconds. */
+	void StartSong(class USoundBase* Sound, float FadeSeconds);
 	void StopMusic();
 
 	UPROPERTY(Transient)

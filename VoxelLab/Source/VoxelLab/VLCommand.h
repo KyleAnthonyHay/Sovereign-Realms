@@ -160,6 +160,16 @@ public:
 	bool SelectionMarchTogether() const;
 	/** M: the setting of the selected platoon (else of loose selections), on / off; a march under way follows. */
 	void ToggleMarchTogether();
+	/**
+	 * The pace of every march under way, in one place: a group order that marches together (OrderMove, and so the
+	 * legs of a patrol or an attack-move, a Shift pathway, followers sent after their leader) gives its units one
+	 * AVLKing::MarchId. Each unit on a march walks no faster than the slowest of those marching with it: its march's,
+	 * and, a platoon member, the platoon's members on a march (walking or running, each at the speed it was sent at).
+	 * A unit in a fight or a chase, played by hand, or no longer on an order is at its own pace and counts for
+	 * nobody's. Called when an order is given, when a platoon's members change or one falls, and four times a
+	 * second (TickOrders) so a march follows whoever drops out of it or joins it.
+	 */
+	void UpdateMarchPace();
 	// the player's armed clicks
 	void Arm(EVLArm Mode);
 	EVLArm GetArmed() const;
@@ -298,6 +308,11 @@ private:
 	float OrdersClock = 0.f;
 	bool bQuietMove = false;        // a leg of a standing order: no order marker
 	bool bLooseMarchTogether = true;
+	/** Units given a march (MarchId) that UpdateMarchPace looks after; let go of once off it. */
+	TArray<TWeakObjectPtr<AVLKing>> Marchers;
+	int32 NextMarchId = 1;
+	/** A unit taken out of its platoon (or the platoon broken up): its own pace again, off the march. */
+	void LeftPlatoon(AVLKing* Unit);
 	EVLArm Armed = EVLArm::None;
 	double ArmedAt = -1.0;
 	double DismissAskedAt = -100.0;

@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_Chest",
+ "faces": 1394,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1661,
+   -0.1088,
+   -0.0289
+  ],
+  [
+   0.1669,
+   0.1036,
+   0.35
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.925
+ ],
+ "part": "Chest",
+ "parent": "Body",
+ "triangles": 2788,
+ "blocks": 130
+}

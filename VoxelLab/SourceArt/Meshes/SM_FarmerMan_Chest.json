@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_Chest",
+ "faces": 2470,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.2284,
+   -0.1963,
+   -0.0167
+  ],
+  [
+   0.2286,
+   0.1575,
+   0.4903
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.9125
+ ],
+ "part": "Chest",
+ "parent": "Body",
+ "triangles": 4941,
+ "blocks": 228
+}

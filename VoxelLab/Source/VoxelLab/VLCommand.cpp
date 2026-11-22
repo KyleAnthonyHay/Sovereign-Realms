@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Components/StaticMeshComponent.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/ScopeExit.h"
 
 namespace
 {
@@ -342,19 +343,22 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 	{
 		ClearStanding(Units);       // a new order ends a patrol, a guard, a hold, a roam
 	}
-	// march together: nobody faster than the slowest of them (a single unit: its own pace)
+	// march together: one march for the lot (a single unit, or Loose with the setting off: each at its own pace).
+	// Given once their walks are (FollowPath clears it), whichever way this returns; UpdateMarchPace sets the pace.
+	const int32 March = MarchTogether(Units, Shape) ? NextMarchId++ : 0;
+	ON_SCOPE_EXIT
 	{
-		const bool bTogether = MarchTogether(Units, Shape);
-		float Slowest = TNumericLimits<float>::Max();
-		for (const AVLKing* U : Units)
-		{
-			Slowest = FMath::Min(Slowest, bRun ? U->RunSpeed : U->WalkSpeed);
-		}
 		for (AVLKing* U : Units)
 		{
-			U->PaceCap = (bTogether && Slowest < (bRun ? U->RunSpeed : U->WalkSpeed) - 1.f) ? Slowest : 0.f;
+			U->MarchId = March;
+			U->PaceCap = 0.f;
+			if (March != 0)
+			{
+				Marchers.AddUnique(U);
+			}
 		}
-	}
+		UpdateMarchPace();
+	};
 	for (AVLKing* U : Units)
 	{
 		U->bAttackMove = false;     // a plain move (UVLBattle::AttackMove sets it again for the commander's)
@@ -595,6 +599,9 @@ void UVLCommand::OnUnitDied(AVLKing* Unit)
 	StopAttack(Unit);
 	Detach(Unit);
 	ClearStanding({ Unit });
+	Unit->PaceCap = 0.f;
+	Unit->MarchId = 0;
+	UpdateMarchPace();              // (the march it was on keeps the pace of those left)
 }
 
 const TCHAR* UVLCommand::StanceName(EVLStance Stance)
@@ -716,12 +723,31 @@ void UVLCommand::AssignPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 	}
 	// (a leader re-formed into the same platoon keeps the post; otherwise the new platoon gets its senior one)
 	AVLKing* OldLeader = Platoons[Index].Leader.Get();
+	const TArray<TWeakObjectPtr<AVLKing>> Old = Platoons[Index].Members;
 	Platoons[Index].Members.Reset();
 	Platoons[Index].Leader = nullptr;
 	AddToPlatoon(Index, Units);
 	if (OldLeader && Platoons[Index].Members.Contains(OldLeader))
 	{
 		Platoons[Index].Leader = OldLeader;
+	}
+	// those left out of it are taken out of the platoon: their own pace again
+	for (const TWeakObjectPtr<AVLKing>& M : Old)
+	{
+		if (AVLKing* U = M.Get(); U && PlatoonIndexOf(U) == INDEX_NONE)
+		{
+			LeftPlatoon(U);
+		}
+	}
+	UpdateMarchPace();
+}
+
+void UVLCommand::LeftPlatoon(AVLKing* Unit)
+{
+	if (Unit && Unit->MarchId != 0)
+	{
+		Unit->MarchId = 0;
+		Unit->PaceCap = 0.f;
 	}
 }
 
@@ -743,7 +769,10 @@ void UVLCommand::AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 		}
 		for (FPlatoon& P : Platoons)            // a unit belongs to one platoon at most
 		{
-			P.Members.Remove(U);
+			if (P.Members.Remove(U) > 0 && &P != &Platoons[Index])
+			{
+				LeftPlatoon(U);                 // (taken out of its old platoon: off the march it had with it)
+			}
 			if (P.Leader.Get() == U && &P != &Platoons[Index])
 			{
 				P.Leader = nullptr;             // (its old platoon's leader has left it)
@@ -761,6 +790,7 @@ void UVLCommand::AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 			UE_LOG(LogVoxelLab, Log, TEXT("platoon %d formed: %s leads it"), Index + 1, *L->GetDisplayName());
 		}
 	}
+	UpdateMarchPace();              // (a newcomer on a march: the platoon's pace is the slowest's again)
 }
 
 AVLKing* UVLCommand::PickLeader(const TArray<AVLKing*>& Units)
@@ -884,8 +914,13 @@ void UVLCommand::DisbandPlatoon(int32 Index)
 {
 	if (Index >= 0 && Index < MaxPlatoons)
 	{
+		for (const TWeakObjectPtr<AVLKing>& M : Platoons[Index].Members)
+		{
+			LeftPlatoon(M.Get());
+		}
 		Platoons[Index].Members.Reset();
 		Platoons[Index].Leader = nullptr;
+		UpdateMarchPace();
 		UE_LOG(LogVoxelLab, Log, TEXT("platoon %d disbanded"), Index + 1);
 	}
 }
@@ -2026,22 +2061,80 @@ void UVLCommand::ToggleMarchTogether()
 	bool& bSetting = P != INDEX_NONE ? Platoons[P].bMarchTogether : bLooseMarchTogether;
 	bSetting = !bSetting;
 	const bool bNow = MarchTogether(Units, SelectionFormation());
-	// a march under way follows the change at once
-	float Slowest = TNumericLimits<float>::Max();
-	for (const AVLKing* U : Units)
+	// a march under way follows the change at once: those of them on an order march together now, or each at its own pace
+	TArray<AVLKing*> Walking = Units.FilterByPredicate([](const AVLKing* U) { return U->IsOnOrder(); });
+	const int32 March = bNow && Walking.Num() > 1 ? NextMarchId++ : 0;
+	for (AVLKing* U : Walking)
 	{
-		Slowest = FMath::Min(Slowest, U->WalkSpeed);
+		U->MarchId = March;
+		U->PaceCap = 0.f;
+		if (March != 0)
+		{
+			Marchers.AddUnique(U);
+		}
 	}
-	for (AVLKing* U : Units)
-	{
-		U->PaceCap = (bNow && U->HasOrder() && Slowest < U->WalkSpeed - 1.f) ? Slowest : 0.f;
-	}
+	UpdateMarchPace();
 	if (UVLBattle* Battle = UVLBattle::Get(this))
 	{
 		Battle->PushAlert(SelectionFormation() != EVLFormation::Loose ? FString(TEXT("In formation they always keep the slowest one's pace (march freely: Loose, F)"))
 			: (bSetting ? FString(TEXT("March together: the slowest sets the pace")) : FString(TEXT("March freely: each at its own speed"))));
 	}
 	UE_LOG(LogVoxelLab, Log, TEXT("march together: %s"), bSetting ? TEXT("on") : TEXT("off"));
+}
+
+void UVLCommand::UpdateMarchPace()
+{
+	// who is on a march now, and the slowest of each march and of each platoon's marching members
+	TMap<int32, float> MarchPace;
+	float PlatoonPace[MaxPlatoons];
+	for (float& P : PlatoonPace)
+	{
+		P = TNumericLimits<float>::Max();
+	}
+	struct FOn
+	{
+		AVLKing* Unit;
+		int32 Platoon;
+		float Own;
+	};
+	TArray<FOn, TInlineAllocator<64>> On;
+	for (int32 i = Marchers.Num() - 1; i >= 0; --i)
+	{
+		AVLKing* U = Marchers[i].Get();
+		if (!U || U->IsDead() || U->MarchId == 0 || !U->IsOnOrder())
+		{
+			if (U)
+			{
+				U->MarchId = 0;     // the order is over (it arrived, gave up, was stopped or sent off alone)
+				U->PaceCap = 0.f;
+			}
+			Marchers.RemoveAtSwap(i);
+			continue;
+		}
+		if (PlayedByHand(U) || IsFightingNow(U))
+		{
+			U->PaceCap = 0.f;       // a fight, a chase, the player's hands: full speed, and nobody waits for it
+			continue;
+		}
+		const float Own = U->IsAutoRunning() ? U->RunSpeed : U->WalkSpeed;
+		float& M = MarchPace.FindOrAdd(U->MarchId, TNumericLimits<float>::Max());
+		M = FMath::Min(M, Own);
+		const int32 P = PlatoonIndexOf(U);
+		if (P != INDEX_NONE && (Platoons[P].Formation != EVLFormation::Loose || Platoons[P].bMarchTogether))
+		{
+			PlatoonPace[P] = FMath::Min(PlatoonPace[P], Own);
+		}
+		On.Add({ U, P, Own });
+	}
+	for (const FOn& O : On)
+	{
+		float Pace = MarchPace.FindRef(O.Unit->MarchId);
+		if (O.Platoon != INDEX_NONE)
+		{
+			Pace = FMath::Min(Pace, PlatoonPace[O.Platoon]);
+		}
+		O.Unit->PaceCap = Pace < O.Own - 1.f ? Pace : 0.f;
+	}
 }
 
 void UVLCommand::Arm(EVLArm Mode)
@@ -2229,6 +2322,9 @@ void UVLCommand::TickOrders(float Dt)
 	// ---- followers: after the one they follow
 	TickFollowers();
 
+	// ---- the marches' pace (the slowest of each march, and of each platoon on one; see UpdateMarchPace)
+	UpdateMarchPace();
+
 	// ---- guards: at their posts (which move with a unit they guard); a chase that takes one too far from its ward
 	// is let go (one that struck the ward or the guard is run down further)
 	const UVLBattle* Battle = UVLBattle::Get(this);
@@ -2327,7 +2423,7 @@ namespace
 		const bool bEnemy = Who.Equals(TEXT("enemy"), ESearchCase::IgnoreCase);
 		for (TActorIterator<AVLKing> It(World); It; ++It)
 		{
-			if (It->IsDead())
+			if (It->IsDead() || It->bAmbient)
 			{
 				continue;
 			}

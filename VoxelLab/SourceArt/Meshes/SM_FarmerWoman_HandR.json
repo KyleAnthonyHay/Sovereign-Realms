@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_HandR",
+ "faces": 150,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0812,
+   -0.1622,
+   -0.0733
+  ],
+  [
+   0.0945,
+   0.0302,
+   0.0993
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.32238,
+  -0.2431,
+  0.84316
+ ],
+ "part": "HandR",
+ "parent": "ForeR",
+ "triangles": 300,
+ "blocks": 7
+}

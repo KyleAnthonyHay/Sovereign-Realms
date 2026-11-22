@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_ForeR",
+ "faces": 298,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1156,
+   -0.1689,
+   -0.3047
+  ],
+  [
+   0.0866,
+   0.076,
+   0.0742
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.34386,
+  0.0,
+  0.95164
+ ],
+ "part": "ForeR",
+ "parent": "ArmR",
+ "triangles": 596,
+ "blocks": 47
+}

@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_HandR",
+ "faces": 150,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0887,
+   -0.1475,
+   -0.1444
+  ],
+  [
+   0.0852,
+   0.0488,
+   0.0401
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.37269,
+  -0.11818,
+  0.67734
+ ],
+ "part": "HandR",
+ "parent": "ForeR",
+ "triangles": 300,
+ "blocks": 7
+}

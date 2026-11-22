@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_ShinL",
+ "faces": 498,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1075,
+   -0.16,
+   -0.35
+  ],
+  [
+   0.1088,
+   0.1075,
+   0.05
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.1125,
+  0.0,
+  0.35
+ ],
+ "part": "ShinL",
+ "parent": "LegL",
+ "triangles": 996,
+ "blocks": 60
+}

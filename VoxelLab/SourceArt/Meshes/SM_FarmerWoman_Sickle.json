@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_Sickle",
+ "faces": 522,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0508,
+   -0.1086,
+   -0.1294
+  ],
+  [
+   0.2732,
+   0.0602,
+   0.3837
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.32643,
+  -0.29097,
+  0.78072
+ ],
+ "part": "Sickle",
+ "parent": "ForeL",
+ "triangles": 1044,
+ "blocks": 35
+}

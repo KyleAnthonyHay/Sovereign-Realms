@@ -322,7 +322,10 @@ void UVLBattle::OnWorldBeginPlay(UWorld& InWorld)
 	Registered.Reset();
 	for (TActorIterator<AVLKing> It(&InWorld); It; ++It)
 	{
-		Registered.AddUnique(*It);
+		if (!It->bAmbient)          // (a figure of the scenery, a farm's hand, is nobody's unit)
+		{
+			Registered.AddUnique(*It);
+		}
 	}
 	bHashDirty = true;
 	bTagsDirty = true;
@@ -409,8 +412,11 @@ void UVLBattle::OnActorSpawned(AActor* Actor)
 {
 	if (AVLKing* Unit = Cast<AVLKing>(Actor))
 	{
-		Registered.AddUnique(Unit);
-		bHashDirty = true;
+		if (!Unit->bAmbient)        // (a farm's hand: no side, never fought, selected or counted: AVLFarmer)
+		{
+			Registered.AddUnique(Unit);
+			bHashDirty = true;
+		}
 	}
 	else if (Actor && !Actor->IsA<AController>() && !Actor->IsA<AInfo>())
 	{
@@ -436,7 +442,10 @@ const TArray<AVLKing*>& UVLBattle::AllUnits() const
 	LegacyUnits.Reset();
 	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
 	{
-		LegacyUnits.Add(*It);
+		if (!It->bAmbient)
+		{
+			LegacyUnits.Add(*It);
+		}
 	}
 	return LegacyUnits;
 }
@@ -616,7 +625,10 @@ void UVLBattle::CheckRegistry()
 	TArray<AVLKing*> World;
 	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
 	{
-		World.Add(*It);
+		if (!It->bAmbient)
+		{
+			World.Add(*It);
+		}
 	}
 	int32 Missing = 0;
 	for (AVLKing* U : World)

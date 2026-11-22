@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_LegL",
+ "faces": 3933,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1167,
+   -0.2314,
+   -0.4543
+  ],
+  [
+   0.1418,
+   0.1792,
+   0.129
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.1125,
+  0.0,
+  0.7
+ ],
+ "part": "LegL",
+ "parent": "",
+ "triangles": 7866,
+ "blocks": 353
+}

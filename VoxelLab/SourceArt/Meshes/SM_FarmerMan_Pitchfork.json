@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_Pitchfork",
+ "faces": 583,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1375,
+   -0.0362,
+   -0.8689
+  ],
+  [
+   0.1375,
+   0.0362,
+   0.8561
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.35677,
+  -0.35203,
+  0.86893
+ ],
+ "part": "Pitchfork",
+ "parent": "ForeL",
+ "triangles": 1166,
+ "blocks": 28
+}

@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_LegL",
+ "faces": 1496,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1408,
+   -0.15,
+   -0.375
+  ],
+  [
+   0.1167,
+   0.1159,
+   0.1273
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.15,
+  0.0,
+  0.675
+ ],
+ "part": "LegL",
+ "parent": "",
+ "triangles": 2993,
+ "blocks": 149
+}

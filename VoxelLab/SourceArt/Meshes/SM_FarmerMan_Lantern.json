@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_Lantern",
+ "faces": 259,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0575,
+   -0.0575,
+   -0.2125
+  ],
+  [
+   0.0575,
+   0.0575,
+   -0.0025
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.31875,
+  0.3875,
+  1.15
+ ],
+ "part": "Lantern",
+ "parent": "BackBasket",
+ "triangles": 518,
+ "blocks": 12
+}

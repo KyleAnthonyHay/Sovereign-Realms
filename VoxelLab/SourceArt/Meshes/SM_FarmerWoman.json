@@ -1,0 +1,216 @@
+{
+ "height": 1.66,
+ "radius": 0.4,
+ "voxel": 0.0125,
+ "mesh_yaw": -90.0,
+ "stride": 1.7,
+ "elbow_l": 55.0,
+ "elbow_r": 75.0,
+ "wrist_l": 20.0,
+ "cape": {
+  "cols": 0,
+  "rows": 0
+ },
+ "has_sheath": false,
+ "parts": {
+  "Body": {
+   "mesh": "SM_FarmerWoman_Body",
+   "pivot": [
+    0.0,
+    0.0,
+    0.725
+   ],
+   "parent": ""
+  },
+  "Chest": {
+   "mesh": "SM_FarmerWoman_Chest",
+   "pivot": [
+    0.0,
+    0.0,
+    0.925
+   ],
+   "parent": "Body"
+  },
+  "Head": {
+   "mesh": "SM_FarmerWoman_Head",
+   "pivot": [
+    0.0,
+    0.0,
+    1.225
+   ],
+   "parent": "Chest"
+  },
+  "ArmL": {
+   "mesh": "SM_FarmerWoman_ArmL",
+   "pivot": [
+    0.2875,
+    0.0,
+    1.175
+   ],
+   "parent": "Chest"
+  },
+  "ForeL": {
+   "mesh": "SM_FarmerWoman_ForeL",
+   "pivot": [
+    0.31625,
+    0.0,
+    0.90151
+   ],
+   "parent": "ArmL"
+  },
+  "ArmR": {
+   "mesh": "SM_FarmerWoman_ArmR",
+   "pivot": [
+    -0.2875,
+    0.0,
+    1.175
+   ],
+   "parent": "Chest"
+  },
+  "ForeR": {
+   "mesh": "SM_FarmerWoman_ForeR",
+   "pivot": [
+    -0.31625,
+    0.0,
+    0.90151
+   ],
+   "parent": "ArmR"
+  },
+  "HandR": {
+   "mesh": "SM_FarmerWoman_HandR",
+   "pivot": [
+    -0.32238,
+    -0.2431,
+    0.84316
+   ],
+   "parent": "ForeR"
+  },
+  "LegL": {
+   "mesh": "SM_FarmerWoman_LegL",
+   "pivot": [
+    0.1125,
+    0.0,
+    0.7
+   ],
+   "parent": ""
+  },
+  "ShinL": {
+   "mesh": "SM_FarmerWoman_ShinL",
+   "pivot": [
+    0.1125,
+    0.0,
+    0.35
+   ],
+   "parent": "LegL"
+  },
+  "LegR": {
+   "mesh": "SM_FarmerWoman_LegR",
+   "pivot": [
+    -0.1125,
+    0.0,
+    0.7
+   ],
+   "parent": ""
+  },
+  "ShinR": {
+   "mesh": "SM_FarmerWoman_ShinR",
+   "pivot": [
+    -0.1125,
+    0.0,
+    0.35
+   ],
+   "parent": "LegR"
+  },
+  "Sickle": {
+   "mesh": "SM_FarmerWoman_Sickle",
+   "pivot": [
+    0.32643,
+    -0.29097,
+    0.78072
+   ],
+   "parent": "ForeL"
+  },
+  "Basket": {
+   "mesh": "SM_FarmerWoman_Basket",
+   "pivot": [
+    -0.33179,
+    -0.10867,
+    0.98505
+   ],
+   "parent": "ForeR"
+  },
+  "Pouch": {
+   "mesh": "SM_FarmerWoman_Pouch",
+   "pivot": [
+    0.2125,
+    -0.025,
+    0.8625
+   ],
+   "parent": "Body"
+  }
+ },
+ "sickle": {
+  "part": "Sickle",
+  "hand": "L",
+  "parent": "ForeL",
+  "grip": [
+   0.32643,
+   -0.29097,
+   0.78072
+  ],
+  "axis": [
+   -0.10097,
+   -0.25882,
+   0.96063
+  ],
+  "blade_dir": [
+   0.99452,
+   0.0,
+   0.10453
+  ],
+  "flat": [
+   -0.02705,
+   0.96593,
+   0.2574
+  ],
+  "foot_offset": 0.125,
+  "neck_offset": 0.2,
+  "radius": 0.1625,
+  "tip": [
+   0.58585,
+   -0.35891,
+   1.06293
+  ]
+ },
+ "basket": {
+  "part": "Basket",
+  "arm": "R",
+  "parent": "ForeR",
+  "pivot": [
+   -0.33179,
+   -0.10867,
+   0.98505
+  ],
+  "axis": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "rim": [
+   -0.33179,
+   -0.10867,
+   0.65505
+  ],
+  "drop": 0.1125
+ },
+ "pouch": {
+  "part": "Pouch",
+  "side": "L",
+  "parent": "Body",
+  "pivot": [
+   0.2125,
+   -0.025,
+   0.8625
+  ]
+ }
+}

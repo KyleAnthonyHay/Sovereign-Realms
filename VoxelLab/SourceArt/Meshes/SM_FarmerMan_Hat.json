@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_Hat",
+ "faces": 5285,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.3582,
+   -0.3532,
+   -0.1079
+  ],
+  [
+   0.3566,
+   0.2807,
+   0.1676
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  1.6
+ ],
+ "part": "Hat",
+ "parent": "Head",
+ "triangles": 10570,
+ "blocks": 444
+}

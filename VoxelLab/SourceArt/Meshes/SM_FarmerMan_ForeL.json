@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_ForeL",
+ "faces": 557,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0976,
+   -0.4195,
+   -0.1887
+  ],
+  [
+   0.1089,
+   0.0701,
+   0.0878
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.34906,
+  0.0,
+  0.95224
+ ],
+ "part": "ForeL",
+ "parent": "ArmL",
+ "triangles": 1115,
+ "blocks": 60
+}

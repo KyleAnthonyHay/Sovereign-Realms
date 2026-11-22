@@ -5,8 +5,9 @@ as the level builder gives the level's own (Tools/blender/town_layout.py with_pr
 
     python3 Tools/ue/gen_building_specs.py          (no editor needed; run it again when a building's props change)
 
-Positions are converted to Unreal's local space of the building (centimetres, +Y = Blender's -Y, the building's front)
-and yaws to Unreal's (minus Blender's). A farm variant (SM_Farmstead_A/B/C) that has no json yet is left out: the game
+Also each building's door (the json's "door": the farmhouse door, where the farm's hands go in and out: UVLConstruction's
+farmhands). Positions are converted to Unreal's local space of the building (centimetres, +Y = Blender's -Y, the
+building's front) and yaws to Unreal's (minus Blender's). A farm variant (SM_Farmstead_A/B/C) that has no json yet is left out: the game
 then falls back to SM_Farmstead.
 """
 import json
@@ -19,12 +20,15 @@ BUILDABLE = ["SM_BarracksYard", "SM_ArcheryHall", "SM_Farmstead", "SM_Farmstead_
 
 
 def main():
-    rows, counts = [], {}
+    rows, counts, doors = [], {}, []
     for name in BUILDABLE:
         p = os.path.join(MESHES, name + ".json")
         if not os.path.exists(p):
             continue
         meta = json.load(open(p))
+        if meta.get("door"):
+            x, y, z = meta["door"]
+            doors.append('\t{ TEXT("%s"), %.1ff, %.1ff, %.1ff },' % (name, x * 100.0, -y * 100.0, z * 100.0))
         props = meta.get("props", [])
         counts[name] = len(props)
         for pr in props:
@@ -38,6 +42,10 @@ def main():
         f.write("static const FVLPropSpec GBuildingProps[] = {\n")
         f.write("\n".join(rows) + "\n")
         f.write("\t{ nullptr, nullptr, 0.f, 0.f, 0.f, 0.f, 1.f }\n};\n")
+        f.write("// The door of each building that has one: owner mesh, local X Y Z (cm, Unreal axes).\n")
+        f.write("static const FVLDoorSpec GBuildingDoors[] = {\n")
+        f.write("".join(d + "\n" for d in doors))
+        f.write("\t{ nullptr, 0.f, 0.f, 0.f }\n};\n")
     print("wrote %s: %d props (%s)" % (OUT, len(rows), ", ".join("%s %d" % kv for kv in counts.items())))
 
 

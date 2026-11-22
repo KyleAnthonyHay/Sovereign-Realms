@@ -226,15 +226,15 @@ namespace
 	/** A part's look by its side. Every unit writes custom depth, with its side in the stencil: 1 the player's (which
 	 *  M_Silhouette shows through trees and buildings), 2 the enemy's (never shown; but, being in the custom depth, a
 	 *  unit standing in front of another does not bring the silhouette out). The enemy's cloth is red. */
-	void VLTeamLook(UStaticMeshComponent* Mesh, int32 Team, bool bDepth)
+	void VLTeamLook(UStaticMeshComponent* Mesh, int32 Team, bool bDepth, bool bAmbient = false)
 	{
 		const bool bEnemy = Team != 0;
 		Mesh->SetRenderCustomDepth(bDepth);          // (off behind the title screen and far from the camera: AVLKing::RigLate)
-		Mesh->SetCustomDepthStencilValue(bEnemy ? 2 : 1);
+		Mesh->SetCustomDepthStencilValue(bEnemy ? 2 : 1);   // (a figure of the scenery: 2, never shown through walls)
 		const UStaticMesh* Asset = Mesh->GetStaticMesh();
 		for (int32 i = 0; Asset && i < Asset->GetStaticMaterials().Num(); ++i)
 		{
-			Mesh->SetMaterial(i, bEnemy ? VLEnemyTwin(Asset->GetMaterial(i)) : nullptr);      // (null: the mesh's own)
+			Mesh->SetMaterial(i, bEnemy && !bAmbient ? VLEnemyTwin(Asset->GetMaterial(i)) : nullptr);      // (null: the mesh's own)
 		}
 	}
 }
@@ -245,7 +245,7 @@ void AVLKing::RefreshSilhouette()
 	{
 		if (Mesh)
 		{
-			VLTeamLook(Mesh, Team, bDepthOn);
+			VLTeamLook(Mesh, Team, bDepthOn, bAmbient);
 		}
 	}
 }
@@ -324,7 +324,7 @@ void AVLKing::BuildFigure()
 			Mesh->bAffectDynamicIndirectLighting = false;
 			Mesh->IndirectLightingCacheQuality = ILCQ_Off;
 		}
-		VLTeamLook(Mesh, Team, bDepthOn);              // custom depth + stencil for M_Silhouette; the enemy's red cloth
+		VLTeamLook(Mesh, Team, bDepthOn, bAmbient);    // custom depth + stencil for M_Silhouette; the enemy's red cloth
 		Mesh->RegisterComponent();
 		Meshes.Add(Mesh);
 		RigNodes[NodeIndex].Mesh = Mesh;
@@ -497,6 +497,8 @@ void AVLKing::FollowPath(const TArray<FVector>& Points, bool bRun)
 	Waypoints = Points;
 	bAutoWalk = Waypoints.Num() > 0;
 	bAutoRun = bRun;
+	PaceCap = 0.f;              // at its own pace, unless it is a march's (UVLCommand::OrderMove sets that after this)
+	MarchId = 0;
 	AutoTime = 0.f;
 	ProgressTime = 0.f;
 	ProgressAt = FVector2D(GetActorLocation());
@@ -509,7 +511,7 @@ void AVLKing::FollowPath(const TArray<FVector>& Points, bool bRun)
 	}
 	// On the march units pass through one another (kept apart by AutoSteer, as the main game's are by its own
 	// separation): capsules that block each other jam a gate or the bridge when a whole group arrives at it.
-	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, bAutoWalk ? ECR_Ignore : ECR_Block);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, (bAutoWalk || bAmbient) ? ECR_Ignore : ECR_Block);
 }
 
 void AVLKing::QueueLeg(const FVector& Slot, bool bRun)
@@ -547,7 +549,12 @@ bool AVLKing::StartNextLeg()
 	{
 		Path.Add(Slot);
 	}
+	// a leg of its pathway is part of the march it was queued on: it keeps the march's pace
+	const float Cap = PaceCap;
+	const int32 March = MarchId;
 	FollowPath(Path, bRun);
+	PaceCap = Cap;
+	MarchId = March;
 	return true;
 }
 
@@ -555,12 +562,16 @@ void AVLKing::StopOrder()
 {
 	bAutoWalk = false;
 	Waypoints.Reset();
-	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	PaceCap = 0.f;              // (its own pace again: the march is over for it)
+	MarchId = 0;
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, bAmbient ? ECR_Ignore : ECR_Block);
 }
 
 void AVLKing::FinishOrder(bool bArrived)
 {
 	const bool bHad = bAutoWalk;
+	const float Cap = PaceCap;
+	const int32 March = MarchId;
 	StopOrder();
 	if (bHad)
 	{
@@ -575,9 +586,16 @@ void AVLKing::FinishOrder(bool bArrived)
 			Command->OnOrderEnded(this, bArrived);
 		}
 		// the next point of its pathway (Shift + right click), unless the order's end gave it something else to do
+		// (walked with the march it was queued on)
 		if (!bAutoWalk)
 		{
-			StartNextLeg();
+			PaceCap = Cap;
+			MarchId = March;
+			if (!StartNextLeg())
+			{
+				PaceCap = 0.f;
+				MarchId = 0;
+			}
 		}
 	}
 }
@@ -2726,7 +2744,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 		Wish = (FRotationMatrix(Yaw).GetUnitAxis(EAxis::X) * Stick.X + FRotationMatrix(Yaw).GetUnitAxis(EAxis::Y) * Stick.Y).GetClampedToMaxSize(1.f);
 	}
 	GetCharacterMovement()->MaxWalkSpeed = bRun ? RunSpeed : WalkSpeed;
-	if (PaceCap > 0.f && bAutoWalk)
+	if (PaceCap > 0.f && bAutoWalk && !bHeroMode)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, PaceCap);     // on an order with his troops: their pace
 	}

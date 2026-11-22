@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerMan_Pouch",
+ "faces": 147,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0625,
+   -0.0838,
+   -0.1625
+  ],
+  [
+   0.0625,
+   0.0,
+   0.1125
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.175,
+  -0.1625,
+  0.825
+ ],
+ "part": "Pouch",
+ "parent": "Body",
+ "triangles": 294,
+ "blocks": 7
+}

@@ -174,8 +174,17 @@ public:
 	bool bHoldOrder = false;
 	/** Holding its ground: the Hold stance, or a hold order. */
 	bool IsHolding() const { return bHoldOrder || Stance == EVLStance::Hold; }
-	/** March together (UVLCommand::OrderMove): no faster than this on its order (cm/s; 0 = its own pace). */
+	/** March together (UVLCommand::UpdateMarchPace): no faster than this on its order (cm/s; 0 = its own pace). */
 	float PaceCap = 0.f;
+	/** The march it walks with (UVLCommand::OrderMove gives every group order that marches together one; 0 = none,
+	 *  its own pace). Any walk not given as a march (FollowPath: a chase, a Builder's errand) clears it; the legs of
+	 *  its pathway keep it. */
+	int32 MarchId = 0;
+	/** On its order at a run. */
+	bool IsAutoRunning() const { return bAutoRun; }
+	/** A figure of the scenery (AVLFarmer: the farm's hands): no side (Team Neutral), not in the battle's registry,
+	 *  never selected, ordered, struck or shown through walls. Set in the constructor. */
+	bool bAmbient = false;
 	/** Where it took up the fight (a defensive unit goes back there). */
 	FVector Post = FVector::ZeroVector;
 	TWeakObjectPtr<AActor> LastStruckBy;

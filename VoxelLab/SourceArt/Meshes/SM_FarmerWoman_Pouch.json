@@ -1,0 +1,27 @@
+{
+ "name": "SM_FarmerWoman_Pouch",
+ "faces": 191,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.03,
+   -0.075,
+   -0.3325
+  ],
+  [
+   0.11,
+   0.075,
+   0.02
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.2125,
+  -0.025,
+  0.8625
+ ],
+ "part": "Pouch",
+ "parent": "Body",
+ "triangles": 382,
+ "blocks": 9
+}

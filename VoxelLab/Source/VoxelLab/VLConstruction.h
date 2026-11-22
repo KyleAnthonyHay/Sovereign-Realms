@@ -377,6 +377,23 @@ private:
 	/** The props each building raised in the match got (its dummies, its wheat and beasts): they go when it falls. */
 	TMap<TWeakObjectPtr<AActor>, TArray<TWeakObjectPtr<AActor>>> Props;
 
+	// ---- the farms' hands (AVLFarmer, VLFarmer.*): a farmer woman and a farmer man at every finished farm, the
+	// map's and those raised in the match; sent away when it falls, is pulled down (or abandoned) or is turned (they
+	// come back to its new ground). Looked over once a second.
+	struct FFarmCrew
+	{
+		TArray<TWeakObjectPtr<AVLKing>> Hands;
+		FTransform At;
+	};
+	TMap<TWeakObjectPtr<AActor>, FFarmCrew> FarmCrews;
+	TSet<TWeakObjectPtr<AActor>> FarmNoSpots;     // farms whose ground could not be found (logged once)
+	float FarmClock = 0.f;
+	void TickFarmhands(float Dt);
+	/** Where a farm's hands work: its crop rows (the wheat of its props table), the farmhouse door, the store beside it;
+	 *  each on walkable ground of the door's region, inside the farm. False: no grid, or no ground at the door. */
+	bool FarmSpots(const FVLBuildingState& B, struct FVLFarmSpots& Out) const;
+	void DismissCrew(AActor* Farm, FFarmCrew& Crew, const TCHAR* Why);
+
 	UPROPERTY(Transient)
 	TObjectPtr<AStaticMeshActor> Ghost;
 
