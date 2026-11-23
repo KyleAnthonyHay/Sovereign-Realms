@@ -1,0 +1,21 @@
+{
+ "name": "SM_TroopShip_L1",
+ "faces": 39007,
+ "collision": "none",
+ "bounds": [
+  [
+   -11.5,
+   -4.875,
+   -1.25
+  ],
+  [
+   13.125,
+   4.5,
+   17.375
+  ]
+ ],
+ "lights": [],
+ "lod_of": "SM_TroopShip",
+ "voxel": 0.125,
+ "triangles": 78014
+}

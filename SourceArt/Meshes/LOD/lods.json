@@ -4244,5 +4244,32 @@
     ]
    }
   ]
+ },
+ "SM_TroopShip": {
+  "set": "buildings",
+  "triangles": 312108,
+  "levels": [
+   {
+    "level": 1,
+    "file": "SM_TroopShip_L1.gltf",
+    "voxel": 0.125,
+    "triangles": 78014,
+    "slots": [
+     "stone",
+     "plank",
+     "beam",
+     "beam_v",
+     "wool",
+     "paint",
+     "glow",
+     "window",
+     "metal",
+     "gold",
+     "moss",
+     "stone_mossy",
+     "cloth"
+    ]
+   }
+  ]
  }
 }
