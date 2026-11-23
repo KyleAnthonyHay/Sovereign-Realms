@@ -242,11 +242,11 @@ namespace
 
 void AVLKing::RefreshSilhouette()
 {
-	for (UStaticMeshComponent* Mesh : Meshes)
+	for (UStaticMeshComponent* PartMesh : Meshes)
 	{
-		if (Mesh)
+		if (PartMesh)
 		{
-			VLTeamLook(Mesh, Team, bDepthOn, bAmbient, bTowerGuard);
+			VLTeamLook(PartMesh, Team, bDepthOn, bAmbient, bTowerGuard);
 		}
 	}
 }
@@ -309,26 +309,26 @@ void AVLKing::BuildFigure()
 		{
 			continue;
 		}
-		UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(this, *FString::Printf(TEXT("Mesh_%s"), *Label));
-		Mesh->SetStaticMesh(P.Mesh);
-		Mesh->SetupAttachment(Joint);
-		Mesh->SetRelativeRotation(FRotator(0.f, Loaded->MeshYaw, 0.f));
-		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Mesh->SetCastShadow(true);
-		Mesh->bCastContactShadow = true;
-		Mesh->bAffectDistanceFieldLighting = false;    // he moves every frame: keep him out of the global distance field
+		UStaticMeshComponent* PartMesh = NewObject<UStaticMeshComponent>(this, *FString::Printf(TEXT("Mesh_%s"), *Label));
+		PartMesh->SetStaticMesh(P.Mesh);
+		PartMesh->SetupAttachment(Joint);
+		PartMesh->SetRelativeRotation(FRotator(0.f, Loaded->MeshYaw, 0.f));
+		PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PartMesh->SetCastShadow(true);
+		PartMesh->bCastContactShadow = true;
+		PartMesh->bAffectDistanceFieldLighting = false;    // he moves every frame: keep him out of the global distance field
 		bUnitGI = VLUnitGI();
 		if (!bUnitGI)
 		{
 			// nor in Lumen's scene (a card capture for every part, every frame it moved) or the indirect lighting cache
 			// (the project has no static lighting): a figure this small adds nothing to the bounce that can be seen
-			Mesh->bAffectDynamicIndirectLighting = false;
-			Mesh->IndirectLightingCacheQuality = ILCQ_Off;
+			PartMesh->bAffectDynamicIndirectLighting = false;
+			PartMesh->IndirectLightingCacheQuality = ILCQ_Off;
 		}
-		VLTeamLook(Mesh, Team, bDepthOn, bAmbient, bTowerGuard);    // custom depth + stencil for M_Silhouette; the enemy's red cloth
-		Mesh->RegisterComponent();
-		Meshes.Add(Mesh);
-		RigNodes[NodeIndex].Mesh = Mesh;
+		VLTeamLook(PartMesh, Team, bDepthOn, bAmbient, bTowerGuard);    // custom depth + stencil for M_Silhouette; the enemy's red cloth
+		PartMesh->RegisterComponent();
+		Meshes.Add(PartMesh);
+		RigNodes[NodeIndex].Mesh = PartMesh;
 		RigNodes[NodeIndex].MeshRot = FRotator(0.f, Loaded->MeshYaw, 0.f).Quaternion();
 	}
 	auto At = [&Pivot](const TCHAR* Name) { const FVector* V = Pivot.Find(Name); return V ? *V : FVector::ZeroVector; };
@@ -3227,9 +3227,9 @@ void AVLKing::ReceiveDamage(float Amount, AActor* From)
 	FlashLeft = FMath::Max(0.f, HitFlashSeconds);
 	if (FlashMID && !bFlashOn && FlashLeft > 0.f)
 	{
-		for (UStaticMeshComponent* Mesh : Meshes)
+		for (UStaticMeshComponent* PartMesh : Meshes)
 		{
-			Mesh->SetOverlayMaterial(FlashMID);
+			PartMesh->SetOverlayMaterial(FlashMID);
 		}
 		bFlashOn = true;
 	}
@@ -3358,9 +3358,9 @@ void AVLKing::UpdateFlash(float Dt)
 	FlashLeft -= Dt;
 	if (FlashLeft <= 0.f || !FlashMID)
 	{
-		for (UStaticMeshComponent* Mesh : Meshes)          // his own materials were never touched: just lift the overlay
+		for (UStaticMeshComponent* PartMesh : Meshes)          // his own materials were never touched: just lift the overlay
 		{
-			Mesh->SetOverlayMaterial(nullptr);
+			PartMesh->SetOverlayMaterial(nullptr);
 		}
 		bFlashOn = false;
 		return;

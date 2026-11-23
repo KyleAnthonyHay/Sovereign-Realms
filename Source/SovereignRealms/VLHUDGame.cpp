@@ -1647,7 +1647,7 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 			TArray<FString> Lines;
 			Lines.Add(bArcher ? TEXT("Light and quick, with a long reach. Weak up close.") : TEXT("Heavy infantry: holds the line and hits hard."));
 			Lines.Add(FString::Printf(TEXT("Cost %d food   ·   trains in %.0f s   ·   %d housing"), T.Cost.Food, Battle->TrainSeconds(Building), T.Pop));
-			Lines.Add(FString::Printf(TEXT("Shift+click: %d at once   ·   Ctrl / Option+click: %d"), VLRules::RecruitBatch, VLRules::RecruitBatchLarge));
+			Lines.Add(FString::Printf(TEXT("Shift+click: %d at once   ·   Ctrl / ") VL_ALT_KEY TEXT("+click: %d"), VLRules::RecruitBatch, VLRules::RecruitBatchLarge));
 			if (!bHoused) { Lines.Add(Why + TEXT(".")); }
 			SetTooltip(R, Troop, Lines);
 		}
@@ -1842,7 +1842,7 @@ void AVLHUD::DrawPlatoonPanel()
 				UVLCommand::FormationName(Shape), UVLCommand::StanceName(Stance)),
 				RowLeader ? FString::Printf(TEXT("Led by %s: the formation forms up on it"), RowLeader == King ? TEXT("you") : *RowLeader->GetDisplayName())
 					: FString(TEXT("No leader: take control of a member, or have the others follow one (right-click it)")),
-				FString::Printf(TEXT("Click or press %d to select; twice to go there. Option + click: the selection guards it."), i + 1) });
+				FString::Printf(TEXT("Click or press %d to select; twice to go there. ") VL_ALT_KEY TEXT(" + click: the selection guards it."), i + 1) });
 		}
 	}
 }
@@ -1880,18 +1880,18 @@ void AVLHUD::DrawHeroBits()
 				// troops selected and this one is not among them: they guard it (its platoon, if it is in one)
 				const int32 GP = HintCmd ? HintCmd->PlatoonIndexOf(Aimed) : INDEX_NONE;
 				const bool bWhole = GP != INDEX_NONE && Sel.ContainsByPredicate([HintCmd, GP](const AVLKing* U2) { return HintCmd->PlatoonIndexOf(U2) != GP; });
-				Hint = (bWhole ? FString::Printf(TEXT("Option+click: guard platoon %d"), GP + 1) : TEXT("Option+click: guard ") + Aimed->GetDisplayName())
-					+ TEXT("   ·   Shift+Option: add it to the selection");
+				Hint = (bWhole ? FString::Printf(VL_ALT_KEY TEXT("+click: guard platoon %d"), GP + 1) : VL_ALT_KEY TEXT("+click: guard ") + Aimed->GetDisplayName())
+					+ TEXT("   ·   Shift+") VL_ALT_KEY TEXT(": add it to the selection");
 			}
 			else if (King->IsHeroHoverSelect())
 			{
-				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? TEXT("Option+click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift+Option+click: let go)")
-					: TEXT("Option+click: select ") + Aimed->GetDisplayName());
+				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? VL_ALT_KEY TEXT("+click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift+") VL_ALT_KEY TEXT("+click: let go)")
+					: VL_ALT_KEY TEXT("+click: select ") + Aimed->GetDisplayName());
 			}
 			else if (Commanded.Num() > 0 && Battle && Battle->IsHostile(Aimed, King->Team))
 			{
 				// (the right click orders the selection only)
-				Hint = FString::Printf(TEXT("Option+click%s: attack %s   ·   Shift: after the last"), Sel.Num() > 0 ? (King->bRightMouseAims ? TEXT(" / Ctrl+click") : TEXT(" / right click")) : TEXT(""),
+				Hint = FString::Printf(VL_ALT_KEY TEXT("+click%s: attack %s   ·   Shift: after the last"), Sel.Num() > 0 ? (King->bRightMouseAims ? TEXT(" / Ctrl+click") : TEXT(" / right click")) : TEXT(""),
 					*Aimed->GetDisplayName());
 				HintCol = Refuse;
 			}
@@ -1959,10 +1959,10 @@ void AVLHUD::DrawHeroBits()
 			TArray<AVLKing*> Commanded;
 			King->HeroCommanded(Commanded, &bFollowers);
 			Commanding = Sel.Num() > 0
-				? FString::Printf(TEXT("Commanding %d  ·  Option+click: attack / move (Shift: queue), a friend: guard it  ·  G: follow me  ·  Esc: let go"), Sel.Num())
-				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  Option+click: attack / move (Shift: queue)"), Commanded.Num())
-				: (Commanded.Num() > 0 ? FString::Printf(TEXT("Your platoon (%d)  ·  Option+click: attack / move (Shift: queue)  ·  G: follow me"), Commanded.Num())
-				: FString(TEXT("Option+click a troop under the crosshair (or 1-6) to command it"))));
+				? FString::Printf(TEXT("Commanding %d  ·  ") VL_ALT_KEY TEXT("+click: attack / move (Shift: queue), a friend: guard it  ·  G: follow me  ·  Esc: let go"), Sel.Num())
+				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  ") VL_ALT_KEY TEXT("+click: attack / move (Shift: queue)"), Commanded.Num())
+				: (Commanded.Num() > 0 ? FString::Printf(TEXT("Your platoon (%d)  ·  ") VL_ALT_KEY TEXT("+click: attack / move (Shift: queue)  ·  G: follow me"), Commanded.Num())
+				: FString(VL_ALT_KEY TEXT("+click a troop under the crosshair (or 1-6) to command it"))));
 			if (bLeads)
 			{
 				Commanding = FString::Printf(TEXT("Leader of platoon %d  ·  "), P + 1) + Commanding;
@@ -2012,8 +2012,8 @@ void AVLHUD::DrawHeroBits()
 					? TEXT("WASD move   Shift run   Space jump   Hold right mouse: look through the spyglass (far ahead)   Left click: a light blow   Tab overview   Esc menu")
 					: (King->GetKind() == TEXT("Builder")
 						? TEXT("WASD move   Shift run   Space jump   Left click: swing the hammer   Tab overview (select the king + Enter to go back to him)   Esc menu")
-						: TEXT("WASD move   Shift run   Space jump   Left click swing   Option+click select / command   Tab overview (select the king + Enter to go back to him)   Esc menu"))))
-			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   Option+click select / command (Shift: queue)   Tab overview   Esc menu");
+						: TEXT("WASD move   Shift run   Space jump   Left click swing   ") VL_ALT_KEY TEXT("+click select / command   Tab overview (select the king + Enter to go back to him)   Esc menu"))))
+			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   ") VL_ALT_KEY TEXT("+click select / command (Shift: queue)   Tab overview   Esc menu");
 		// between the minimap and the platoon panel (both stay up in the hero view): smaller in a narrow window
 		const float SpanL = MapRect.bIsValid ? MapRect.Max.X + U(16.f) : U(14.f), SpanR = PlatoonRect.bIsValid ? PlatoonRect.Min.X - U(10.f) : View.X - U(14.f);
 		float P = U(15.f);

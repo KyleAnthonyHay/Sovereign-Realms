@@ -284,10 +284,10 @@ void AVLKing::RigSetMeshRot(int32 Node, const FQuat& Q)
 	bRigForce = true;
 }
 
-void AVLKing::AddRigPoser(UActorComponent* Owner, TFunction<void(AVLKing*)> Pose)
+void AVLKing::AddRigPoser(UActorComponent* PoserOwner, TFunction<void(AVLKing*)> Pose)
 {
 	FRigPoser& P = RigPosers.AddDefaulted_GetRef();
-	P.Owner = Owner;
+	P.Owner = PoserOwner;
 	P.Pose = MoveTemp(Pose);
 }
 
@@ -536,12 +536,12 @@ void AVLKing::PoseNow(bool bAtTick)
 	// what else poses parts of it (the bow arm, the spyglass): a ticking component does so in its own tick, after this
 	for (int32 i = RigPosers.Num() - 1; i >= 0; --i)
 	{
-		const UActorComponent* Owner = RigPosers[i].Owner.Get();
-		if (!Owner)
+		const UActorComponent* PoserOwner = RigPosers[i].Owner.Get();
+		if (!PoserOwner)
 		{
 			RigPosers.RemoveAt(i);
 		}
-		else if (!bAtTick || !Owner->IsComponentTickEnabled())
+		else if (!bAtTick || !PoserOwner->IsComponentTickEnabled())
 		{
 			RigPosers[i].Pose(this);
 		}
@@ -586,13 +586,13 @@ void AVLKing::RigLate(const FVLRigView& View)
 	{
 		// (vl.Opt.UnitGI changed: for comparing the two looks in one session)
 		bUnitGI = View.bUnitGI;
-		for (UStaticMeshComponent* Mesh : Meshes)
+		for (UStaticMeshComponent* PartMesh : Meshes)
 		{
-			if (Mesh)
+			if (PartMesh)
 			{
-				Mesh->bAffectDynamicIndirectLighting = bUnitGI;
-				Mesh->IndirectLightingCacheQuality = bUnitGI ? ILCQ_Point : ILCQ_Off;
-				Mesh->MarkRenderStateDirty();
+				PartMesh->bAffectDynamicIndirectLighting = bUnitGI;
+				PartMesh->IndirectLightingCacheQuality = bUnitGI ? ILCQ_Point : ILCQ_Off;
+				PartMesh->MarkRenderStateDirty();
 			}
 		}
 	}
@@ -721,11 +721,11 @@ void AVLKing::RigLateUpdate(UWorld* World, ELevelTick TickType, float DeltaSecon
 void AVLKing::UpdateCustomDepth(bool bWant)
 {
 	bDepthOn = bWant;
-	for (UStaticMeshComponent* Mesh : Meshes)
+	for (UStaticMeshComponent* PartMesh : Meshes)
 	{
-		if (Mesh)
+		if (PartMesh)
 		{
-			Mesh->SetRenderCustomDepth(bWant);
+			PartMesh->SetRenderCustomDepth(bWant);
 		}
 	}
 }
@@ -758,9 +758,9 @@ void AVLKing::WakeRigPosers()
 {
 	for (const FRigPoser& P : RigPosers)
 	{
-		if (UActorComponent* Owner = P.Owner.Get())
+		if (UActorComponent* PoserOwner = P.Owner.Get())
 		{
-			Owner->SetComponentTickEnabled(true);
+			PoserOwner->SetComponentTickEnabled(true);
 		}
 	}
 }
