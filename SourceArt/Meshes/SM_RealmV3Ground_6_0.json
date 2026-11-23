@@ -1,0 +1,18 @@
+{
+ "name": "SM_RealmV3Ground_6_0",
+ "faces": 5224,
+ "collision": "complex",
+ "bounds": [
+  [
+   -16.0,
+   -183.75,
+   -10.0
+  ],
+  [
+   16.0,
+   -176.0,
+   4.0
+  ]
+ ],
+ "lights": []
+}
