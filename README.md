@@ -55,6 +55,24 @@ On Windows the keys are the same; the Mac's **Option** key is **Alt** (the game'
 Ctrl. What was done for Windows performance: `Docs/Optimization/Windows/PROPOSAL.md`; what the game measures on a
 Windows PC today: `Docs/Optimization/Windows/BASELINE.md`.
 
+**Display settings.** The Mac starts in a window (16:9, at most 1600 x 900) and its Settings have one **Window** row
+(Windowed / Full screen). Windows starts in **borderless full screen at the desktop's own resolution**
+(`Config/Windows/WindowsGameUserSettings.ini`; an install from before is moved there once, `[SovereignRealms.Video]
+FullscreenByDefault`), and its Settings have **Display mode** (Windowed / Borderless / Full screen, the exclusive
+kind), **Resolution** (the display's own modes in exclusive full screen, the usual sizes up to the desktop in a window,
+the desktop's size shown in borderless) and **VSync**; an exclusive mode asks "Keep this display mode?" and goes back
+after 15 s without an answer. F11 / Alt+Enter toggle full screen on both, and the choice is saved however it was made.
+The Windows game is DPI-aware (`bAllowHighDPIInGameMode` in `Config/Windows/WindowsEngine.ini`): it draws in the
+monitor's real pixels (3840 x 2160 on a 4K display at 175 %, where it used to be told 2194 x 1234), the HUD keeps its
+size on the screen (it is laid out from the view's height), and the 3D picture is the engine's automatic share of the
+output (1920 x 1080 upscaled by TSR at 4K) times Render scale. A change of mode or size is made by `UVLGraphics` in
+its next tick, never inside the HUD's draw (the engine redraws the viewport in the middle of a resize, which crashed
+the Settings screen). On Windows the pointer stays inside a full-screen game; there is no edge scrolling (the view
+pans with WASD / the arrows). The panels fit any aspect: the selection panel, the top bar and the menus are drawn
+smaller where the view is narrower or lower than their design (4:3, 3:2, a 1280 x 720 window; `AVLHUD::FFit`).
+`Tools\windows\hud_shots.ps1` takes screenshots with the interface at a list of sizes and clicks through the display
+settings (`Saved\HUDShots`).
+
 ## Play
 
 - Packaged game: `Builds/Mac/SovereignRealms.app` (first time: right-click > Open), or on Windows
@@ -1182,7 +1200,7 @@ RESUME, RESTART, NEW GAME (another map), CONTROLS, SETTINGS, QUIT TO MAIN MENU, 
 first (CANCEL / yes). Settings: master volume, effects, music (sliders; music on, 100 %, until the player turns it
 down), interface scale (applied when the slider is let go), Graphics (Quality High / Medium / Low, Render scale 100-50 %,
 dynamic resolution), frame-rate limit, **Window** (Windowed / Full screen; the editor's play window says "Editor
-window"), camera angle (V), look speed (L), invert look (I). **Every setting is kept across launches** in
+window"; on Windows **Display mode**, **Resolution** and **VSync** in its place: see *Platforms*), camera angle (V), look speed (L), invert look (I). **Every setting is kept across launches** in
 `GameUserSettings.ini` (`Saved/Config/Mac/` packaged): `[SovereignRealms.Audio] MasterVolume`, `Effects`, `MusicV2` (a new key:
 the old `Music` could hold the 0 of the days it was off by default), `[SovereignRealms.Interface] Scale`, `PlatoonsCollapsed`,
 `[SovereignRealms.Video] Quality`, `RenderScale`, `DynamicRes`, `FrameCapV2`, `WindowX` / `WindowY` (the window's own size, to
