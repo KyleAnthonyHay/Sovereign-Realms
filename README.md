@@ -1428,8 +1428,13 @@ without a reference picture, from the grain ship's art language).
   plus); selected, its panel takes the selection panel's place.
 - Console: `vl.Ship [#n] state | board <sel|all|heroes|near [m]|platoon N> [run] | put <who> | unload | sail X Y |
   stop | moor X Y Yaw | pos`. The check: `python Tools/troopship_test.py shots perf` (PIE on L_RealmV2: boards 24 of
-  26 and the king at the west port with the player's own clicks, sails round the island, lands on the east beach,
-  unloads, marches inland).
+  26 and the king where the player's ship lies with the player's own clicks, sails round the island, comes alongside
+  the east port's quay, unloads, marches inland).
+- **Realm v2's shores** (found by the ship, not changed): the west port's quay and its stair are cut off from the
+  land (the stair's head meets 1 m terraces), so no unit can walk to the player's own quay, and the four other
+  beaches are coves the path grid's main region does not reach. The player's ship therefore lies at the south
+  beach (the nearest shore units can walk to, 278 m from the port; the grain ship stays at the pier) and can land
+  there and at the east port. Realm v3: both ships lie at their ports' piers.
 - **Not done**: the enemy's commander does not use its ship. Units on the gangplank slide (no walk pose while the
   ship carries them). The ship turns on the spot when it comes alongside (its ends can pass through a quay's corner).
   The minimap's right click does not sail it.
