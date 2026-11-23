@@ -306,7 +306,7 @@ void AVLHUD::DrawChipList()
 		Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, RowH, bSel ? FLinearColor(0.20f, 0.155f, 0.05f, 0.95f) : FMath::Lerp(Inset, ButtonHot, B.Hot * 0.7f));
 		if (bSel || B.bHover) { Outline(Row, bSel ? Gold : A(GoldBright, 0.8f), FMath::Max(1.f, U(1.f))); }
 		const float PS = U(36.f);
-		Portrait(VLPortraitOf(Un->GetKind()), Row.Min.X + U(6.f), Row.Min.Y + (RowH - PS) * 0.5f, PS);
+		Portrait(Un->IsJonathan() ? EVLPortrait::Archer : VLPortraitOf(Un->GetKind()), Row.Min.X + U(6.f), Row.Min.Y + (RowH - PS) * 0.5f, PS);      // (Jonathan: the archer's face until he has a portrait of his own)
 		const float TX = Row.Min.X + U(6.f) + PS + U(10.f);
 		const float Frac = Un->GetHealthFrac();
 		Text(Un->GetDisplayName(), TX, Row.Min.Y + U(4.f), U(15.f), Parchment, AlignLeft, Bold);
@@ -2099,7 +2099,9 @@ void AVLHUD::DrawHeroBits()
 	if (bHero)
 	{
 		const FString Help = King->IsTroop()
-			? (King->IsRanged()
+			? (King->IsJonathan()
+				? TEXT("WASD move   Shift run   Space jump   Hold right mouse: draw (a long draw), let go: shoot   Left click while drawing: lock the draw   Left click: bash with the bow   J: King David   Tab overview   Esc menu")
+				: King->IsRanged()
 				? TEXT("WASD move   Hold right mouse: draw, let go: shoot   Left click while drawing: lock the draw (right click shoots, left click lets down)   Left click: bash with the bow   Tab overview   Esc menu")
 				: (King->GetKind() == TEXT("Spy")
 					? TEXT("WASD move   Shift run   Space jump   Hold right mouse: look through the spyglass (far ahead)   Left click: a light blow   Tab overview   Esc menu")

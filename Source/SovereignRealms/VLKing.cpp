@@ -17,8 +17,13 @@
 #include "VLSwordsmanCombat.h"
 #include "VLBattle.h"
 #include "VLConstruction.h"
+#include "VLTroop.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Components/SkeletalMeshComponent.h"      // (these four: the file also builds on its own, outside the unity blob)
+#include "Engine/Engine.h"
+#include "Misc/ConfigCacheIni.h"
+#include "UObject/Package.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -157,12 +162,13 @@ void AVLKing::BeginPlay()
 	{
 		Skel->SetComponentTickEnabled(false);       // hidden, with no mesh: nothing to animate
 	}
-	if (!bTroop)
+	if (!bTroop || IsJonathan())
 	{
 		// King David's pace (VLRules; a troop's 420 / 760 now, it was 520 / 950). A pace other than the figure's own is
 		// half a longer stride and half a quicker step, so the feet stay planted (StrideScale); he gets up to speed,
 		// brakes and is trailed by the camera in the same time and distance as before (at a troop's pace: 1, as is).
-		const VLRules::FTroop& Rules = VLRules::Troop(TEXT("King"));
+		// (Jonathan, the second hero, has a pace of his own the same way: 520 / 1000, VLRules::Jonathan*)
+		const VLRules::FTroop& Rules = VLRules::Troop(UnitKind);
 		if (Rules.WalkSpeed > 0.f)
 		{
 			const float Was = WalkSpeed, WasRun = RunSpeed;
@@ -2693,6 +2699,32 @@ void AVLKing::PollInput(float DeltaSeconds)
 	if (PC->WasInputKeyJustPressed(EKeys::C))
 	{
 		SetView(ViewMode == 1 ? (bHeroMode ? 0 : 3) : 1);
+	// J: the other hero. From King David (or any unit, or the overview) the controls go to Jonathan, the archer prince,
+	// once he is in the field (he comes to the castle at its third level: UVLBattle::TickJonathan); from Jonathan
+	// they go back to King David. Enter / a double click on either in the overview does the same.
+	if (PC->WasInputKeyJustPressed(EKeys::J))
+	{
+		AVLKing* Other = nullptr;
+		if (IsJonathan())
+		{
+			for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+			{
+				if (!It->IsTroop() && It->Team == Team)
+				{
+					Other = *It;
+				}
+			}
+		}
+		else if (const UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			Other = Battle->GetJonathan(Team);
+		}
+		if (Other && Other != this && Other->IsAlive())
+		{
+			TakeControlOf(Other);
+			return;
+		}
+	}
 	}
 
 	float Fwd = (PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::Up) ? 1.f : 0.f) - (PC->IsInputKeyDown(EKeys::S) || PC->IsInputKeyDown(EKeys::Down) ? 1.f : 0.f);

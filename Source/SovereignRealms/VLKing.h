@@ -26,6 +26,7 @@ enum class EVLUnitKind : uint8
 	Spy,
 	Builder,
 	Other,          // any other name: fights by a swordsman's rules, as VLRules::Troop(name) has it
+	Jonathan,       // the archer prince, the second hero (an AVLTroop with a bow and rules of his own: VLRules::Jonathan*)
 	Unknown = 0xFF  // not looked up yet
 };
 
@@ -108,7 +109,9 @@ public:
 	/** The point of the ground under it. */
 	FVector GetFeet() const;
 	/** An archer: stands behind the melee in a formation, and can man the watch tower. */
-	bool IsRanged() const { return KindId() == EVLUnitKind::Archer; }
+	bool IsRanged() const { const EVLUnitKind K = KindId(); return K == EVLUnitKind::Archer || K == EVLUnitKind::Jonathan; }
+	/** Jonathan, the archer prince: a troop in the code (ordered, selected and taken over as one), a hero in the game. */
+	bool IsJonathan() const { return KindId() == EVLUnitKind::Jonathan; }
 	const FString& GetKind() const { return UnitKind; }
 	void SetKind(const FString& InKind) { UnitKind = InKind; CachedKind = EVLUnitKind::Unknown; CachedRules = nullptr; }
 	// ---- B: unit caches (UVLBattle's registry; CacheKind is in VLBattle.cpp). UnitKind as a number and its rules,

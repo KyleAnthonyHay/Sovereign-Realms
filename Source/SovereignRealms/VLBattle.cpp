@@ -37,6 +37,7 @@ namespace VLRules
 		if (Kind == TEXT("Spy")) { return EVLUnitKind::Spy; }
 		if (Kind == TEXT("Builder")) { return EVLUnitKind::Builder; }
 		if (Kind == TEXT("King")) { return EVLUnitKind::King; }
+		if (Kind == TEXT("Jonathan")) { return EVLUnitKind::Jonathan; }
 		return Kind == TEXT("Swordsman") ? EVLUnitKind::Swordsman : EVLUnitKind::Other;
 	}
 
@@ -68,9 +69,19 @@ namespace VLRules
 		// 350 gold + 200 food, 12 s at the castle.
 		static const FTroop Spy = [] { FTroop T; T.Health = 90.f; T.Damage = 8.f; T.BuildingScale = 0.2f; T.Acquire = 0.f; T.Pop = 1; T.Cost.Gold = 350; T.Cost.Food = 200;
 			T.TrainSeconds = 24.f; T.Sight = 3380.f; T.Notice = 0.45f; T.WalkSpeed = 875.f; T.RunSpeed = 1100.f; return T; }();
+		// Jonathan, the archer prince: the second hero, an archer. Free, no housing (he comes with the castle's third
+		// level). Three quarters of King David's health and three and a half archers'; an arrow of 60 (the archer's 40
+		// and a half: his slower, harder bow; the same half against buildings); he notices and sees as an archer does.
+		// His pace is his own: 520 / 1000 cm/s (VLRules::JonathanWalkSpeed / JonathanRunSpeed).
+		static const FTroop Prince = [] { FTroop T; T.Health = 450.f; T.Damage = 60.f; T.BuildingScale = 0.5f; T.Acquire = 4200.f; T.Sight = 1950.f; T.Pop = 0; T.TrainSeconds = 0.f;
+			T.WalkSpeed = JonathanWalkSpeed; T.RunSpeed = JonathanRunSpeed; return T; }();
 		if (Kind == EVLUnitKind::Archer)
 		{
 			return Bow;
+		}
+		if (Kind == EVLUnitKind::Jonathan)
+		{
+			return Prince;
 		}
 		if (Kind == EVLUnitKind::Spy)
 		{
@@ -1275,6 +1286,17 @@ void UVLBattle::OnUnitKilled(AVLKing* Unit, AActor* By)
 		PushAlert(FString::Printf(TEXT("King David has fallen! He will rise again at the castle in %.0f s"), VLRules::KingRespawnSeconds), EVLAlert::Lost, &At);
 		Play2D(TEXT("S_AttackAlert"), 0.6f);
 	}
+	if (Unit->IsJonathan() && (Unit->Team == Player || Unit->Team == Enemy) && Jonathans[Unit->Team].Get() == Unit)
+	{
+		// the prince comes back to the castle, as the king does (TickJonathan)
+		JonathanWait[Unit->Team] = VLRules::JonathanRespawnSeconds;
+		if (Unit->Team == Player)
+		{
+			const FVector At = Unit->GetActorLocation();
+			PushAlert(FString::Printf(TEXT("Jonathan has fallen! He will return to the castle in %.0f s"), VLRules::JonathanRespawnSeconds), EVLAlert::Lost, &At);
+			Play2D(TEXT("S_AttackAlert"), 0.6f);
+		}
+	}
 }
 
 void UVLBattle::Collapse(FVLBuildingState& B, AActor* By, int32 ByTeam, bool bDemolished)
@@ -1851,6 +1873,13 @@ AVLTroop* UVLBattle::SpawnTroop(const FString& Kind, int32 Team, const FVector& 
 	T->SetKind(Kind);
 	T->Team = Team;
 	T->SetDisplayName(FString::Printf(TEXT("%s%s %d"), *Prefix, *Kind, Number));
+	if (T->IsJonathan())
+	{
+		// a hero, not one of many: his name without a number, and a hero's footsteps and dust
+		T->SetDisplayName(Prefix + TEXT("Jonathan"));
+		T->bFootDust = true;
+		T->bFootsteps = true;
+	}
 	T->FinishSpawning(At);
 	T->RefreshSilhouette();         // (its side's stencil and cloth: the enemy's troops are red and do not show through walls)
 	return T;
@@ -2954,6 +2983,95 @@ void UVLBattle::TickKings(float Dt)
 	}
 }
 
+// ------------------------------------------------------------------------------------------------ Jonathan
+
+namespace
+{
+	TAutoConsoleVariable<int32> CVarJonathanEnemy(TEXT("vl.Jonathan.Enemy"), 0, TEXT("1: the enemy's castle gets a Jonathan of its own at level 3 too (its commander fields him as an archer); 0: only the player's"));
+}
+
+bool UVLBattle::JonathanFor(int32 Team)
+{
+	return Team == Player || (Team == Enemy && CVarJonathanEnemy.GetValueOnGameThread() != 0);
+}
+
+AVLTroop* UVLBattle::GetJonathan(int32 Team) const
+{
+	return (Team == Player || Team == Enemy) ? Jonathans[Team].Get() : nullptr;
+}
+
+AVLTroop* UVLBattle::SpawnJonathan(int32 Team, const FVector& Ground, float Yaw)
+{
+	if (Team != Player && Team != Enemy)
+	{
+		return nullptr;
+	}
+	AVLTroop* J = SpawnTroop(TEXT("Jonathan"), Team, Ground, Yaw);
+	if (J)
+	{
+		Jonathans[Team] = J;
+		JonathanWait[Team] = 0.f;
+		UE_LOG(LogSovereignRealms, Log, TEXT("%s comes into the field at (%.0f, %.0f, %.0f)"), *J->GetDisplayName(), Ground.X, Ground.Y, Ground.Z);
+	}
+	return J;
+}
+
+int32 UVLBattle::RaiseCastleForJonathan(int32 Team)
+{
+	FVLBuildingState* B = FindBuilding(GetCastle(Team));
+	if (!B)
+	{
+		return 0;
+	}
+	B->UpgradeLeft = -1.f;
+	while (B->Level < VLRules::JonathanCastleLevel && B->Level < VLRules::NumLevels(EVLBuilding::Castle))
+	{
+		++B->Level;
+		ApplyLevel(*B, true);
+	}
+	return B->Level;
+}
+
+void UVLBattle::TickJonathan(float Dt)
+{
+	for (int32 t = 0; t < 2; ++t)
+	{
+		if (const AVLTroop* J = Jonathans[t].Get(); J && J->IsAlive())
+		{
+			continue;               // in the field
+		}
+		JonathanWait[t] = FMath::Max(0.f, JonathanWait[t] - Dt);        // (fallen: the wait runs whatever the castle's state)
+		if (JonathanWait[t] > 0.f || !JonathanFor(t))
+		{
+			continue;
+		}
+		// he comes to the castle once it stands at its third level (and comes back there)
+		AActor* Castle = GetCastle(t);
+		const FVLBuildingState* B = FindBuilding(Castle);
+		if (!Castle || !B || !B->IsAlive() || B->Level < VLRules::JonathanCastleLevel)
+		{
+			continue;
+		}
+		FVector Door, Rally, Front;
+		FrontOf(Castle, Door, Rally, Front);
+		const FVector Side(-Front.Y, Front.X, 0.f);
+		AVLTroop* J = SpawnJonathan(t, Door, Front.Rotation().Yaw);      // (at the door itself, as a recruit: beside it is the wall)
+		if (!J)
+		{
+			JonathanWait[t] = 30.f;         // (no character data: not every frame)
+			continue;
+		}
+		J->WalkTo(FVector2D(Rally + Side * 220.f), false);      // out of the gate, beside where the recruits gather
+		if (t == Player)
+		{
+			PushAlert(bJonathanCame[t] ? TEXT("Jonathan has returned to the castle (J: play him)")
+				: TEXT("Prince Jonathan, the archer, has come to your castle (J: play him)"), EVLAlert::Good, &Door);
+			Play2D(TEXT("S_RecruitReady"), 0.5f);
+		}
+		bJonathanCame[t] = true;
+	}
+}
+
 // ------------------------------------------------------------------------------------------------ the match
 
 const TCHAR* UVLBattle::DifficultyName(int32 InDifficulty)
@@ -3028,6 +3146,8 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 		return;
 	}
 	SpyCooldownLeft[0] = SpyCooldownLeft[1] = 0.f;
+	JonathanWait[0] = JonathanWait[1] = 0.f;
+	bJonathanCame[0] = bJonathanCame[1] = false;
 	ScanBuildings();
 	MatchLog.Reset();           // (a new match, a new log: vl.MatchLog)
 	// (Windows pass, batch 2) the battle's sound sets, loaded as the match starts and not each at its first use in the
@@ -3362,6 +3482,7 @@ void UVLBattle::Tick(float DeltaSeconds)
 		return;
 	}
 	TickKings(DeltaSeconds);
+	TickJonathan(DeltaSeconds);
 	TickAutoCombat(DeltaSeconds);
 	TickCohesion(DeltaSeconds);
 	if (UVLCommand* Command = UVLCommand::Get(this))
@@ -3660,6 +3781,68 @@ namespace
 			{
 				Battle->LogStatus();
 			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdJonathan(TEXT("vl.Jonathan"),
+		TEXT("vl.Jonathan [spawn | play | king | castle]: log Jonathan's state and numbers; spawn: bring him in beside the unit the player plays (a sandbox with no castle); play / king: hand the controls to him / back to King David (the J key); castle: raise the player's castle to level 3 now"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UVLBattle* Battle = UVLBattle::Get(World);
+			APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			AVLKing* Played = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr;
+			if (!Battle || !Played)
+			{
+				return;
+			}
+			const FString Verb = Args.Num() > 0 ? Args[0].ToLower() : FString();
+			AVLTroop* J = Battle->GetJonathan(Played->Team);
+			if (Verb == TEXT("castle"))
+			{
+				UE_LOG(LogSovereignRealms, Log, TEXT("vl.Jonathan castle: the castle is level %d"), Battle->RaiseCastleForJonathan(Played->Team));
+			}
+			else if (Verb == TEXT("spawn"))
+			{
+				if (!J || !J->IsAlive())
+				{
+					const FVector Right = Played->GetActorRightVector();
+					J = Battle->SpawnJonathan(Played->Team, Played->GetFeet() + Right * 220.f, Played->GetActorRotation().Yaw);
+				}
+			}
+			else if (Verb == TEXT("play"))
+			{
+				if (J && J->IsAlive())
+				{
+					Played->TakeControlOf(J);
+				}
+			}
+			else if (Verb == TEXT("king"))
+			{
+				for (TActorIterator<AVLKing> It(World); It; ++It)
+				{
+					if (!It->IsTroop() && It->Team == Played->Team && It->IsAlive())
+					{
+						Played->TakeControlOf(*It);
+						break;
+					}
+				}
+			}
+			J = Battle->GetJonathan(Played->Team);
+			if (!J)
+			{
+				UE_LOG(LogSovereignRealms, Log, TEXT("vl.Jonathan: not in the field (castle level %d, he comes at %d; %.0f s to wait)"), Battle->GetCastleLevel(Played->Team),
+					VLRules::JonathanCastleLevel, Battle->GetJonathanWait(Played->Team));
+				return;
+			}
+			const UCharacterMovementComponent* Move = J->GetCharacterMovement();
+			const UVLArcherCombat* Bow = UVLArcherCombat::For(J, false);
+			const UVLArcherCombat* Base = GetDefault<UVLArcherCombat>();
+			UE_LOG(LogSovereignRealms, Log, TEXT("vl.Jonathan: %s %s at (%.0f, %.0f, %.0f), health %.0f / %.0f, %s | walk %.0f run %.0f (king 420 / 760) jump %.0f (king 540) speed now %.0f, max now %.0f | ")
+				TEXT("bow: reach %.2f + nock %.2f + draw %.2f = %.2f s (archer %.2f), arrow %.0f cm/s (archer %.0f), damage %.0f (archer %.0f), every %.1f s on orders (archer %.1f)"),
+				*J->GetDisplayName(), J->IsAlive() ? TEXT("alive") : TEXT("fallen"), J->GetFeet().X, J->GetFeet().Y, J->GetFeet().Z, J->GetHealth(), J->MaxHealth,
+				Cast<APlayerController>(J->GetController()) ? TEXT("played") : TEXT("on his own"), J->WalkSpeed, J->RunSpeed, Move->JumpZVelocity, J->GetVelocity().Size(), Move->MaxWalkSpeed,
+				Bow ? Bow->ReachSeconds : 0.f, Bow ? Bow->NockSeconds : 0.f, Bow ? Bow->DrawSeconds : 0.f, Bow ? Bow->ReachSeconds + Bow->NockSeconds + Bow->DrawSeconds : 0.f,
+				Base->ReachSeconds + Base->NockSeconds + Base->DrawSeconds, Bow ? Bow->ArrowSpeed : 0.f, Base->ArrowSpeed, Bow ? Bow->ArrowDamage : 0.f, Base->ArrowDamage,
+				Bow ? Bow->ShotInterval : 0.f, Base->ShotInterval);
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdGive(TEXT("vl.Give"), TEXT("vl.Give gold|food N [enemy]: resources for a side (past its stores)"),

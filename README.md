@@ -1419,6 +1419,49 @@ reaching the hilt (`UpdateSword`). Tuning is on the actor (Details, category Vox
 `CapeYawLag`, `bFootDust`; and on his `Dust` component: `PuffsPerStep`, `Size`, `Growth`, `Lifetime`, `Drift`, `Rise`,
 `Color`, `Glow`. Other code hurts him with `ReceiveDamage(Amount)` (or Unreal's `ApplyDamage`).
 
+## Jonathan, the archer prince (the second hero)
+
+The owner's sheet: `References/StyleRefs/Jonathan_turnaround.png`. A young bearded man with a big brown afro, King
+David's armour, fur mantle and green cape, a brown baldric, a big recurve bow in his left hand and a full quiver on
+his back.
+
+- **When he comes.** Not at the start: King David is the starting hero. Jonathan comes to your castle the moment it
+  reaches **level 3** (`VLRules::JonathanCastleLevel`; `UVLBattle::TickJonathan`), free and taking no housing, walks out
+  of the gate and stands by the rally point; an alert says so. If he falls he comes back to the castle 100 s later
+  (`JonathanRespawnSeconds`, the king's wait), as long as the castle stands at level 3. The enemy gets none
+  (`vl.Jonathan.Enemy 1` gives its castle one too: its commander fields him as an archer).
+- **Playing him.** **J** hands the controls to Jonathan from King David (or from any unit, or the overview), and J
+  again hands them back to the king; selecting him in the overview and Enter / a double click works as for any unit.
+  Left alone he fights as an archer does (his stance, orders, platoons, the tower's lookout). In your hands he is the
+  played archer (see Play): hold the right mouse button to draw (the draw bar under the crosshair), let go to shoot,
+  left click to lock the draw or to bash; he runs (Shift) and jumps (Space).
+- **In the code** he is a troop (`AVLTroop`, unit kind `"Jonathan"`, `EVLUnitKind::Jonathan`, `IsRanged()`), so the
+  king's own rules (the match is lost with the castle, the sword, the F key) stay King David's alone.
+- **His numbers** (`VLRules::Jonathan*` in `VLBattle.h`, put on him by `AVLTroop::BeginPlay`; the archers and the king
+  keep theirs):
+
+| | Jonathan | the archer troop | King David |
+|---|---|---|---|
+| Bow: button down to fully drawn (reach + nock + draw) | **1.14 s** (0.26 + 0.26 + 0.62) | 0.86 s (0.26 + 0.26 + 0.34) | |
+| Arrow speed | **8280 cm/s** | 6210 cm/s | |
+| Arrow damage | 60 | 40 | |
+| Seconds between shots on orders | 3.0 | 2.4 | |
+| Walk / run | **520 / 1000 cm/s** | 420 / 760 | 420 / 760 |
+| Jump (`JumpZVelocity`) | **700** | 540 | 540 |
+| Health | 450 | 125 | 600 |
+
+  The aim, the arc and the lead on a moving target are solved from the bow's own `ArrowSpeed`, so they hold at his
+  speed. `vl.Jonathan` logs his state and the numbers on him; `vl.Jonathan castle` raises your castle to level 3 now,
+  `vl.Jonathan spawn` brings him in beside the unit you play (a sandbox with no castle), `vl.Jonathan play | king`
+  are the J key.
+- **The figure**: `Blender -b --factory-startup --python Tools/blender/assets/jonathan.py` (previews
+  `SourceArt/Previews/jonathan_*.png`; `jonathan_compare.png` is the sheet over the model's same three views), then,
+  editor open,
+  `python3 Tools/ue_py.py -c "KING='SM_Jonathan'; DST='/Game/Voxel/Troops/Jonathan'; DA='DA_Jonathan'; NO_LODS=True; exec(open(r'<abs>/Tools/ue/import_king.py').read())"`
+  -> `/Game/Voxel/Troops/Jonathan/DA_Jonathan`. King David's joints and the archer's part names (Bow, BowStringU / L,
+  Quiver, Arrow), so `AVLKing` swings him and `UVLArcherCombat` draws his bow with no code of his own. Not done: a
+  portrait of his own (the HUD shows the archer's), far levels of detail, a place in the top bar next to the king.
+
 ## Sounds
 
 - **The recordings** (`SourceArt/Audio/Raw/Footsteps{Dirt,Cement,Wood,Carpet}.wav`, one take of many steps each) are

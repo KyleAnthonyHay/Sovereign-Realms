@@ -159,6 +159,20 @@ namespace VLRules
 	constexpr int32 SpyCastleLevel = 3;          // the castle level a kingdom needs before it can train its Spy
 	constexpr int32 MaxSpies = 1;                // alive and in training
 	constexpr float SpyCooldown = 300.f;         // seconds between two, from the moment the last was queued and paid for
+	// JONATHAN, the archer prince: the second hero (unit kind "Jonathan": an AVLTroop with the played archer's bow).
+	// He is not there at the start: he comes to the castle when it reaches JonathanCastleLevel (UVLBattle::TickJonathan),
+	// free and taking no housing, and comes back there JonathanRespawnSeconds after he falls (while the castle stands
+	// at that level). His own numbers, next to the archer troop's bow and King David's legs (the owner's call,
+	// 2026-11-23: "his bow should take longer to draw and arrows go faster. his run speed should be faster too and
+	// his jump higher"); the archers and the king keep theirs. AVLTroop::BeginPlay puts them on him.
+	constexpr int32 JonathanCastleLevel = 3;
+	constexpr float JonathanRespawnSeconds = KingRespawnSeconds;
+	constexpr float JonathanDrawSeconds = 0.62f;     // the draw itself (the archer: 0.34). Button down to fully drawn: 1.14 s against her 0.86 (+33%)
+	constexpr float JonathanArrowSpeed = 8280.f;     // cm/s (the archer: 6210; +33%). Aim and arcs are solved with the bow's own speed
+	constexpr float JonathanShotInterval = 3.0f;     // on orders, seconds from shot to shot (the archer: 2.4): the longer draw
+	constexpr float JonathanWalkSpeed = 520.f;       // cm/s (King David: 420; +24%)
+	constexpr float JonathanRunSpeed = 1000.f;       // cm/s (King David: 760; +32%)
+	constexpr float JonathanJumpZ = 700.f;           // cm/s off the ground (King David and every troop: 540; +30%, a jump 1.68 times as high)
 }
 
 /** A building of the game, as the battle keeps it. */
@@ -380,6 +394,16 @@ public:
 	bool TrySpend(int32 Team, const FVLCost& Cost, bool bQuiet = false);
 	int32 GetStorage(int32 Team, EVLRes Res) const;
 	int32 GetCastleLevel(int32 Team) const;
+	/** Jonathan, the archer prince, of a side (alive or just fallen), or null: he is not in the field. */
+	AVLTroop* GetJonathan(int32 Team) const;
+	/** Jonathan at a point, now (what TickJonathan does at the castle; vl.Jonathan spawn for a sandbox without one). */
+	AVLTroop* SpawnJonathan(int32 Team, const FVector& Ground, float Yaw);
+	/** Which sides get him: the player's; the enemy's too with vl.Jonathan.Enemy 1. */
+	static bool JonathanFor(int32 Team);
+	/** Seconds until he may come (back) to the castle; and, for testing (vl.Jonathan castle), the side's castle raised
+	 *  straight to the level he comes at. Returns the castle's level. */
+	float GetJonathanWait(int32 Team) const { return (Team == 0 || Team == 1) ? JonathanWait[Team] : 0.f; }
+	int32 RaiseCastleForJonathan(int32 Team);
 	/** Troops alive (not the king), and waiting in training queues. */
 	int32 GetPopulation(int32 Team) const;
 	int32 GetQueuedPopulation(int32 Team) const;
@@ -529,6 +553,11 @@ private:
 	float CohesionTimer = 0.f;
 	bool bTestWorld = false;
 	void TickKings(float Dt);
+	/** Jonathan comes to his side's castle once it is at VLRules::JonathanCastleLevel, and again after he has fallen. */
+	void TickJonathan(float Dt);
+	TWeakObjectPtr<AVLTroop> Jonathans[2];
+	float JonathanWait[2] = { 0.f, 0.f };       // seconds until he may come (back) to the castle
+	bool bJonathanCame[2] = { false, false };   // he has been in this match before (the alert's wording)
 	void SpawnRecruit(FVLBuildingState& B, const FString& Kind);
 	void Collapse(FVLBuildingState& B, AActor* By, int32 ByTeam, bool bDemolished = false);
 	void CheckEnd();
