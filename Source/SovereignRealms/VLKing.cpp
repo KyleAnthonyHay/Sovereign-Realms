@@ -1150,10 +1150,10 @@ void AVLKing::UpdateOverviewCamera(float DeltaSeconds, bool bSnap)
 	}
 	// (the title screen's backdrop frames the whole map from its own distance, past the overview's zoom limits)
 	const bool bTitle = TitleDistance > 0.f;
-	const float Dist = bTitle ? TitleDistance : FMath::Lerp(OverviewNear, OverviewFar, OverviewZoom * OverviewZoom);
+	FVector Focus = bTitle ? TitleFocus : OverviewFocus;
+	const float Dist = bTitle ? TitleDistance : OverviewDistance(OverviewZoom, Focus);
 	const float Pitch = bTitle ? TitlePitch : OverviewPitch(OverviewZoom);
 	const FRotator Rot(Pitch, OverviewYaw, 0.f);
-	FVector Focus = bTitle ? TitleFocus : OverviewFocus;
 	// The camera and the ground (UVLCameraGround; not the title's shot, which is far over everything). The view turns
 	// about a point ON the ground: the focus rides the terrain's surface (it was at height 0 everywhere, so over high
 	// ground the whole view hung under it), smoothly, a little slower the further out the view is.
@@ -3009,6 +3009,96 @@ float AVLKing::HeroPitch(float InZoom) const
 	const float Near = A == 0 ? PitchNear : Hero[A][0];
 	const float Far = A == 0 ? PitchFar : Hero[A][1];
 	return FMath::Lerp(Near, Far, FMath::Clamp(InZoom, 0.f, 1.f));
+}
+
+float AVLKing::OverviewDistance(float InZoom, FVector& InOutFocus) const
+{
+	const float Z = FMath::Clamp(InZoom, 0.f, 1.f);
+	float Dist = FMath::Lerp(OverviewNear, OverviewFar, Z * Z);
+	FVector2D Centre;
+	const float Whole = WholeMapDistance(Centre);
+	if (Whole > OverviewFar)
+	{
+		// the usual zoom untouched up to three quarters; from there out to the whole map, the focus to its middle
+		const float E = FMath::SmoothStep(0.75f, 1.f, Z);
+		Dist += (Whole - OverviewFar) * E;
+		InOutFocus.X = FMath::Lerp(float(InOutFocus.X), float(Centre.X), E);
+		InOutFocus.Y = FMath::Lerp(float(InOutFocus.Y), float(Centre.Y), E);
+	}
+	return Dist;
+}
+
+float AVLKing::WholeMapDistance(FVector2D& OutCentre) const
+{
+	const UVLGrid* Grid = UVLGrid::Get(this);
+	if (!Grid || !Grid->IsBuilt())
+	{
+		return 0.f;
+	}
+	const FBox2D Ground = Grid->GetBounds();
+	float Aspect = 16.f / 9.f;
+	if (GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport)
+	{
+		const FIntPoint Size = GEngine->GameViewport->Viewport->GetSizeXY();
+		if (Size.X > 0 && Size.Y > 0)
+		{
+			Aspect = float(Size.X) / float(Size.Y);
+		}
+	}
+	const float Pitch = OverviewPitch(1.f);
+	const TArray<float> Key = { float(Ground.Min.X), float(Ground.Min.Y), float(Ground.Max.X), float(Ground.Max.Y), Aspect, OverviewFOV, Pitch };
+	if (Key == WholeMapKey)
+	{
+		OutCentre = WholeMapCentre;
+		return WholeMapDist;
+	}
+	// The map's ground, a square of its larger side round its middle (with a 5% margin), must be inside the view's
+	// frustum: every corner in front of the eye and within the half angles, for eight yaws (the furthest of them, so the
+	// distance does not change as the view turns). Found by halving between the near limit and far past it.
+	const FVector2D C = Ground.GetCenter();
+	const float Half = 0.5f * FMath::Max(Ground.GetSize().X, Ground.GetSize().Y) * 1.05f;
+	const float TanH = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(OverviewFOV, 5.f, 170.f) * 0.5f));
+	const float TanV = TanH / FMath::Max(Aspect, 0.1f);
+	auto Fits = [&](float D, float Yaw)
+	{
+		const FRotationMatrix M(FRotator(Pitch, Yaw, 0.f));
+		const FVector F = M.GetUnitAxis(EAxis::X), R = M.GetUnitAxis(EAxis::Y), U = M.GetUnitAxis(EAxis::Z);
+		const FVector Eye = -F * D;     // (the focus at the origin, on the ground)
+		for (int32 k = 0; k < 4; ++k)
+		{
+			const FVector P((k & 1) ? Half : -Half, (k & 2) ? Half : -Half, 0.f);
+			const FVector V = P - Eye;
+			const float X = float(FVector::DotProduct(V, F));
+			if (X <= 1.f || FMath::Abs(float(FVector::DotProduct(V, R))) > X * TanH || FMath::Abs(float(FVector::DotProduct(V, U))) > X * TanV)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+	float Need = 0.f;
+	for (int32 y = 0; y <= 8; ++y)
+	{
+		const float Yaw = y * 11.25f;   // (0 .. 90: a square repeats itself every quarter turn)
+		float Lo = OverviewNear, Hi = FMath::Max(OverviewFar, Half * 40.f);
+		if (!Fits(Hi, Yaw))
+		{
+			continue;                   // (never fits: a pitch too shallow for this view; left to the usual far limit)
+		}
+		for (int32 i = 0; i < 40; ++i)
+		{
+			const float Mid = 0.5f * (Lo + Hi);
+			(Fits(Mid, Yaw) ? Hi : Lo) = Mid;
+		}
+		Need = FMath::Max(Need, Hi);
+	}
+	WholeMapKey = Key;
+	WholeMapDist = Need;
+	WholeMapCentre = C;
+	OutCentre = C;
+	UE_LOG(LogSovereignRealms, Log, TEXT("overview: the whole map (%.0f x %.0f m) is in view at %.0f m (usual far %.0f m; aspect %.2f, FOV %.0f, pitch %.0f)"),
+		Ground.GetSize().X / 100.f, Ground.GetSize().Y / 100.f, Need / 100.f, OverviewFar / 100.f, Aspect, OverviewFOV, Pitch);
+	return Need;
 }
 
 float AVLKing::OverviewPitch(float InZoom) const

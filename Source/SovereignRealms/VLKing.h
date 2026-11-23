@@ -381,6 +381,14 @@ public:
 
 	float HeroPitch(float InZoom) const;
 	float OverviewPitch(float InZoom) const;
+	/** The overview's distance and focus for a zoom: the usual curve (OverviewNear .. OverviewFar on zoom squared), and
+	 *  on a map whose ground is bigger than OverviewFar shows, the last quarter of the zoom goes on out to where the
+	 *  whole map is in view at any yaw (WholeMapDistance), the focus drifting to the map's middle on the way (user
+	 *  request 2026-11-23: the whole island of Realm and Realm v2 at the furthest zoom). */
+	float OverviewDistance(float InZoom, FVector& InOutFocus) const;
+	/** The distance at which the map's ground (UVLGrid's bounds) fits the overview's view at its furthest pitch, for
+	 *  every yaw (0: no grid). Cached against the ground, the view's aspect, the FOV and the pitch. */
+	float WholeMapDistance(FVector2D& OutCentre) const;
 	void CycleCameraAngle();
 	int32 GetCameraAngle() const { return CameraAngle; }
 	static const TCHAR* CameraAngleName(int32 Angle);
@@ -709,6 +717,10 @@ private:
 	void UpdateOverviewCamera(float DeltaSeconds, bool bSnap = false);
 	FVector TitleFocus = FVector::ZeroVector;
 	float TitleDistance = 0.f;
+	// WholeMapDistance's cache: the key (ground min, ground max, aspect, FOV, pitch) and the answer
+	mutable TArray<float> WholeMapKey;
+	mutable float WholeMapDist = 0.f;
+	mutable FVector2D WholeMapCentre = FVector2D::ZeroVector;
 	float TitlePitch = -38.f;
 	USceneComponent* Part(FName Name) const;
 
