@@ -574,6 +574,8 @@ bool AVLKing::StartNextLeg()
 
 namespace
 {
+	TAutoConsoleVariable<int32> CVarMoveSleep(TEXT("vl.Opt.MoveSleep"), 0,
+		TEXT("1: a unit standing with nothing to do (settled on a floor that does not move, no order) has its movement component switched off until it is asked to move, is put elsewhere or loses its floor. 0: every unit's ticks every frame"));
 	TAutoConsoleVariable<int32> CVarGarrisonSleep(TEXT("vl.Opt.GarrisonSleep"), 1,
 		TEXT("1: a unit standing on a tower's lookout has its movement component switched off until it leaves (it never walks there). 0: it ticks as every unit"));
 }
@@ -600,27 +602,50 @@ void AVLKing::UpdateMovementSleep()
 	// down: it only turns to aim (SetActorRotation, which needs no movement tick). Once it has settled on the floor
 	// its movement component stops ticking; anything that ends the stay wakes it (here, and at once in Leave,
 	// FollowPath, Die and TakeControlOf).
-	const bool bStay = IsGarrisoned() && !bAutoWalk && !bDead && !IsPlayerControlled() && CVarGarrisonSleep.GetValueOnGameThread() != 0;
-	if (!bStay)
+	// (Batch 4, vl.Opt.MoveSleep) The same for any unit that stands with nothing to do: settled on a floor that does
+	// not move, no order, not stepping aside. It wakes the moment anything asks it to move (AddMovementInput,
+	// FollowPath), when it is hurt, and here, every tick of its own, if it is no longer where it fell asleep (put
+	// somewhere else: a teleport) or what it stands on has moved, gone or lost its collision.
+	const bool bGarrison = IsGarrisoned() && CVarGarrisonSleep.GetValueOnGameThread() != 0;
+	const bool bIdle = CVarMoveSleep.GetValueOnGameThread() != 0 && !bYielding && !bYieldReturn && YieldWish.IsNearlyZero() && WayIgnored.Num() == 0;
+	const bool bStay = (bGarrison || bIdle) && !bAutoWalk && !bDead && !IsPlayerControlled();
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (bMoveAsleep)
 	{
-		if (bMoveAsleep)
+		const UPrimitiveComponent* Base = Move->GetMovementBase();
+		const bool bFloorThere = Base && IsValid(Base) && Base == SleepBase.Get() && Base->IsQueryCollisionEnabled()
+			&& Base->GetComponentLocation().Equals(SleepBaseAt, 0.01);
+		if (!bStay || !bFloorThere || !GetActorLocation().Equals(SleepAt, 0.01))
 		{
 			SetMovementAwake(true);
 		}
+		return;
+	}
+	if (!bStay)
+	{
 		MoveStill = 0;
 		return;
 	}
-	if (bMoveAsleep)
-	{
-		return;
-	}
-	const UCharacterMovementComponent* Move = GetCharacterMovement();
-	const bool bStill = Move->IsMovingOnGround() && Move->Velocity.IsNearlyZero() && Move->GetPendingInputVector().IsNearlyZero() && Move->GetCurrentAcceleration().IsNearlyZero();
+	const UPrimitiveComponent* Base = Move->GetMovementBase();
+	const bool bStill = Move->IsMovingOnGround() && Move->Velocity.IsNearlyZero() && Move->GetPendingInputVector().IsNearlyZero() && Move->GetCurrentAcceleration().IsNearlyZero()
+		&& Base && Base->Mobility != EComponentMobility::Movable && Move->CurrentFloor.IsWalkableFloor();
 	MoveStill = bStill ? MoveStill + 1 : 0;
 	if (MoveStill >= 20)
 	{
+		SleepAt = GetActorLocation();
+		SleepBase = const_cast<UPrimitiveComponent*>(Base);
+		SleepBaseAt = Base->GetComponentLocation();
 		SetMovementAwake(false);
 	}
+}
+
+void AVLKing::AddMovementInput(FVector WorldDirection, float ScaleValue, bool bForce)
+{
+	if (bMoveAsleep)
+	{
+		SetMovementAwake(true);         // (asked to move: UpdateMovementSleep)
+	}
+	Super::AddMovementInput(WorldDirection, ScaleValue, bForce);
 }
 
 void AVLKing::StopOrder()
@@ -3285,6 +3310,7 @@ void AVLKing::ReceiveDamage(float Amount, AActor* From)
 	{
 		return;
 	}
+	SetMovementAwake(true);         // (hurt: awake for whatever follows)
 	Health = FMath::Max(0.f, Health - Amount);
 	LastHurtTime = GetWorld()->GetTimeSeconds();
 	HitPauseLeft = FMath::Max(0.f, HitPauseSeconds);

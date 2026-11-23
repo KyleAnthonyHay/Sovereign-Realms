@@ -92,6 +92,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PossessedBy(AController* NewController) override;
+	/** (wakes its movement component if it was asleep: UpdateMovementSleep) */
+	virtual void AddMovementInput(FVector WorldDirection, float ScaleValue = 1.0f, bool bForce = false) override;
 	virtual void UnPossessed() override;
 
 	/** Walks there by himself (vl.Walk, or an order from the overview), until the player takes the controls: by a
@@ -927,6 +929,9 @@ private:
 	void UpdateSafety(float DeltaSeconds);
 	void UpdateMovementSleep();
 	bool bMoveAsleep = false;
+	FVector SleepAt = FVector::ZeroVector;                  // where it fell asleep, and on what
+	TWeakObjectPtr<UPrimitiveComponent> SleepBase;
+	FVector SleepBaseAt = FVector::ZeroVector;
 	int32 MoveStill = 0;        // frames it has stood settled on its post
 	// overview: a click or a dragged box, the platoon keys
 	bool bLeftDown = false;

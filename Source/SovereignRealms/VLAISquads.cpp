@@ -1,9 +1,10 @@
-#include "VLEnemyAI.h"
+﻿#include "VLEnemyAI.h"
 #include "SovereignRealms.h"
 #include "VLBattle.h"
 #include "VLKing.h"
 #include "VLCommand.h"
 #include "VLConstruction.h"
+#include "VLGrid.h"
 #include "VLArcherCombat.h"
 #include "Engine/World.h"
 
@@ -784,6 +785,23 @@ bool FVLCommander::LaunchAttack(UVLBattle* B, FVLSquad& Field)
 	// ---- Hard: a second body round by a flank bridge, the main body leaving later so that both arrive together
 	if (Prof.bFlank && !bAllIn && Free.Num() >= 8 && !FindSquad(EVLSquadRole::Flank) && !Field.Target.IsValid())
 	{
+		// (Windows pass, batch 4: the searches below, side by side on worker threads first; the loop then reads them)
+		{
+			TArray<TPair<FVector, FVector>> Ways;
+			Ways.Emplace(C, Goal);
+			for (const FVLAIPoint& P : Map.Points)
+			{
+				if (P.Kind == EVLAIPoint::Flank)
+				{
+					Ways.Emplace(C, P.End[Team]);
+					Ways.Emplace(P.End[Foe()], Goal);
+				}
+			}
+			if (UVLGrid* Grid = UVLGrid::Get(B->GetWorld()))
+			{
+				Grid->PrewarmRoutes(Ways);
+			}
+		}
 		const float Direct = VLAI::RouteLength(B, C, Goal);
 		const FVLAIPoint* Best = nullptr;
 		float BestLen = Direct * 1.7f;
@@ -1252,6 +1270,23 @@ bool FVLCommander::LaunchRaid(UVLBattle* B)
 	if (Prof.bFlank)
 	{
 		TArray<FVector> Route;
+		// (Windows pass, batch 4: the searches below, side by side on worker threads first; the loop then reads them)
+		{
+			TArray<TPair<FVector, FVector>> Ways;
+			Ways.Emplace(C, Goal);
+			for (const FVLAIPoint& P : Map.Points)
+			{
+				if (P.Kind == EVLAIPoint::Flank)
+				{
+					Ways.Emplace(C, P.End[Team]);
+					Ways.Emplace(P.End[Foe()], Goal);
+				}
+			}
+			if (UVLGrid* Grid = UVLGrid::Get(B->GetWorld()))
+			{
+				Grid->PrewarmRoutes(Ways);
+			}
+		}
 		const float Direct = VLAI::RouteLength(B, C, Goal, &Route);     // (B: the one search gives the route and its length; it was run twice)
 		float Peak = 0.f;
 		const float Risk = Influence.RouteRisk(Route, 1000.f, &Peak);

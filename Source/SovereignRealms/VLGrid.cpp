@@ -47,6 +47,8 @@ namespace
 	TAutoConsoleVariable<int32> CVarFastRegions(TEXT("vl.Opt.FastRegions"), 1, TEXT("1: the grid's regions of connected ground are worked out in one pass over the nodes in order (the same regions, sooner). 0: by the flood"));
 	TAutoConsoleVariable<int32> CVarRouteMemo(TEXT("vl.Opt.RouteMemo"), 1,
 		TEXT("1: a one-walker route search between the same two nodes of the same grid is answered from the last answer (a stuck unit planning again, the commander weighing the same route). 2: searched anyway and compared with the memo (logs a difference). 0: always searched"));
+	TAutoConsoleVariable<int32> CVarParallelRoutes(TEXT("vl.Opt.ParallelRoutes"), 1,
+		TEXT("1: the routes a commander weighs when it sends a raid or a flank out are searched side by side on worker threads first (UVLGrid::PrewarmRoutes; the same routes). 0: one after another on the game thread"));
 	TAutoConsoleVariable<int32> CVarFastFlood(TEXT("vl.Opt.FastFlood"), 1,
 		TEXT("1: the route search reads a node's wall flag from a byte array of its own and counts its starts with a stamp (the same search, sooner). 0: as it was"));
 	TAutoConsoleVariable<int32> CVarGridChecksum(TEXT("vl.Opt.GridChecksum"), 0, TEXT("1: log a checksum of the path grid whenever it is built or a part of it sampled again"));
@@ -923,7 +925,7 @@ bool UVLGrid::Submerged(const FVector& Feet) const
 	return ToCell(FVector2D(Feet), C) && WaterZ[CellIdx(C)] > Feet.Z + 25.f && NodeAt(Feet, 60.f) == INDEX_NONE;
 }
 
-bool UVLGrid::WalkLine(int32 FromNode, const FVector2D& A, const FVector2D& B, int32 ToNode, ELineRule Rule) const
+bool UVLGrid::WalkLine(int32 FromNode, const FVector2D& A, const FVector2D& B, int32 ToNode, ELineRule Rule, const uint32* Marks, uint32 MarkStamp) const
 {
 	if (!Nodes.IsValidIndex(FromNode) || !Nodes.IsValidIndex(ToNode))
 	{
@@ -940,7 +942,7 @@ bool UVLGrid::WalkLine(int32 FromNode, const FVector2D& A, const FVector2D& B, i
 		}
 		if (Rule == ELineRule::Route)
 		{
-			return RouteMark[I] == RouteStamp;
+			return Marks ? Marks[I] == MarkStamp : RouteMark[I] == RouteStamp;     // (a search on a worker thread has marks of its own)
 		}
 		const FIntPoint P = CellOf(I);
 		return FMath::Max(FMath::Abs(P.X - Start.X), FMath::Abs(P.Y - Start.Y)) <= 1 || FMath::Max(FMath::Abs(P.X - End.X), FMath::Abs(P.Y - End.Y)) <= 1;
@@ -1368,6 +1370,191 @@ bool UVLGrid::FindGroupPaths(const TArray<FVector>& Starts, const FVector& Goal,
 	}
 	UE_LOG(LogSovereignRealms, Verbose, TEXT("PATH group of %d (%d searched) in %.2f ms"), Starts.Num(), Searched, (FPlatformTime::Seconds() - T0) * 1000.0);
 	return bAny;
+}
+
+bool UVLGrid::SearchOne(FSearchScratch& S, uint32 JobStamp, int32 Start, int32 To, TArray<FVector>& OutCorners) const
+{
+	// FloodFast for one goal and one start, then the chain and StringPull, on arrays the caller owns: the same
+	// expansion, costs and corners as FindGroupPaths gets for one walker. Reads the grid only.
+	const FNode* const Node = Nodes.GetData();
+	const uint8* const Wall = NearWall.GetData();
+	const int32 Dim = DimX;
+	const FIntPoint SC = CellOf(Start);
+	auto H = [&](int32 I)
+	{
+		const int32 C = Node[I].Cell;
+		const int32 Cx = C % Dim, Cy = C / Dim;
+		const int32 Dx = FMath::Max3(SC.X - Cx, 0, Cx - SC.X);
+		const int32 Dy = FMath::Max3(SC.Y - Cy, 0, Cy - SC.Y);
+		return float(FMath::Max(Dx, Dy)) + (Diag - 1.f) * float(FMath::Min(Dx, Dy));
+	};
+	float* const CostAt = S.Cost.GetData();
+	int32* const NextAt = S.Next.GetData();
+	uint32* const SeenAt = S.Seen.GetData();
+	TArray<FOpen> Open;
+	Open.Reserve(4096);
+	SeenAt[To] = JobStamp;
+	CostAt[To] = 0.f;
+	NextAt[To] = INDEX_NONE;
+	Open.HeapPush({ H(To), To }, FOpenLess());
+	const float WallCost = 1.f + WallPenalty;
+	while (Open.Num() > 0)
+	{
+		FOpen Top;
+		Open.HeapPop(Top, FOpenLess());
+		const int32 I = Top.I;
+		const float GCost = CostAt[I];
+		if (Top.F > GCost + H(I) + 1e-3f)
+		{
+			continue;
+		}
+		if (I == Start)
+		{
+			break;          // (the one start is reached: as Flood returns when none remain)
+		}
+		const float Here = Wall[I] ? WallCost : 1.f;
+		const int32* const Nb = Node[I].Nb;
+		for (int32 n = 0; n < 8; ++n)
+		{
+			const int32 J = Nb[n];
+			if (J < 0)
+			{
+				continue;
+			}
+			const float There = Wall[J] ? WallCost : 1.f;
+			const float NewCost = GCost + (n >= 4 ? Diag : 1.f) * 0.5f * (Here + There);
+			if (SeenAt[J] != JobStamp || NewCost < CostAt[J])
+			{
+				SeenAt[J] = JobStamp;
+				CostAt[J] = NewCost;
+				NextAt[J] = I;
+				Open.HeapPush({ NewCost + H(J), J }, FOpenLess());
+			}
+		}
+	}
+	if (SeenAt[Start] != JobStamp)
+	{
+		return false;
+	}
+	TArray<int32> Chain;
+	for (int32 I = Start; I != INDEX_NONE && Chain.Num() < Nodes.Num(); I = NextAt[I])
+	{
+		Chain.Add(I);
+	}
+	// (StringPull, with marks of this search)
+	uint32* const Mark = S.Mark.GetData();
+	for (int32 I : Chain)
+	{
+		Mark[I] = JobStamp;
+	}
+	int32 Anchor = 0;
+	while (Anchor < Chain.Num() - 1)
+	{
+		const FVector2D AnchorPos(NodePos(Chain[Anchor]));
+		int32 FarI = Anchor + 1;
+		for (int32 k = Anchor + 2; k < Chain.Num(); ++k)
+		{
+			if (WalkLine(Chain[Anchor], AnchorPos, FVector2D(NodePos(Chain[k])), Chain[k], ELineRule::Route, Mark, JobStamp))
+			{
+				FarI = k;
+			}
+			else if (k - FarI > 8)
+			{
+				break;
+			}
+		}
+		OutCorners.Add(NodePos(Chain[FarI]));
+		Anchor = FarI;
+	}
+	return true;
+}
+
+void UVLGrid::PrewarmRoutes(TConstArrayView<TPair<FVector, FVector>> Pairs)
+{
+	if (CVarParallelRoutes.GetValueOnGameThread() == 0 || CVarRouteMemo.GetValueOnGameThread() == 0 || !EnsureBuilt()
+		|| NearWall.Num() != Nodes.Num())
+	{
+		return;
+	}
+	// which searches FindPath would run for these (FindGroupPaths, for one walker), less those the memo has
+	struct FJob
+	{
+		int32 Start = INDEX_NONE, To = INDEX_NONE;
+		bool bFound = false;
+		TArray<FVector> Corners;
+	};
+	TArray<FJob> Jobs;
+	for (const TPair<FVector, FVector>& P : Pairs)
+	{
+		const FVector& From = P.Key;
+		const FVector& Goal = P.Value;
+		const int32 GoalNode = NearestNode(Goal, 24);
+		if (GoalNode == INDEX_NONE)
+		{
+			continue;
+		}
+		FIntPoint GC;
+		const bool bExact = ToCell(FVector2D(Goal), GC) && CellIdx(GC) == Nodes[GoalNode].Cell;
+		const FVector G = bExact ? FVector(Goal.X, Goal.Y, Nodes[GoalNode].Z) : NodePos(GoalNode);
+		int32 StartNode = NodeAt(From);
+		bool bSnapped = false;
+		if (StartNode == INDEX_NONE)
+		{
+			StartNode = NearestNode(From, 6);
+			bSnapped = true;
+		}
+		if (StartNode == INDEX_NONE)
+		{
+			continue;
+		}
+		const int32 Region = Nodes[StartNode].Region;
+		if (Region == Nodes[GoalNode].Region && !bSnapped && WalkLine(StartNode, FVector2D(From), FVector2D(G), GoalNode, ELineRule::Clear))
+		{
+			continue;       // (straight there: no search)
+		}
+		int32 To = GoalNode;
+		if (Region != Nodes[GoalNode].Region)
+		{
+			To = NearestNode(Goal, 80, Region);
+			if (To == INDEX_NONE)
+			{
+				continue;
+			}
+		}
+		if (FindMemo(StartNode, To) || Jobs.ContainsByPredicate([StartNode, To](const FJob& J) { return J.Start == StartNode && J.To == To; }))
+		{
+			continue;
+		}
+		FJob& J = Jobs.AddDefaulted_GetRef();
+		J.Start = StartNode;
+		J.To = To;
+	}
+	if (Jobs.Num() < 2)
+	{
+		return;             // (one search: FindPath runs it as ever)
+	}
+	const double T0 = FPlatformTime::Seconds();
+	const int32 Workers = FMath::Clamp(FMath::Min(Jobs.Num(), FPlatformMisc::NumberOfCoresIncludingHyperthreads() - 2), 1, 8);
+	const int32 N = Nodes.Num();
+	ParallelFor(Workers, [this, &Jobs, Workers, N](int32 W)
+	{
+		// (the arrays of each worker are its own, made here and gone when it is done: 20 bytes a node)
+		FSearchScratch S;
+		S.Cost.SetNumUninitialized(N);
+		S.Next.SetNumUninitialized(N);
+		S.Seen.SetNumZeroed(N);
+		S.Mark.SetNumZeroed(N);
+		uint32 JobStamp = 0;
+		for (int32 j = W; j < Jobs.Num(); j += Workers)
+		{
+			Jobs[j].bFound = SearchOne(S, ++JobStamp, Jobs[j].Start, Jobs[j].To, Jobs[j].Corners);
+		}
+	});
+	for (const FJob& J : Jobs)
+	{
+		AddMemo(J.Start, J.To, J.bFound, J.Corners);
+	}
+	UE_LOG(LogSovereignRealms, Log, TEXT("PATH %d route(s) of %d searched side by side on %d worker(s) in %.1f ms"), Jobs.Num(), Pairs.Num(), Workers, (FPlatformTime::Seconds() - T0) * 1000.0);
 }
 
 const UVLGrid::FRouteMemo* UVLGrid::FindMemo(int32 From, int32 To)

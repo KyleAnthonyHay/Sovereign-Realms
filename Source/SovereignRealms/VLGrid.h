@@ -97,6 +97,14 @@ public:
 	bool FindGroupPaths(const TArray<FVector>& Starts, const FVector& Goal, TArray<TArray<FVector>>& OutPaths, TArray<FVector>* OutGoals = nullptr);
 	/** One walker's corners, the goal (or the nearest point it can reach) appended. */
 	bool FindPath(const FVector& From, const FVector& Goal, TArray<FVector>& OutPath);
+	/**
+	 * (Windows pass, batch 4) Routes that are about to be asked for one after another with FindPath (the commander
+	 * weighing the ways round for a raid: a score of searches across the map in one frame), searched now side by side
+	 * on worker threads and kept in the route memo, where FindPath then finds them. Each is the search FindPath would
+	 * have run (the same nodes, the same corners); pairs that need no search, or are in the memo already, are passed
+	 * over. vl.Opt.ParallelRoutes 0: nothing is done here (FindPath searches as it comes to each).
+	 */
+	void PrewarmRoutes(TConstArrayView<TPair<FVector, FVector>> Pairs);
 	/** Formation slots made standable: kept if they can be walked to from the goal nearby, else moved to such ground. */
 	void FitSlots(const FVector& Goal, const TArray<FVector2D>& Slots, TArray<FVector>& Out) const;
 	/** The water's surface over this point of the map (far below everything where there is none, or no grid). */
@@ -159,7 +167,15 @@ private:
 	TArray<uint8> NearWall;     // per node: FNode::bNearWall, for the search's inner loop
 	TArray<uint32> StartMark;   // per node: a start the running search has still to reach (== Stamp)
 	enum class ELineRule : uint8 { Any, Clear, Route };
-	bool WalkLine(int32 FromNode, const FVector2D& A, const FVector2D& B, int32 ToNode, ELineRule Rule) const;
+	bool WalkLine(int32 FromNode, const FVector2D& A, const FVector2D& B, int32 ToNode, ELineRule Rule, const uint32* Marks = nullptr, uint32 MarkStamp = 0) const;
+	// (Windows pass, batch 4) one-walker searches run side by side: each worker has its own arrays
+	struct FSearchScratch
+	{
+		TArray<float> Cost;
+		TArray<int32> Next;
+		TArray<uint32> Seen, Mark;
+	};
+	bool SearchOne(FSearchScratch& S, uint32 JobStamp, int32 Start, int32 To, TArray<FVector>& OutCorners) const;
 	void StringPull(const TArray<int32>& Chain, TArray<FVector>& Out);
 
 	bool bTried = false;
