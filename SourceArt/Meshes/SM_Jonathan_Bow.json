@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Bow",
+ "faces": 1364,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0593,
+   -0.2702,
+   -0.8645
+  ],
+  [
+   0.4086,
+   0.3065,
+   0.9021
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.35921,
+  -0.316,
+  0.78168
+ ],
+ "part": "Bow",
+ "parent": "ForeL",
+ "triangles": 2728,
+ "blocks": 103
+}

@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Cape00",
+ "faces": 516,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1393,
+   -0.1607,
+   -0.254
+  ],
+  [
+   0.1133,
+   0.1433,
+   0.0061
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.46071,
+  0.21071,
+  1.1
+ ],
+ "part": "Cape00",
+ "parent": "Cape",
+ "triangles": 1032,
+ "blocks": 43
+}

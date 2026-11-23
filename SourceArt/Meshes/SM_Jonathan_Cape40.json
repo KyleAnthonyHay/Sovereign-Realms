@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Cape40",
+ "faces": 467,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1107,
+   -0.1668,
+   -0.2569
+  ],
+  [
+   0.1454,
+   0.1455,
+   0.0075
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.46071,
+  0.21071,
+  1.1
+ ],
+ "part": "Cape40",
+ "parent": "Cape",
+ "triangles": 935,
+ "blocks": 42
+}

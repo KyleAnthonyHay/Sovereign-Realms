@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Chest",
+ "faces": 7111,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.6176,
+   -0.267,
+   -0.0167
+  ],
+  [
+   0.6229,
+   0.3879,
+   0.5523
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.9125
+ ],
+ "part": "Chest",
+ "parent": "Body",
+ "triangles": 14222,
+ "blocks": 538
+}

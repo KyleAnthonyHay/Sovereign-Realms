@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Arrow",
+ "faces": 220,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0458,
+   -0.4565,
+   -0.1261
+  ],
+  [
+   0.0313,
+   0.2295,
+   0.2195
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.3752,
+  -0.19919,
+  0.62951
+ ],
+ "part": "Arrow",
+ "parent": "HandR",
+ "triangles": 440,
+ "blocks": 10
+}

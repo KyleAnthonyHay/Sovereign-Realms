@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_ArmR",
+ "faces": 400,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1345,
+   -0.1325,
+   -0.3555
+  ],
+  [
+   0.0821,
+   0.1019,
+   0.0821
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.3125,
+  0.0,
+  1.25
+ ],
+ "part": "ArmR",
+ "parent": "Chest",
+ "triangles": 800,
+ "blocks": 58
+}

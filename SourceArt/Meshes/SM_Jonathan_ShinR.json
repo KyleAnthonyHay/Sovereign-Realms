@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_ShinR",
+ "faces": 550,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.13,
+   -0.2075,
+   -0.35
+  ],
+  [
+   0.1213,
+   0.0975,
+   0.075
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.15,
+  0.0,
+  0.35
+ ],
+ "part": "ShinR",
+ "parent": "LegR",
+ "triangles": 1101,
+ "blocks": 61
+}

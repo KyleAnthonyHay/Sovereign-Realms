@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_BowStringU",
+ "faces": 110,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0058,
+   -0.0053,
+   -0.6363
+  ],
+  [
+   0.077,
+   0.1802,
+   0.0013
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.5918,
+  -0.44582,
+  1.4582
+ ],
+ "part": "BowStringU",
+ "parent": "Bow",
+ "triangles": 220,
+ "blocks": 5
+}

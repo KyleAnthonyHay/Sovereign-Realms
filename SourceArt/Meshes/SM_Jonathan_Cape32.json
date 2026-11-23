@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Cape32",
+ "faces": 406,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1528,
+   -0.0555,
+   -0.257
+  ],
+  [
+   0.15,
+   0.0994,
+   0.0
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.30278,
+  0.35278,
+  0.55
+ ],
+ "part": "Cape32",
+ "parent": "Cape31",
+ "triangles": 812,
+ "blocks": 38
+}

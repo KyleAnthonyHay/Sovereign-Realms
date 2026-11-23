@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Body",
+ "faces": 1341,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.275,
+   -0.2075,
+   -0.3
+  ],
+  [
+   0.275,
+   0.1525,
+   0.2463
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  0.7
+ ],
+ "part": "Body",
+ "parent": "",
+ "triangles": 2682,
+ "blocks": 152
+}

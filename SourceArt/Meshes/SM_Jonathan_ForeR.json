@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_ForeR",
+ "faces": 439,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1248,
+   -0.2037,
+   -0.3069
+  ],
+  [
+   0.0917,
+   0.0762,
+   0.0887
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.34386,
+  0.0,
+  0.95164
+ ],
+ "part": "ForeR",
+ "parent": "ArmR",
+ "triangles": 878,
+ "blocks": 49
+}

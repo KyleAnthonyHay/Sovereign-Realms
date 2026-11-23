@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Quiver",
+ "faces": 2565,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.5088,
+   -0.2441,
+   -0.5078
+  ],
+  [
+   0.3767,
+   0.177,
+   0.729
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  -0.0875,
+  0.525,
+  1.075
+ ],
+ "part": "Quiver",
+ "parent": "Chest",
+ "triangles": 5131,
+ "blocks": 223
+}

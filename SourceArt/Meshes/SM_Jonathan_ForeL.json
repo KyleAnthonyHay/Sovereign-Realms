@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_ForeL",
+ "faces": 563,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0969,
+   -0.3936,
+   -0.2597
+  ],
+  [
+   0.1204,
+   0.0801,
+   0.0842
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.34386,
+  0.0,
+  0.95164
+ ],
+ "part": "ForeL",
+ "parent": "ArmL",
+ "triangles": 1126,
+ "blocks": 54
+}

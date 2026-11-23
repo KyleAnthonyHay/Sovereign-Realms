@@ -1,0 +1,27 @@
+{
+ "name": "SM_Jonathan_Head",
+ "faces": 5210,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.325,
+   -0.2375,
+   -0.0017
+  ],
+  [
+   0.3162,
+   0.325,
+   0.5375
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.0,
+  0.0,
+  1.3
+ ],
+ "part": "Head",
+ "parent": "Chest",
+ "triangles": 10421,
+ "blocks": 506
+}
