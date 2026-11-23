@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Summarise the last ProfileGPU capture in the editor log: the passes over 0.6 ms, indented by depth.
    python3 Tools/pie.py run "r.ProfileGPU.ShowUI 0" "ProfileGPU"; python3 Tools/gpuprof.py"""
-import re
+import re, sys
 import vl_env
-L = vl_env.editor_log()
+L = sys.argv[1] if len(sys.argv) > 1 else vl_env.editor_log()      # (or a log given: a packaged build's)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
 lines = open(L, encoding="utf-8", errors="replace").read().split("\n")
 idx = [i for i, l in enumerate(lines) if "LogRHI: Display:" in l and "┃" in l]
 end = idx[-1]; s = set(idx[-4000:]); start = end

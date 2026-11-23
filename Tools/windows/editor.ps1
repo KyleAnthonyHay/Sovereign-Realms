@@ -78,7 +78,11 @@ function Start-Editor {
     # a leftover crash reporter can hold the MCP port
     Get-Process -Name 'CrashReportClient*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Force -Path $VLSaved | Out-Null
-    Start-Process -FilePath (Join-Path $UE 'Engine\Binaries\Win64\UnrealEditor.exe') -ArgumentList "`"$VLProject`""
+    # (the editor idles at 3 fps while another window is in front: Editor Preferences > Performance > "Use less CPU when
+    # in background". The scripted tools measure and record with the editor behind a terminal, so it is off for an editor
+    # started here; for this session only, nothing is written to the settings.)
+    $noThrottle = '-ini:EditorSettings:[/Script/UnrealEd.EditorPerformanceSettings]:bThrottleCPUWhenNotForeground=False'
+    Start-Process -FilePath (Join-Path $UE 'Engine\Binaries\Win64\UnrealEditor.exe') -ArgumentList @("`"$VLProject`"", $noThrottle)
     Write-Host 'the editor is starting (the first start compiles shaders: several minutes) ...'
     $i = 0
     while (-not (Test-Listening)) {

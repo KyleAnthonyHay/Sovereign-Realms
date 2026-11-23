@@ -36,7 +36,7 @@ they find is not 5.8 (building and packaging with a newer engine is harmless: co
 | Engine found at | `$UE_ROOT`, else `/Users/Shared/Epic Games/UnrealInstall/UE_5.8` | `%UE_ROOT%`, else the launcher's 5.8 (`C:\Program Files\Epic Games\UE_5.8`), else the newest `UE_5.*` there |
 | Open the editor | `sh Tools/mac/editor.sh rebuild` (build the editor target, start it), or open `SovereignRealms.uproject` | double-click `Tools\windows\Editor.bat` (`editor.ps1`: builds `SovereignRealmsEditor Win64 Development`, then opens the project), or open `SovereignRealms.uproject` |
 | Package | `sh Tools/mac/package.sh [Shipping or Development]` | double-click `Tools\windows\Package.bat`, or `powershell -ExecutionPolicy Bypass -File Tools\windows\package.ps1 [Shipping or Development]` |
-| The build lands in | `Builds/Mac/SovereignRealms.app` | `Builds\Windows\SovereignRealms\SovereignRealms.exe` (the whole folder is the game; its symbols beside it in `Builds\Windows\Symbols`) |
+| The build lands in | `Builds/Mac/SovereignRealms.app` | `Builds\Windows\SovereignRealms\SovereignRealms.exe` (the whole folder is the game; `Development` lands in `Builds\Windows\SovereignRealms-Development`; the symbols of each beside them in `Builds\Windows\Symbols`) |
 | Packaging log | `Saved/package.log` | `Saved\package.log` |
 | Renderer | Metal, SM6 shaders alone (`Config/Mac/`) | Direct3D 12, SM6 shaders alone, no Direct3D 11 fallback (`Config/Windows/`) |
 
@@ -45,14 +45,15 @@ Where the tools are:
 - `Tools/mac/*.sh`: the Mac's shell scripts (the editor's lifecycle, packaging, the levels' rebuilds, `rec.sh`,
   `realmv2_perf.sh`, `blender_build_all.sh`).
 - `Tools/windows/`: their PowerShell counterparts, `package.ps1`, `editor.ps1` (`open` / `quit` / `build` / `start` /
-  `rebuild`), `rec.ps1` and `realmv2_perf.ps1`, with `Package.bat` and `Editor.bat` to double-click. The levels'
+  `rebuild`), `rec.ps1` and `realmv2_perf.ps1`, with `Package.bat` and `Editor.bat` to double-click; and
+  `perf_capture.ps1`, which measures the packaged Development build in a battle that plays itself. The levels'
   rebuilds (`*_rebuild.sh`, `blender_build_all.sh`) have no Windows counterpart: the art is authored on the Mac.
 - `Tools/*.py`, `Tools/ue/`, `Tools/blender/`: Python, the same files on both (`Tools/vl_env.py` finds the engine, the
   editor's log and Blender on either). Where this README writes `python3 Tools/...`, Windows says `python Tools\...`.
 
 On Windows the keys are the same; the Mac's **Option** key is **Alt** (the game's own hints say Alt there), and Cmd is
-Ctrl. What was done for Windows performance, and what is still to be measured there:
-`Docs/Optimization/Windows/PROPOSAL.md`.
+Ctrl. What was done for Windows performance: `Docs/Optimization/Windows/PROPOSAL.md`; what the game measures on a
+Windows PC today: `Docs/Optimization/Windows/BASELINE.md`.
 
 ## Play
 

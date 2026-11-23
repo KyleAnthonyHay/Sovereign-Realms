@@ -5,6 +5,8 @@ Frame times of L_RealmV2 in PIE at three fixed views (the editor open on L_Realm
   mountain  a free camera south-west of the massif, the whole mountain in view
   overview  the postcard camera: the whole map
 profile: also a ProfileGPU capture of the mountain view (Tools/gpuprof.py)
+The editor idles at 3 fps while its window is not the one in front; an editor started by editor.ps1 has that
+switched off (see there), one opened by hand must be in front, or the figures are 3 fps.
 The counterpart of Tools/mac/realmv2_perf.sh (the same views and waits, so the numbers compare).
 #>
 param([Parameter(Position = 0)][string]$Mode = '')

@@ -6,9 +6,10 @@ Date: 2026-11-23. Target: Windows 10 / 11, 64-bit, a Direct3D 12 GPU with SM6 (t
 hold here: the default **High** preset keeps the Mac's look, behaviour stays identical, anything visible goes behind
 the lower presets.
 
-**Status of the numbers: nothing in this file is measured on Windows yet.** The engine the project is on (5.8) was not
-installed on the Windows machine while this was written, so the build, the cook and every figure below marked
-"expected" are still to be confirmed. *How to measure* at the end lists the runs that turn them into numbers.
+**Status of the numbers.** The build, the cook and the game are confirmed on Unreal 5.8.4 and measured as they stand:
+`BASELINE.md` beside this file (Direct3D 12, SM6, the RX 9070 chosen; the game thread, not the GPU, is the limit on
+this PC). The gains marked "expected" below are still estimates: none of the settings has been A/B-tested on
+Windows. *How to measure* at the end lists the runs.
 
 ## 1. What carries over from the earlier passes untouched
 
@@ -33,7 +34,7 @@ on Windows.
 | W3 | PSO precaching said explicitly (`r.PSOPrecaching=1`, `r.PSOPrecache.GlobalShaders=1`) | `Config/Windows/WindowsEngine.ini` | No first-sight hitch when a new troop, effect or building appears. The engine's defaults for `PCD3D_SM6` should already be this: the lines pin it | None |
 | W4 | Hardware ray tracing stays off (nothing to change: the project never sets `r.RayTracing`) | - | No ray tracing shaders cooked, no acceleration structures built | None: the Mac build has it off too, so Lumen traces distance fields on both |
 | W5 | The HUD and the controls screen write **Alt** where the Mac writes **Option** (`VL_ALT_KEY`) | `SovereignRealms.h`, `VLHUDGame.cpp`, `VLHUDMenus.cpp` | Correct key names on a PC keyboard | Mac strings are byte-for-byte what they were |
-| W6 | Packaging: Shipping by default, `-nodebuginfo`, `.pdb` files moved out of the game's folder, staging manifests dropped, the Visual C++ runtime installer included | `Tools/windows/package.ps1` | The folder to hand out has no debug files; symbols are kept beside it for crash dumps | - |
+| W6 | Packaging: Shipping by default (Development beside it in its own folder), `-nodebuginfo`, `.pdb` files kept out of the game's folder, staging manifests dropped, the Visual C++ runtime installer included | `Tools/windows/package.ps1` | The folder to hand out has no debug files; symbols are kept beside it for crash dumps | - |
 | W7 | The tools find the engine, the editor's log, Python and Blender on either OS; text files are read and written as UTF-8 explicitly | `Tools/vl_env.py`, `Tools/windows/_env.ps1`, `Tools/pie.py`, `gpuprof.py`, `aivsai.py`, `ue_py.py`, `ue_py_bridge.py`, `Content/Python/init_unreal.py` | The PIE tools and the AI-against-AI runs work on Windows; no behaviour change on the Mac (its default encoding is UTF-8 already) | - |
 | W8 | MSVC build fixes: locals that hid a class member (`ACharacter::Mesh`, `AActor::Owner`) renamed; MSVC treats that as an error (C4458), clang does not | `VLKing.cpp`, `VLKingRig.cpp` | Compiles with MSVC | Renames only |
 
@@ -69,11 +70,12 @@ on Windows.
 
 1. `Tools\windows\editor.ps1 build`, then `Tools\windows\package.ps1 Development` (the test build: console, log,
    command inbox) and `Tools\windows\package.ps1` (Shipping).
-2. In the packaged Development build's log (`Builds\Windows\SovereignRealms\SovereignRealms\Saved\Logs`): the RHI line
+2. In the packaged Development build's log (`Builds\Windows\SovereignRealms-Development\SovereignRealms\Saved\Logs`): the RHI line
    (`D3D12`, `SM6`), the adapter chosen (the discrete card, not the integrated one), the number of task workers.
 3. Shader formats: `Saved\Cooked\Windows\SovereignRealms\Metadata\ShaderTypeStats-PCD3D_SM6.csv` should be the only
    `ShaderTypeStats` file. Size of the packaged folder against the Mac's 1,062 MB.
-4. Frame times, the same three views as the Mac's figures: the editor open on `L_RealmV2`,
+4. Frame times: `Tools\windows\perf_capture.ps1` (the packaged Development build, a Test World battle that plays
+   itself; the method of `BASELINE.md`). In the editor, the same three views as the Mac's figures: open on `L_RealmV2`,
    `Tools\windows\realmv2_perf.ps1 profile` (PIE; `vl.Perf` and a `ProfileGPU` summary).
 5. A/B in one session (`~` console of the Development build, the same scene): `r.TranslucencyLightingVolume 1` / `0`
    (W2), `r.Nanite 1` / `0` with `stat gpu` (the prepass question of section 3), `vl.Gfx.DynRes 1`.
