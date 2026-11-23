@@ -125,6 +125,10 @@ public:
 	TObjectPtr<UVLSpy> SpyComp;
 	uint8 CompLooked = 0;
 	bool IsGarrisoned() const { return GarrisonIn.IsValid(); }
+	/** Its movement component ticking again (true), or put to sleep (false: only for a unit that stands where it is
+	 *  put and never walks, as on a tower's lookout: UpdateMovementSleep). Waking one that is awake does nothing. */
+	void SetMovementAwake(bool bAwake);
+	bool IsMovementAsleep() const { return bMoveAsleep; }
 	/** The tower whose lookout it stands on, and the one it is walking to (UVLCommand keeps both). */
 	TWeakObjectPtr<AActor> GarrisonIn;
 	TWeakObjectPtr<AActor> PendingGarrison;
@@ -921,6 +925,9 @@ private:
 	float SafeTimer = 0.f;
 	float WetTime = 0.f;
 	void UpdateSafety(float DeltaSeconds);
+	void UpdateMovementSleep();
+	bool bMoveAsleep = false;
+	int32 MoveStill = 0;        // frames it has stood settled on its post
 	// overview: a click or a dragged box, the platoon keys
 	bool bLeftDown = false;
 	bool bBoxing = false;

@@ -91,6 +91,14 @@ AVLKing::AVLKing()
 	Move->GravityScale = 1.6f;
 	Move->bUseFlatBaseForFloorChecks = true;    // a round capsule bottom slides off block edges
 	Move->PerchRadiusThreshold = 0.f;
+	// (Windows pass, batch 1) A unit standing still keeps the floor it found instead of sweeping for it again every
+	// frame: the engine looks again by itself when the unit moves or is teleported, and when what it stands on is
+	// movable, loses its collision or is destroyed (UCharacterMovementComponent::FindFloor).
+	Move->bAlwaysCheckFloor = false;
+	// nothing in this world simulates physics: no downward force on the floor, no push from overlapping bodies
+	Move->bEnablePhysicsInteraction = false;
+	// nothing listens to the capsule's overlaps (the game has no triggers): its sweeps need not gather them
+	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
 
 	Figure = CreateDefaultSubobject<USceneComponent>(TEXT("Figure"));
 	Figure->SetupAttachment(GetCapsuleComponent());
@@ -497,6 +505,10 @@ void AVLKing::FollowPath(const TArray<FVector>& Points, bool bRun)
 {
 	Waypoints = Points;
 	bAutoWalk = Waypoints.Num() > 0;
+	if (bAutoWalk)
+	{
+		SetMovementAwake(true);
+	}
 	bAutoRun = bRun;
 	PaceCap = 0.f;              // at its own pace, unless it is a march's (UVLCommand::OrderMove sets that after this)
 	MarchId = 0;
@@ -557,6 +569,57 @@ bool AVLKing::StartNextLeg()
 	PaceCap = Cap;
 	MarchId = March;
 	return true;
+}
+
+namespace
+{
+	TAutoConsoleVariable<int32> CVarGarrisonSleep(TEXT("vl.Opt.GarrisonSleep"), 1,
+		TEXT("1: a unit standing on a tower's lookout has its movement component switched off until it leaves (it never walks there). 0: it ticks as every unit"));
+}
+
+void AVLKing::SetMovementAwake(bool bAwake)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (!Move || bAwake != bMoveAsleep)
+	{
+		return;             // (as it is already; only what was put to sleep here is woken here)
+	}
+	bMoveAsleep = !bAwake;
+	MoveStill = 0;
+	Move->SetComponentTickEnabled(bAwake);
+	if (bAwake)
+	{
+		Move->bForceNextFloorCheck = true;      // (wherever it is now: the floor is looked for afresh)
+	}
+}
+
+void AVLKing::UpdateMovementSleep()
+{
+	// On a lookout a unit is put on its post (UVLCommand::Enter) and stays there until UVLCommand::Leave takes it
+	// down: it only turns to aim (SetActorRotation, which needs no movement tick). Once it has settled on the floor
+	// its movement component stops ticking; anything that ends the stay wakes it (here, and at once in Leave,
+	// FollowPath, Die and TakeControlOf).
+	const bool bStay = IsGarrisoned() && !bAutoWalk && !bDead && !IsPlayerControlled() && CVarGarrisonSleep.GetValueOnGameThread() != 0;
+	if (!bStay)
+	{
+		if (bMoveAsleep)
+		{
+			SetMovementAwake(true);
+		}
+		MoveStill = 0;
+		return;
+	}
+	if (bMoveAsleep)
+	{
+		return;
+	}
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	const bool bStill = Move->IsMovingOnGround() && Move->Velocity.IsNearlyZero() && Move->GetPendingInputVector().IsNearlyZero() && Move->GetCurrentAcceleration().IsNearlyZero();
+	MoveStill = bStill ? MoveStill + 1 : 0;
+	if (MoveStill >= 20)
+	{
+		SetMovementAwake(false);
+	}
 }
 
 void AVLKing::StopOrder()
@@ -3257,6 +3320,7 @@ void AVLKing::Die()
 		return;
 	}
 	bDead = true;
+	SetMovementAwake(true);         // (asleep on a lookout: awake to fall as any other does)
 	DeadTime = 0.f;
 	Health = 0.f;
 	StopOrder();
@@ -4342,6 +4406,7 @@ void AVLKing::Tick(float DeltaSeconds)
 		return;
 	}
 	PollInput(DeltaSeconds);
+	UpdateMovementSleep();
 	UpdateSafety(DeltaSeconds);
 	// Being hurt holds the POSE for a moment, nothing else: the pose's clock stops while the game's runs on, and
 	// afterwards runs a little fast until it has caught up.

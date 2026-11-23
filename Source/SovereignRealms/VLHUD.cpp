@@ -1457,6 +1457,8 @@ void AVLHUD::DrawUnitHighlight()
 	}
 }
 
+static TAutoConsoleVariable<int32> CVarPipTris(TEXT("vl.Opt.PipTris"), 1, TEXT("1: a far unit's diamond is two triangles a layer. 0: a canvas row for each of its lines, as it was"));
+
 void AVLHUD::DrawFarPips()
 {
 	const UVLCommand* Command = UVLCommand::Get(this);
@@ -1477,6 +1479,8 @@ void AVLHUD::DrawFarPips()
 	// the same rectangles as before)
 	const bool bFast = CVarOptHud.GetValueOnGameThread() != 0;
 	const FUnitFrame& Frame = UnitsThisFrame();
+	static const IConsoleVariable* PipTris = IConsoleManager::Get().FindConsoleVariable(TEXT("vl.Opt.PipTris"));
+	const bool bPipTris = !PipTris || PipTris->GetInt() != 0;
 	BeginRects();
 	for (AVLKing* Unit : Frame.Live)
 	{
@@ -1527,6 +1531,22 @@ void AVLHUD::DrawFarPips()
 				continue;
 			}
 			const FLinearColor CL = Lin(C);     // (once for the diamond's rows)
+			if (RectBatch && bPipTris)
+			{
+				// (Windows pass, batch 1) the diamond as two triangles instead of a row of the canvas for each of its
+				// lines: the same four corners (the rows ran from H above to H below the point, a pixel tall each)
+				FLinearColor Actual = CL;
+				Actual.A *= Canvas->Canvas->AlphaModulate;
+				const FHitProxyId HitProxyId = Canvas->Canvas->GetHitProxyId();
+				const float Cx = FMath::RoundToFloat(P.X), Cy = float(P.Y) + 0.5f, R = H + 0.5f;
+				const int32 VL = RectBatch->AddVertexf(FVector4f(Cx - R, Cy, 0.f, 1.f), FVector2f(0.f, 0.5f), Actual, HitProxyId);
+				const int32 VT = RectBatch->AddVertexf(FVector4f(Cx, Cy - R, 0.f, 1.f), FVector2f(0.5f, 0.f), Actual, HitProxyId);
+				const int32 VR = RectBatch->AddVertexf(FVector4f(Cx + R, Cy, 0.f, 1.f), FVector2f(1.f, 0.5f), Actual, HitProxyId);
+				const int32 VB = RectBatch->AddVertexf(FVector4f(Cx, Cy + R, 0.f, 1.f), FVector2f(0.5f, 1.f), Actual, HitProxyId);
+				RectBatch->AddTriangleExtensive(VL, VT, VR, nullptr, GWhiteTexture, SE_BLEND_Translucent);
+				RectBatch->AddTriangleExtensive(VL, VR, VB, nullptr, GWhiteTexture, SE_BLEND_Translucent);
+				continue;
+			}
 			for (float dy = -H; dy <= H; dy += 1.f)
 			{
 				const float w = H - FMath::Abs(dy);

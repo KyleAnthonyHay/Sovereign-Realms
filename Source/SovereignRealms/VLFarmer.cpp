@@ -246,7 +246,7 @@ void AVLFarmer::GoTo(ESpot Spot)
 	FollowPath(Path, false);
 	Step = EStep::Walk;
 	++Walked;
-	UE_LOG(LogSovereignRealms, Log, TEXT("FARMHAND %s walks to %s (%.0f cm, %d corners)"), *DisplayName, SpotName(Spot), FVector::Dist2D(GetFeet(), Target), Path.Num());
+	UE_LOG(LogSovereignRealms, Verbose, TEXT("FARMHAND %s walks to %s (%.0f cm, %d corners)"), *DisplayName, SpotName(Spot), FVector::Dist2D(GetFeet(), Target), Path.Num());
 }
 
 void AVLFarmer::Arrive(double Now)
@@ -273,14 +273,14 @@ void AVLFarmer::Arrive(double Now)
 		WorkRate = FMath::FRandRange(0.9f, 1.1f);
 		StepEnd = Now + FMath::FRandRange(WorkSeconds.X, WorkSeconds.Y);
 		++Worked;
-		UE_LOG(LogSovereignRealms, Log, TEXT("FARMHAND %s works at %s (%s; %.0f cm from the spot)"), *DisplayName, SpotName(Where), bMan ? TEXT("raking") : TEXT("cutting with the sickle"),
+		UE_LOG(LogSovereignRealms, Verbose, TEXT("FARMHAND %s works at %s (%s; %.0f cm from the spot)"), *DisplayName, SpotName(Where), bMan ? TEXT("raking") : TEXT("cutting with the sickle"),
 			FVector::Dist2D(GetFeet(), Target));
 	}
 	else
 	{
 		Step = EStep::Rest;
 		StepEnd = Now + FMath::FRandRange(RestSeconds.X, RestSeconds.Y);
-		UE_LOG(LogSovereignRealms, Log, TEXT("FARMHAND %s stops at %s"), *DisplayName, SpotName(Where));
+		UE_LOG(LogSovereignRealms, Verbose, TEXT("FARMHAND %s stops at %s"), *DisplayName, SpotName(Where));
 	}
 }
 

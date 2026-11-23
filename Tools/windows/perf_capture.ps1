@@ -127,17 +127,23 @@ try {
     # -AB "r.Nanite 0;r.HZBOcclusion 1": each set at the overview for 15 s of CSV and a ProfileGPU, then put back
     foreach ($ab in @($AB.Split(';') | Where-Object { $_.Trim() })) {
         $ab = $ab.Trim()
+        # ("set|restore" for a command that is not a console variable: nothing to read its present value from)
+        $restore = ''
+        if ($ab.Contains('|')) { $restore = $ab.Split('|')[1].Trim(); $ab = $ab.Split('|')[0].Trim() }
         $parts = $ab.Split(' ')
-        Send-Commands @($parts[0])              # (logs its present value)
-        Start-Sleep -Seconds 1
-        $was = '1'
-        if ((Read-Log) -match ('(?s).*' + [regex]::Escape($parts[0]) + ' = "([^"]*)"')) { $was = $Matches[1] }
+        if (-not $restore) {
+            Send-Commands @($parts[0])              # (logs its present value)
+            Start-Sleep -Seconds 1
+            $was = '1'
+            if ((Read-Log) -match ('(?s).*' + [regex]::Escape($parts[0]) + ' = "([^"]*)"')) { $was = $Matches[1] }
+            $restore = "$($parts[0]) $was"
+        }
         Send-Commands @($ab)
         Start-Sleep -Seconds 6
         Send-Commands @('csvprofile start')
         Start-Sleep -Seconds 15
-        Send-Commands @('csvprofile stop', 'ProfileGPU')
-        Start-Sleep -Seconds 6
+        Send-Commands @('csvprofile stop')
+        Start-Sleep -Seconds 3
         $new = @(Get-ChildItem -LiteralPath $CsvDir -Filter '*.csv' -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.FullName } | Sort-Object LastWriteTime)
         if ($new.Count -gt 0) {
             $name = 'ab_' + ($ab -replace '[^A-Za-z0-9]+', '_')
@@ -146,7 +152,7 @@ try {
             $before += $new | ForEach-Object { $_.FullName }
             $results += ,@($name, $dst)
         }
-        Send-Commands @("$($parts[0]) $was")
+        Send-Commands @($restore)
         Start-Sleep -Seconds 3
     }
     # -Post "stat dumpave -num=120 -ms=0.02": console commands at the overview once the captures are done

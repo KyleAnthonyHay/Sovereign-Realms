@@ -45,6 +45,10 @@ namespace
 	// was. The grid is the same either way (vl.Opt.GridChecksum 1 logs a checksum of it to compare).
 	TAutoConsoleVariable<int32> CVarParallelGrid(TEXT("vl.Opt.ParallelGrid"), 1, TEXT("1: the path grid is sampled on worker threads (the same grid, sooner). 0: on the game thread only"));
 	TAutoConsoleVariable<int32> CVarFastRegions(TEXT("vl.Opt.FastRegions"), 1, TEXT("1: the grid's regions of connected ground are worked out in one pass over the nodes in order (the same regions, sooner). 0: by the flood"));
+	TAutoConsoleVariable<int32> CVarRouteMemo(TEXT("vl.Opt.RouteMemo"), 1,
+		TEXT("1: a one-walker route search between the same two nodes of the same grid is answered from the last answer (a stuck unit planning again, the commander weighing the same route). 2: searched anyway and compared with the memo (logs a difference). 0: always searched"));
+	TAutoConsoleVariable<int32> CVarFastFlood(TEXT("vl.Opt.FastFlood"), 1,
+		TEXT("1: the route search reads a node's wall flag from a byte array of its own and counts its starts with a stamp (the same search, sooner). 0: as it was"));
 	TAutoConsoleVariable<int32> CVarGridChecksum(TEXT("vl.Opt.GridChecksum"), 0, TEXT("1: log a checksum of the path grid whenever it is built or a part of it sampled again"));
 }
 
@@ -284,6 +288,7 @@ void UVLGrid::Build()
 	RouteMark.Init(0, Nodes.Num());
 	Stamp = RouteStamp = 0;
 	++Revision;
+	SyncSearchArrays();
 	const double T4 = FPlatformTime::Seconds();
 	UE_LOG(LogSovereignRealms, Log, TEXT("GRID built: %dx%d cells of %.0f cm, %d nodes in %d regions (the main one %d), rejected: %d under water (%d sheets), %d too tight, %d inside solids; in %.0f ms"),
 		DimX, DimY, Cell, Nodes.Num(), Regions, MainSize, Wet, Water.Num(), Tight, Inside, (T4 - T0) * 1000.0);
@@ -784,6 +789,7 @@ int32 UVLGrid::RebuildAreas(TConstArrayView<FBox2D> Areas)
 	RouteMark.Init(0, Nodes.Num());
 	Stamp = RouteStamp = 0;
 	++Revision;
+	SyncSearchArrays();
 	int32 Cells = 0;
 	for (int32 y = Lo.Y; y <= Hi.Y; ++y)
 	{
@@ -978,8 +984,26 @@ bool UVLGrid::WalkLine(int32 FromNode, const FVector2D& A, const FVector2D& B, i
 	return Cur == ToNode;
 }
 
+void UVLGrid::SyncSearchArrays()
+{
+	// (what Flood reads of a neighbour, apart from the node itself: one byte a node instead of a 48-byte node, most
+	// of which it does not need; the starts still to be reached, as a stamp per node)
+	const int32 N = Nodes.Num();
+	NearWall.SetNumUninitialized(N, EAllowShrinking::No);
+	for (int32 i = 0; i < N; ++i)
+	{
+		NearWall[i] = Nodes[i].bNearWall ? 1 : 0;
+	}
+	StartMark.Init(0, N);
+	Memo.Reset();
+}
+
 bool UVLGrid::Flood(TConstArrayView<int32> Goals, const TArray<int32>& Starts)
 {
+	if (CVarFastFlood.GetValueOnGameThread() != 0 && NearWall.Num() == Nodes.Num() && StartMark.Num() == Nodes.Num())
+	{
+		return FloodFast(Goals, Starts);
+	}
 	++Stamp;
 	if (Stamp == 0)
 	{
@@ -1045,6 +1069,99 @@ bool UVLGrid::Flood(TConstArrayView<int32> Goals, const TArray<int32>& Starts)
 		}
 	}
 	return Remaining.Num() == 0;
+}
+
+bool UVLGrid::FloodFast(TConstArrayView<int32> Goals, const TArray<int32>& Starts)
+{
+	// Flood, step for step: the same order of expansion, the same costs and the same Next. Two things differ in how it
+	// is written: a neighbour's wall flag comes from NearWall (a byte, where the node is 48 and in another cache line
+	// for each of the eight), and the starts still to be reached are a count and a stamp per node, not a set that is
+	// searched at every node taken off the heap.
+	++Stamp;
+	if (Stamp == 0)
+	{
+		FMemory::Memzero(Seen.GetData(), Seen.Num() * sizeof(uint32));
+		FMemory::Memzero(StartMark.GetData(), StartMark.Num() * sizeof(uint32));
+		Stamp = 1;
+	}
+	FIntPoint BMin(MAX_int32, MAX_int32), BMax(MIN_int32, MIN_int32);
+	int32 RemainingCount = 0;
+	uint32* const Mark = StartMark.GetData();
+	for (int32 S : Starts)
+	{
+		BMin = BMin.ComponentMin(CellOf(S));
+		BMax = BMax.ComponentMax(CellOf(S));
+		if (Mark[S] != Stamp)
+		{
+			Mark[S] = Stamp;
+			++RemainingCount;
+		}
+	}
+	const FNode* const Node = Nodes.GetData();
+	const uint8* const Wall = NearWall.GetData();
+	const int32 Dim = DimX;
+	auto H = [&](int32 I)
+	{
+		const int32 C = Node[I].Cell;
+		const int32 Cx = C % Dim, Cy = C / Dim;
+		const int32 Dx = FMath::Max3(BMin.X - Cx, 0, Cx - BMax.X);
+		const int32 Dy = FMath::Max3(BMin.Y - Cy, 0, Cy - BMax.Y);
+		return float(FMath::Max(Dx, Dy)) + (Diag - 1.f) * float(FMath::Min(Dx, Dy));
+	};
+	float* const CostAt = Cost.GetData();
+	int32* const NextAt = Next.GetData();
+	uint32* const SeenAt = Seen.GetData();
+	const uint32 Now = Stamp;
+	TArray<FOpen> Open;
+	Open.Reserve(4096);
+	for (int32 G : Goals)
+	{
+		SeenAt[G] = Now;
+		CostAt[G] = 0.f;
+		NextAt[G] = INDEX_NONE;
+		Open.HeapPush({ H(G), G }, FOpenLess());
+	}
+	const float WallCost = 1.f + WallPenalty;
+	while (Open.Num() > 0)
+	{
+		FOpen Top;
+		Open.HeapPop(Top, FOpenLess());
+		const int32 I = Top.I;
+		const float GCost = CostAt[I];
+		if (Top.F > GCost + H(I) + 1e-3f)
+		{
+			continue;
+		}
+		if (Mark[I] == Now)
+		{
+			Mark[I] = 0;
+			--RemainingCount;
+		}
+		if (RemainingCount == 0)
+		{
+			return true;
+		}
+		const float Here = Wall[I] ? WallCost : 1.f;
+		const int32* const Nb = Node[I].Nb;
+		for (int32 n = 0; n < 8; ++n)
+		{
+			const int32 J = Nb[n];
+			if (J < 0)
+			{
+				continue;
+			}
+			const float There = Wall[J] ? WallCost : 1.f;
+			const float NewCost = GCost + (n >= 4 ? Diag : 1.f) * 0.5f * (Here + There);
+			if (SeenAt[J] != Now || NewCost < CostAt[J])
+			{
+				SeenAt[J] = Now;
+				CostAt[J] = NewCost;
+				NextAt[J] = I;
+				Open.HeapPush({ NewCost + H(J), J }, FOpenLess());
+			}
+		}
+	}
+	return RemainingCount == 0;
 }
 
 void UVLGrid::StringPull(const TArray<int32>& Chain, TArray<FVector>& Out)
@@ -1173,6 +1290,36 @@ bool UVLGrid::FindGroupPaths(const TArray<FVector>& Starts, const FVector& Goal,
 				continue;
 			}
 		}
+		// One walker alone (a unit planning again, the commander weighing a route): the corners between two nodes of
+		// one grid are always the same ones, so the last answer for the pair is the answer (the memo is emptied
+		// whenever the grid changes: SyncSearchArrays).
+		const int32 MemoMode = Starts.Num() == 1 ? CVarRouteMemo.GetValueOnGameThread() : 0;
+		const FRouteMemo* Known = MemoMode != 0 ? FindMemo(Pair.Value[0].Node, To) : nullptr;
+		FRouteMemo KnownCopy;
+		if (Known)
+		{
+			KnownCopy = *Known;     // (AddMemo below may move the array)
+			Known = &KnownCopy;
+		}
+		if (Known && MemoMode == 1)
+		{
+			const FWalker& W = Pair.Value[0];
+			if (Known->bFound)
+			{
+				TArray<FVector>& Path = OutPaths[W.Index];
+				Path = Known->Corners;
+				if (Path.Num() > 0)
+				{
+					Path.Pop();
+				}
+				if (W.bSnapped)
+				{
+					Path.Insert(NodePos(W.Node), 0);
+				}
+				bAny = true;
+			}
+			continue;
+		}
 		StartNodes.Reset();
 		for (const FWalker& W : Pair.Value)
 		{
@@ -1183,6 +1330,14 @@ bool UVLGrid::FindGroupPaths(const TArray<FVector>& Starts, const FVector& Goal,
 		{
 			if (Seen[W.Node] != Stamp)
 			{
+				if (MemoMode != 0)
+				{
+					if (Known && Known->bFound)
+					{
+						UE_LOG(LogSovereignRealms, Warning, TEXT("GRID memo: %d -> %d was found before and is not now"), W.Node, To);
+					}
+					AddMemo(W.Node, To, false, TArray<FVector>());
+				}
 				continue;
 			}
 			Chain.Reset();
@@ -1192,6 +1347,14 @@ bool UVLGrid::FindGroupPaths(const TArray<FVector>& Starts, const FVector& Goal,
 			}
 			TArray<FVector>& Path = OutPaths[W.Index];
 			StringPull(Chain, Path);
+			if (MemoMode != 0)
+			{
+				if (Known && (!Known->bFound || Known->Corners != Path))
+				{
+					UE_LOG(LogSovereignRealms, Warning, TEXT("GRID memo: %d -> %d differs from the search (%d corners against %d)"), W.Node, To, Known->Corners.Num(), Path.Num());
+				}
+				AddMemo(W.Node, To, true, Path);
+			}
 			if (Path.Num() > 0)
 			{
 				Path.Pop();          // the goal cell's middle: the caller appends the exact slot instead
@@ -1205,6 +1368,55 @@ bool UVLGrid::FindGroupPaths(const TArray<FVector>& Starts, const FVector& Goal,
 	}
 	UE_LOG(LogSovereignRealms, Verbose, TEXT("PATH group of %d (%d searched) in %.2f ms"), Starts.Num(), Searched, (FPlatformTime::Seconds() - T0) * 1000.0);
 	return bAny;
+}
+
+const UVLGrid::FRouteMemo* UVLGrid::FindMemo(int32 From, int32 To)
+{
+	for (FRouteMemo& M : Memo)
+	{
+		if (M.From == From && M.To == To)
+		{
+			M.Used = ++MemoClock;
+			return &M;
+		}
+	}
+	return nullptr;
+}
+
+void UVLGrid::AddMemo(int32 From, int32 To, bool bFound, const TArray<FVector>& Corners)
+{
+	FRouteMemo* Slot = nullptr;
+	for (FRouteMemo& M : Memo)
+	{
+		if (M.From == From && M.To == To)
+		{
+			Slot = &M;
+			break;
+		}
+	}
+	if (!Slot)
+	{
+		if (Memo.Num() < MemoSize)
+		{
+			Slot = &Memo.AddDefaulted_GetRef();
+		}
+		else
+		{
+			Slot = &Memo[0];
+			for (FRouteMemo& M : Memo)
+			{
+				if (M.Used < Slot->Used)
+				{
+					Slot = &M;      // (the one asked for longest ago goes)
+				}
+			}
+		}
+	}
+	Slot->From = From;
+	Slot->To = To;
+	Slot->bFound = bFound;
+	Slot->Corners = Corners;
+	Slot->Used = ++MemoClock;
 }
 
 bool UVLGrid::FindPath(const FVector& From, const FVector& Goal, TArray<FVector>& OutPath)

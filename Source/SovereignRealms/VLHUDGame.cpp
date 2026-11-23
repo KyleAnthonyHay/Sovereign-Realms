@@ -870,12 +870,32 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 	FVector Origin, Dir;
 	if (VX > 0 && PCtrl->DeprojectScreenPositionToWorld(VX * 0.5f, VY * 0.5f, Origin, Dir))
 	{
+		// (Windows pass, batch 1: the ground under the view's middle is looked for again only when the view has moved;
+		// the same trace, the same answer while it stands)
+		static FVector LastOrigin(FVector::ZeroVector), LastDir(FVector::ZeroVector);
+		static TWeakObjectPtr<UWorld> LastWorld;
+		static float LastPlaneZ = 0.f;
+		static uint32 LastRevision = MAX_uint32;
+		const UVLGrid* MapGrid = UVLGrid::Get(this);
+		const uint32 GridRevision = MapGrid ? MapGrid->GetRevision() : 0;
 		float PlaneZ = 0.f;
-		FHitResult Hit;
-		FCollisionQueryParams Params(TEXT("MinimapView"), false);
-		if (GetWorld()->LineTraceSingleByChannel(Hit, Origin, Origin + Dir * 100000.f, ECC_Visibility, Params))
+		if (LastWorld.Get() == GetWorld() && LastRevision == GridRevision && Origin.Equals(LastOrigin, 0.01) && Dir.Equals(LastDir, 1e-6))
 		{
-			PlaneZ = Hit.ImpactPoint.Z;
+			PlaneZ = LastPlaneZ;
+		}
+		else
+		{
+			FHitResult Hit;
+			FCollisionQueryParams Params(TEXT("MinimapView"), false);
+			if (GetWorld()->LineTraceSingleByChannel(Hit, Origin, Origin + Dir * 100000.f, ECC_Visibility, Params))
+			{
+				PlaneZ = Hit.ImpactPoint.Z;
+			}
+			LastWorld = GetWorld();
+			LastOrigin = Origin;
+			LastDir = Dir;
+			LastPlaneZ = PlaneZ;
+			LastRevision = GridRevision;
 		}
 		const FVector2D Corners[4] = { FVector2D(0.f, 0.f), FVector2D(VX, 0.f), FVector2D(VX, VY), FVector2D(0.f, VY) };
 		FVector2D Points[4];

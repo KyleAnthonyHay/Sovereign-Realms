@@ -333,7 +333,7 @@ public:
 	 *  (a spatial hash on UnitCell cm cells, rebuilt once a frame; the caller's own test decides). In registry order. */
 	void UnitsNear(const FVector& At, float Radius, FVLUnits& Out) const;
 	/** The same for a box on the ground plane (an arrow's stretch of flight). */
-	void UnitsInBox(const FVector2D& Min, const FVector2D& Max, FVLUnits& Out) const;
+	void UnitsInBox(const FVector2D& Min, const FVector2D& Max, FVLUnits& Out, int32 NotOfTeam = MIN_int32) const;
 	/** Rebuilds the hash now (the subsystems' ticks: every unit has moved since the actors' own). */
 	void RefreshUnitHash() const;
 	static bool UseRegistry();

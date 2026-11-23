@@ -772,6 +772,13 @@ void AVLKing::PossessedBy(AController* NewController)
 	{
 		EnsureCameraRig();      // the player's now: the hero camera and the overview's
 	}
+	else if (NewController)
+	{
+		// Its AI controller only stands for "not the player's" (AVLKing::PollInput walks it to its orders): the tick
+		// that turns the controller to its focus has nothing to do (no focus is ever set, and the unit does not take
+		// its controller's rotation). 348 of them ticked every frame.
+		NewController->SetActorTickEnabled(false);
+	}
 	WakeRigPosers();            // (its bow or its spyglass may be in other hands now)
 }
 

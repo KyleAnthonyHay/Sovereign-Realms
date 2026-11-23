@@ -375,6 +375,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> CVarOptRegistry(TEXT("vl.Opt.Registry"), 1,
 		TEXT("1: units come from the battle's registry and its spatial hash, buildings and tagged actors from cached lists; 0: the old walks over every actor (to compare)"));
+	TAutoConsoleVariable<int32> CVarOptFoeScan(TEXT("vl.Opt.FoeScan"), 1,
+		TEXT("1: a unit looking for a foe gathers only the other side's living from the spatial hash, and passes over a building whose bounds are further than the best so far (the same choice, sooner). 0: as it was"));
 	TAutoConsoleVariable<int32> CVarOptRegistryCheck(TEXT("vl.Opt.RegistryCheck"), 0,
 		TEXT("1: every frame, check the registry against a walk over every unit, and every unit's choice of foe by the hash against the choice by the full walk; differences are logged"));
 }
@@ -519,7 +521,7 @@ void UVLBattle::EnsureUnitHash() const
 	}
 }
 
-void UVLBattle::UnitsInBox(const FVector2D& Min, const FVector2D& Max, FVLUnits& Out) const
+void UVLBattle::UnitsInBox(const FVector2D& Min, const FVector2D& Max, FVLUnits& Out, int32 NotOfTeam) const
 {
 	Out.Reset();
 	if (!UseRegistry())
@@ -527,6 +529,9 @@ void UVLBattle::UnitsInBox(const FVector2D& Min, const FVector2D& Max, FVLUnits&
 		Out.Append(AllUnits());
 		return;
 	}
+	// (NotOfTeam: a caller looking for foes; one of that side, of no side or dead is not gathered)
+	const bool bFoesOnly = NotOfTeam != MIN_int32;
+	auto Wanted = [NotOfTeam](const AVLKing* K) { return K->Team != NotOfTeam && K->Team >= 0 && K->IsAlive(); };
 	EnsureUnitHash();
 	const int32 N = Registered.Num();
 	if (N == 0)
@@ -546,7 +551,19 @@ void UVLBattle::UnitsInBox(const FVector2D& Min, const FVector2D& Max, FVLUnits&
 	}
 	if (int64(X1 - X0 + 1) * int64(Y1 - Y0 + 1) > int64(N) * 2 + 16)
 	{
-		Out.Append(Registered);          // (a wide look: the walk over every unit is the shorter one)
+		// (a wide look: the walk over every unit is the shorter one)
+		if (!bFoesOnly)
+		{
+			Out.Append(Registered);
+			return;
+		}
+		for (AVLKing* K : Registered)
+		{
+			if (Wanted(K))
+			{
+				Out.Add(K);
+			}
+		}
 		return;
 	}
 	const uint32 Mask = uint32(HashStart.Num() - 2);
@@ -559,7 +576,7 @@ void UVLBattle::UnitsInBox(const FVector2D& Min, const FVector2D& Max, FVLUnits&
 			for (int32 k = HashStart[B]; k < HashStart[B + 1]; ++k)
 			{
 				const int32 i = HashItems[k];
-				if (HashCells[i].X == X && HashCells[i].Y == Y)
+				if (HashCells[i].X == X && HashCells[i].Y == Y && (!bFoesOnly || Wanted(Registered[i])))
 				{
 					Found.Add(i);
 				}
@@ -2304,8 +2321,12 @@ AActor* UVLBattle::FindFoe(const AVLKing* U, float Range, bool bUnitsOnly) const
 {
 	// the units that can be within Range of it (the hash), in the registry's order: the walk below picks as it did
 	// over every unit (a foe further than Range is never chosen)
+	// (Windows pass, batch 1: those FindFoeIn would pass over anyway, its own side and the dead, are left out as the
+	// hash is read, before they are sorted; the ones it weighs are the same, in the same order)
 	FVLUnits Near;
-	UnitsNear(U->GetActorLocation(), FMath::Max(Range, 0.f), Near);
+	const FVector At = U->GetActorLocation();
+	const float R = FMath::Max(Range, 0.f);
+	UnitsInBox(FVector2D(At.X - R, At.Y - R), FVector2D(At.X + R, At.Y + R), Near, CVarOptFoeScan.GetValueOnGameThread() != 0 ? U->Team : MIN_int32);
 	return FindFoeIn(U, Range, bUnitsOnly, Near);
 }
 
@@ -2342,11 +2363,26 @@ AActor* UVLBattle::FindFoeIn(const AVLKing* U, float Range, bool bUnitsOnly, con
 	}
 	// troops before buildings
 	float BestB = Range;
+	const bool bQuick = CVarOptFoeScan.GetValueOnGameThread() != 0;
 	for (const FVLBuildingState& B : Buildings)
 	{
 		if (!B.IsAlive() || B.Team == U->Team || B.Team < 0)
 		{
 			continue;
+		}
+		// (a building whose bounds are all further off than the best so far cannot be nearer: its exact distance,
+		// to its turned box, is not worked out. The bounds' sphere holds the whole mesh.)
+		const AActor* Act = B.Actor.Get();
+		if (bQuick && Act)
+		{
+			if (const UStaticMeshComponent* Root = Cast<UStaticMeshComponent>(Act->GetRootComponent()))
+			{
+				const FBoxSphereBounds& Bounds = Root->Bounds;
+				if (float(FVector::Dist2D(Bounds.Origin, Me)) - float(Bounds.SphereRadius) - 2.f >= BestB)
+				{
+					continue;
+				}
+			}
 		}
 		const float D = DistanceTo(B.Actor.Get(), Me);
 		if (D < BestB)

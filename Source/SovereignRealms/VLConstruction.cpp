@@ -2184,10 +2184,12 @@ void UVLConstruction::TickSites(float Dt)
 	UVLBattle* Battle = UVLBattle::Get(this);
 	TMap<const AActor*, int32>& AtWork = AtWorkScratch;
 	AtWork.Reset();
-	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
+	// (the battle's registry, not a walk over the world's actors: every Builder is in it; the farms' hands are not,
+	// and are no Builders)
+	for (AVLKing* It : Battle->AllUnits())
 	{
 		// (only a Builder has the component: the others' parts are not searched for it)
-		if (const UVLBuilderWork* W = It->IsAlive() && UVLBuilderWork::IsBuilder(*It) ? It->FindComponentByClass<UVLBuilderWork>() : nullptr; W && W->IsWorking())
+		if (const UVLBuilderWork* W = It->IsAlive() && UVLBuilderWork::IsBuilder(It) ? It->FindComponentByClass<UVLBuilderWork>() : nullptr; W && W->IsWorking())
 		{
 			++AtWork.FindOrAdd(W->GetJob());
 		}

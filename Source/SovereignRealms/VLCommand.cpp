@@ -1264,6 +1264,7 @@ void UVLCommand::Enter(AVLKing* Unit, AActor* Tower)
 	}
 	T.Posts[Post] = Unit;
 	Unit->GarrisonIn = Tower;
+	Unit->SetMovementAwake(true);       // (it settles on the post, then sleeps there: AVLKing::UpdateMovementSleep)
 	Unit->StopOrder();
 	// there are no stairs: it is put on the lookout's floor, the way the main game mans its towers
 	const float Half = Unit->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
@@ -1280,6 +1281,7 @@ void UVLCommand::Leave(AVLKing* Unit)
 		return;
 	}
 	Unit->GarrisonIn = nullptr;
+	Unit->SetMovementAwake(true);       // (asleep on its post: AVLKing::UpdateMovementSleep)
 	FVector Door = DoorPoint(Tower);
 	// beside whoever stands there already
 	int32 Down = 0;

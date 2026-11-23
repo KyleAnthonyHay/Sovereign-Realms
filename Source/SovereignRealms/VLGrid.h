@@ -141,6 +141,23 @@ private:
 	FVector2D CellCentre(const FIntPoint& C) const { return Origin + (FVector2D(C) + 0.5f) * Cell; }
 	bool InGrid(const FIntPoint& C) const { return C.X >= 0 && C.Y >= 0 && C.X < DimX && C.Y < DimY; }
 	bool Flood(TConstArrayView<int32> Goals, const TArray<int32>& Starts);
+	bool FloodFast(TConstArrayView<int32> Goals, const TArray<int32>& Starts);
+	void SyncSearchArrays();
+	// (Windows pass, batch 1) the last one-walker searches: the corners StringPull gave between two nodes
+	struct FRouteMemo
+	{
+		int32 From = INDEX_NONE, To = INDEX_NONE;
+		bool bFound = false;
+		TArray<FVector> Corners;
+		uint64 Used = 0;
+	};
+	static constexpr int32 MemoSize = 96;
+	TArray<FRouteMemo> Memo;
+	uint64 MemoClock = 0;
+	const FRouteMemo* FindMemo(int32 From, int32 To);
+	void AddMemo(int32 From, int32 To, bool bFound, const TArray<FVector>& Corners);
+	TArray<uint8> NearWall;     // per node: FNode::bNearWall, for the search's inner loop
+	TArray<uint32> StartMark;   // per node: a start the running search has still to reach (== Stamp)
 	enum class ELineRule : uint8 { Any, Clear, Route };
 	bool WalkLine(int32 FromNode, const FVector2D& A, const FVector2D& B, int32 ToNode, ELineRule Rule) const;
 	void StringPull(const TArray<int32>& Chain, TArray<FVector>& Out);
