@@ -140,6 +140,23 @@ private:
 	void BeginFrame();
 	void EndFrame();
 	float U(float Design) const { return FMath::RoundToFloat(Design * UI); }
+	/** For its scope, design units are drawn smaller by a factor (never larger): a panel that has less room than its
+	 *  design size (the selection panel between the Build button and the platoons on a narrow view, the top bar, a menu
+	 *  taller than a small window) is drawn whole at a smaller scale, instead of running under its neighbour or off the
+	 *  view. At 1: nothing changes, so a view with room for everything looks as it always did. */
+	struct FFit
+	{
+		FFit(AVLHUD& InHUD, float Scale) : HUD(InHUD), Saved(InHUD.UI) { HUD.UI = Saved * FMath::Clamp(Scale, 0.4f, 1.f); }
+		~FFit() { HUD.UI = Saved; }
+		AVLHUD& HUD;
+		float Saved;
+	};
+	/** The factor at which a panel of that design size fits the view with a margin round it (1: it fits as it is). */
+	float FitScale(float DesignW, float DesignH) const;
+	/** The left edge of a menu panel W wide centred on CentreX, kept inside the view and right of PanelLeft. */
+	float PanelX(float CentreX, float W) const;
+	/** Where the shared menu panels may begin: the view's left edge, or the right of the title screen's entries. */
+	float PanelLeft = 0.f;
 
 	// ---- primitives (VLHUD.cpp); every coordinate is in canvas pixels
 	void Fill(float X, float Y, float W, float H, const FLinearColor& Color);
@@ -214,7 +231,8 @@ private:
 	float DrawHints(float Y);
 	void DrawAlerts(float Y);
 	void DrawMinimap(const FBox2D& Box);
-	void DrawSelectionPanel(const FBox2D& Box);
+	/** The panel from X rightwards, Room wide at most (up to the platoon panel), its bottom edge at Bottom. */
+	void DrawSelectionPanel(float X, float Bottom, float Room);
 	void DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units);
 	void DrawBuildingSelection(const FBox2D& Box, AActor* Building);
 	void DrawUpgradeButton(const FBox2D& Box, AActor* Building);
@@ -281,6 +299,8 @@ private:
 	void DrawSettingsPanel(float CentreX);
 	void DrawNewGamePanel(float CentreX);
 	void DrawConfirmPanel(float CentreX);
+	/** "Keep this display mode?" with its countdown, over everything, while UVLGraphics waits for the answer. */
+	void DrawDisplayConfirm();
 	void DimScreen(float Alpha);
 
 	UPROPERTY(Transient) TObjectPtr<UFont> UIFont;

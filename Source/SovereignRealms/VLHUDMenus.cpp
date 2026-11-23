@@ -26,7 +26,11 @@ namespace
 		{ TEXT("LMB"), TEXT("Select a unit or a building") },
 		{ TEXT("Shift + LMB"), TEXT("Add to / remove from the selection") },
 		{ TEXT("LMB drag"), TEXT("Box-select units") },
+#if PLATFORM_MAC
 		{ TEXT("Alt / Option + LMB"), TEXT("All of that kind in view") },
+#else
+		{ VL_ALT_KEY TEXT(" + LMB"), TEXT("All of that kind in view") },
+#endif
 		{ TEXT("Enter / double-click"), TEXT("Take control of the unit (the hero view)") },
 		{ TEXT("Space"), TEXT("Centre the view on the selection") },
 		{ TEXT("Builders / Spy (top bar)"), TEXT("Their list: click one to go to it, hover marks it") },
@@ -47,10 +51,16 @@ namespace
 		{ TEXT("O / K K"), TEXT("The Spy roams / dismiss (press twice)") },
 		{ nullptr, TEXT("CAMERA") },
 		{ TEXT("WASD / Arrows"), TEXT("Pan (hold A or S: a tap is the order)") },
+#if PLATFORM_MAC
 		{ TEXT("Mouse wheel"), TEXT("Zoom (trackpad: pinch)") },
+#else
+		{ TEXT("Mouse wheel"), TEXT("Zoom") },
+#endif
 		{ TEXT("Q / E, RMB drag"), TEXT("Turn the view right / left (R: back)") },
 		{ TEXT("V / C"), TEXT("Camera angle (no troops chosen) / postcard") },
-		{ TEXT("Trackpad"), TEXT("Two fingers pan, twist turns, Ctrl+click = RMB") },
+#if PLATFORM_MAC
+		{ TEXT("Trackpad"), TEXT("Two fingers pan, twist turns, Ctrl+click = RMB") },       // (the Mac trackpad's gestures)
+#endif
 		{ TEXT("Minimap"), TEXT("LMB look there (drag), RMB send troops") },
 	};
 	const FControlRow ControlsRight[] = {
@@ -64,7 +74,11 @@ namespace
 		{ TEXT("U"), TEXT("Upgrade the selected building") },
 		{ TEXT("T"), TEXT("Turn the selected building a quarter turn") },
 		{ TEXT("RMB a free mine"), TEXT("The selected Builders claim it (140 gold)") },
+#if PLATFORM_MAC
 		{ TEXT("Train"), TEXT("One recruit (Shift: 5, Ctrl / Cmd: 10)") },
+#else
+		{ TEXT("Train"), TEXT("One recruit (Shift: 5, Ctrl: 10)") },
+#endif
 		{ TEXT("RMB"), TEXT("Rally point (Barracks or Range selected)") },
 		{ TEXT("Ctrl + 1-6"), TEXT("Its recruits join that platoon (again: none)") },
 		{ nullptr, TEXT("HERO") },
@@ -165,7 +179,13 @@ void AVLHUD::DrawMainMenu()
 	}
 	Text(TEXT("F1  controls      Enter  new game      Esc  back"), X, View.Y - U(48.f), U(14.f), A(Dim, 0.9f * In));
 
-	if (Sub != EVLScreen::None || bConfirm) { DrawSub(FMath::Max(View.X * 0.64f, X + BW + U(60.f) + U(330.f))); }
+	if (Sub != EVLScreen::None || bConfirm)
+	{
+		// (the panel keeps right of the entries: on a narrow view it is drawn smaller to fit beside them, FitScale)
+		PanelLeft = X + BW + U(14.f);
+		DrawSub(FMath::Max(View.X * 0.64f, X + BW + U(60.f) + U(330.f)));
+		PanelLeft = 0.f;
+	}
 }
 
 // ---------------------------------------------------------------------------- pause menu
@@ -182,6 +202,7 @@ void AVLHUD::DrawPauseMenu()
 	}
 
 	const int32 N = 7;
+	const FFit Fit(*this, FitScale(420.f, 104.f + N * 64.f + 56.f));        // (a view too small for it: drawn smaller)
 	const float W = U(420.f), BH = U(54.f), Gap = U(10.f);
 	const float H = U(104.f) + N * (BH + Gap) + U(56.f);
 	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = FMath::RoundToFloat((View.Y - H) * 0.5f - (1.f - In) * U(12.f));
@@ -242,6 +263,7 @@ void AVLHUD::DrawEndScreen()
 		{ TEXT("Enemy buildings razed"), FString::FromInt(Foe.BuildingsLost) },
 	};
 	const int32 NumRows = UE_ARRAY_COUNT(Rows);
+	const FFit Fit(*this, FitScale(560.f, 170.f + NumRows * 30.f + 100.f + 62.f));
 	const float W = U(560.f), RowH = U(30.f);
 	const float H = U(170.f) + NumRows * RowH + U(100.f) + U(62.f);
 	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = FMath::RoundToFloat((View.Y - H) * 0.5f - (1.f - In) * U(24.f));
@@ -286,6 +308,10 @@ void AVLHUD::DrawLegendOverlay()
 
 void AVLHUD::DrawSub(float CentreX)
 {
+	if (UVLGraphics::DisplayConfirmSeconds() > 0.f)
+	{
+		return;                     // ("Keep this display mode?" is up in its place: DrawDisplayConfirm)
+	}
 	if (bConfirm)
 	{
 		DrawConfirmPanel(CentreX);
@@ -303,10 +329,12 @@ void AVLHUD::DrawSub(float CentreX)
 void AVLHUD::DrawControlsPanel(float CentreX, bool bCloseButton)
 {
 	const int32 NL = UE_ARRAY_COUNT(ControlsLeft), NR = UE_ARRAY_COUNT(ControlsRight);
-	const float RowH = U(27.f), ColW = U(470.f), KeyW = U(168.f);
+	// (the tallest panel of all: on a view under 1080 design units high, a 1280 x 720 window, it is drawn smaller)
+	const FFit Fit(*this, FitScale(2.f * 520.f + 70.f, 92.f + FMath::Max(NL, NR) * 27.f + (bCloseButton ? 84.f : 24.f)));
+	const float RowH = U(27.f), ColW = U(520.f), KeyW = U(168.f);      // (520: the longest lines ran 40 px past a 470 column)
 	const float W = 2.f * ColW + U(70.f);
 	const float H = U(92.f) + FMath::Max(NL, NR) * RowH + (bCloseButton ? U(84.f) : U(24.f));
-	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
+	const float X = PanelX(CentreX, W), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("CONTROLS"), X + W * 0.5f, Y + U(22.f), U(26.f), GoldBright, AlignCentre, Bold, U(5.f));
 	Rule(X + U(40.f), Y + U(66.f), W - U(80.f));
@@ -345,10 +373,16 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 {
 	AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
 	AVLKing* Me = King;
+#if PLATFORM_MAC
 	const int32 NumRows = 12;
+#else
+	const int32 NumRows = 14;       // (Display mode, Resolution and VSync where the Mac has its Window row)
+#endif
+	// (a view too low for the panel, a 1280 x 720 window or a large Interface scale: drawn smaller, whole)
+	const FFit Fit(*this, FitScale(600.f, 92.f + NumRows * 46.f + 2.f * 34.f + 96.f + 24.f));
 	const float W = U(600.f), RowH = U(46.f), HeadH = U(34.f);
 	const float H = U(92.f) + NumRows * RowH + 2.f * HeadH + U(96.f) + U(24.f);
-	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
+	const float X = PanelX(CentreX, W), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("SETTINGS"), X + W * 0.5f, Y + U(22.f), U(26.f), GoldBright, AlignCentre, Bold, U(5.f));
 	Rule(X + U(40.f), Y + U(66.f), W - U(80.f));
@@ -430,12 +464,53 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 	RY += RowH;
 	// the window (saved in GameUserSettings by UVLGraphics, as F11 / Alt+Enter and a dragged edge are; the editor's
 	// play window is the editor's own)
+#if PLATFORM_MAC
 	Label(TEXT("Window"));
 	if (Choice(VLId::Setting + 11, !UVLGraphics::CanChangeWindow() ? FString(TEXT("Editor window")) : FString(UVLGraphics::IsFullscreen() ? TEXT("Full screen") : TEXT("Windowed")), nullptr))
 	{
 		UVLGraphics::ToggleFullscreen();
 	}
 	RY += RowH;
+#else
+	// Windows: the display mode (a window, borderless full screen at the desktop's size, exclusive full screen at a
+	// mode of the display's), the resolution and VSync. UVLGraphics makes the change in its next tick, never here in
+	// the draw, and asks for an exclusive mode to be confirmed (DrawDisplayConfirm).
+	Label(TEXT("Display mode"));
+	if (Choice(VLId::Setting + 11, !UVLGraphics::CanChangeWindow() ? FString(TEXT("Editor window")) : FString(UVLGraphics::DisplayModeName(UVLGraphics::GetDisplayMode())), nullptr))
+	{
+		UVLGraphics::CycleDisplayMode();
+	}
+	RY += RowH;
+	Label(TEXT("Resolution"));
+	{
+		// [<] 2560 x 1440 [>]: the display's own modes in exclusive full screen, the usual sizes in a window; borderless
+		// full screen is the desktop's size, shown and not to be chosen
+		const FBox2D Box = SliderBox();
+		const bool bPick = UVLGraphics::CanPickResolution();
+		const FIntPoint Res = UVLGraphics::GetResolution();
+		const float AW = U(36.f), AG = U(4.f);
+		const FBox2D Mid(FVector2D(Box.Min.X + AW + AG, Box.Min.Y), FVector2D(Box.Max.X - AW - AG, Box.Max.Y));
+		Fill(Mid.Min.X, Mid.Min.Y, Mid.Max.X - Mid.Min.X, Mid.Max.Y - Mid.Min.Y, Inset);
+		Outline(Mid, A(Bronze, bPick ? 0.9f : 0.5f), FMath::Max(1.f, U(1.f)));
+		TextIn(Mid, FString::Printf(TEXT("%d x %d"), Res.X, Res.Y), U(16.f), bPick ? Parchment : Dim, AlignCentre, Bold);
+		for (int32 d = 0; d < 2; ++d)
+		{
+			const FBox2D Arrow = d == 0 ? FBox2D(Box.Min, FVector2D(Box.Min.X + AW, Box.Max.Y)) : FBox2D(FVector2D(Box.Max.X - AW, Box.Min.Y), Box.Max);
+			const FBtn B = Button(Arrow, VLId::Setting + 12 + d, bPick);
+			ButtonFrame(Arrow, B, bPick);
+			TextIn(FBox2D(Arrow.Min + FVector2D(0.f, B.bHeld ? U(1.f) : 0.f), Arrow.Max), d == 0 ? TEXT("<") : TEXT(">"), U(18.f), bPick ? FMath::Lerp(Parchment, GoldBright, B.Hot) : A(Dim, 0.6f), AlignCentre, Bold);
+			if (B.bClicked) { Click(); UVLGraphics::StepResolution(d == 0 ? -1 : 1); }
+		}
+		if (!bPick && UVLGraphics::CanChangeWindow())
+		{
+			TextIn(FBox2D(FVector2D(SX + SW, RY), FVector2D(VX, RY + RowH)), TEXT("desktop"), U(14.f), Dim, AlignRight);
+		}
+	}
+	RY += RowH;
+	Label(TEXT("VSync"));
+	if (Choice(VLId::Setting + 14, UVLGraphics::IsVSync() ? TEXT("On") : TEXT("Off"), nullptr)) { UVLGraphics::SetVSync(!UVLGraphics::IsVSync()); }
+	RY += RowH;
+#endif
 	Head(TEXT("CAMERA"));
 	Label(TEXT("Camera angle"));
 	if (Choice(VLId::Setting + 5, AVLKing::CameraAngleName(Me ? Me->GetCameraAngle() : 0), TEXT("V")) && Me) { Me->CycleCameraAngle(); }
@@ -458,9 +533,10 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 void AVLHUD::DrawNewGamePanel(float CentreX)
 {
 	// the maps side by side above the difficulties
+	const FFit Fit(*this, FitScale(1170.f, 92.f + 104.f + 16.f + 3.f * 86.f + 98.f));
 	const float W = U(1170.f), RowH = U(76.f), MapH = U(104.f);     // (1170: five maps side by side at the width four had in 960)
 	const float H = U(92.f) + MapH + U(16.f) + 3.f * (RowH + U(10.f)) + U(98.f);
-	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
+	const float X = PanelX(CentreX, W), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("NEW GAME"), X + W * 0.5f, Y + U(22.f), U(26.f), GoldBright, AlignCentre, Bold, U(5.f));
 	Rule(X + U(40.f), Y + U(66.f), W - U(80.f));
@@ -535,8 +611,9 @@ void AVLHUD::DrawConfirmPanel(float CentreX)
 	const FString Note = !bInMatch ? FString(TEXT("Until next time, sovereign."))
 		: (Confirm == EConfirm::Restart ? FString(TEXT("The battle starts over.")) : FString(TEXT("This match will be lost.")));
 
+	const FFit Fit(*this, FitScale(520.f, 250.f));
 	const float W = U(520.f), H = U(250.f);
-	const float X = FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, U(10.f), FMath::Max(U(10.f), View.X - W - U(10.f)))), Y = FMath::RoundToFloat((View.Y - H) * 0.5f);
+	const float X = PanelX(CentreX, W), Y = FMath::RoundToFloat((View.Y - H) * 0.5f);
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(Titles[K], X + W * 0.5f, Y + U(30.f), U(23.f), GoldBright, AlignCentre, Bold, U(3.f));
 	Rule(X + U(40.f), Y + U(72.f), W - U(80.f));
@@ -547,4 +624,28 @@ void AVLHUD::DrawConfirmPanel(float CentreX)
 	auto Btn = [&](int32 i) { const float BX = X + U(40.f) + i * (BW + Gap); return FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + U(54.f))); };
 	if (MenuButton(Btn(0), VLId::Screen + 8, TEXT("CANCEL"))) { bConfirm = false; return; }
 	if (MenuButton(Btn(1), VLId::Screen + 9, Yes[K])) { DoConfirmed(); }
+}
+
+void AVLHUD::DrawDisplayConfirm()
+{
+	// An exclusive full screen mode was set (Settings > Display mode / Resolution). The display may be showing nothing
+	// of it, so the game goes back to the mode before unless the player says, within the countdown, that it is fine.
+	const float Left = UVLGraphics::DisplayConfirmSeconds();
+	const FIntPoint Res = UVLGraphics::GetResolution();
+	DimScreen(0.5f);
+	const FFit Fit(*this, FitScale(520.f, 250.f));
+	const float W = U(520.f), H = U(250.f);
+	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = FMath::RoundToFloat((View.Y - H) * 0.5f);
+	const FBox2D Box(FVector2D(X, Y), FVector2D(X + W, Y + H));
+	Block(Box);
+	Panel(Box, true);
+	Text(TEXT("KEEP THIS DISPLAY MODE?"), X + W * 0.5f, Y + U(30.f), U(23.f), GoldBright, AlignCentre, Bold, U(3.f));
+	Rule(X + U(40.f), Y + U(72.f), W - U(80.f));
+	Text(FString::Printf(TEXT("%s, %d x %d. Going back in %d s."), UVLGraphics::DisplayModeName(UVLGraphics::GetDisplayMode()), Res.X, Res.Y, FMath::CeilToInt(Left)),
+		X + W * 0.5f, Y + U(90.f), U(17.f), Amber, AlignCentre);
+	Text(TEXT("Enter: keep   ·   Esc: go back"), X + W * 0.5f, Y + U(116.f), U(14.f), Dim, AlignCentre);
+	const float Gap = U(14.f), BW = (W - U(80.f) - Gap) / 2.f, BY = Y + H - U(84.f);
+	auto Btn = [&](int32 i) { const float BX = X + U(40.f) + i * (BW + Gap); return FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + U(54.f))); };
+	if (MenuButton(Btn(0), VLId::Screen + 30, TEXT("GO BACK"))) { UVLGraphics::RevertDisplay(); }
+	if (MenuButton(Btn(1), VLId::Screen + 31, TEXT("KEEP"))) { UVLGraphics::ConfirmDisplay(); }
 }

@@ -154,7 +154,9 @@ void AVLHUD::DrawGameHUD()
 		{
 			DrawBuildMenu(MapBox.Max.X + U(8.f), View.Y - M);
 			const float SX = MapBox.Max.X + U(8.f) + U(76.f) + U(10.f);
-			DrawSelectionPanel(FBox2D(FVector2D(SX, View.Y - M - U(152.f)), FVector2D(SX + U(760.f), View.Y - M)));
+			// (its room: up to the platoon panel, which DrawPlatoonPanel puts 292 wide on the right edge. On a view
+			// narrower than about 16:9 that is less than the panel's design width: it is drawn smaller there)
+			DrawSelectionPanel(SX, View.Y - M, View.X - M - U(292.f) - U(8.f) - SX);
 		}
 		DrawPlatoonPanel();
 		if (!bHero)
@@ -476,10 +478,24 @@ void AVLHUD::DrawTopBar()
 	const FVLKingdom& K = Battle->GetKingdom(UVLBattle::Player);
 	FLinearColor EnemyCol = Dim;
 	const FString Enemy = Battle->EnemyStatus(&EnemyCol);
-	const float EnemyW = Enemy.IsEmpty() ? 0.f : U(12.f) + U(30.f) + TextSize(Enemy, U(17.f), Bold).X + U(14.f);
+	// top-right: controls, pause (drawn last; the bar keeps clear of them)
+	const float Y = U(10.f), BS = U(46.f);
+	const FBox2D PauseBox(FVector2D(View.X - U(14.f) - BS, Y + U(4.f)), FVector2D(View.X - U(14.f), Y + U(4.f) + BS));
+	const FBox2D HelpBox(PauseBox.Min - FVector2D(BS + U(8.f), 0.f), PauseBox.Max - FVector2D(BS + U(8.f), 0.f));
+	// The bar sits in the middle of the view. On a narrow one (4:3, 3:2) its right end would run under the two
+	// buttons: it moves left as far as it has to, and where even the room between the left edge and the buttons is
+	// less than its width, it is drawn smaller (FFit). On a view with room it is where and as it always was.
+	auto BarWidth = [&]()
+	{
+		const float EnemyW = Enemy.IsEmpty() ? 0.f : U(12.f) + U(30.f) + TextSize(Enemy, U(17.f), Bold).X + U(14.f);
+		return U(18.f) + 2.f * U(252.f) + U(176.f) + TopChipsWidth() + U(112.f) + EnemyW;
+	};
+	const float BarLeft = U(14.f), BarRight = HelpBox.Min.X - U(10.f);
+	TOptional<FFit> Fit;
+	Fit.Emplace(*this, (BarRight - BarLeft) / FMath::Max(BarWidth(), 1.f));
 	const float H = U(54.f);
-	const float W = U(18.f) + 2.f * U(252.f) + U(176.f) + TopChipsWidth() + U(112.f) + EnemyW;
-	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = U(10.f);
+	const float W = FMath::Min(BarWidth(), BarRight - BarLeft);
+	const float X = FMath::Max(FMath::Min(FMath::RoundToFloat((View.X - W) * 0.5f), BarRight - W), BarLeft);
 	const FBox2D Bar(FVector2D(X, Y), FVector2D(X + W, Y + H));
 	TopBarRect = Bar;
 	HudPanel(Bar);
@@ -561,10 +577,9 @@ void AVLHUD::DrawTopBar()
 		}
 	}
 
+	Fit.Reset();
+
 	// top-right: controls, pause
-	const float BS = U(46.f);
-	const FBox2D PauseBox(FVector2D(View.X - U(14.f) - BS, Y + U(4.f)), FVector2D(View.X - U(14.f), Y + U(4.f) + BS));
-	const FBox2D HelpBox(PauseBox.Min - FVector2D(BS + U(8.f), 0.f), PauseBox.Max - FVector2D(BS + U(8.f), 0.f));
 	Block(PauseBox);
 	Block(HelpBox);
 	const FBtn Help = IconButton(HelpBox, VLId::Help, EVLIcon::Help, nullptr);
@@ -975,7 +990,7 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 
 // ---------------------------------------------------------------------------- selection panel
 
-void AVLHUD::DrawSelectionPanel(const FBox2D& Box)
+void AVLHUD::DrawSelectionPanel(float X, float Bottom, float Room)
 {
 	AActor* Building = SelectedBuilding();
 	TArray<AVLKing*> Units;
@@ -985,12 +1000,16 @@ void AVLHUD::DrawSelectionPanel(const FBox2D& Box)
 		return;
 	}
 	// the player's castle has three buttons (Builder, Spy, upgrade): its panel is wider
-	FBox2D Panel = Box;
+	float DesignW = 760.f;
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	if (const FVLBuildingState* St = Building && Battle ? Battle->FindBuilding(Building) : nullptr; St && St->Kind == EVLBuilding::Castle && St->Team == UVLBattle::Player)
 	{
-		Panel.Max.X += U(200.f);
+		DesignW += 200.f;
 	}
+	// Less room than that (a 3:2 or 4:3 view, where the platoon panel stands closer): the whole panel, its cards and
+	// its text are drawn smaller, by as much as it takes to end short of the platoon panel. With room: as designed.
+	const FFit Fit(*this, Room / FMath::Max(U(DesignW), 1.f));
+	const FBox2D Panel(FVector2D(X, Bottom - U(152.f)), FVector2D(X + FMath::Min(U(DesignW), FMath::Max(Room, 1.f)), Bottom));
 	HudPanel(Panel);
 	if (Building) { DrawBuildingSelection(Panel, Building); }
 	else { DrawTroopSelection(Panel, Units); }

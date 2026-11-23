@@ -272,6 +272,11 @@ void AVLHUD::DoConfirmed()
 
 void AVLHUD::OnEscape()
 {
+	if (UVLGraphics::DisplayConfirmSeconds() > 0.f)
+	{
+		UVLGraphics::RevertDisplay();        // ("Keep this display mode?": no)
+		return;
+	}
 	if (bLegend)
 	{
 		bLegend = false;
@@ -363,6 +368,12 @@ void AVLHUD::MenuInput(APlayerController* PC, AVLKing* Me)
 		OnMousePress(FVector2D(MX, MY), false);
 	}
 	auto Key = [PC](const FKey& K) { return PC->WasInputKeyJustPressed(K); };
+	if (UVLGraphics::DisplayConfirmSeconds() > 0.f)
+	{
+		// "Keep this display mode?": Enter keeps it (Esc goes back: OnEscape); no other key of the menus meanwhile
+		if (Key(EKeys::Enter)) { Click(); UVLGraphics::ConfirmDisplay(); }
+		return;
+	}
 	if (Key(EKeys::Enter))
 	{
 		const UVLBattle* Battle = UVLBattle::Get(this);
@@ -509,6 +520,17 @@ void AVLHUD::BeginFrame()
 	bInputOpen = true;
 }
 
+float AVLHUD::FitScale(float DesignW, float DesignH) const
+{
+	return FMath::Min3(1.f, (float(View.X) - PanelLeft - 2.f * U(10.f)) / FMath::Max(DesignW * UI, 1.f), (float(View.Y) - 2.f * U(8.f)) / FMath::Max(DesignH * UI, 1.f));
+}
+
+float AVLHUD::PanelX(float CentreX, float W) const
+{
+	const float Left = PanelLeft + U(10.f);
+	return FMath::RoundToFloat(FMath::Clamp(CentreX - W * 0.5f, Left, FMath::Max(Left, float(View.X) - W - U(10.f))));
+}
+
 void AVLHUD::EndFrame()
 {
 	DrawTooltip();
@@ -583,6 +605,10 @@ void AVLHUD::DrawHUD()
 	case EVLScreen::Pause: DrawPauseMenu(); break;
 	case EVLScreen::End: DrawEndScreen(); break;
 	default: if (bLegend) { DrawLegendOverlay(); } break;
+	}
+	if (UVLGraphics::DisplayConfirmSeconds() > 0.f)
+	{
+		DrawDisplayConfirm();       // (an exclusive full screen mode waits to be kept: over everything)
 	}
 	EndFrame();
 	// the hero chip's double click: King David's hero view (as Enter with him selected), after the frame's drawing
