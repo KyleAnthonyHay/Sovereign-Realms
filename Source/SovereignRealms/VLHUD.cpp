@@ -1457,7 +1457,7 @@ void AVLHUD::DrawUnitHighlight()
 	}
 }
 
-static TAutoConsoleVariable<int32> CVarPipTris(TEXT("vl.Opt.PipTris"), 1, TEXT("1: a far unit's diamond is two triangles a layer. 0: a canvas row for each of its lines, as it was"));
+static TAutoConsoleVariable<int32> CVarPipTris(TEXT("vl.Opt.PipTris"), 0, TEXT("1: a far unit's diamond is two triangles a layer (not the default: its edges were not compared pixel for pixel with the rows). 0: a canvas row for each of its lines, as it was"));
 
 void AVLHUD::DrawFarPips()
 {
