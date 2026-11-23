@@ -7,6 +7,7 @@
 #include "VLGrid.h"
 #include "VLCommand.h"
 #include "VLBattle.h"
+#include "VLGraphics.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
@@ -80,13 +81,13 @@ namespace
 		return Args.IsValidIndex(Index) ? FCString::Atof(*Args[Index]) : Default;
 	}
 
-	FAutoConsoleCommandWithWorldAndArgs CmdShot(TEXT("vl.Shot"), TEXT("vl.Shot <name>: save the view to Saved/Screenshots/VL/<name>.png"),
+	FAutoConsoleCommandWithWorldAndArgs CmdShot(TEXT("vl.Shot"), TEXT("vl.Shot <name> [ui]: save the view to Saved/Screenshots/VL/<name>.png (ui: with the interface, as the window shows it)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld*)
 		{
 			const FString Name = Args.Num() > 0 ? Args[0] : TEXT("shot");
 			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots/VL") / (Name + TEXT(".png")));
 			IFileManager::Get().Delete(*Path);
-			FScreenshotRequest::RequestScreenshot(Path, false, false);
+			FScreenshotRequest::RequestScreenshot(Path, Args.Num() > 1 && Args[1] == TEXT("ui"), false);
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdView(TEXT("vl.View"), TEXT("vl.View follow | postcard | free X Y Z Pitch Yaw [FOV]"),
@@ -929,6 +930,28 @@ void AVLGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 void AVLGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+#if PLATFORM_WINDOWS
+	// Windows: borderless full screen at the desktop's own resolution by default (user request 2026-11-23; a fresh
+	// install starts that way: Config/Windows/WindowsGameUserSettings.ini). Once per install, under a key of its own,
+	// a saved window is made full screen: the installs from before, which the Mac's rule below had put in a window.
+	// From then on the player's choice is kept (Settings > Display mode, F11 / Alt+Enter). A size or mode given on
+	// the command line (the capture scripts' -windowed -ResX=) is left alone, and does not use the one time up.
+	if (!GIsEditor && GEngine && GConfig)
+	{
+		bool bDone = false;
+		int32 Ignored = 0;
+		GConfig->GetBool(TEXT("SovereignRealms.Video"), TEXT("FullscreenByDefault"), bDone, GGameUserSettingsIni);
+		const bool bCommandLine = FParse::Param(FCommandLine::Get(), TEXT("windowed")) || FParse::Param(FCommandLine::Get(), TEXT("fullscreen"))
+			|| FParse::Value(FCommandLine::Get(), TEXT("ResX="), Ignored) || FParse::Value(FCommandLine::Get(), TEXT("ResY="), Ignored);
+		if (!bDone && !bCommandLine)
+		{
+			UVLGraphics::SetDisplay(UVLGraphics::DisplayBorderless, FIntPoint::ZeroValue);     // (made in UVLGraphics' next tick, and saved)
+			UE_LOG(LogSovereignRealms, Log, TEXT("window: full screen by default (once per install)"));
+			GConfig->SetBool(TEXT("SovereignRealms.Video"), TEXT("FullscreenByDefault"), true, GGameUserSettingsIni);
+			GConfig->Flush(false, GGameUserSettingsIni);
+		}
+	}
+#else
 	// A window by default, not full screen (full screen grabbed the mouse badly on the Mac, user request 2026-11-21):
 	// once per install, a saved full-screen mode is put back to a window (16:9, 85% of the desktop, at most 1600 x 900).
 	// F11 / Alt+Enter still toggle full screen, and that choice is kept from then on.
@@ -962,6 +985,7 @@ void AVLGameMode::BeginPlay()
 			GConfig->Flush(false, GGameUserSettingsIni);
 		}
 	}
+#endif
 	// the music: on by default; the player's own choice (Settings > Music, U in the pause menu: off included) is kept.
 	// (MusicV2: the old key may hold the 0 of the days it was off by default, which was nobody's choice)
 	float SavedMusic = 1.f;

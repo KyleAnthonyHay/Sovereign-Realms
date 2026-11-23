@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "LegacyScreenPercentageDriver.h"
 #include "Misc/ConfigCacheIni.h"
 #include "UnrealClient.h"
@@ -614,6 +615,8 @@ void UVLGraphics::UpdateFarFog()
 void UVLGraphics::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	// the window: a change the Settings screen asked for (here, outside any draw), and an exclusive mode nobody confirmed
+	ApplyPendingDisplay();
 	UpdateScreenPercentage(false);
 	if (UWorld* World = GetWorld(); World && !World->IsPaused())
 	{
@@ -658,51 +661,352 @@ namespace
 		OutSize = GEngine->GameViewport->Viewport->GetSizeXY();
 		return OutSize.X > 0 && OutSize.Y > 0;
 	}
-}
 
-bool UVLGraphics::IsFullscreen()
-{
-	EWindowMode::Type Mode = EWindowMode::Windowed;
-	FIntPoint Size;
-	if (GameWindow(Mode, Size))
+	// A change of the window waiting for the next Tick (see VLGraphics.h: never from inside the HUD's draw).
+	struct FDisplayRequest
 	{
-		return Mode != EWindowMode::Windowed;
-	}
-	const UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
-	return S && S->GetFullscreenMode() != EWindowMode::Windowed;
-}
+		bool bPending = false;
+		EWindowMode::Type Mode = EWindowMode::Windowed;
+		FIntPoint Size = FIntPoint::ZeroValue;      // (0: none to set, as borderless full screen: the desktop's)
+		bool bNeedsConfirm = false;
+	};
+	FDisplayRequest DisplayRequest;
+	// An exclusive full screen mode that the player has not confirmed yet, and what to go back to.
+	const float DisplayConfirmTime = 15.f;
+	bool bDisplayUnconfirmed = false;
+	double DisplayConfirmUntil = 0.0;
+	EWindowMode::Type DisplayBackMode = EWindowMode::Windowed;
+	FIntPoint DisplayBackSize = FIntPoint::ZeroValue;
 
-void UVLGraphics::ToggleFullscreen()
-{
-	UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
-	if (!S || !CanChangeWindow())
+	EWindowMode::Type ToWindowMode(int32 Display)
 	{
-		return;
+		return Display == UVLGraphics::DisplayExclusive ? EWindowMode::Fullscreen : (Display == UVLGraphics::DisplayBorderless ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
 	}
-	KeepWindowState();          // (the window's own size first, to come back to)
-	const bool bFull = !IsFullscreen();
-	S->SetFullscreenMode(bFull ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed);
-	if (!bFull)
+	int32 ToDisplay(EWindowMode::Type Mode)
 	{
-		// back to the window it was ([SovereignRealms.Video] WindowX / WindowY; none: 85% of the desktop, at most 1600 x 900)
+		return Mode == EWindowMode::Fullscreen ? UVLGraphics::DisplayExclusive : (Mode == EWindowMode::WindowedFullscreen ? UVLGraphics::DisplayBorderless : UVLGraphics::DisplayWindowed);
+	}
+
+	FIntPoint DesktopSize()
+	{
+		const UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+		FIntPoint Desk = S ? S->GetDesktopResolution() : FIntPoint::ZeroValue;
+#if PLATFORM_WINDOWS
+		// In exclusive full screen at a lower mode Windows reports that mode as the desktop: the desktop to go back
+		// to (a window's sizes, borderless) is the display's largest mode.
+		EWindowMode::Type Mode = EWindowMode::Windowed;
+		FIntPoint Size;
+		if (GameWindow(Mode, Size) && Mode == EWindowMode::Fullscreen)
+		{
+			TArray<FIntPoint> Modes;
+			UKismetSystemLibrary::GetSupportedFullscreenResolutions(Modes);
+			for (const FIntPoint& M : Modes)
+			{
+				if (M.X * M.Y > Desk.X * Desk.Y)
+				{
+					Desk = M;
+				}
+			}
+		}
+#endif
+		return Desk;
+	}
+
+	/** The window to come back to from full screen: the one it was ([SovereignRealms.Video] WindowX / WindowY); none:
+	 *  16:9, 85% of the desktop (on the Mac at most 1600 x 900, as ever). */
+	FIntPoint WindowedSize()
+	{
 		FIntPoint Res(0, 0);
 		if (GConfig)
 		{
 			GConfig->GetInt(TEXT("SovereignRealms.Video"), TEXT("WindowX"), Res.X, GGameUserSettingsIni);
 			GConfig->GetInt(TEXT("SovereignRealms.Video"), TEXT("WindowY"), Res.Y, GGameUserSettingsIni);
 		}
-		const FIntPoint Desk = S->GetDesktopResolution();
+		const FIntPoint Desk = DesktopSize();
 		if (Res.X < 640 || Res.Y < 360 || (Desk.X > 0 && Res.X >= Desk.X && Res.Y >= Desk.Y))
 		{
+#if PLATFORM_WINDOWS
+			// (real pixels on Windows: 1600 x 900 is a small window on a 4K desktop)
+			Res.X = FMath::Max(1280, FMath::RoundToInt(Desk.X * 0.85f));
+			Res.Y = FMath::RoundToInt(Res.X * 9.f / 16.f);
+			if (Desk.Y > 0 && Res.Y > Desk.Y * 0.85f)
+			{
+				Res.Y = FMath::RoundToInt(Desk.Y * 0.85f);
+				Res.X = FMath::RoundToInt(Res.Y * 16.f / 9.f);
+			}
+#else
 			Res.X = FMath::Min(1600, FMath::RoundToInt(Desk.X * 0.85f));
 			Res.Y = FMath::RoundToInt(Res.X * 9.f / 16.f);
+#endif
 		}
-		S->SetScreenResolution(Res);
+		return Res;
+	}
+
+	bool SizeLess(const FIntPoint& A, const FIntPoint& B)
+	{
+		return A.X != B.X ? A.X < B.X : A.Y < B.Y;
+	}
+
+	/** The sizes the Resolution row steps through, smallest first. */
+	void DisplaySizes(int32 Display, TArray<FIntPoint>& Out)
+	{
+		const FIntPoint Desk = DesktopSize();
+		if (Display == UVLGraphics::DisplayExclusive)
+		{
+			// the display's own modes, as the RHI lists them
+			TArray<FIntPoint> Modes;
+			UKismetSystemLibrary::GetSupportedFullscreenResolutions(Modes);
+			for (const FIntPoint& M : Modes)
+			{
+				if (M.X >= 1024 && M.Y >= 720)
+				{
+					Out.AddUnique(M);
+				}
+			}
+			if (Out.Num() == 0 && Desk.X > 0)
+			{
+				Out.Add(Desk);
+			}
+		}
+		else if (Display == UVLGraphics::DisplayWindowed)
+		{
+			// the usual sizes that fit on the desktop with the title bar (any other: drag the window's edge)
+			static const FIntPoint Usual[] = { FIntPoint(1280, 720), FIntPoint(1600, 900), FIntPoint(1920, 1080), FIntPoint(1920, 1200), FIntPoint(2560, 1080),
+				FIntPoint(2560, 1440), FIntPoint(2560, 1600), FIntPoint(3200, 1800), FIntPoint(3440, 1440), FIntPoint(3840, 2160), FIntPoint(5120, 1440), FIntPoint(5120, 2880) };
+			for (const FIntPoint& Size : Usual)
+			{
+				if (Desk.X <= 0 || (Size.X <= Desk.X && Size.Y <= Desk.Y - 100))
+				{
+					Out.Add(Size);
+				}
+			}
+			if (Out.Num() == 0)
+			{
+				Out.Add(FIntPoint(1280, 720));
+			}
+		}
+		Out.Sort(&SizeLess);
+	}
+}
+
+bool UVLGraphics::IsFullscreen()
+{
+	return GetDisplayMode() != DisplayWindowed;
+}
+
+int32 UVLGraphics::GetDisplayMode()
+{
+	if (DisplayRequest.bPending)
+	{
+		return ToDisplay(DisplayRequest.Mode);
+	}
+	EWindowMode::Type Mode = EWindowMode::Windowed;
+	FIntPoint Size;
+	if (GameWindow(Mode, Size))
+	{
+		return ToDisplay(Mode);
+	}
+	const UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	return S ? ToDisplay(S->GetFullscreenMode()) : int32(DisplayWindowed);
+}
+
+const TCHAR* UVLGraphics::DisplayModeName(int32 Mode)
+{
+	return Mode == DisplayExclusive ? TEXT("Full screen") : (Mode == DisplayBorderless ? TEXT("Borderless") : TEXT("Windowed"));
+}
+
+FIntPoint UVLGraphics::GetResolution()
+{
+	if (DisplayRequest.bPending && DisplayRequest.Size.X > 0)
+	{
+		return DisplayRequest.Size;
+	}
+	EWindowMode::Type Mode = EWindowMode::Windowed;
+	FIntPoint Size;
+	if (!DisplayRequest.bPending && GameWindow(Mode, Size))
+	{
+		return Size;
+	}
+	return DesktopSize();
+}
+
+bool UVLGraphics::CanPickResolution()
+{
+	return CanChangeWindow() && GetDisplayMode() != DisplayBorderless;
+}
+
+void UVLGraphics::SetDisplay(int32 Mode, FIntPoint Resolution)
+{
+	if (!CanChangeWindow() || !GEngine || !GEngine->GetGameUserSettings())
+	{
+		return;
+	}
+	if (!bDisplayUnconfirmed && !DisplayRequest.bPending)
+	{
+		KeepWindowState();          // (the window's own size first, to come back to)
+		// what an unconfirmed mode goes back to: the display as it is now
+		EWindowMode::Type NowMode = EWindowMode::Windowed;
+		FIntPoint NowSize = FIntPoint::ZeroValue;
+		const bool bWindow = GameWindow(NowMode, NowSize);
+		DisplayBackMode = bWindow ? NowMode : EWindowMode::WindowedFullscreen;
+		DisplayBackSize = bWindow && NowMode != EWindowMode::WindowedFullscreen ? NowSize : FIntPoint::ZeroValue;
+	}
+	DisplayRequest.bPending = true;
+	DisplayRequest.Mode = ToWindowMode(Mode);
+	DisplayRequest.Size = Resolution;
+	if (DisplayRequest.Mode == EWindowMode::WindowedFullscreen)
+	{
+		DisplayRequest.Size = FIntPoint::ZeroValue;
+	}
+	else if (Resolution.X <= 0 || Resolution.Y <= 0)
+	{
+		DisplayRequest.Size = DisplayRequest.Mode == EWindowMode::Windowed ? WindowedSize() : DesktopSize();
+	}
+	// The display shows an exclusive mode or it does not (a black screen, "out of range"): that one is confirmed by
+	// the player. A window and borderless full screen are the desktop's own mode: nothing to confirm.
+	DisplayRequest.bNeedsConfirm = DisplayRequest.Mode == EWindowMode::Fullscreen;
+}
+
+void UVLGraphics::ApplyPendingDisplay()
+{
+	UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	if (bDisplayUnconfirmed && FPlatformTime::Seconds() >= DisplayConfirmUntil)
+	{
+		RevertDisplay();            // (nobody confirmed the exclusive mode: the screen may be showing nothing)
+	}
+	if (!DisplayRequest.bPending || !S)
+	{
+		return;
+	}
+	const FDisplayRequest R = DisplayRequest;
+	DisplayRequest.bPending = false;
+	S->SetFullscreenMode(R.Mode);
+	if (R.Size.X > 0 && R.Size.Y > 0)
+	{
+		S->SetScreenResolution(R.Size);
 	}
 	S->ApplyResolutionSettings(false);
-	S->ConfirmVideoMode();
+	bDisplayUnconfirmed = R.bNeedsConfirm;
+	if (R.bNeedsConfirm)
+	{
+		DisplayConfirmUntil = FPlatformTime::Seconds() + DisplayConfirmTime;
+	}
+	else
+	{
+		S->ConfirmVideoMode();
+		S->SaveSettings();
+	}
+	UE_LOG(LogSovereignRealms, Log, TEXT("window: %s %d x %d (%s)"), R.Mode == EWindowMode::Windowed ? TEXT("a window") : (R.Mode == EWindowMode::Fullscreen ? TEXT("exclusive full screen") : TEXT("full screen")),
+		R.Size.X, R.Size.Y, R.bNeedsConfirm ? TEXT("to be confirmed") : TEXT("saved"));
+}
+
+float UVLGraphics::DisplayConfirmSeconds()
+{
+	return bDisplayUnconfirmed ? FMath::Max(float(DisplayConfirmUntil - FPlatformTime::Seconds()), 0.01f) : 0.f;
+}
+
+void UVLGraphics::ConfirmDisplay()
+{
+	UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	if (bDisplayUnconfirmed && S)
+	{
+		bDisplayUnconfirmed = false;
+		S->ConfirmVideoMode();
+		S->SaveSettings();
+		UE_LOG(LogSovereignRealms, Log, TEXT("window: the mode is confirmed (saved)"));
+	}
+}
+
+void UVLGraphics::RevertDisplay()
+{
+	if (bDisplayUnconfirmed)
+	{
+		UE_LOG(LogSovereignRealms, Log, TEXT("window: the mode is not confirmed: back to the one before"));
+		bDisplayUnconfirmed = false;
+		DisplayRequest.bPending = true;
+		DisplayRequest.Mode = DisplayBackMode;
+		DisplayRequest.Size = DisplayBackSize;
+		DisplayRequest.bNeedsConfirm = false;
+	}
+}
+
+void UVLGraphics::ToggleFullscreen()
+{
+	SetDisplay(IsFullscreen() ? DisplayWindowed : DisplayBorderless, FIntPoint::ZeroValue);
+}
+
+void UVLGraphics::CycleDisplayMode()
+{
+#if PLATFORM_WINDOWS
+	const int32 NumModes = 3;
+#else
+	const int32 NumModes = 2;       // (no exclusive full screen: the Mac's full screen is the borderless one)
+#endif
+	SetDisplay((FMath::Clamp(GetDisplayMode(), 0, NumModes - 1) + 1) % NumModes, FIntPoint::ZeroValue);
+}
+
+void UVLGraphics::StepResolution(int32 Direction)
+{
+	const int32 Mode = GetDisplayMode();
+	TArray<FIntPoint> Sizes;
+	DisplaySizes(Mode, Sizes);
+	if (!CanPickResolution() || Sizes.Num() == 0)
+	{
+		return;
+	}
+	// from where the size now sits in the list (a dragged window is between two of them)
+	const FIntPoint Now = GetResolution();
+	int32 Pick = INDEX_NONE;
+	if (Direction > 0)
+	{
+		for (int32 i = 0; i < Sizes.Num() && Pick == INDEX_NONE; ++i)
+		{
+			if (SizeLess(Now, Sizes[i])) { Pick = i; }
+		}
+		if (Pick == INDEX_NONE) { Pick = 0; }                       // (past the largest: the smallest)
+	}
+	else
+	{
+		for (int32 i = Sizes.Num() - 1; i >= 0 && Pick == INDEX_NONE; --i)
+		{
+			if (SizeLess(Sizes[i], Now)) { Pick = i; }
+		}
+		if (Pick == INDEX_NONE) { Pick = Sizes.Num() - 1; }
+	}
+	SetDisplay(Mode, Sizes[Pick]);
+}
+
+bool UVLGraphics::IsVSync()
+{
+	const UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	return S && S->IsVSyncEnabled();
+}
+
+void UVLGraphics::SetVSync(bool bOn)
+{
+	UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
+	if (!S)
+	{
+		return;
+	}
+	// (the engine reads bUseVSync into r.VSync when it starts; here the variable itself, and not
+	// ApplyNonResolutionSettings, which would put the engine's scalability levels over the game's own presets)
+	S->SetVSyncEnabled(bOn);
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("r.VSync")))
+	{
+		Var->Set(bOn ? 1 : 0, ECVF_SetByGameSetting);
+	}
 	S->SaveSettings();
-	UE_LOG(LogSovereignRealms, Log, TEXT("window: %s (saved)"), bFull ? TEXT("full screen") : TEXT("a window"));
+	UE_LOG(LogSovereignRealms, Log, TEXT("graphics: vsync %s (saved)"), bOn ? TEXT("on") : TEXT("off"));
+}
+
+EMouseLockMode UVLGraphics::PointerLock()
+{
+#if PLATFORM_WINDOWS
+	return !GIsEditor && IsFullscreen() ? EMouseLockMode::LockAlways : EMouseLockMode::DoNotLock;
+#else
+	return EMouseLockMode::DoNotLock;
+#endif
 }
 
 void UVLGraphics::KeepWindowState()
@@ -710,7 +1014,8 @@ void UVLGraphics::KeepWindowState()
 	UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
 	EWindowMode::Type Mode = EWindowMode::Windowed;
 	FIntPoint Size;
-	if (!S || !GameWindow(Mode, Size))
+	// (a change on its way, or an exclusive mode not yet confirmed: nothing of it is saved)
+	if (!S || DisplayRequest.bPending || bDisplayUnconfirmed || !GameWindow(Mode, Size))
 	{
 		return;
 	}

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Engine/EngineBaseTypes.h"
 #include "VLGraphics.generated.h"
 
 class APostProcessVolume;
@@ -57,14 +58,44 @@ public:
 	static void SetMenuThrottle(UWorld* World, bool bInMenu);
 	static void Save();
 	/** The window (packaged game only; the editor's play window is the editor's): full screen (borderless, the
-	 *  desktop's size) or a window. The choice and the window's size are kept in GameUserSettings.ini
-	 *  ([/Script/Engine.GameUserSettings] FullscreenMode, ResolutionSizeX / Y) however they were changed: the Settings
-	 *  row, F11 / Alt+Enter, the green button, dragging the window's edge (KeepWindowState, once a second and when the
-	 *  world goes). */
+	 *  desktop's size; on Windows also exclusive, at one of the display's own modes) or a window. The choice and the
+	 *  window's size are kept in GameUserSettings.ini ([/Script/Engine.GameUserSettings] FullscreenMode,
+	 *  ResolutionSizeX / Y) however they were changed: the Settings rows, F11 / Alt+Enter, the green button, dragging
+	 *  the window's edge (KeepWindowState, once a second and when the world goes).
+	 *
+	 *  A change asked for here is NOT made at once: it waits for this subsystem's next Tick. The Settings screen asks
+	 *  from inside the HUD's draw, and the engine resizes the viewport there and then and draws it again
+	 *  (FSceneViewport::ResizeViewport): a second HUD draw inside the first. When the inner one ended the engine took
+	 *  the canvas from the HUD, and the outer one's next Text() read a null canvas (the crash of 2026-11-23). */
+	enum { DisplayWindowed = 0, DisplayBorderless = 1, DisplayExclusive = 2 };
 	static bool IsFullscreen();
 	static bool CanChangeWindow() { return !GIsEditor; }
 	static void ToggleFullscreen();
 	static void KeepWindowState();
+	/** The display mode the window has, or is about to get. */
+	static int32 GetDisplayMode();
+	static const TCHAR* DisplayModeName(int32 Mode);
+	/** Windowed -> borderless full screen -> full screen (exclusive; Windows only) -> windowed. */
+	static void CycleDisplayMode();
+	/** The mode and the size asked for (a size of 0: the window's remembered one, or the desktop's). An exclusive full
+	 *  screen mode has to be confirmed (ConfirmDisplay) within DisplayConfirmSeconds, or the display goes back. */
+	static void SetDisplay(int32 Mode, FIntPoint Resolution);
+	/** The size drawn at: the window's, or the display's in full screen. */
+	static FIntPoint GetResolution();
+	/** A window and exclusive full screen have a choice of sizes; borderless is the desktop's. */
+	static bool CanPickResolution();
+	/** The next larger (+1) or smaller (-1) size of the mode's list: the display's own modes in exclusive full screen,
+	 *  the usual window sizes up to the desktop in a window. */
+	static void StepResolution(int32 Direction);
+	/** Seconds left to confirm an exclusive full screen mode (0: nothing to confirm). */
+	static float DisplayConfirmSeconds();
+	static void ConfirmDisplay();
+	static void RevertDisplay();
+	static bool IsVSync();
+	static void SetVSync(bool bOn);
+	/** The pointer's lock for the overview and the menus: never on the Mac (full screen grabbed the mouse badly
+	 *  there); on Windows kept inside the game while it is full screen (no slipping onto a second monitor). */
+	static EMouseLockMode PointerLock();
 	/** Everything, to the engine and to this world's look actors. */
 	static void Apply(UWorld* World);
 
@@ -83,6 +114,7 @@ private:
 	void UpdateScreenPercentage(bool bForce);
 	void UpdateFarFog();
 	void UpdateThermalAndFrameCap(bool bForce);
+	static void ApplyPendingDisplay();
 
 	static int32 Quality;
 	static int32 RenderScale;

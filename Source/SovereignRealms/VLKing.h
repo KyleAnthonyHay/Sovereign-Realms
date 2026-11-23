@@ -469,6 +469,8 @@ public:
 	float LookPitch = 0.f;
 	bool bMouseLookActive = false;
 	bool bCursorModeSet = false;
+	/** The pointer lock the overview was last given (UVLGraphics::PointerLock: on Windows it follows full screen). */
+	EMouseLockMode CursorLock = EMouseLockMode::DoNotLock;
 
 	UPROPERTY(EditAnywhere, Category = "Voxel|Motion")
 	bool bFootDust = true;

@@ -3,6 +3,7 @@
 #include "VLCharacterData.h"
 #include "VLPartMesh.h"
 #include "VLHUD.h"
+#include "VLGraphics.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
@@ -1733,7 +1734,7 @@ void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
 	{
 		if (Battle)
 		{
-			Battle->PushAlert(TEXT("Nobody to command: Option+click a troop to select it, or G with your platoon"));
+			Battle->PushAlert(TEXT("Nobody to command: ") VL_ALT_KEY TEXT("+click a troop to select it, or G with your platoon"));
 			Battle->Play2D(TEXT("S_UIError"), 0.4f);
 		}
 		return;
@@ -1867,7 +1868,7 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 		}
 		else if (UVLBattle* Battle = UVLBattle::Get(this))
 		{
-			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or Option + click)"));
+			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or ") VL_ALT_KEY TEXT(" + click)"));
 			Battle->Play2D(TEXT("S_UIError"), 0.4f);
 		}
 	}
@@ -3122,7 +3123,9 @@ void AVLKing::UpdateCursorMode(APlayerController* PC, const AVLHUD* HUD)
 			}
 		}
 	}
-	if (bWant == bMouseLookActive && bCursorModeSet)
+	// (Windows: the pointer stays inside the game while it is full screen, so the lock follows the window mode)
+	const EMouseLockMode Lock = UVLGraphics::PointerLock();
+	if (bWant == bMouseLookActive && bCursorModeSet && (bWant || Lock == CursorLock))
 	{
 		return;
 	}
@@ -3137,9 +3140,11 @@ void AVLKing::UpdateCursorMode(APlayerController* PC, const AVLHUD* HUD)
 	}
 	else
 	{
-		// the overview, the postcard and the menu: the pointer is back and free to leave the window
+		// the overview, the postcard and the menu: the pointer is back and free to leave the window (a full-screen
+		// game on Windows keeps it: UVLGraphics::PointerLock)
+		CursorLock = Lock;
 		FInputModeGameAndUI Mode;
-		Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		Mode.SetLockMouseToViewportBehavior(Lock);
 		Mode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(Mode);
 		PC->bShowMouseCursor = true;
