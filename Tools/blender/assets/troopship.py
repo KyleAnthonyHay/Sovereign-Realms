@@ -606,7 +606,7 @@ def write_inl(meta):
         return "FVector(%.1ff, %.1ff, %.1ff)" % (s[0] * 100.0, -s[1] * 100.0, s[2] * 100.0)
     lines = ["// Written by Tools/blender/assets/troopship.py from the model's own plan: do not edit by hand.",
              "// Where units stand on SM_TroopShip (cm, the ship's own space: +X the bow, Z up from the waterline), the entry",
-             "// ports in its bulwark and the hull's size.", "namespace VLTroopShipDeck", "{"]
+             "// ports in its bulwark and the hull's size.", "#pragma once", "namespace VLTroopShipDeck", "{"]
     for (name, key, note) in (("Main", "main", "the main deck, aft of the mast: soldiers"), ("Fore", "fore", "the forecastle: archers first"),
                               ("Stern", "stern", "the stern castle: the heroes")):
         lines.append("\t// %s" % note)

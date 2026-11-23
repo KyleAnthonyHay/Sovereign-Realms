@@ -494,11 +494,11 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 	Label(TEXT("Render scale"));
 	{
 		// (the settings row's choices; a scale set from the console between them lights none)
-		static const int32 Scales[] = { 50, 60, 67, 75, 85, 100 };
+		static const int32 MenuScales[] = { 50, 60, 67, 75, 85, 100 };
 		int32 ScaleNow = INDEX_NONE;
-		for (int32 i = 0; i < UE_ARRAY_COUNT(Scales); ++i) { if (Scales[i] == UVLGraphics::GetRenderScale()) { ScaleNow = i; } }
+		for (int32 i = 0; i < UE_ARRAY_COUNT(MenuScales); ++i) { if (MenuScales[i] == UVLGraphics::GetRenderScale()) { ScaleNow = i; } }
 		const int32 Pick = Segments(1, { TEXT("50%"), TEXT("60%"), TEXT("67%"), TEXT("75%"), TEXT("85%"), TEXT("100%") }, ScaleNow);
-		if (Pick != INDEX_NONE) { UVLGraphics::SetRenderScale(GetWorld(), Scales[Pick]); }
+		if (Pick != INDEX_NONE) { UVLGraphics::SetRenderScale(GetWorld(), MenuScales[Pick]); }
 	}
 	RY += RowH;
 	Label(TEXT("Dynamic resolution"));
