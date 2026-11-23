@@ -175,6 +175,18 @@ along the ground or over the top of a target. A crosshair on the sky: the arrow 
 `vl.Bow look X Y [Z]` turns the camera until the crosshair is on a point; with `vl.ArcherLog 1` each played shot logs
 `aimtest` (the crosshair's point, the aim, the arrow's point) for measuring; `vl.Bow spread D` sets `HeroSpread`.
 
+**The draw bar**: while she draws, a small bar just under the crosshair fills over the reach, the nock and the draw
+(0.86 s; `UVLArcherCombat::GetDrawState`, drawn in `AVLHUD::DrawHeroBits`), white as it fills. Full, it turns green with a tick
+under it: the bow is fully drawn, and letting go looses at once (earlier, she finishes the draw first). A locked draw
+keeps the full bar, with a paler frame. It only shows the shot's state: an arrow flies the same however long it is held.
+
+**Streaks**: every arrow in flight draws a thin pale-gold line along the stretch it has just flown, tapering to
+nothing over `vl.Arrow.TrailLength` 0.4 s of flight, `vl.Arrow.TrailWidth` 5 cm wide at the arrow (never under a pixel
+and a half on screen, so it reads from the overview); when the arrow lands the streak runs out behind it.
+`vl.Arrow.Trail 0` turns them off. All of them are one camera-facing ribbon mesh (`UVLArrowTrailComponent`,
+`VLArrowTrail.*`) on the arrows' actor, worked out from each arrow's parabola (nothing stored per frame), depth tested
+and drawn in Shipping; the material is a dynamic instance of `M_PlacementGhost`, made at runtime (no asset of its own).
+
 Arrows (`UVLArrows`, `VLArrow.*`) are pooled mesh components: one sticks in what it hits (a dummy rocks and carries it),
 fades out and is taken back 2 s after landing (`vl.Arrow.Life`, `vl.Arrow.Fade`, `vl.Arrow.Pool`; volumes
 `vl.Arrow.ReleaseVolume` 0.3, `FlyVolume` 0.1, `HitVolume` 0.26). Their material is `M_VoxArrow`

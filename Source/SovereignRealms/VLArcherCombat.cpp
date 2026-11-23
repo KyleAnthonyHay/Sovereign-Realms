@@ -301,6 +301,31 @@ void UVLArcherCombat::Shoot()
 	SetComponentTickEnabled(true);
 }
 
+bool UVLArcherCombat::GetDrawState(float& OutDrawn, bool& bOutReady) const
+{
+	OutDrawn = 0.f;
+	bOutReady = false;
+	if (!bHands || Phase == EPhase::Rest || Phase == EPhase::Loose)
+	{
+		return false;
+	}
+	// (the same lengths TickShot steps the shot by)
+	const float Scale = bQuick ? FMath::Max(QuickScale, 0.1f) : 1.f;
+	const float Reach = ReachSeconds * Scale, Nock = NockSeconds * Scale, Draw = DrawSeconds * Scale;
+	const float Total = FMath::Max(Reach + Nock + Draw, 0.01f);
+	float Done = Total;
+	switch (Phase)
+	{
+	case EPhase::Reach: Done = FMath::Min(PhaseTime, Reach); break;
+	case EPhase::Nock: Done = Reach + FMath::Min(PhaseTime, Nock); break;      // (it waits here until the bow arm is up)
+	case EPhase::Draw: Done = Reach + Nock + FMath::Min(PhaseTime, Draw); break;
+	default: break;
+	}
+	bOutReady = Phase == EPhase::Hold;
+	OutDrawn = bOutReady ? 1.f : FMath::Clamp(Done / Total, 0.f, 0.99f);
+	return true;
+}
+
 FVector UVLArcherCombat::OrderTarget() const
 {
 	if (Mode == EMode::Actor && Target.IsValid())

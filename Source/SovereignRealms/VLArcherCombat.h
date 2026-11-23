@@ -92,6 +92,12 @@ public:
 	/** A blow with the bow, if she is not drawing or shooting. */
 	void StartBash();
 	bool IsDrawLocked() const { return bLocked; }
+	/** For the bar under the crosshair (AVLHUD::DrawHeroBits): is the played archer drawing, and how far along. OutDrawn:
+	 *  0..1 of the way from the button going down to the bow fully drawn (the reach to the quiver, the nock and the
+	 *  draw, by their own clocks: ReachSeconds + NockSeconds + DrawSeconds, QuickScale of them for a quick shot).
+	 *  bOutReady: fully drawn and held (letting the button go now looses at once; before it, the shot waits for the
+	 *  draw to finish). False: no draw on (at rest, or the arrow has just left). It only reads the shot's state. */
+	bool GetDrawState(float& OutDrawn, bool& bOutReady) const;
 	/** Aim at this point instead of the mouse pointer for a while. */
 	void SetTestAim(const FVector& Point, float Seconds) { TestAim = Point; TestAimTime = Seconds; SetComponentTickEnabled(true); }
 	/** Turn the hero camera, for a while, until the crosshair's ray passes through this point (vl.Bow look): the

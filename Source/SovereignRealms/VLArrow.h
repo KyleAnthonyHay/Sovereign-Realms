@@ -10,6 +10,8 @@ class UStaticMeshComponent;
 class UMaterialInterface;
 class USoundBase;
 class USoundAttenuation;
+class UVLArrowTrailComponent;
+class UMaterialInstanceDynamic;
 
 /** The loose arrow as the archer's generator models it (Tools/blender/assets/troop_archer.py, "arrow" in
  *  SourceArt/Meshes/SM_Archer.json), in character space: the mesh's origin is where her right fist holds the shaft. */
@@ -42,6 +44,14 @@ namespace VLArrowGeom
  * Sounds (S_BowRelease*, S_ArrowFly, S_ArrowHitWood*, S_ArrowHitGround*; the dummy's thunk is UVLSwordFx's), fading
  * with the distance from where the player is looking as the troops' shuffle does: vl.Arrow.ReleaseVolume, FlyVolume,
  * HitVolume, Near, Range, SoundGap. vl.ArcherLog 1 logs every shot and every landing; vl.Arrows logs the pool.
+ *
+ * THE STREAK. Every arrow in flight draws a thin pale line along the stretch it has just flown (vl.Arrow.Trail 0|1),
+ * the last vl.Arrow.TrailLength seconds of it, vl.Arrow.TrailWidth cm wide at the arrow and tapering to nothing at
+ * its far end; once the arrow has landed (or struck someone) the streak runs out behind it and is gone. Nothing is
+ * kept per frame: the flight is a parabola, so where the arrow was s seconds ago follows from where it is and how it
+ * flies now. All the streaks are one mesh (UVLArrowTrailComponent on the arrows' actor), in the world and depth
+ * tested, with a dynamic instance of M_PlacementGhost (translucent, unlit) tinted pale gold. Looks only: nothing of
+ * the flight, the hits or the damage depends on it.
  */
 UCLASS()
 class SOVEREIGNREALMS_API UVLArrows : public UTickableWorldSubsystem
@@ -106,6 +116,22 @@ private:
 	class AVLKing* UnitOnPath(const FArrow& A, const FVector& From, const FVector& To, float& OutT) const;
 	TArray<FArrow> Arrows;
 
+	/** The streak of an arrow that is no longer flying (it landed, struck someone or was lost), until it has run out:
+	 *  where the flight ended, how it flew there, how long it had flown, and how long ago that was. */
+	struct FTail
+	{
+		FVector End = FVector::ZeroVector;
+		FVector Velocity = FVector::ZeroVector;
+		float Gravity = 980.f;
+		float Flight = 0.f;
+		float Since = 0.f;
+	};
+	TArray<FTail> Tails;
+	/** The arrow's flight ends at At: its streak runs out from there. */
+	void EndTrail(const FArrow& A, const FVector& At);
+	/** This frame's streaks to their component. */
+	void UpdateTrails(float DeltaSeconds);
+
 	struct FKnock
 	{
 		TWeakObjectPtr<AActor> Actor;
@@ -126,6 +152,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMesh> Mesh;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UVLArrowTrailComponent> Trail;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> TrailMaterial;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> FadeMaterial;

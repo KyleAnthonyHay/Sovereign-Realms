@@ -1,4 +1,5 @@
 #include "VLArrow.h"
+#include "VLArrowTrail.h"
 #include "VLGrid.h"
 #include "VLBattle.h"
 #include "Components/CapsuleComponent.h"
@@ -14,6 +15,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
@@ -33,6 +35,9 @@ namespace
 	TAutoConsoleVariable<float> CVarArrowNear(TEXT("vl.Arrow.Near"), 900.f, TEXT("full volume within this many cm of where the player is looking"));
 	TAutoConsoleVariable<float> CVarArrowRange(TEXT("vl.Arrow.Range"), 4500.f, TEXT("silent from this many cm"));
 	TAutoConsoleVariable<float> CVarArrowSoundGap(TEXT("vl.Arrow.SoundGap"), 0.06f, TEXT("seconds at least between two sounds of a kind (a volley's sounds do not pile up)"));
+	TAutoConsoleVariable<int32> CVarArrowTrail(TEXT("vl.Arrow.Trail"), 1, TEXT("1: every arrow in flight draws a pale streak along the stretch it has just flown; 0: none"));
+	TAutoConsoleVariable<float> CVarArrowTrailLength(TEXT("vl.Arrow.TrailLength"), 0.4f, TEXT("seconds of its flight an arrow's streak shows (it tapers to nothing over them)"));
+	TAutoConsoleVariable<float> CVarArrowTrailWidth(TEXT("vl.Arrow.TrailWidth"), 5.f, TEXT("cm the streak is wide at the arrow (never under a pixel and a half on screen)"));
 	TAutoConsoleVariable<int32> CVarArcherLog(TEXT("vl.ArcherLog"), 0, TEXT("1: log every shot, every landing and every archery sound"));
 
 	enum { ArrowSoundRelease, ArrowSoundFly, ArrowSoundWood, ArrowSoundGround, ArrowSoundDraw };
@@ -142,6 +147,22 @@ void UVLArrows::Load()
 			USceneComponent* Root = NewObject<USceneComponent>(Holder, TEXT("Root"));
 			Holder->SetRootComponent(Root);
 			Root->RegisterComponent();
+			// the streaks behind the arrows: one mesh for all of them. Its material is made here from M_PlacementGhost
+			// (translucent, unlit, two sided: emissive "Tint", "Opacity"), pale gold: no asset of its own
+			Trail = NewObject<UVLArrowTrailComponent>(Holder, TEXT("Trails"));
+			if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Voxel/Materials/M_PlacementGhost.M_PlacementGhost"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+			{
+				TrailMaterial = UMaterialInstanceDynamic::Create(Glow, this);
+				TrailMaterial->SetVectorParameterValue(TEXT("Tint"), FLinearColor(1.f, 0.93f, 0.7f, 1.f));
+				TrailMaterial->SetScalarParameterValue(TEXT("Opacity"), 0.6f);
+				Trail->SetTrailMaterial(TrailMaterial);
+			}
+			else
+			{
+				UE_LOG(LogSovereignRealms, Warning, TEXT("arrows: no M_PlacementGhost (run Tools/ue/build_ghost_material.py): the streaks are drawn with the default material"));
+			}
+			Trail->SetupAttachment(Root);
+			Trail->RegisterComponent();
 		}
 	}
 }
@@ -434,6 +455,7 @@ AVLKing* UVLArrows::UnitOnPath(const FArrow& A, const FVector& From, const FVect
 void UVLArrows::Land(int32 Index, const FHitResult& Hit)
 {
 	FArrow& A = Arrows[Index];
+	EndTrail(A, Hit.ImpactPoint);
 	const FVector Way = A.Velocity.GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
 	AActor* Struck = Hit.GetActor();
 	const AVLKing* By = A.Shooter.Get();
@@ -564,6 +586,7 @@ void UVLArrows::Tick(float DeltaSeconds)
 			{
 				UE_LOG(LogSovereignRealms, Log, TEXT("arrow lost at %s after %.2f s"), *A.Tip.ToCompactString(), A.Age);
 			}
+			EndTrail(A, A.Tip);
 			Release(i);
 			continue;
 		}
@@ -597,6 +620,7 @@ void UVLArrows::Tick(float DeltaSeconds)
 			{
 				UE_LOG(LogSovereignRealms, Log, TEXT("arrow strikes %s after %.2f s (damage %.0f)"), *Foe->GetDisplayName(), A.Age, A.Damage);
 			}
+			EndTrail(A, From + (To - From) * FMath::Clamp(T, 0.f, 1.f));
 			Release(i);
 			continue;
 		}
@@ -621,6 +645,7 @@ void UVLArrows::Tick(float DeltaSeconds)
 					{
 						UE_LOG(LogSovereignRealms, Log, TEXT("arrow strikes building %s after %.2f s (damage %.0f)"), *Wall->GetName(), A.Age, A.Damage);
 					}
+					EndTrail(A, From + (To - From) * FMath::Clamp(BT, 0.f, 1.f));
 					Release(i);
 					continue;
 				}
@@ -635,6 +660,88 @@ void UVLArrows::Tick(float DeltaSeconds)
 		A.Velocity = NewVelocity;
 		Place(i);
 	}
+	UpdateTrails(DeltaSeconds);
+}
+
+void UVLArrows::EndTrail(const FArrow& A, const FVector& At)
+{
+	if (CVarArrowTrail.GetValueOnGameThread() == 0 || A.State != EState::Flying || A.Age <= 0.f)
+	{
+		return;
+	}
+	FTail& Tail = Tails.AddDefaulted_GetRef();
+	Tail.End = At;
+	Tail.Velocity = A.Velocity;
+	Tail.Gravity = A.Gravity;
+	Tail.Flight = A.Age;
+}
+
+void UVLArrows::UpdateTrails(float DeltaSeconds)
+{
+	if (!Trail)
+	{
+		return;
+	}
+	const float Length = FMath::Clamp(CVarArrowTrailLength.GetValueOnGameThread(), 0.02f, 5.f);
+	const bool bOn = CVarArrowTrail.GetValueOnGameThread() != 0;
+	for (int32 i = Tails.Num() - 1; i >= 0; --i)
+	{
+		Tails[i].Since += DeltaSeconds;
+		if (!bOn || Tails[i].Since >= Length)
+		{
+			Tails.RemoveAtSwap(i);
+		}
+	}
+	// A streak is PerTrail points of the arc the arrow has flown, from Newest to Oldest seconds ago. The flight is a
+	// parabola, so where it was U seconds before End (flying on at Velocity there) is End - Velocity U - (0, 0, Gravity U2 / 2).
+	constexpr int32 PerTrail = 9;
+	TArray<UVLArrowTrailComponent::FPoint> Points;
+	FVector Origin = FVector::ZeroVector;
+	FBox Box(ForceInit);
+	bool bFirst = true;
+	auto Add = [&](const FVector& End, const FVector& Velocity, float Gravity, float Since, float Newest, float Oldest)
+	{
+		if (Oldest - Newest < 0.004f)
+		{
+			return;
+		}
+		if (bFirst)
+		{
+			bFirst = false;
+			Origin = End;
+		}
+		for (int32 k = 0; k < PerTrail; ++k)
+		{
+			const float Ago = FMath::Lerp(Newest, Oldest, float(k) / float(PerTrail - 1));
+			const float Back = Ago - Since;
+			const FVector At = End - Velocity * Back - FVector(0.f, 0.f, 0.5f * Gravity * Back * Back);
+			Box += At;
+			UVLArrowTrailComponent::FPoint& P = Points.AddDefaulted_GetRef();
+			P.At = FVector3f(At - Origin);
+			P.Width = FMath::Clamp(1.f - Ago / Length, 0.f, 1.f);
+		}
+	};
+	if (bOn)
+	{
+		for (const FArrow& A : Arrows)
+		{
+			if (A.State == EState::Flying)
+			{
+				// (from a little behind the point, inside the shaft, back to the bow at most)
+				const float Speed = A.Velocity.Size();
+				Add(A.Tip, A.Velocity, A.Gravity, 0.f, Speed > 1.f ? FMath::Min(VLArrowGeom::TipOffset / Speed, A.Age) : 0.f, FMath::Min(Length, A.Age));
+			}
+		}
+		for (const FTail& T : Tails)
+		{
+			Add(T.End, T.Velocity, T.Gravity, T.Since, T.Since, FMath::Min(Length, T.Since + T.Flight));
+		}
+	}
+	if (Points.Num() > 0)
+	{
+		Box = Box.ExpandBy(50.f);
+	}
+	Trail->SetTrails(MoveTemp(Points), PerTrail, Origin, Box, FMath::Max(CVarArrowTrailWidth.GetValueOnGameThread(), 0.1f) * 0.5f);
 }
 
 int32 UVLArrows::NumFlying() const
