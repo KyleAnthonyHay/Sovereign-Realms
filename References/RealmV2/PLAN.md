@@ -24,7 +24,7 @@ A new battlefield, **Realm v2** (level `L_RealmV2`). The original Realm (`L_Real
 - Variation stays within the planned geography, keeping the strategic locations and routes.
 - Mines sit physically inside hillsides or mountains.
 - No additional major mountain ranges.
-- The standing rules in `VoxelLab/README.md` all apply:
+- The standing rules in `README.md` all apply:
   - no hard edges on open ground;
   - no coarse LODs at the distances the game is played at;
   - the original tree set;
