@@ -87,6 +87,7 @@ namespace VLId
 		Assign = 292,     // + platoon 0..5 (the command card's Assign picker)
 		Menu = 300,       // + entry
 		Screen = 340,     // + control on a sub-screen
-		Setting = 400     // + row
+		Setting = 400,    // + row
+		Ship = 500        // the troop ship's Unload (VLTroopShipHUD.cpp)
 	};
 }

@@ -234,6 +234,9 @@ private:
 	void DrawMinimap(const FBox2D& Box);
 	/** The panel from X rightwards, Room wide at most (up to the platoon panel), its bottom edge at Bottom. */
 	void DrawSelectionPanel(float X, float Bottom, float Room);
+	/** The troop ships (VLTroopShipHUD.cpp): a plate over each of the player's that says who is aboard; true if one
+	 *  is the selection and its panel was drawn in the selection panel's place. */
+	bool DrawShipPanel(float X, float Bottom, float Room);
 	void DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units);
 	void DrawBuildingSelection(const FBox2D& Box, AActor* Building);
 	void DrawUpgradeButton(const FBox2D& Box, AActor* Building);

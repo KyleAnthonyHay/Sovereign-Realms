@@ -6,6 +6,7 @@
 #include "VLArcherCombat.h"
 #include "VLBattle.h"
 #include "VLConstruction.h"
+#include "VLTroopShip.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -335,6 +336,7 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 			Units.AddUnique(U);
 		}
 	}
+	AVLTroopShip::HoldAboard(Units);    // (aboard a ship at sea: they stay aboard)
 	if (Units.Num() == 0)
 	{
 		return;
@@ -702,6 +704,10 @@ void UVLCommand::OnOrderEnded(AVLKing* Unit, bool bArrived)
 		return;
 	}
 	AActor* Tower = Unit->PendingGarrison.Get();
+	if (Tower && Tower->IsA<AVLTroopShip>())
+	{
+		return;                 // on its way to a troop ship: the ship takes it aboard itself (AVLTroopShip::TickTroops)
+	}
 	if (Tower)
 	{
 		Unit->PendingGarrison = nullptr;
@@ -1327,6 +1333,11 @@ void UVLCommand::Leave(AVLKing* Unit)
 	{
 		return;
 	}
+	if (AVLTroopShip* Ship = Cast<AVLTroopShip>(Tower))
+	{
+		Ship->Disembark(Unit);  // aboard a troop ship: down its gangplank (at sea it stays aboard)
+		return;
+	}
 	Unit->GarrisonIn = nullptr;
 	Unit->SetMovementAwake(true);       // (asleep on its post: AVLKing::UpdateMovementSleep)
 	FVector Door = DoorPoint(Tower);
@@ -1790,6 +1801,7 @@ int32 UVLCommand::OrderGuard(const TArray<AVLKing*>& InUnits, AActor* Ward, bool
 			Guards.Add(U);
 		}
 	}
+	AVLTroopShip::HoldAboard(Guards);
 	FVector Centre;
 	if (Guards.Num() == 0 || !WardPos(Ward, Centre))
 	{
@@ -2094,6 +2106,7 @@ bool UVLCommand::OrderChain(const TArray<AVLKing*>& InUnits, AActor* Target, con
 {
 	TArray<AVLKing*> Units = Living(InUnits);
 	Units.RemoveAll([](const AVLKing* U) { return U->bTowerGuard || PlayedByHand(U); });
+	AVLTroopShip::HoldAboard(Units);
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	FChainItem Item;
 	Item.bAttack = Target != nullptr;

@@ -10,6 +10,7 @@
 #include "VLArcherCombat.h"
 #include "VLGameMode.h"
 #include "VLGrid.h"
+#include "VLTroopShip.h"
 #include "VLCommand.h"
 #include "AIController.h"
 #include "VLPlayerController.h"
@@ -1299,6 +1300,11 @@ AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* 
 		}
 		return Best;
 	}
+	// a troop ship (it has no collision: the pointer's ray against its hull and its sail), nearer than what the ray meets
+	if (AVLTroopShip* Ship = bRay ? AVLTroopShip::Pick(GetWorld(), Origin, Dir, bHit ? Hit.Distance : 200000.f) : nullptr)
+	{
+		return Ship;
+	}
 	if (bHit && Hit.GetActor() && Hit.GetActor()->ActorHasTag(TEXT("Selectable")))
 	{
 		return Hit.GetActor();
@@ -1395,6 +1401,10 @@ bool AVLKing::OrderAt(const FVector2D& Point, bool bRun, bool bQueue)
 	Command->GetSelection(Units);
 	FVector Ground = FVector::ZeroVector;
 	AActor* Hit = PickAt(PC, Point, &Ground, false);    // a foe or the tower only where the pointer is on the thing itself
+	if (AVLTroopShip::OrderFromView(this, PC, Point, Ground))
+	{
+		return true;            // a troop ship is the selection: it sails there
+	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("order at %.0f %.0f of the view: %d unit(s), ground %s, on %s"), Point.X, Point.Y, Units.Num(), *Ground.ToCompactString(), *GetNameSafe(Hit));
 	return OrderOn(Units, Hit, Ground, bRun, bQueue);
 }
@@ -1405,6 +1415,12 @@ bool AVLKing::OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground
 	if (!Command || Units.Num() == 0 || Ground.IsZero())
 	{
 		return false;
+	}
+	// a troop ship of their side: they go aboard it (AVLTroopShip::OrderBoard)
+	if (AVLTroopShip* Ship = Cast<AVLTroopShip>(Hit); Ship && Ship->GetTeam() == Team)
+	{
+		Ship->OrderBoard(Units, bRun);
+		return true;
 	}
 	// one of the player's own troops (or anyone of the selection itself, as a platoon's member): the others follow
 	// it; members of its platoon following it make it the platoon's leader. (King David and Builders not in the

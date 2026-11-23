@@ -1011,6 +1011,10 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 
 void AVLHUD::DrawSelectionPanel(float X, float Bottom, float Room)
 {
+	if (DrawShipPanel(X, Bottom, Room))
+	{
+		return;                 // a troop ship is the selection (VLTroopShipHUD.cpp)
+	}
 	AActor* Building = SelectedBuilding();
 	TArray<AVLKing*> Units;
 	SelectedUnits(Units);
