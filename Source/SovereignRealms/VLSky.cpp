@@ -113,7 +113,7 @@ void AVLSky::Tick(float DeltaSeconds)
 		Shown = Clock < 0.5f ? Want : FMath::FInterpTo(Shown, Want, DeltaSeconds, 2.5f);
 		const float S = Shown * Shown * (3.f - 2.f * Shown);
 		const bool bLast = c == CloudCentres.Num() - 1;
-		if (S <= 0.002f && !bWas && !bLast)
+		if (S <= 0.002f && !bWas)
 		{
 			continue;       // (still away)
 		}
@@ -129,7 +129,7 @@ void AVLSky::Tick(float DeltaSeconds)
 			Size = FVector(FMath::Max(200.f, FMath::RoundToFloat(Size.X / 200.f) * 200.f), FMath::Max(200.f, FMath::RoundToFloat(Size.Y / 200.f) * 200.f),
 				FMath::Max(100.f, FMath::RoundToFloat(Size.Z / 100.f) * 100.f));
 			const FTransform Tr = S <= 0.002f ? SkyHidden : FTransform(FRotator::ZeroRotator, Mid + Off, Size * (S / 50.f));
-			Clouds->UpdateInstanceTransform(i, Tr, true, bLast && k == Per - 1, false);
+			Clouds->UpdateInstanceTransform(i, Tr, true, false, false);      // (no render-state rebuild: the instance data goes to the renderer by itself)
 		}
 	}
 
@@ -174,7 +174,7 @@ void AVLSky::Tick(float DeltaSeconds)
 				const FQuat Wing = Body * FQuat(FVector::ForwardVector, FMath::DegreesToRadians(-Sg * Flap));
 				const FVector Mid = Place + Wing.RotateVector(FVector(Span * 0.03f, Sg * Span * 0.27f, Span * 0.02f));
 				const bool bLast = f == FlockCentres.Num() - 1 && b == PerFlock - 1 && w == 1;
-				Birds->UpdateInstanceTransform(i + 1 + w, FTransform(Wing, Mid, FVector(Span * 0.2f, Span * 0.46f, Span * 0.035f) / 100.f), true, bLast, false);
+				Birds->UpdateInstanceTransform(i + 1 + w, FTransform(Wing, Mid, FVector(Span * 0.2f, Span * 0.46f, Span * 0.035f) / 100.f), true, false, false);
 			}
 		}
 	}

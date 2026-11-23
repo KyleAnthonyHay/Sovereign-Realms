@@ -1,6 +1,7 @@
 #include "VLKing.h"
 #include "SovereignRealms.h"
 #include "VLCharacterData.h"
+#include "VLPartMesh.h"
 #include "VLHUD.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Application/SlateApplication.h"
@@ -317,7 +318,7 @@ void AVLKing::BuildFigure()
 		{
 			continue;
 		}
-		UStaticMeshComponent* PartMesh = NewObject<UStaticMeshComponent>(this, *FString::Printf(TEXT("Mesh_%s"), *Label));
+		UStaticMeshComponent* PartMesh = NewObject<UVLPartMeshComponent>(this, *FString::Printf(TEXT("Mesh_%s"), *Label));     // (never occlusion-queried: VLPartMesh.h)
 		PartMesh->SetStaticMesh(P.Mesh);
 		PartMesh->SetupAttachment(Joint);
 		PartMesh->SetRelativeRotation(FRotator(0.f, Loaded->MeshYaw, 0.f));

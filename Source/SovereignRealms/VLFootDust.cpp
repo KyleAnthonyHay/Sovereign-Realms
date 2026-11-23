@@ -70,7 +70,7 @@ void UVLFootDust::Emit(const FVector& At, const FVector& Back, int32 Count, floa
 		for (int32 i = 0; i < Puffs.Num(); ++i)
 		{
 			Puffs[i].Pos = ParkAt;
-			UpdateInstanceTransform(i, Hidden, true, i + 1 == Puffs.Num(), false);
+			UpdateInstanceTransform(i, Hidden, true, false, false);
 		}
 		SetVisibility(true);
 	}
@@ -127,7 +127,7 @@ void UVLFootDust::Advance(float DeltaSeconds)
 			Edge = P.Size * FMath::Lerp(1.f, Growth, FMath::Sqrt(T)) * FMath::Clamp(T * 10.f, 0.f, 1.f) * FMath::Clamp((1.f - T) * 2.2f, 0.f, 1.f) / 100.f;
 		}
 		// (the instances are marked dirty once, with the last of them: not the whole render state every frame)
-		UpdateInstanceTransform(i, FTransform(FRotator(0.f, P.Yaw, 0.f), P.Pos, FVector(FMath::Max(Edge, 0.0005f))), true, i == Last, false);
+		UpdateInstanceTransform(i, FTransform(FRotator(0.f, P.Yaw, 0.f), P.Pos, FVector(FMath::Max(Edge, 0.0005f))), true, false, false);
 	}
 	if (Alive <= 0)
 	{

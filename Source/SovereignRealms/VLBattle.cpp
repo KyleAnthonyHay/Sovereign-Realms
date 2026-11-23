@@ -24,6 +24,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
+#include "Misc/PackageName.h"
 
 // ------------------------------------------------------------------------------------------------ the rules
 
@@ -3029,6 +3030,14 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 	SpyCooldownLeft[0] = SpyCooldownLeft[1] = 0.f;
 	ScanBuildings();
 	MatchLog.Reset();           // (a new match, a new log: vl.MatchLog)
+	// (Windows pass, batch 2) the battle's sound sets, loaded as the match starts and not each at its first use in the
+	// middle of it (a load on the game thread: the first arrow, the first blow, the first building to fall)
+	for (const TCHAR* Base : { TEXT("S_ArrowFly"), TEXT("S_ArrowHitFlesh"), TEXT("S_ArrowHitGround"), TEXT("S_ArrowHitWood"), TEXT("S_AttackAlert"), TEXT("S_BowDraw"),
+		TEXT("S_BowRelease"), TEXT("S_BuildComplete"), TEXT("S_BuildPlace"), TEXT("S_BuildingCollapse"), TEXT("S_BuildingHit"), TEXT("S_Death"), TEXT("S_RecruitReady"),
+		TEXT("S_SwordHit"), TEXT("S_UIClick"), TEXT("S_UIError") })
+	{
+		Sounds(Base);
+	}
 	State = EVLMatch::Playing;
 	Clock = 0.f;
 	Winner = -1;
@@ -3427,6 +3436,12 @@ FVLSoundSet* UVLBattle::Sounds(const TCHAR* Base)
 		for (int32 i = 1; i <= 8; ++i)
 		{
 			const FString Name = i == 1 ? FString(Base) : FString::Printf(TEXT("%s_%d"), Base, i);
+			// (asked first whether there is such a sound: a load of one that is not there is a search of the
+			// packages and a line in the log for each)
+			if (!FPackageName::DoesPackageExist(FString::Printf(TEXT("/Game/Voxel/Audio/%s"), *Name)))
+			{
+				continue;
+			}
 			if (USoundBase* S = LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Voxel/Audio/%s.%s"), *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet))
 			{
 				Set->Sounds.Add(S);

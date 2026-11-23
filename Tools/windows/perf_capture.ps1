@@ -163,9 +163,12 @@ try {
     Send-Commands @('vl.Battle')
     Start-Sleep -Seconds 1
     # the size really drawn at (the last "TemporalSuperResolution ... -> W x H" of a ProfileGPU, if one was taken)
-    if ((Read-Log) -match '(?s).*TemporalSuperResolution[^
-]*-> (\d+)x(\d+)') {
-        if ([int]$Matches[1] -ne $Width -or [int]$Matches[2] -ne $Height) { Write-Host "WARNING: the game drew at $($Matches[1]) x $($Matches[2]), not ${Width} x ${Height}" }
+    # (every match, the last one taken: a greedy '(?s).*' in front of it ran for minutes on a log with no ProfileGPU)
+    $sizes = [regex]::Matches((Read-Log), 'TemporalSuperResolution[^
+]*-> (\d+)x(\d+)')
+    if ($sizes.Count -gt 0) {
+        $last = $sizes[$sizes.Count - 1]
+        if ([int]$last.Groups[1].Value -ne $Width -or [int]$last.Groups[2].Value -ne $Height) { Write-Host "WARNING: the game drew at $($last.Groups[1].Value) x $($last.Groups[2].Value), not ${Width} x ${Height}" }
     }
 }
 finally {

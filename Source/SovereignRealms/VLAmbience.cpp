@@ -171,7 +171,7 @@ void AVLAmbience::Tick(float DeltaSeconds)
 			60.f + 150.f * E + FMath::Sin(T * (0.35f + 0.4f * D) + B * 6.2832f) * 45.f);
 		const float Wink = FMath::Clamp(FMath::Sin(T * (0.8f + 1.3f * E) + D * 6.2832f) * 0.9f + 0.55f, 0.f, 1.f);
 		const float S = MoteSize * (0.5f + 0.5f * A) * Wink / 100.f;
-		Motes->UpdateInstanceTransform(i, FTransform(FRotator(0.f, T * 20.f * (B - 0.5f), 0.f), P, FVector(FMath::Max(S, 0.0005f))), true, i == LastMote, false);
+		Motes->UpdateInstanceTransform(i, FTransform(FRotator(0.f, T * 20.f * (B - 0.5f), 0.f), P, FVector(FMath::Max(S, 0.0005f))), true, false, false);    // (Windows pass, batch 2: no render-state rebuild a frame; the instance data goes to the renderer by itself)
 	}
 
 	// smoke: puffs leave the chimney one after another, swell as they climb, lean with the wind, and shrink away
@@ -212,6 +212,6 @@ void AVLAmbience::Tick(float DeltaSeconds)
 		const FVector P = SmokeSources[S] + FVector(0.f, 0.f, 10.f) + FVector(0.f, 0.f, 1.f) * (Age * 330.f) + Wind * (Age * Age * 1.6f)
 			+ FVector(FMath::Sin(Age * 9.f + J * 6.2832f), FMath::Cos(Age * 7.f + J * 4.f), 0.f) * (14.f + 30.f * Age);
 		const float Size = FMath::Lerp(13.f, 44.f, FMath::Sqrt(Age)) * FMath::Clamp((1.f - Age) * 3.2f, 0.f, 1.f) * FMath::Clamp(Age * 12.f, 0.f, 1.f) * (0.75f + 0.5f * J);
-		Smoke->UpdateInstanceTransform(i, FTransform(FRotator(0.f, J * 90.f, 0.f), P, FVector(FMath::Max(Size / 100.f, 0.0005f))), true, i == LastPuff, false);
+		Smoke->UpdateInstanceTransform(i, FTransform(FRotator(0.f, J * 90.f, 0.f), P, FVector(FMath::Max(Size / 100.f, 0.0005f))), true, false, false);
 	}
 }

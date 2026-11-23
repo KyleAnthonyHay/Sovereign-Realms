@@ -17,6 +17,7 @@
 #include "VLSwordsmanCombat.h"
 #include "VLArcherCombat.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/PointLight.h"
 #include "Engine/StaticMesh.h"
@@ -1297,6 +1298,8 @@ void UVLConstruction::ShowRising(FVLBuildingState& B, float Progress)
 	R->SetActorScale3D(FVector(S.X, S.Y, S.Z * FMath::Max(0.06f, P)));
 }
 
+static TAutoConsoleVariable<int32> CVarPropInstances(TEXT("vl.Opt.PropInstances"), 0, TEXT("1: a building's wheat tufts are the instances of one component a mesh. 0: an actor each, as before (for buildings raised after it is set)"));
+
 void UVLConstruction::SpawnProps(FVLBuildingState& B)
 {
 	AActor* A = B.Actor.Get();
@@ -1306,6 +1309,13 @@ void UVLConstruction::SpawnProps(FVLBuildingState& B)
 	}
 	const FTransform T = A->GetActorTransform();
 	int32 N = 0;
+	// (Windows pass, batch 2) A farm's wheat is 84 tufts: an actor each, they were 1,700 actors and as many primitives
+	// with a few farms standing. They have no collision, cast no shadow and nothing ever looks one up, so a building's
+	// tufts of one mesh are the instances of one component (on one actor among the building's props, which goes and
+	// is raised again with them): the same places, turns and sizes. vl.Opt.PropInstances 0: an actor each, as before.
+	static const IConsoleVariable* PropInstances = IConsoleManager::Get().FindConsoleVariable(TEXT("vl.Opt.PropInstances"));
+	const bool bInstanced = !PropInstances || PropInstances->GetInt() != 0;
+	TMap<UStaticMesh*, TArray<FTransform>> Crops;
 	for (const FVLPropSpec* P = GBuildingProps; P->Owner; ++P)
 	{
 		if (B.Mesh != P->Owner)
@@ -1315,6 +1325,12 @@ void UVLConstruction::SpawnProps(FVLBuildingState& B)
 		UStaticMesh* M = LoadMesh(P->Mesh);
 		if (!M)
 		{
+			continue;
+		}
+		if (bInstanced && FString(P->Mesh).StartsWith(TEXT("SM_Wheat")))
+		{
+			Crops.FindOrAdd(M).Add(FTransform(FRotator(0.f, A->GetActorRotation().Yaw + P->Yaw, 0.f), T.TransformPosition(FVector(P->X, P->Y, P->Z)), FVector(P->Scale)));
+			++N;
 			continue;
 		}
 		FActorSpawnParameters SP;
@@ -1342,6 +1358,27 @@ void UVLConstruction::SpawnProps(FVLBuildingState& B)
 		}
 		Props.FindOrAdd(A).Add(Prop);
 		++N;
+	}
+	for (const TPair<UStaticMesh*, TArray<FTransform>>& Crop : Crops)
+	{
+		FActorSpawnParameters SP;
+		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AActor* Holder = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform(A->GetActorRotation(), A->GetActorLocation()), SP);
+		if (!Holder)
+		{
+			continue;
+		}
+		UInstancedStaticMeshComponent* C = NewObject<UInstancedStaticMeshComponent>(Holder, TEXT("Crop"));
+		C->SetMobility(EComponentMobility::Movable);
+		C->SetStaticMesh(Crop.Key);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		C->SetCastShadow(false);
+		C->WorldPositionOffsetDisableDistance = 6000;
+		Holder->SetRootComponent(C);
+		C->SetWorldLocationAndRotation(A->GetActorLocation(), A->GetActorRotation());
+		C->RegisterComponent();
+		C->AddInstances(Crop.Value, false, true);
+		Props.FindOrAdd(A).Add(Holder);
 	}
 	if (N > 0)
 	{
