@@ -116,6 +116,8 @@ There are two ways to play, switched with **Tab**.
 | Right click on one of your troops | the rest of the selection follows it (falls in behind it in its formation, re-sent as it moves, fights what it meets, lets go of a chase 24 m from it); its platoon's members following it make it the platoon's leader |
 | Shift + right click | a point on the selection's pathway (as in the first draft): units already on an order walk there after it, in order; idle ones start at once. A plain right click replaces the pathway. **On a foe's unit or building: queued** (`UVLCommand::OrderChain`): they attack it after what they are doing, then the next foe, a building, a walk (Shift + right click on the ground after an attack is the chain's next walk); a dashed line through the chain (red attacks, blue walks) with numbered plates, as the Builders' queue |
 | Right click on the Watch Tower | the archers of the selection walk to its door and appear on the lookout (8 posts); anyone else waits by the door |
+| Right click on the Troop Ship | the selection walks to the foot of its gangplank and goes aboard, one after another (24 soldiers; King David and Jonathan besides, on the stern castle); those it has no room for stay ashore. Only while its gangplank is out (it lies at a quay or a shore). See *The troop ship* |
+| Select the Troop Ship (click it) | its panel: who is aboard, **Unload** (everyone down the gangplank, forming up on the shore). **Right click the water: it sails there**, round the land; right click a shore, a quay or a pier: it goes as near as the water lets it, turns its side to the land and comes alongside (the gangplank goes out where ground is within its reach). Troops aboard can also be selected and sent somewhere: they step ashore first; at sea they stay aboard |
 | Select the Watch Tower | its panel (the selection panel, bottom middle) shows who mans it; its **Lookout** button brings them down. An archer on the lookout can also be selected and sent somewhere: it comes down first |
 | F | the next formation: Line, Column, Wedge, Square, Loose (melee in front, archers behind) |
 | A (a tap), then left click | attack-move: the selection marches there fighting what it meets, and marches on after each fight (Shift + click: one more point of the way; a click on a foe attacks it). **No attack-ground for archers any more** (the owner's call, 2026-11-22: no key, no button; `vl.ArmGround` and `UVLCommand::OrderAttackGround` are kept for tests) |
@@ -1386,6 +1388,68 @@ Console: `vl.Stop [who]`, `vl.Hold [who]`, `vl.Patrol <who> X Y [X Y ...] [run]`
 [run]`, `vl.Guard <who> <building name | unit name | platoon N>`, `vl.Roam [who]`, `vl.Dismiss [who]`, `vl.March`, `vl.Orders`
 (every unit's standing order, speed and pace). The audit of what the first draft had and where each is now:
 `Docs/PORT_AUDIT.md`.
+
+## The troop ship (`AVLTroopShip`, `UVLFleet`: `VLTroopShip.*`, `VLTroopShipHUD.cpp`)
+
+A war cog that takes a platoon and the heroes aboard, carries them over the water and lands them (2026-11-23; designed
+without a reference picture, from the grain ship's art language).
+
+- **The model**: `SM_TroopShip` and `SM_TroopShip_Gangplank`, from `Tools/blender/assets/troopship.py` (previews
+  `SourceArt/Previews/troopship_*.png`; `--lod` makes its far level, 312k -> 78k triangles at the hull's own voxel).
+  22.5 m of hull (25 m over the bowsprit and the rudder), 6 m in the beam, 16.9 m to the masthead; it draws 1.125 m.
+  The grain ship is 12.75 m by 3.25 m by 9.1 m: this is 1.8 times as long and has 3.3 times its deck. A main deck
+  1.5 m above the water with twenty places aft of the mast (four rows of five, 1.2 m by 1 m: a soldier's capsule is
+  0.8 m across), a forecastle with four (archers first), a stern castle for the heroes; an entry port each side for
+  the gangplank; one mast with a crow's nest and a square sail 9.5 m wide whose foot is over the soldiers' heads.
+  The script writes the places, the ports and the hull's size to `SM_TroopShip.json` ("deck") and to
+  `Source/SovereignRealms/VLTroopShipDeck.inl` for the game: change the model there, never the `.inl`.
+- **Aboard** a unit is garrisoned in the ship (`AVLKing::GarrisonIn`, as on a watch tower's lookout): it stands at a
+  place of its own, attached to the hull (it rides, heaves and rolls with it), its movement off, takes no orders and
+  chases nobody. Archers aboard shoot from the deck (with the lookout's reach); nobody with a sword reaches those
+  aboard. **Capacity: 24 soldiers**, and King David and Jonathan on the stern castle, who take no soldier's place.
+- **Boarding** (`OrderBoard`; a right click on the ship, the hero view's Alt + click): they march to the gangplank's
+  foot and go up it one every 0.3 s. Only where the ship is LANDED: lying still within a gangplank's reach (6.2 m)
+  of ground of the path grid's main region that is no more than 1.9 m under or 1.2 m over the port's sill. **Unload**
+  (the panel's button, `Unload`): down the gangplank one after another, to a block formed 6.5 m inland. An order to
+  units aboard a landed ship: they step ashore and take it; at sea it is refused (an alert).
+- **Sailing** (`SailTo`; the ship selected, a right click): `UVLFleet` charts the level once on 2.5 m cells: water
+  a hull floats in is a cell where a water sheet lies at the ships' sea level and nothing stands in it or over it
+  down to the draught (ground, rocks, piers, quays, bridges); the ship's middle keeps to cells whose neighbours are
+  all water. Routes are A* over those, pulled straight; it sails at 9 m/s, turns 26 degrees a second and loses way
+  off its heading. At the end, with land within 14 m, it turns its side to the land and comes sideways to 55 cm off
+  it; leaving a berth it first comes sideways off it. It cannot leave the water, and it cannot be attacked or sunk
+  (it is no building: no `Team:` or `Selectable` tag; the pointer finds it by its hull's and sail's boxes).
+- **Where ships come from** (when play starts): an actor tagged `TroopShip`, `TroopShip:0` or `TroopShip:1` (the
+  team) is the mooring: its place is the ship's pivot (on the waterline), its yaw the ship's (bow +X); a static mesh
+  actor there (the level's own `SM_TroopShip`, so the ship shows in the editor) is hidden. A level with none and
+  with ships tagged `Moored` at its piers (Realm v2) gets a troop ship at a berth found beside each: alongside the
+  quay, the shortest gangplank, clear of the moored ship; whose it is: the moored ship's cloth.
+- **The interface**: a plate over the player's ship says how many are aboard ("24 / 24 + 1": the heroes after the
+  plus); selected, its panel takes the selection panel's place.
+- Console: `vl.Ship [#n] state | board <sel|all|heroes|near [m]|platoon N> [run] | put <who> | unload | sail X Y |
+  stop | moor X Y Yaw | pos`. The check: `python Tools/troopship_test.py shots perf` (PIE on L_RealmV2: boards 24 of
+  26 and the king at the west port with the player's own clicks, sails round the island, lands on the east beach,
+  unloads, marches inland).
+- **Not done**: the enemy's commander does not use its ship. Units on the gangplank slide (no walk pose while the
+  ship carries them). The ship turns on the spot when it comes alongside (its ends can pass through a quay's corner).
+  The minimap's right click does not sail it.
+
+## The water's depth (`UVLWaterLook`, `VLWaterLook.*`; `M_VoxWater`)
+
+The depth of the water is drawn, not modelled ("it can be simulated depth", the owner, 2026-11-23): the beds are a
+slab 2 m under the surface and the water sheets are opaque. `M_VoxWater` (`Tools/ue/build_special_materials.py`, the
+one water material of every map, through `MI_Vox_water`) colours the water by its distance from the shore: clear
+turquoise with a pebble bed showing through by the land (the bed shifts with the view, as if it lay 70 cm down), the
+middle blue from 7 m, darkening to the deep blue at 32 m; foam breaks along the shore in a band 1.5 m wide; a gentle
+swell tilts the surface, which mirrors the sky. The distance is measured by the game when play starts, for whatever
+level is open (`UVLWaterLook::Build`: the level sampled from above on 1.25 m cells, a distance sweep, a texture of
+its own; every actor tagged `Water` gets an instance of its material that reads it): no level's files carry it, and
+a new map needs nothing but its `Water` tag. Rivers, brooks and ponds come out shallow from bank to bank. The
+editor's own viewport has no such texture: there the water is one middling depth without foam (`ShoreOn` 0).
+Parameters: `Shallow`, `Mid`, `Deep`, `ShallowEnd`, `DeepStart`, `FoamWidth`, `BedShow`, `BedDepth`, `WaveSlope`,
+`DefaultDepth`. `vl.Water.Depth 0` is the flat water of before (to compare), `vl.Water` logs what was measured.
+Units are kept out of the water as before: the path grid has no floor under water and the hidden barriers stand on
+the shores (nothing of that changed).
 
 ## King David
 
