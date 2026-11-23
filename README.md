@@ -1532,7 +1532,7 @@ his back.
 | | Jonathan | the archer troop | King David |
 |---|---|---|---|
 | Bow: button down to fully drawn (reach + nock + draw) | **1.14 s** (0.26 + 0.26 + 0.62) | 0.86 s (0.26 + 0.26 + 0.34) | |
-| Arrow speed | **8280 cm/s** | 6210 cm/s | |
+| Arrow speed | **11000 cm/s** (8280 until 2026-11-23) | 6210 cm/s | |
 | Arrow damage | 60 | 40 | |
 | Seconds between shots on orders | 3.0 | 2.4 | |
 | Walk / run | **520 / 1000 cm/s** | 420 / 760 | 420 / 760 |

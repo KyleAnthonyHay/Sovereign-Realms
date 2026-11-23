@@ -168,7 +168,7 @@ namespace VLRules
 	constexpr int32 JonathanCastleLevel = 3;
 	constexpr float JonathanRespawnSeconds = KingRespawnSeconds;
 	constexpr float JonathanDrawSeconds = 0.62f;     // the draw itself (the archer: 0.34). Button down to fully drawn: 1.14 s against her 0.86 (+33%)
-	constexpr float JonathanArrowSpeed = 8280.f;     // cm/s (the archer: 6210; +33%). Aim and arcs are solved with the bow's own speed
+	constexpr float JonathanArrowSpeed = 11000.f;    // cm/s (the archer: 6210; +77%; was 8280 until 2026-11-23). Aim and arcs are solved with the bow's own speed
 	constexpr float JonathanShotInterval = 3.0f;     // on orders, seconds from shot to shot (the archer: 2.4): the longer draw
 	constexpr float JonathanWalkSpeed = 520.f;       // cm/s (King David: 420; +24%)
 	constexpr float JonathanRunSpeed = 1000.f;       // cm/s (King David: 760; +32%)
