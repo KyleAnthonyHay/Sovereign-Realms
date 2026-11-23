@@ -2,8 +2,19 @@
 
     python3 Tools/ue_py.py Tools/ue/build_special_materials.py
 
-  M_VoxWater   the river: the pixel water texture drifting in whole-texel steps (so it stays pixel art), glints that
-               come and go, white streaks running down the vertical faces (the fall), glossy enough to mirror the sky.
+  M_VoxWater   the water of every map (rivers, ponds, the sea: MI_Vox_water is its one instance, and the only water
+               material there is): the pixel water texture drifting in whole-texel steps (so it stays pixel art), glints
+               that come and go, white streaks running down the vertical faces (the fall), glossy enough to mirror the
+               sky. And DEPTH, as it looks (the beds are a slab 2 m down and the sheet is opaque, so depth is drawn):
+               from the distance to the shore, which the game measures when play starts and hands over in a texture
+               (UVLWaterLook, VLWaterLook.*: ShoreTex, ShoreRect, ShoreRange, ShoreOn). By the land the water is clear
+               turquoise and a pebble bed shows through it, shifting with the view as if it lay BedDepth under the
+               surface; from ShallowEnd out it is the middle blue, and from there to DeepStart it darkens to the deep
+               blue; a band of foam FoamWidth wide breaks along the shore; a gentle swell tilts the surface
+               (WaveSlope), in steps of two texels. Without the game's texture (the editor's viewport: ShoreOn 0) the
+               water is DefaultDepth from the shore everywhere, with no foam. DepthOn 0: the flat water of before.
+               Parameters (on MI_Vox_water, or a map's own instance): Shallow, Mid, Deep (colours), ShallowEnd,
+               DeepStart, FoamWidth, BedShow, BedDepth, WaveSlope, DefaultDepth.
   M_VoxLeaves  M_Voxel plus a small wind: every leaf cube bobs on its own and the crown leans a little.
 MI_Vox_water and MI_Vox_leaves are re-parented to them, so every mesh picks them up.
 """
@@ -102,8 +113,34 @@ if (up > 0.5)
     col = lerp(ca, cb, 0.45);
     // glints: the brightest texels of the two layers flare when they meet
     float g = saturate((max(ca.b, cb.b) - 0.72) * 6.0) * saturate((ca.g + cb.g) - 1.05) * 3.0;
-    col = lerp(col, float3(0.86, 0.95, 1.0), saturate(g));
     Glint = saturate(g);
+    // ---- depth, as it looks: by how far this point is from the shore (cm)
+    float2 suv = (P.xy - Rect.xy) * Rect.zw;
+    float d = lerp(DefaultDepth, Texture2DSampleLevel(Shore, ShoreSampler, suv, 0).a * Range, ShoreOn);
+    float shallow = 1.0 - smoothstep(0.0, ShallowEnd, d);
+    float deep = smoothstep(ShallowEnd * 0.6, DeepStart, d);
+    float detail = dot(col, float3(0.3, 0.4, 0.3)) / 0.6;
+    float3 water = lerp(lerp(Mid, Shallow, shallow), Deep, deep) * lerp(1.0, detail, 0.55);
+    // the bed through the shallows: pebbles seen as if BedDepth under the surface (they shift with the view), in texels
+    float3 V = normalize(Cam);
+    float2 bp = floor((P.xy - V.xy / max(V.z, 0.25) * BedDepth) / 6.25) * 6.25;
+    float3 bed = Texture2DSample(Bed, BedSampler, bp / 400.0).rgb;
+    float see = shallow * shallow * BedShow;
+    water = lerp(water, bed * Shallow * 2.2, see);
+    // foam along the shore: a band that comes and goes with the drifting texture
+    float n = Texture2DSample(Tex, TexSampler, UV * 2.0 + floor(T * Speed * 0.6) * texel * float2(-1.0, 1.0)).b;
+    float reach = FoamWidth * (0.75 + 0.25 * sin(T * 0.9 + (P.x + P.y) * 0.004));
+    float foam = (1.0 - smoothstep(reach * 0.3, reach, d + (n - 0.62) * FoamWidth * 1.6)) * ShoreOn;
+    water = lerp(water, float3(0.92, 0.97, 1.0), saturate(foam) * 0.9);
+    col = lerp(col, water, DepthOn);
+    col = lerp(col, float3(0.86, 0.95, 1.0), saturate(g) * lerp(1.0, 1.0 - 0.6 * shallow, DepthOn));
+    // a gentle swell: the surface tilts a little, in steps of two texels (it mirrors the sky, so this is what is seen)
+    float2 q = floor(P.xy / 12.5) * 12.5;
+    float w1 = (q.x * 0.6 + q.y * 0.8) * 0.0105 + T * 0.9;
+    float w2 = (q.x * -0.8 + q.y * 0.55) * 0.0061 - T * 0.6;
+    float w3 = (q.x + q.y * 0.3) * 0.021 + T * 1.4;
+    float2 grad = float2(0.6, 0.8) * cos(w1) + float2(-0.8, 0.55) * cos(w2) * 0.8 + float2(1.0, 0.3) * cos(w3) * 0.35;
+    Wave = normalize(float3(-grad * WaveSlope * DepthOn * (0.4 + 0.6 * saturate(d / 600.0)), 1.0));
 }
 else
 {
@@ -113,6 +150,7 @@ else
     float streak = step(0.5, frac(UV.x * 32.0 + 0.25)) * 0.25 + cf.b;
     col = lerp(cf, float3(0.66, 0.84, 0.96), saturate(streak * 0.62));
     Glint = 0.05;
+    Wave = float3(0.0, 0.0, 1.0);
 }
 Rough = up > 0.5 ? TopRough : 0.5;
 return col;
@@ -126,10 +164,23 @@ def water():
     uv = g.node(unreal.MaterialExpressionTextureCoordinate)
     t = g.node(unreal.MaterialExpressionTime)
     n = g.node(unreal.MaterialExpressionVertexNormalWS)
+    def colour(name, r, g_, b):
+        return g.node(unreal.MaterialExpressionVectorParameter, parameter_name=name, default_value=unreal.LinearColor(r, g_, b, 1))
+
+    # the shore's distance comes from the game (UVLWaterLook); the default is a white square: its alpha of 1 is "far out"
+    shore = g.node(unreal.MaterialExpressionTextureObjectParameter, parameter_name="ShoreTex", texture=unreal.load_asset("/Engine/EngineResources/WhiteSquareTexture"))
+    bed = g.node(unreal.MaterialExpressionTextureObjectParameter, parameter_name="BedTex", texture=eal.load_asset(TEX_DIR + "/T_Vox_gravel"))
+    rect = g.node(unreal.MaterialExpressionVectorParameter, parameter_name="ShoreRect", default_value=unreal.LinearColor(0, 0, 0, 0))
     c = g.custom(WATER, CT.CMOT_FLOAT3,
                  [("UV", uv), ("T", t), ("N", n), ("Tex", tex), ("Speed", g.scalar("Speed", 5.0)), ("FallSpeed", g.scalar("FallSpeed", 46.0)),
-                  ("TopRough", g.scalar("Roughness", 0.16))],
-                 "pixel water", outputs=[("Glint", CT.CMOT_FLOAT1), ("Rough", CT.CMOT_FLOAT1)])
+                  ("TopRough", g.scalar("Roughness", 0.16)),
+                  ("P", g.node(unreal.MaterialExpressionWorldPosition)), ("Cam", g.node(unreal.MaterialExpressionCameraVectorWS)),
+                  ("Shore", shore), ("Bed", bed), ("Rect", rect, "RGBA"), ("Range", g.scalar("ShoreRange", 4000.0)), ("ShoreOn", g.scalar("ShoreOn", 0.0)),
+                  ("DepthOn", g.scalar("DepthOn", 1.0)), ("DefaultDepth", g.scalar("DefaultDepth", 1100.0)),
+                  ("Shallow", colour("Shallow", 0.13, 0.62, 0.55)), ("Mid", colour("Mid", 0.045, 0.27, 0.47)), ("Deep", colour("Deep", 0.012, 0.075, 0.23)),
+                  ("ShallowEnd", g.scalar("ShallowEnd", 700.0)), ("DeepStart", g.scalar("DeepStart", 3200.0)), ("FoamWidth", g.scalar("FoamWidth", 150.0)),
+                  ("BedShow", g.scalar("BedShow", 0.6)), ("BedDepth", g.scalar("BedDepth", 70.0)), ("WaveSlope", g.scalar("WaveSlope", 0.05))],
+                 "pixel water", outputs=[("Glint", CT.CMOT_FLOAT1), ("Rough", CT.CMOT_FLOAT1), ("Wave", CT.CMOT_FLOAT3)])
     vc = g.node(unreal.MaterialExpressionVertexColor)
     tint = g.node(unreal.MaterialExpressionVectorParameter, parameter_name="Tint", default_value=unreal.LinearColor(0.82, 0.95, 1.0, 1))
     m1 = g.node(unreal.MaterialExpressionMultiply)
@@ -140,6 +191,7 @@ def water():
     g.link(tint, m2, "B")
     g.out(m2, MP.MP_BASE_COLOR)
     g.out(c, MP.MP_ROUGHNESS, "Rough")
+    g.out(c, MP.MP_NORMAL, "Wave")
     em = g.node(unreal.MaterialExpressionMultiply)
     g.link(c, em, "A", "Glint")
     g.link(g.scalar("GlintGlow", 0.35), em, "B")
