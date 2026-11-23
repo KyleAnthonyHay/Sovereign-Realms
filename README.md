@@ -69,6 +69,10 @@ packager rewrites on every run (`Build/*/FileOpenOrder/`, `*.PackageVersionCount
 One developer, two machines. Each machine has its own working branch, `dev` is where the two meet, and `main` is
 production.
 
+Coding agents follow this through `AGENTS.md` (`CLAUDE.md` loads it). Saying "push to dev", "sync with dev" or
+"promote to main" is enough. The agent works out which machine it is on and checks `dev` for the other machine's
+work before pushing, and it never touches the other machine's branch.
+
 | Branch | Lives | Purpose |
 | --- | --- | --- |
 | `mac` | on the Mac (pushing it is optional) | day-to-day work on the Mac |
