@@ -48,7 +48,3 @@
 *.dylib filter=lfs diff=lfs merge=lfs -text
 *.a filter=lfs diff=lfs merge=lfs -text
 *.so filter=lfs diff=lfs merge=lfs -text
-
-# Documentation-only screenshots remain in ordinary Git so the brief can be
-# cloned while this GitHub account's LFS budget is exhausted. Game art stays LFS.
-references/*.png -filter -diff -merge -text

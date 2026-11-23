@@ -1,5 +1,3 @@
-// Copyright Sovereign Realms.
-
 using UnrealBuildTool;
 
 public class SovereignRealmsEditorTarget : TargetRules

@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"EngineAssociation": "5.8",
 	"Category": "",
-	"Description": "Sovereign Realms - top-down fantasy RTS",
+	"Description": "Sovereign Realms: a top-down fantasy RTS in a voxel diorama",
 	"Modules": [
 		{
 			"Name": "SovereignRealms",
@@ -12,15 +12,10 @@
 		}
 	],
 	"Plugins": [
-		{ "Name": "ModelingToolsEditorMode", "Enabled": true, "TargetAllowList": [ "Editor" ] },
-		{ "Name": "ProceduralMeshComponent", "Enabled": true },
 		{ "Name": "PythonScriptPlugin", "Enabled": true },
-		{ "Name": "AvfMedia", "Enabled": true },
 		{ "Name": "ModelContextProtocol", "Enabled": true },
 		{ "Name": "EditorToolset", "Enabled": true },
-		{ "Name": "LiveCodingToolset", "Enabled": true },
-		{ "Name": "AutomationTestToolset", "Enabled": true },
-		{ "Name": "ConfigSettingsToolset", "Enabled": true },
-		{ "Name": "NiagaraToolsets", "Enabled": true }
+		{ "Name": "NNEDenoiser", "Enabled": false },
+		{ "Name": "NNERuntimeORT", "Enabled": false }
 	]
 }
