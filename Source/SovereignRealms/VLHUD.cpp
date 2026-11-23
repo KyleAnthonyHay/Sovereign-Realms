@@ -143,13 +143,13 @@ void AVLHUD::SaveSettings()
 FString AVLHUD::MapPath(int32 Map)
 {
 	// (4, the Test World, is Realm v2 opened with ?TestWorld=1: OpenMatch)
-	static const TCHAR* Paths[NumMaps] = { TEXT("/Game/Maps/L_RealmV2"), TEXT("/Game/Maps/L_Realm"), TEXT("/Game/Maps/L_Flatlands"), TEXT("/Game/Maps/L_Highlands"), TEXT("/Game/Maps/L_RealmV2") };
+	static const TCHAR* Paths[NumMaps] = { TEXT("/Game/Maps/L_RealmV2"), TEXT("/Game/Maps/L_Realm"), TEXT("/Game/Maps/L_Flatlands"), TEXT("/Game/Maps/L_Highlands"), TEXT("/Game/Maps/L_RealmV2"), TEXT("/Game/Maps/L_RealmV3") };
 	return Paths[FMath::Clamp(Map, 0, NumMaps - 1)];
 }
 
 const TCHAR* AVLHUD::MapName(int32 Map)
 {
-	static const TCHAR* Names[NumMaps] = { TEXT("Realm v2"), TEXT("Realm"), TEXT("Flatlands"), TEXT("Highlands"), TEXT("Test World") };
+	static const TCHAR* Names[NumMaps] = { TEXT("Realm v2"), TEXT("Realm"), TEXT("Flatlands"), TEXT("Highlands"), TEXT("Test World"), TEXT("Realm v3") };
 	return Names[FMath::Clamp(Map, 0, NumMaps - 1)];
 }
 
@@ -160,8 +160,8 @@ int32 AVLHUD::CurrentMap() const
 	{
 		return 4;                   // the Test World (Realm v2 with both sides at their most)
 	}
-	// ("L_RealmV2" contains "Realm": it is asked first)
-	return Name.Contains(TEXT("RealmV2")) ? 0 : (Name.Contains(TEXT("Highlands")) ? 3 : (Name.Contains(TEXT("Flatlands")) ? 2 : 1));
+	// ("L_RealmV2" and "L_RealmV3" contain "Realm": they are asked first)
+	return Name.Contains(TEXT("RealmV3")) ? 5 : Name.Contains(TEXT("RealmV2")) ? 0 : (Name.Contains(TEXT("Highlands")) ? 3 : (Name.Contains(TEXT("Flatlands")) ? 2 : 1));
 }
 
 bool AVLHUD::InFlatlands() const

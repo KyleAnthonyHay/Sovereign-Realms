@@ -316,7 +316,7 @@ void FVLAIMap::Build(UVLBattle* B)
 	// ---- the map's json (in the editor): its markers and each side's bridge end, where the level has not got them
 	{
 		const FString MapName = World->GetMapName();
-		FString File = MapName.Contains(TEXT("RealmV2")) ? TEXT("realmv2") : (MapName.Contains(TEXT("Highland")) ? TEXT("highland") : (MapName.Contains(TEXT("Realm")) ? TEXT("realm") : FString()));
+		FString File = MapName.Contains(TEXT("RealmV3")) ? TEXT("realmv3") : MapName.Contains(TEXT("RealmV2")) ? TEXT("realmv2") : (MapName.Contains(TEXT("Highland")) ? TEXT("highland") : (MapName.Contains(TEXT("Realm")) ? TEXT("realm") : FString()));
 		if (File.IsEmpty())
 		{
 			File = MapName;

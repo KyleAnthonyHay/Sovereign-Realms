@@ -821,12 +821,12 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map realm|realmv2|highlands|flatlands|test: open that map (test: the Test World, Realm v2 with both sides at their most)"),
+	FAutoConsoleCommandWithWorldAndArgs CmdMap(TEXT("vl.Map"), TEXT("vl.Map realm|realmv2|realmv3|highlands|flatlands|test: open that map (test: the Test World, Realm v2 with both sides at their most)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (Args.Num() > 0 && World)
 			{
-				const int32 Map = Args[0].StartsWith(TEXT("t"), ESearchCase::IgnoreCase) ? 4 : Args[0].Contains(TEXT("2")) ? 0 : (Args[0].StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 3 : (Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : 1));
+				const int32 Map = Args[0].StartsWith(TEXT("t"), ESearchCase::IgnoreCase) ? 4 : Args[0].Contains(TEXT("3")) ? 5 : Args[0].Contains(TEXT("2")) ? 0 : (Args[0].StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 3 : (Args[0].StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : 1));
 				const UVLBattle* Battle = UVLBattle::Get(World);
 				AVLHUD::OpenMatch(World, Map, Battle ? Battle->GetDifficulty() : 1);       // a match there at once (no title screen)
 			}

@@ -82,8 +82,9 @@ public:
 	bool InFlatlands() const;
 	/** The maps of the menu: 0 Realm v2 (the biggest battle map, L_RealmV2), 1 the realm (the battle map, L_Realm), 2 the
 	 *  flatlands (the building review field), 3 the highlands (L_Highlands), 4 the Test World (Realm v2 with both sides
-	 *  at their most: UVLBattle::SetupTestWorld). The town and the village are gone. */
-	static const int32 NumMaps = 5;
+	 *  at their most: UVLBattle::SetupTestWorld), 5 Realm v3 (the compact island, L_RealmV3: two plateaus, one pass,
+	 *  the basin). The town and the village are gone. */
+	static const int32 NumMaps = 6;
 	static FString MapPath(int32 Map);
 	static const TCHAR* MapName(int32 Map);
 	int32 CurrentMap() const;

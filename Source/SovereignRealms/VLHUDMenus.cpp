@@ -109,14 +109,15 @@ namespace
 		TEXT("The enemy strikes early, raids often, adapts fully.") };
 
 	// the maps of New Game, in the order shown: the battles first, then the sandboxes
-	const int32 MapOrder[AVLHUD::NumMaps] = { 1, 0, 3, 2, 4 };
-	const TCHAR* MapTitles[AVLHUD::NumMaps] = { TEXT("Realm v2"), TEXT("The Realm"), TEXT("Flatlands"), TEXT("Highlands"), TEXT("Test World") };
+	const int32 MapOrder[AVLHUD::NumMaps] = { 1, 0, 5, 3, 2, 4 };
+	const TCHAR* MapTitles[AVLHUD::NumMaps] = { TEXT("Realm v2"), TEXT("The Realm"), TEXT("Flatlands"), TEXT("Highlands"), TEXT("Test World"), TEXT("Realm v3") };
 	const TCHAR* MapNotes[AVLHUD::NumMaps] = {
 		TEXT("The great battle: a mountain, two rivers, five mines, the ruins."),
 		TEXT("The battle: two kingdoms with a river between."),
 		TEXT("Sandbox: every building side by side."),
 		TEXT("The bigger battle: bluffs, a gorge, the Crown."),
-		TEXT("Balance test: both sides start maxed out, on Realm v2.") };
+		TEXT("Balance test: both sides start maxed out, on Realm v2."),
+		TEXT("The tight island: two plateaus, one pass, the basin's two mines.") };
 
 	const int32 MenuFpsCaps[5] = { 30, 40, 60, 120, 0 };
 
@@ -607,8 +608,8 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 void AVLHUD::DrawNewGamePanel(float CentreX)
 {
 	// the maps side by side above the difficulties
-	const FFit Fit(*this, FitScale(1170.f, 92.f + 104.f + 16.f + 3.f * 86.f + 98.f));
-	const float W = U(1170.f), RowH = U(76.f), MapH = U(104.f);     // (1170: five maps side by side at the width four had in 960)
+	const FFit Fit(*this, FitScale(1390.f, 92.f + 104.f + 16.f + 3.f * 86.f + 98.f));
+	const float W = U(1390.f), RowH = U(76.f), MapH = U(104.f);     // (1390: six maps side by side at the width four had in 960)
 	const float H = U(92.f) + MapH + U(16.f) + 3.f * (RowH + U(10.f)) + U(98.f);
 	const float X = PanelX(CentreX, W), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
