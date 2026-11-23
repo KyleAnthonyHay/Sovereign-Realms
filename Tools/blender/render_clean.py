@@ -18,7 +18,9 @@ checkerboard). Everything takes about 15 minutes on a desktop CPU at the default
 What is in it (ITEMS below; the names are the game's own: UVLBattle's building names, the units' display names)
   units       King David (King B, Tools/blender/assets/king_b.py: the figure the game uses, with the new face and
               beard), Jonathan, Swordsman, Archer, Spy, Builder, Farmer (the man and the woman): EVLUnitKind and
-              AVLFarmer. (Enemy_King_David is the king an AI-against-AI match gives the enemy, vl.AIvsAI.King 1: in
+              AVLFarmer. They wear the game's unit materials (unit_material below: MI_King_<slot> of
+              Tools/ue/import_king.py, the white paint texture on every slot, so steel is light grey and gold is
+              yellow), not voxlib's building materials. (Enemy_King_David is the king an AI-against-AI match gives the enemy, vl.AIvsAI.King 1: in
               a normal match the enemy has no king.) A three-quarter view, the figure turned 35 degrees, in its rest pose, every part at its joint.
   enemy       Enemy_<Name>: the enemy's look, where it differs. A unit's green cloth turns red (TEAM_SWAP of
               Tools/ue/build_special_materials.py, repeated here on the vertex colours); a building's cloth (its
@@ -280,6 +282,53 @@ def place_props(mesh):
     return out
 
 
+# A unit's slots in the game (MI_King_<slot>, Tools/ue/import_king.py): (metallic, roughness, tint). Its colours are all
+# in its vertex colours, so EVERY slot has the plain white paint texture: the buildings' dark metal and yellow gold
+# textures (voxlib's preview materials, right for a building) would multiply its steel to black and its gold to orange.
+UNIT_SURFACE = {"gold": (0.55, 0.38, (1.25, 1.15, 1.0)), "metal": (0.35, 0.42, (1.45, 1.45, 1.5)), "wool": (0.0, 0.95, (1.0, 1.0, 1.0))}
+UNIT_DEFAULT = (0.0, 0.85, (1.0, 1.0, 1.0))
+
+
+def unit_material(slot, layer):
+    """The game's material of a unit's slot: paint texture x vertex colour x tint, its metallic and roughness."""
+    name = "Unit_" + slot
+    mat = bpy.data.materials.get(name)
+    if mat:
+        return mat
+    metal, rough, tint = UNIT_SURFACE.get(slot, UNIT_DEFAULT)
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    path = os.path.join(V.TEXTURES, "T_Vox_paint.png")
+    if os.path.exists(path):
+        tex.image = bpy.data.images.load(path, check_existing=True)
+    tex.interpolation = "Closest"
+    col = nt.nodes.new("ShaderNodeVertexColor")
+    col.layer_name = layer
+    mul = nt.nodes.new("ShaderNodeMixRGB")
+    mul.blend_type = "MULTIPLY"
+    mul.inputs[0].default_value = 1.0
+    nt.links.new(tex.outputs["Color"], mul.inputs[1])
+    nt.links.new(col.outputs["Color"], mul.inputs[2])
+    tnt = nt.nodes.new("ShaderNodeMixRGB")
+    tnt.blend_type = "MULTIPLY"
+    tnt.inputs[0].default_value = 1.0
+    tnt.inputs[2].default_value = (*tint, 1.0)
+    nt.links.new(mul.outputs[0], tnt.inputs[1])
+    nt.links.new(tnt.outputs[0], bsdf.inputs["Base Color"])
+    bsdf.inputs["Metallic"].default_value = metal
+    bsdf.inputs["Roughness"].default_value = rough
+    if slot == "glow":                                           # a lantern's light (Emissive 6 in the game, with bloom)
+        nt.links.new(tnt.outputs[0], bsdf.inputs["Emission Color"])
+        bsdf.inputs["Emission Strength"].default_value = 1.8
+    nt.links.new(bsdf.outputs[0], out.inputs[0])
+    return mat
+
+
 def place_unit(rig):
     """The figure in its rest pose (R.place_character): every part at its own pivot, turned CHAR_YAW."""
     root = bpy.data.objects.new(rig + "_root", None)
@@ -292,6 +341,10 @@ def place_unit(rig):
             o.rotation_euler = (0.0, 0.0, 0.0)
             o.parent = root
             obs.append(o)
+            layer = o.data.color_attributes[0].name if o.data.color_attributes else "Col"
+            for i, m in enumerate(o.data.materials):             # voxlib's building materials -> the units' own
+                if m is not None and m.name.startswith("Vox_"):
+                    o.data.materials[i] = unit_material(m.name[4:].split(".")[0], layer)
     root.rotation_euler = (0.0, 0.0, math.radians(CHAR_YAW))
     return obs
 
