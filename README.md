@@ -924,8 +924,8 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   Deferred with the fog of war: lifting the fog over what it sees, hiding the enemy's Spy from the player until one
   of the player's troops is within 45% of its sight, drawing it half seen; Its Roam order (O) is in (see *Standing orders*), choosing
   ground it has not been to lately instead of unexplored ground.
-- **Buildings** (health, then by level): Castle 12000 (houses 8, troop ceiling 36, stores 600 each, 1 archer on its
-  walls: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500 and 4 archers), Barracks 1600, Archery Range 1400 (levels:
+- **Buildings** (health, then by level): Castle 8400 (houses 8, troop ceiling 36, stores 600 each, 1 archer on its
+  walls: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500, 4 archers and 21000 health; it was 12000 to 30000 until 2026-11-23), Barracks 1600, Archery Range 1400 (levels:
   training x1.35 / x1.8), Farm 1000 (14 food every 6 s, houses 4; levels 20 / 27, 6 / 8), Gold Mine 1250 (10 gold
   every 6 s; levels 16 / 23), Watch Tower 1800 (shoots 35 every 1.2 s to 24 m; levels 60 / 85, 0.95 / 0.8 s, 27 / 30 m; it was 50 / 85 / 120
   until the balance runs of 2026-11-22;
