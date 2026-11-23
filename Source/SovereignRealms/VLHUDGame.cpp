@@ -348,30 +348,49 @@ void AVLHUD::DrawAssignPicker(const TArray<AVLKing*>& Units, const FBox2D& Ancho
 	HudPanel(Box);
 	Text(TEXT("ASSIGN TO PLATOON"), X + Pad, Y + U(6.f), U(13.f), GoldBright, AlignLeft, Bold, U(2.f));
 	Text(TEXT("or Ctrl + 1-6"), Box.Max.X - Pad, Y + U(7.f), U(12.f), Dim, AlignRight);
-	const int32 Current = Command->PlatoonOf(Units);
 	for (int32 i = 0; i < Num; ++i)
 	{
 		TArray<AVLKing*> Members;
 		Command->GetPlatoon(i, Members);
+		// the platoon the selection is already in (all of it): lit, and a click takes the selection out of it
+		const bool bIn = Command->AllInPlatoon(i, Units);
 		const FBox2D Chip(FVector2D(X + Pad + i * (CW + Gap), Y + HeadH), FVector2D(X + Pad + i * (CW + Gap) + CW, Y + HeadH + CH));
 		const FBtn B = Button(Chip, VLId::Assign + i);
 		const FLinearColor PCol = PlatoonColor(i);
-		ButtonFrame(Chip, B, true, Current == i);
+		ButtonFrame(Chip, B, true, bIn);
 		TextIn(FBox2D(Chip.Min + FVector2D(0.f, U(4.f)), FVector2D(Chip.Max.X, Chip.Min.Y + U(36.f))), FString::FromInt(i + 1), U(24.f), Members.Num() > 0 ? PCol : A(PCol, 0.55f), AlignCentre, Black);
 		TextIn(FBox2D(FVector2D(Chip.Min.X, Chip.Max.Y - U(24.f)), Chip.Max), Members.Num() > 0 ? FString::Printf(TEXT("%d in it"), Members.Num()) : FString(TEXT("new")), U(12.f),
 			Members.Num() > 0 ? Parchment : Dim, AlignCentre);
 		if (B.bHover)
 		{
-			SetTooltip(Chip, Members.Num() > 0 ? FString::Printf(TEXT("Join platoon %d   [Ctrl+%d]"), i + 1, i + 1) : FString::Printf(TEXT("Form platoon %d   [Ctrl+%d]"), i + 1, i + 1),
-				{ Members.Num() > 0 ? FString::Printf(TEXT("The selected troops join its %d: nobody is put out of it."), Members.Num()) : FString(TEXT("The selected troops become this platoon.")),
-				  TEXT("A troop already in another platoon leaves that one.") });
+			if (bIn)
+			{
+				SetTooltip(Chip, FString::Printf(TEXT("Leave platoon %d"), i + 1),
+					{ Members.Num() > Units.Num() ? FString::Printf(TEXT("The selected troops are taken out of it: its other %d stay."), Members.Num() - Units.Num())
+						: FString(TEXT("The selected troops are taken out of it: nobody is left, so it is disbanded.")) });
+			}
+			else
+			{
+				SetTooltip(Chip, Members.Num() > 0 ? FString::Printf(TEXT("Join platoon %d   [Ctrl+%d]"), i + 1, i + 1) : FString::Printf(TEXT("Form platoon %d   [Ctrl+%d]"), i + 1, i + 1),
+					{ Members.Num() > 0 ? FString::Printf(TEXT("The selected troops join its %d: nobody is put out of it."), Members.Num()) : FString(TEXT("The selected troops become this platoon.")),
+					  TEXT("A troop already in another platoon leaves that one.") });
+			}
 		}
 		if (B.bClicked)
 		{
 			Click();
-			Command->AddToPlatoon(i, Units);
+			if (bIn)
+			{
+				// the platoon it is already assigned to: clicked again, the selection leaves it (user request 2026-11-23)
+				Command->RemoveFromPlatoon(i, Units);
+				UE_LOG(LogSovereignRealms, Log, TEXT("hud: Assign: %d unit(s) out of platoon %d (it had %d)"), Units.Num(), i + 1, Members.Num());
+			}
+			else
+			{
+				Command->AddToPlatoon(i, Units);
+				UE_LOG(LogSovereignRealms, Log, TEXT("hud: Assign: %d unit(s) to platoon %d (it had %d)"), Units.Num(), i + 1, Members.Num());
+			}
 			bAssignOpen = false;
-			UE_LOG(LogSovereignRealms, Log, TEXT("hud: Assign: %d unit(s) to platoon %d (it had %d)"), Units.Num(), i + 1, Members.Num());
 			return;
 		}
 	}

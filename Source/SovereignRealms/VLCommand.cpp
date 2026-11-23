@@ -933,6 +933,53 @@ void UVLCommand::DisbandPlatoon(int32 Index)
 	}
 }
 
+void UVLCommand::RemoveFromPlatoon(int32 Index, const TArray<AVLKing*>& Units)
+{
+	if (Index < 0 || Index >= MaxPlatoons)
+	{
+		return;
+	}
+	int32 Removed = 0;
+	for (AVLKing* U : Units)
+	{
+		if (U && Platoons[Index].Members.Remove(U) > 0)
+		{
+			++Removed;
+			LeftPlatoon(U);                     // (off the march it had with the platoon: its own pace again)
+			if (Platoons[Index].Leader.Get() == U)
+			{
+				Platoons[Index].Leader = nullptr;   // (as when a leader joins another platoon: the rest stay without one)
+			}
+		}
+	}
+	Platoons[Index].Members.RemoveAll([](const TWeakObjectPtr<AVLKing>& M) { return !M.IsValid() || M->IsDead(); });
+	if (Platoons[Index].Members.Num() == 0)
+	{
+		DisbandPlatoon(Index);                  // (nobody left in it: the slot is free again)
+	}
+	else
+	{
+		UpdateMarchPace();
+	}
+	UE_LOG(LogSovereignRealms, Log, TEXT("platoon %d: %d unit(s) taken out, %d left"), Index + 1, Removed, Platoons[Index].Members.Num());
+}
+
+bool UVLCommand::AllInPlatoon(int32 Index, const TArray<AVLKing*>& Units) const
+{
+	if (Index < 0 || Index >= MaxPlatoons || Units.Num() == 0)
+	{
+		return false;
+	}
+	for (const AVLKing* U : Units)
+	{
+		if (!U || !Platoons[Index].Members.Contains(U))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 void UVLCommand::SetRallyPlatoon(int32 Index)
 {
 	TArray<AVLKing*> Members;

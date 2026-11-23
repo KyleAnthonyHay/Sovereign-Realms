@@ -242,6 +242,10 @@ public:
 	static constexpr int32 MaxPlatoons = 6;
 	void AssignPlatoon(int32 Index, const TArray<AVLKing*>& Units);
 	void AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units);
+	/** These units out of platoon Index (the rest stay in it; a platoon left with nobody is disbanded). */
+	void RemoveFromPlatoon(int32 Index, const TArray<AVLKing*>& Units);
+	/** Is every one of these units in platoon Index (the selection already assigned to it, alone or with others)? */
+	bool AllInPlatoon(int32 Index, const TArray<AVLKing*>& Units) const;
 	void GetPlatoon(int32 Index, TArray<AVLKing*>& Out) const;
 	EVLFormation PlatoonFormation(int32 Index) const { return Platoons[FMath::Clamp(Index, 0, MaxPlatoons - 1)].Formation; }
 	EVLStance PlatoonStance(int32 Index) const { return Platoons[FMath::Clamp(Index, 0, MaxPlatoons - 1)].Stance; }
