@@ -15,7 +15,7 @@ WANT = [("FrameTime", "frame"), ("GameThreadTime", "game"), ("RenderThreadTime",
 
 def read(path):
     with open(path, encoding="utf-8", errors="replace") as f:
-        rows = [line.rstrip("\r\n").split(",") for line in f if line.strip()]
+        rows = [line.rstrip("\r\n").split(",") for line in f if line.strip() and not line.startswith("[")]
     header = next((r for r in rows if "FrameTime" in r and "GameThreadTime" in r), None)
     if header is None:
         raise ValueError("no header row with FrameTime in " + path)

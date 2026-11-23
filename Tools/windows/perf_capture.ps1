@@ -25,7 +25,12 @@ param(
     [string]$Map = 'L_RealmV2',
     [string]$Tag = '',
     [switch]$NoTestWorld,
-    [switch]$ProfileGpu
+    [switch]$ProfileGpu,
+    [string]$AB = '',
+    [string]$Pre = '',
+    [string]$ExtraArgs = '',
+    [switch]$Fullscreen,
+    [string]$Post = ''
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_env.ps1"
@@ -48,8 +53,10 @@ function Send-Commands([string[]]$Lines) {
     [System.IO.File]::WriteAllText($tmp, (($Lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
     Move-Item -LiteralPath $tmp -Destination $Inbox -Force
     $i = 0
-    while ((Test-Path -LiteralPath $Inbox) -and $i -lt 200) { $i++; Start-Sleep -Milliseconds 100 }
-    if (Test-Path -LiteralPath $Inbox) { throw 'the game did not take the commands (is it running, and a Development build?)' }
+    # (the game may be deleting the file at this very moment: 'access denied' then means it is still there)
+    function Test-Inbox { try { return (Test-Path -LiteralPath $Inbox -ErrorAction Stop) } catch { return $true } }
+    while ((Test-Inbox) -and $i -lt 200) { $i++; Start-Sleep -Milliseconds 100 }
+    if (Test-Inbox) { throw 'the game did not take the commands (is it running, and a Development build?)' }
 }
 function Read-Log {
     # (the game holds the log open for writing)
@@ -68,7 +75,11 @@ function Wait-Log([string]$Pattern, [int]$TimeoutSeconds) {
 
 $url = "/Game/Maps/$Map" + '?Match=1?Difficulty=2?AIvsAI=2'
 if (-not $NoTestWorld) { $url += '?TestWorld=1' }
-$gameArgs = @($url, '-windowed', "-ResX=$Width", "-ResY=$Height", '-nosplash', '-unattended', '-NoVSync')
+# -Fullscreen: the size asked for as a full-screen mode. A window cannot be larger than the desktop as Windows
+# reports it to a game that is not DPI-aware (2194 x 1234 on a 4K display at 175 %): "2560 x 1440" in a window was
+# drawn at that size there. The script warns when a ProfileGPU shows another output size than the one asked for.
+$gameArgs = @($url, '-windowed', "-ResX=$Width", "-ResY=$Height", '-nosplash', '-unattended', '-NoVSync', '-FIXEDSEED')
+if ($ExtraArgs) { $gameArgs += $ExtraArgs.Split(' ') }
 Remove-Item -LiteralPath $Inbox -ErrorAction SilentlyContinue
 $before = @(Get-ChildItem -LiteralPath $CsvDir -Filter '*.csv' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 
@@ -82,13 +93,15 @@ try {
     $engineUp = ((Get-Date) - $started).TotalSeconds
     Wait-Log 'LogSovereignRealms' 300
     Start-Sleep -Seconds 5
-    Send-Commands @('t.MaxFPS 0', 'vl.Opt.IdleThrottle 0', 'r.VSync 0', "r.SetRes ${Width}x${Height}w", 'vl.Battle')
+    Send-Commands (@('t.MaxFPS 0', 'vl.Opt.IdleThrottle 0', 'r.VSync 0', "r.SetRes ${Width}x${Height}$(if ($Fullscreen) { 'f' } else { 'w' })", 'vl.Battle') + @($Pre.Split(';') | Where-Object { $_.Trim() }))
     $ready = ((Get-Date) - $started).TotalSeconds
     Write-Host ("engine up after {0:N1} s, in the match after {1:N1} s; warming up {2} s ..." -f $engineUp, $ready, $Warmup)
     Start-Sleep -Seconds $Warmup
 
     $views = @(
-        @('base', 'vl.View follow'),
+        # (the player's castle from a hero-like camera: with both sides played by the computer the king is benched off
+        # the map, and 'vl.View follow' showed the empty sea)
+        @('base', 'vl.View free -19600 13400 1500 -24 -40 40'),
         @('mountain', 'vl.View free -15000 12000 6000 2 -52 70'),
         @('overview', 'vl.View postcard')
     )
@@ -111,8 +124,43 @@ try {
         Send-Commands @('r.ProfileGPU.ShowUI 0', 'ProfileGPU')
         Start-Sleep -Seconds 6
     }
+    # -AB "r.Nanite 0;r.HZBOcclusion 1": each set at the overview for 15 s of CSV and a ProfileGPU, then put back
+    foreach ($ab in @($AB.Split(';') | Where-Object { $_.Trim() })) {
+        $ab = $ab.Trim()
+        $parts = $ab.Split(' ')
+        Send-Commands @($parts[0])              # (logs its present value)
+        Start-Sleep -Seconds 1
+        $was = '1'
+        if ((Read-Log) -match ('(?s).*' + [regex]::Escape($parts[0]) + ' = "([^"]*)"')) { $was = $Matches[1] }
+        Send-Commands @($ab)
+        Start-Sleep -Seconds 6
+        Send-Commands @('csvprofile start')
+        Start-Sleep -Seconds 15
+        Send-Commands @('csvprofile stop', 'ProfileGPU')
+        Start-Sleep -Seconds 6
+        $new = @(Get-ChildItem -LiteralPath $CsvDir -Filter '*.csv' -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.FullName } | Sort-Object LastWriteTime)
+        if ($new.Count -gt 0) {
+            $name = 'ab_' + ($ab -replace '[^A-Za-z0-9]+', '_')
+            $dst = Join-Path $Out ($name + '.csv')
+            Copy-Item -LiteralPath $new[-1].FullName -Destination $dst -Force
+            $before += $new | ForEach-Object { $_.FullName }
+            $results += ,@($name, $dst)
+        }
+        Send-Commands @("$($parts[0]) $was")
+        Start-Sleep -Seconds 3
+    }
+    # -Post "stat dumpave -num=120 -ms=0.02": console commands at the overview once the captures are done
+    if ($Post.Trim()) {
+        Send-Commands @($Post.Split(';') | Where-Object { $_.Trim() })
+        Start-Sleep -Seconds 12
+    }
     Send-Commands @('vl.Battle')
     Start-Sleep -Seconds 1
+    # the size really drawn at (the last "TemporalSuperResolution ... -> W x H" of a ProfileGPU, if one was taken)
+    if ((Read-Log) -match '(?s).*TemporalSuperResolution[^
+]*-> (\d+)x(\d+)') {
+        if ([int]$Matches[1] -ne $Width -or [int]$Matches[2] -ne $Height) { Write-Host "WARNING: the game drew at $($Matches[1]) x $($Matches[2]), not ${Width} x ${Height}" }
+    }
 }
 finally {
     if (-not $script:Game.HasExited) {

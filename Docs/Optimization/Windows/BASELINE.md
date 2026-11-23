@@ -159,3 +159,45 @@ profiler's captures, every timer), `game.log` (the game's whole log of the run: 
   works, and that is what `perf_capture.ps1` does.
 - `python` on this PC is the Microsoft Store's stub; the scripts use the engine's Python
   (`Engine\Binaries\ThirdParty\Python3\Win64\python.exe`).
+
+## 4. The baseline again, with the capture corrected (batch 0 of `PLAN.md`)
+
+Three faults of the first capture, found by the audit and put right in `Tools\windows\perf_capture.ps1` and
+`Tools/perf_csv.py`:
+
+- **The base view was empty.** With both sides played by the computer the king is benched off the map and
+  `vl.View follow` followed him there (3 draw calls in the base pass). The base view is now a free camera at the
+  player's castle (`vl.View free -19600 13400 1500 -24 -40 40`).
+- **"2560 x 1440" was 2194 x 1234.** The game is not DPI-aware, so on this desktop (4K at 175 %) a window can be no
+  larger than that. `-Fullscreen` asks for the size as a full-screen mode instead, and the script warns when a
+  `ProfileGPU` shows another output size than the one asked for. (1920 x 1080 in a window was right.)
+- **The capture's last line** (its metadata) was read as a frame by `perf_csv.py`: a "worst frame" of 1.8e9 ms now and
+  then. In the CSV files a row's `FrameTime` belongs to the row before's thread timers: per-frame analysis must shift it.
+
+The runs also start with `-FIXEDSEED` now. Same build (`bc883c7`, Development), same method otherwise:
+
+| Run | fps | Frame | 99th | worst | Game | Draw | GPU |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1920 x 1080, base | 68.7 | 14.56 | 18.52 | 28.7 | 14.55 | 5.18 | 3.81 |
+| 1920 x 1080, mountain | 46.4 | 21.54 | 28.37 | 277.4 | 21.13 | 18.73 | 6.99 |
+| 1920 x 1080, overview | 41.1 | 24.30 | 52.41 | 60.6 | 24.28 | 10.06 | 11.62 |
+| 2560 x 1440, base | 65.4 | 15.29 | 19.10 | 29.4 | 15.28 | 5.30 | 4.38 |
+| 2560 x 1440, mountain | 45.8 | 21.83 | 28.26 | 271.5 | 21.63 | 15.92 | 7.56 |
+| 2560 x 1440, overview | 41.3 | 24.22 | 58.76 | 65.9 | 24.20 | 10.34 | 12.42 |
+
+Two runs of the same build differ by about 2 % in the means at 1080p; the worst frame and the 99th percentile move more
+(they depend on which of the commanders' searches fall inside the 30 s).
+
+**Where the movement time goes** (`stat dumpave -num=120` at the overview; the stats' own overhead is in the figures):
+`CharacterMovement` 14.5 ms for 312 troops, of which `FindFloor` 5.97 ms (478 box sweeps of 11 us and 163 line traces)
+and the capsule's own sweeps 5.5 ms (326 of 15 us, returning 3,013 hits). Scene queries are about 78 % of it: the
+ground's collision is worth changing (FP-01).
+
+**Console A/Bs at the overview** (2560 x 1440, 15 s each, against that run's own overview: draw 10.44, GPU 12.28,
+RHI thread 1.85 ms):
+
+| Setting | Draw | GPU | RHIT | Verdict |
+|---|---:|---:|---:|---|
+| `r.Nanite 0` | 11.26 | 12.26 | 1.83 | No gain: the prepass goes, the base pass and the occlusion pass take its time. Not taken. |
+| `r.HZBOcclusion 1` | 14.00 | 9.22 | 3.73 | 3 ms off the GPU, 3.6 ms on the render thread and 1.9 ms on the RHI thread. Not taken: FP-07 removes the queries instead. |
+| `r.VelocityOutputPass 1` | - | - | - | Read-only at run time (it changes the shaders: a cook). Not tried. |
