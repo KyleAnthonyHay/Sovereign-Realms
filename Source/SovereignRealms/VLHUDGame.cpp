@@ -8,6 +8,7 @@
 #include "VLKing.h"
 #include "VLGameMode.h"
 #include "VLCommand.h"
+#include "VLTroopShip.h"
 #include "VLBattle.h"
 #include "VLConstruction.h"
 #include "VLEnemyAI.h"
@@ -997,6 +998,10 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 			Command->OrderMove(Units, At, false, Command->SelectionFormation(), ShiftDown(PCtrl));
 			AVLGameMode::PlayOrderSound(this);
 			UE_LOG(LogSovereignRealms, Log, TEXT("minimap: %d unit(s) sent to %.0f %.0f"), Units.Num(), At.X, At.Y);
+		}
+		else if (AVLTroopShip::OrderFromMap(this, At, ShiftDown(PCtrl)))
+		{
+			// a troop ship is the selection: it sails there (Shift: one more point of its course)
 		}
 		else if (St && St->Trains() && St->Team == UVLBattle::Player)
 		{

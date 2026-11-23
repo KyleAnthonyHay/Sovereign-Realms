@@ -1401,9 +1401,9 @@ bool AVLKing::OrderAt(const FVector2D& Point, bool bRun, bool bQueue)
 	Command->GetSelection(Units);
 	FVector Ground = FVector::ZeroVector;
 	AActor* Hit = PickAt(PC, Point, &Ground, false);    // a foe or the tower only where the pointer is on the thing itself
-	if (AVLTroopShip::OrderFromView(this, PC, Point, Ground))
+	if (AVLTroopShip::OrderFromView(this, PC, Point, Ground, bQueue))
 	{
-		return true;            // a troop ship is the selection: it sails there
+		return true;            // a troop ship is the selection: it sails there (Shift: one more point of its course)
 	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("order at %.0f %.0f of the view: %d unit(s), ground %s, on %s"), Point.X, Point.Y, Units.Num(), *Ground.ToCompactString(), *GetNameSafe(Hit));
 	return OrderOn(Units, Hit, Ground, bRun, bQueue);
@@ -2171,6 +2171,14 @@ bool AVLKing::ClickAt(const FVector2D& Point, bool bShift)
 		TArray<AVLKing*> Sel;
 		Command->GetSelection(Sel);
 		Command->Arm(EVLArm::None);
+		if (Armed == EVLArm::Patrol && AVLTroopShip::PatrolClick(this, PC, Point, bShift))
+		{
+			if (bShift)
+			{
+				Command->Arm(EVLArm::Patrol);       // a troop ship's patrol: Shift, one more point, and P stays armed
+			}
+			return true;
+		}
 		if (Armed == EVLArm::Guard)
 		{
 			// (a troop too, since 2026-11-22: its platoon if it is in one and the guards are not all of it)
@@ -2548,7 +2556,7 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		AVLGameMode::PlayOrderSound(this);
 	}
 	// (H, hold ground, is gone: the stance's cycle, G, has Hold ground)
-	if (PC->WasInputKeyJustPressed(EKeys::P) && Units.Num() > 0)
+	if (PC->WasInputKeyJustPressed(EKeys::P) && (Units.Num() > 0 || AVLTroopShip::Selected(this)))
 	{
 		Command->Arm(EVLArm::Patrol);   // then a click (Shift: more points)
 		UIClick();
@@ -2664,7 +2672,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 	{
 		// (P: in the overview with units selected it is Patrol, OverviewCommands; the pause menu otherwise)
 		const UVLCommand* Cmd = UVLCommand::Get(this);
-		const bool bPatrolKey = !bHeroMode && !HUD->bMenu && Cmd && Cmd->NumSelected() > 0;
+		const bool bPatrolKey = !bHeroMode && !HUD->bMenu && Cmd && (Cmd->NumSelected() > 0 || AVLTroopShip::Selected(this));       // (a troop ship patrols too)
 		if (PC->WasInputKeyJustPressed(EKeys::Escape) || (PC->WasInputKeyJustPressed(EKeys::P) && !bPatrolKey))
 		{
 			HUD->OnEscape();

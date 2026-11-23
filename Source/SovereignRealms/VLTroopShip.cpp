@@ -26,7 +26,8 @@ namespace
 {
 	namespace Deck = VLTroopShipDeck;
 
-	constexpr float PlankWalk = 300.f;          // cm a second on the gangplank and the deck
+	constexpr float PlankWalk = 340.f;          // cm a second on the gangplank and the deck (a walk)
+	constexpr float PlankDropSeconds = 0.3f;    // the gangplank dropping out as it docks
 	constexpr float BoardNear = 380.f;          // a unit this near the gangplank's foot goes up it
 	constexpr float BoardEvery = 0.3f;          // seconds between two units setting foot on it
 	constexpr float ChartMargin = 3000.f;       // the chart reaches this far beyond the ground's bounds
@@ -520,6 +521,7 @@ void AVLTroopShip::TickWalks(float Dt)
 			else
 			{
 				U->SetActorLocationAndRotation(P[3] + FVector(0.f, 0.f, Half + 2.f), FRotator(0.f, GetActorRotation().Yaw, 0.f), false, nullptr, ETeleportType::TeleportPhysics);
+				U->GetCharacterMovement()->Velocity = FVector::ZeroVector;
 				Walks.RemoveAt(i--);
 			}
 			continue;
@@ -528,6 +530,8 @@ void AVLTroopShip::TickWalks(float Dt)
 		const FVector Way = P[Leg + 1] - P[Leg];
 		const float Yaw = Way.SizeSquared2D() > 1.f ? Way.Rotation().Yaw : U->GetActorRotation().Yaw;
 		U->SetActorLocationAndRotation(At + FVector(0.f, 0.f, Half + 2.f), FRotator(0.f, Yaw, 0.f), false, nullptr, ETeleportType::TeleportPhysics);
+		// (its movement is off aboard: its velocity is what its walking pose is drawn from, so it walks the gangplank)
+		U->GetCharacterMovement()->Velocity = Way.GetSafeNormal() * PlankWalk;
 	}
 }
 
@@ -606,15 +610,16 @@ void AVLTroopShip::TickTroops(float Dt)
 
 FString AVLTroopShip::DescribeState() const
 {
+	if (bDocking)
+	{
+		return TEXT("Docking");
+	}
 	if (Path.Num() > 0)
 	{
-		return TEXT("Under sail");
+		return bPatrol ? FString::Printf(TEXT("On patrol (%d points)"), PatrolPts.Num())
+			: (Waypoints.Num() > 0 ? FString::Printf(TEXT("Under sail (%d more points)"), Waypoints.Num()) : FString(TEXT("Under sail")));
 	}
-	if (bAligning || bComingAlongside)
-	{
-		return TEXT("Coming alongside");
-	}
-	return bLanded ? TEXT("Moored: the gangplank is out") : TEXT("At sea, off the shore");
+	return bLanded ? TEXT("Moored: the gangplank is out") : (CanDock() ? TEXT("At sea: a berth is in reach") : TEXT("At sea, off the shore"));
 }
 
 void AVLTroopShip::Moor(const FVector& At, float Yaw)
@@ -625,16 +630,61 @@ void AVLTroopShip::Moor(const FVector& At, float Yaw)
 	UpdateLanding();
 }
 
-void AVLTroopShip::StopSailing()
+void AVLTroopShip::ClearCourse()
 {
 	Path.Reset();
-	bAligning = false;
-	bComingAlongside = false;
+	Waypoints.Reset();
+	PatrolPts.Reset();
+	bPatrol = false;
 	bCastingOff = false;
+	bLegDock = false;
+	bLegStop = true;
+}
+
+void AVLTroopShip::StopSailing()
+{
+	ClearCourse();
+	bDocking = false;
 	Speed = 0.f;
 }
 
-bool AVLTroopShip::SailTo(const FVector& Point)
+void AVLTroopShip::EndWalks()
+{
+	// those on the gangplank: up it at once, or on down to the shore; one that has not set foot on it stays aboard
+	for (FWalk& W : Walks)
+	{
+		W.Delay = W.bOff && W.T <= 0.f ? 1e9f : 0.f;
+		W.T = W.Delay > 0.f ? W.T : 1e7f;
+	}
+	TickWalks(0.f);
+	Walks.Reset();
+}
+
+void AVLTroopShip::GetCourse(TArray<FVector>& Out, bool& bOutLoop) const
+{
+	Out.Reset();
+	bOutLoop = bPatrol;
+	if (bPatrol)
+	{
+		Out = PatrolPts;
+		return;
+	}
+	if (Path.Num() == 0)
+	{
+		return;
+	}
+	Out.Add(GetActorLocation());
+	for (const FVector2D& P : Path)
+	{
+		Out.Add(FVector(P.X, P.Y, SeaZ));
+	}
+	for (const FVector& P : Waypoints)
+	{
+		Out.Add(FVector(P.X, P.Y, SeaZ));
+	}
+}
+
+bool AVLTroopShip::StartLeg(const FVector& Point, bool bLast)
 {
 	UVLFleet* Fleet = UVLFleet::Get(this);
 	if (!Fleet || !Fleet->EnsureChart(SeaZ))
@@ -647,57 +697,123 @@ bool AVLTroopShip::SailTo(const FVector& Point)
 	TArray<FVector2D> Route;
 	if (!Fleet->NearestOpen(From, Target, 15000.f, Goal) || !Fleet->FindRoute(From, Goal, Route))
 	{
+		return false;
+	}
+	Path = MoveTemp(Route);
+	LegTarget = Point;
+	bLegStop = bLast && !bPatrol;
+	// the end of its course by land (the land clicked, or land close by where it stops): it docks there
+	FVector2D Land;
+	bLegDock = bLegStop && (!Fleet->IsWater(Target) || Fleet->NearestLand(Goal, 1400.f, Land));
+	bCastingOff = !Fleet->IsOpen(From);     // (hard by a shore: clear of it first)
+	bDocking = false;
+	bLanded = false;
+	Plank->SetVisibility(false);
+	return true;
+}
+
+bool AVLTroopShip::SailTo(const FVector& Point, bool bQueue)
+{
+	if (bQueue && Path.Num() > 0 && !bPatrol)
+	{
+		// one more point of the course it is on: the leg under way no longer ends it
+		Waypoints.Add(Point);
+		bLegStop = false;
+		bLegDock = false;
+		UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s: one more point of its course, %.0f %.0f (%d after this leg)"), *GetName(), Point.X, Point.Y, Waypoints.Num());
+		return true;
+	}
+	EndWalks();
+	ClearCourse();
+	bDocking = false;
+	if (!StartLeg(Point, true))
+	{
 		if (Team == UVLBattle::Player)
 		{
 			Alert(this, TEXT("The ship cannot sail there"), GetActorLocation());
 		}
 		return false;
 	}
-	// those on the gangplank: up it at once, or back on the shore; those still coming stay ashore (TickTroops)
-	for (FWalk& W : Walks)
+	UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s sails to %.0f %.0f (%d corner(s), %d aboard%s)"), *GetName(), Path.Last().X, Path.Last().Y, Path.Num(), NumAboard(), bLegDock ? TEXT(", to dock there") : TEXT(""));
+	return true;
+}
+
+bool AVLTroopShip::OrderPatrol(const FVector& Point, bool bExtend)
+{
+	UVLFleet* Fleet = UVLFleet::Get(this);
+	const FVector2D Here(GetActorLocation());
+	FVector2D There, Home;
+	// a patrol's points are water a ship can lie in: never the land
+	if (!Fleet || !Fleet->EnsureChart(SeaZ) || !Fleet->NearestOpen(Here, FVector2D(Point), 15000.f, There))
 	{
-		W.Delay = W.bOff && W.T <= 0.f ? 1e9f : 0.f;       // (not yet on the gangplank: it stays aboard)
-		W.T = W.Delay > 0.f ? W.T : 1e7f;
+		if (Team == UVLBattle::Player)
+		{
+			Alert(this, TEXT("The ship cannot patrol there"), GetActorLocation());
+		}
+		return false;
 	}
-	TickWalks(0.f);
-	Walks.Reset();
-	Path = MoveTemp(Route);
-	bAligning = false;
-	bComingAlongside = false;
-	bCastingOff = !Fleet->IsOpen(From);     // (hard by a shore: clear of it first)
-	bLanded = false;
-	Plank->SetVisibility(false);
-	// a shore to come alongside: the land clicked, or land close by where it stops
-	FVector2D Land;
-	ShoreDir = FVector2D::ZeroVector;
-	if (!Fleet->IsWater(Target))
+	if (bExtend && bPatrol && PatrolPts.Num() > 0)
 	{
-		ShoreDir = (Target - Goal).GetSafeNormal();
+		PatrolPts.Add(FVector(There.X, There.Y, SeaZ));
+		UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s: one more point of its patrol, %.0f %.0f (%d points)"), *GetName(), There.X, There.Y, PatrolPts.Num());
+		return true;
 	}
-	if (Fleet->NearestLand(Goal, 1400.f, Land))
+	EndWalks();
+	ClearCourse();
+	bDocking = false;
+	if (!Fleet->NearestOpen(Here, Here, 3000.f, Home))
 	{
-		ShoreDir = (Land - Goal).GetSafeNormal();
+		Home = Here;
 	}
-	UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s sails to %.0f %.0f (%d corner(s), %d aboard%s)"), *GetName(), Goal.X, Goal.Y, Path.Num(), NumAboard(),
-		ShoreDir.IsNearlyZero() ? TEXT("") : TEXT(", to come alongside"));
+	bPatrol = true;
+	PatrolPts = { FVector(Home.X, Home.Y, SeaZ), FVector(There.X, There.Y, SeaZ) };
+	PatrolNext = 1;
+	if (!StartLeg(PatrolPts[1], false))
+	{
+		ClearCourse();
+		return false;
+	}
+	UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s patrols between %.0f %.0f and %.0f %.0f"), *GetName(), Home.X, Home.Y, There.X, There.Y);
 	return true;
 }
 
 void AVLTroopShip::Arrive()
 {
 	Path.Reset();
-	Speed = 0.f;
-	if (ShoreDir.IsNearlyZero())
+	if (bPatrol && PatrolPts.Num() >= 2)
 	{
-		FinishSailing();
-		return;
+		// round and round
+		PatrolNext = (PatrolNext + 1) % PatrolPts.Num();
+		if (StartLeg(PatrolPts[PatrolNext], false))
+		{
+			UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s on patrol: on to point %d of %d"), *GetName(), PatrolNext + 1, PatrolPts.Num());
+			return;
+		}
+		ClearCourse();
 	}
-	// side on to the shore: whichever way round is nearer its heading now
-	const float Shore = FMath::RadiansToDegrees(FMath::Atan2(ShoreDir.Y, ShoreDir.X));
-	const float Yaw = GetActorRotation().Yaw;
-	const float A = Shore + 90.f, B = Shore - 90.f;
-	AlignYaw = FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, A)) <= FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, B)) ? A : B;
-	bAligning = true;
+	while (Waypoints.Num() > 0)
+	{
+		const FVector Next = Waypoints[0];
+		Waypoints.RemoveAt(0);
+		if (StartLeg(Next, Waypoints.Num() == 0))
+		{
+			UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s: the next point of its course, %.0f %.0f (%d after it%s)"), *GetName(), Next.X, Next.Y, Waypoints.Num(), bLegDock ? TEXT("; it docks there") : TEXT(""));
+			return;
+		}
+	}
+	Speed = 0.f;
+	if (bLegDock)
+	{
+		// by the land it was sent to: into the berth there
+		const UVLFleet* Fleet = UVLFleet::Get(this);
+		FVLBerth Berth;
+		if (Fleet && Fleet->FindBerth(FVector2D(GetActorLocation()), DockRange, FVector2D(LegTarget), this, Berth))
+		{
+			StartDock(Berth);
+			return;
+		}
+	}
+	FinishSailing();
 }
 
 void AVLTroopShip::FinishSailing()
@@ -714,116 +830,149 @@ void AVLTroopShip::TickSailing(float Dt)
 	FVector Loc = GetActorLocation();
 	float Yaw = GetActorRotation().Yaw;
 	Loc.Z = SeaZ;
-	if (Path.Num() > 0 && Fleet)
+	if (Path.Num() == 0 || !Fleet)
 	{
-		const FVector2D Pos(Loc);
-		FVector2D To = Path[0] - Pos;
-		float Dist = To.Size();
-		if (bCastingOff)
+		return;
+	}
+	const FVector2D Pos(Loc);
+	FVector2D To = Path[0] - Pos;
+	float Dist = To.Size();
+	if (bCastingOff)
+	{
+		// sideways off the quay, as it lies, to the open water its course starts from
+		const float Move = FMath::Min(150.f * Dt, Dist);
+		Loc.X += To.GetSafeNormal().X * Move;
+		Loc.Y += To.GetSafeNormal().Y * Move;
+		bCastingOff = Dist - Move > 60.f;
+		SetActorLocationAndRotation(Loc, FRotator(0.f, Yaw, 0.f));
+		return;
+	}
+	// (a point it sails on from, a patrol's or a course's: passed at a ship's length, under way)
+	const bool bLast = Path.Num() == 1;
+	if (Dist < (bLast && bLegStop ? 40.f : (bLast ? 700.f : 500.f)))
+	{
+		Path.RemoveAt(0);
+		if (Path.Num() == 0)
 		{
-			// sideways off the quay, as it lies, to the open water its course starts from
-			const float Move = FMath::Min(150.f * Dt, Dist);
-			Loc.X += To.GetSafeNormal().X * Move;
-			Loc.Y += To.GetSafeNormal().Y * Move;
-			bCastingOff = Dist - Move > 60.f;
 			SetActorLocationAndRotation(Loc, FRotator(0.f, Yaw, 0.f));
+			Arrive();
 			return;
 		}
-		const bool bLast = Path.Num() == 1;
-		if (Dist < (bLast ? 40.f : 500.f))
-		{
-			Path.RemoveAt(0);
-			if (Path.Num() == 0)
-			{
-				SetActorLocationAndRotation(Loc, FRotator(0.f, Yaw, 0.f));
-				Arrive();
-				return;
-			}
-			To = Path[0] - Pos;
-			Dist = To.Size();
-		}
-		float Left = Dist;
-		for (int32 i = 1; i < Path.Num(); ++i)
-		{
-			Left += FVector2D::Distance(Path[i - 1], Path[i]);
-		}
-		const float Want = FMath::RadiansToDegrees(FMath::Atan2(To.Y, To.X));
-		const float Err = FMath::FindDeltaAngleDegrees(Yaw, Want);
-		const bool bCreep = bLast && Dist < 450.f;         // the last of the way: straight to the spot, whichever way it heads
-		// it turns as it goes, quicker the slower it is; off its heading it loses way, so it never circles a corner
-		const float Turn = TurnRate * (1.f + 0.8f * (1.f - FMath::Clamp(Speed / Cruise, 0.f, 1.f)));
-		if (!bCreep)
-		{
-			Yaw += FMath::Clamp(Err, -Turn * Dt, Turn * Dt);
-		}
-		float Target = Cruise * FMath::Clamp(1.f - FMath::Abs(Err) / 55.f, 0.06f, 1.f);
+		To = Path[0] - Pos;
+		Dist = To.Size();
+	}
+	float Left = Dist;
+	for (int32 i = 1; i < Path.Num(); ++i)
+	{
+		Left += FVector2D::Distance(Path[i - 1], Path[i]);
+	}
+	const float Want = FMath::RadiansToDegrees(FMath::Atan2(To.Y, To.X));
+	const float Err = FMath::FindDeltaAngleDegrees(Yaw, Want);
+	const bool bCreep = bLegStop && Path.Num() == 1 && Dist < 450.f;        // the last of the way: straight to the spot, whichever way it heads
+	// it turns as it goes, quicker the slower it is; off its heading it loses way, so it never circles a corner
+	const float Turn = TurnRate * (1.f + 0.8f * (1.f - FMath::Clamp(Speed / Cruise, 0.f, 1.f)));
+	if (!bCreep)
+	{
+		Yaw += FMath::Clamp(Err, -Turn * Dt, Turn * Dt);
+	}
+	float Target = Cruise * FMath::Clamp(1.f - FMath::Abs(Err) / 55.f, 0.06f, 1.f);
+	if (bLegStop)
+	{
 		Target = FMath::Min(Target, FMath::Sqrt(2.f * Accel * FMath::Max(Left - 30.f, 0.f)) + 50.f);
-		if (bCreep)
-		{
-			Target = FMath::Min(Target, 160.f);
-		}
-		Speed = Speed < Target ? FMath::Min(Speed + Accel * Dt, Target) : FMath::Max(Speed - Accel * 2.f * Dt, Target);
-		const FVector2D Step = (bCreep ? To.GetSafeNormal() : Dir2D(Yaw)) * FMath::Min(Speed * Dt, bCreep ? Dist : 1e9f);
-		const FVector2D Next = Pos + Step;
-		if (Fleet->IsWater(Next))
-		{
-			Loc.X = Next.X;
-			Loc.Y = Next.Y;
-		}
-		else
-		{
-			Speed = 0.f;            // (land ahead: it turns where it lies until its way is clear)
-		}
 	}
-	else if (bAligning)
+	if (bCreep)
 	{
-		const float Err = FMath::FindDeltaAngleDegrees(Yaw, AlignYaw);
-		Yaw += FMath::Clamp(Err, -TurnRate * 1.3f * Dt, TurnRate * 1.3f * Dt);
-		if (FMath::Abs(Err) < 0.4f)
-		{
-			Yaw = AlignYaw;
-			bAligning = false;
-			bComingAlongside = true;
-			Slid = 0.f;
-		}
+		Target = FMath::Min(Target, 160.f);
 	}
-	else if (bComingAlongside)
+	Speed = Speed < Target ? FMath::Min(Speed + Accel * Dt, Target) : FMath::Max(Speed - Accel * 2.f * Dt, Target);
+	const FVector2D Step = (bCreep ? To.GetSafeNormal() : Dir2D(Yaw)) * FMath::Min(Speed * Dt, bCreep ? Dist : 1e9f);
+	const FVector2D Next = Pos + Step;
+	if (Fleet->IsWater(Next))
 	{
-		// sideways toward the shore while the water beside the hull is clear all along it
-		const FVector2D Fwd = Dir2D(Yaw);
-		FVector2D Side(-Fwd.Y, Fwd.X);
-		if (FVector2D::DotProduct(Side, ShoreDir) < 0.f)
-		{
-			Side = -Side;
-		}
-		static FCollisionQueryParams Params;
-		static TWeakObjectPtr<UWorld> ParamsWorld;
-		if (ParamsWorld.Get() != GetWorld())
-		{
-			Params = ChartParams(GetWorld());
-			ParamsWorld = GetWorld();
-		}
-		const float Move = 90.f * Dt;
-		bool bClear = Slid < MaxSlide;
-		for (const float S : { Deck::SternX + 60.f, Deck::SternX * 0.5f, 0.f, Deck::StemX * 0.4f, Deck::StemX * 0.72f })
-		{
-			const FVector2D Probe = FVector2D(Loc) + Fwd * S + Side * (Deck::HalfBeam + SideGap + Move);
-			bClear = bClear && ClearWater(GetWorld(), Probe, SeaZ, Params);
-		}
-		if (bClear)
-		{
-			Loc.X += Side.X * Move;
-			Loc.Y += Side.Y * Move;
-			Slid += Move;
-		}
-		else
-		{
-			SetActorLocationAndRotation(Loc, FRotator(0.f, Yaw, 0.f));
-			FinishSailing();
-			return;
-		}
+		Loc.X = Next.X;
+		Loc.Y = Next.Y;
+	}
+	else
+	{
+		Speed = 0.f;            // (land ahead: it turns where it lies until its way is clear)
 	}
 	SetActorLocationAndRotation(Loc, FRotator(0.f, Yaw, 0.f));
+}
+
+// ------------------------------------------------------------------------------------------------ docking
+
+bool AVLTroopShip::HullNear(const FVector2D& P, float Margin) const
+{
+	const FVector L = GetActorTransform().InverseTransformPosition(FVector(P.X, P.Y, GetActorLocation().Z));
+	return L.X > Deck::SternX - Margin && L.X < Deck::StemX + Margin && FMath::Abs(L.Y) < Deck::HalfBeam + Margin;
+}
+
+bool AVLTroopShip::Dock()
+{
+	const UVLFleet* Fleet = UVLFleet::Get(this);
+	FVLBerth Berth;
+	if (bLanded || bDocking || !Fleet || !UVLFleet::Get(this)->EnsureChart(SeaZ) || !Fleet->FindBerth(FVector2D(GetActorLocation()), DockRange, FVector2D(GetActorLocation()), this, Berth))
+	{
+		return false;
+	}
+	StartDock(Berth);
+	return true;
+}
+
+void AVLTroopShip::StartDock(const FVLBerth& Berth)
+{
+	const UVLFleet* Fleet = UVLFleet::Get(this);
+	ClearCourse();
+	Speed = 0.f;
+	DockFrom = FVector2D(GetActorLocation());
+	DockFromYaw = GetActorRotation().Yaw;
+	DockTo = Fleet ? Fleet->Snug(Berth) : Berth.At;
+	DockToYaw = DockFromYaw + FMath::FindDeltaAngleDegrees(DockFromYaw, Berth.Yaw);       // (the short way round)
+	DockShore = Berth.Shore;
+	const float Dist = FVector2D::Distance(DockFrom, DockTo);
+	const float Swing = FMath::Abs(DockToYaw - DockFromYaw);
+	// quick: a second for a berth beside it, a second and a half from the edge of its range or right round
+	DockDur = FMath::Clamp(DockSecondsMin + (DockSecondsMax - DockSecondsMin) * FMath::Max(Dist / DockRange, Swing / 180.f), DockSecondsMin, DockSecondsMax);
+	// While it swings its ends reach toward the land: it stands off by what the swing needs and comes in as it
+	// straightens (so no end passes through a quay's corner)
+	const float Off = FVector2D::DotProduct(DockFrom - DockTo, -DockShore);       // how far out it starts
+	const float Need = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Swing))) * Deck::StemX * 0.9f + (Swing > 90.f ? Deck::StemX * 0.9f : 0.f);
+	DockBulge = FMath::Clamp(Need - FMath::Max(Off, 0.f), 0.f, 1200.f);
+	DockT = 0.f;
+	bDocking = true;
+	bCanDock = false;
+	bLanded = false;
+	Plank->SetVisibility(false);
+	UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s docks: %.1f m and %.0f degrees to its berth at %.0f %.0f (yaw %.0f), in %.2f s"), *GetName(), Dist / 100.f, Swing, DockTo.X, DockTo.Y, Berth.Yaw, DockDur);
+}
+
+void AVLTroopShip::TickDock(float Dt)
+{
+	DockT += Dt;
+	const float T = FMath::Clamp(DockT / FMath::Max(DockDur, 0.1f), 0.f, 1.f);
+	// fast in, settling at the end. The turn is done by three quarters of the move; along the shore it goes with the
+	// move; toward the shore it comes in last
+	auto Out3 = [](float X) { const float I = 1.f - FMath::Clamp(X, 0.f, 1.f); return 1.f - I * I * I; };
+	const float Along = Out3(T), Turn = Out3(T / 0.75f), In = FMath::SmoothStep(0.2f, 1.f, T);
+	const FVector2D Delta = DockTo - DockFrom;
+	const FVector2D Tangent(-DockShore.Y, DockShore.X);
+	const float DAlong = FVector2D::DotProduct(Delta, Tangent), DIn = FVector2D::DotProduct(Delta, DockShore);
+	FVector2D Pos = DockFrom + Tangent * (DAlong * Along) + DockShore * (DIn * In);
+	Pos -= DockShore * (DockBulge * FMath::Sin(PI * FMath::Min(T / 0.8f, 1.f)) * (1.f - In * 0.5f));
+	const float Yaw = FMath::Lerp(DockFromYaw, DockToYaw, Turn);
+	SetActorLocationAndRotation(FVector(Pos.X, Pos.Y, SeaZ), FRotator(0.f, Yaw, 0.f));
+	if (T >= 1.f)
+	{
+		bDocking = false;
+		LastDockSeconds = DockT;
+		SettleClock = 0.f;
+		SetActorLocationAndRotation(FVector(DockTo.X, DockTo.Y, SeaZ), FRotator(0.f, FRotator::NormalizeAxis(DockToYaw), 0.f));
+		UpdateLanding();
+		PlankClock = 0.f;           // the gangplank drops now
+		PlacePlank();
+		UE_LOG(LogSovereignRealms, Log, TEXT("ship: %s docked in %.2f s at %s, yaw %.0f: %s"), *GetName(), LastDockSeconds, *GetActorLocation().ToCompactString(), GetActorRotation().Yaw,
+			bLanded ? *FString::Printf(TEXT("landed, its %s side to the land, gangplank to %s"), LandSide > 0 ? TEXT("starboard") : TEXT("port"), *LandPoint.ToCompactString()) : TEXT("off the shore"));
+	}
 }
 
 void AVLTroopShip::UpdateLanding()
@@ -865,11 +1014,15 @@ void AVLTroopShip::PlacePlank()
 	{
 		return;
 	}
-	// from the entry port's sill to the ground: turned and tilted to it, stretched or shortened to its length
+	// from the entry port's sill to the ground: turned and tilted to it, stretched or shortened to its length. Just
+	// docked, it drops from upright (0.3 s)
 	const FVector Sill = GetActorTransform().TransformPosition(FVector(Deck::GateX, LandSide * (Deck::GateY - 25.f), Deck::GateZ + 3.f));
 	const FVector To = LandPoint + FVector(0.f, 0.f, 4.f) - Sill;
 	const float Len = FMath::Max(float(To.Size()), 60.f);
-	Plank->SetWorldLocationAndRotation(Sill, To.Rotation());
+	FRotator Rot = To.Rotation();
+	const float Up = 1.f - FMath::Clamp(PlankClock / PlankDropSeconds, 0.f, 1.f);
+	Rot.Pitch += 75.f * Up * Up;
+	Plank->SetWorldLocationAndRotation(Sill, Rot);
 	Plank->SetWorldScale3D(FVector(Len / Deck::PlankLength, 1.f, 1.f));
 }
 
@@ -878,8 +1031,12 @@ void AVLTroopShip::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	const float Dt = FMath::Min(DeltaSeconds, 0.1f);
 	BobClock += Dt;
-	const bool bWasSailing = IsSailing();
-	if (bWasSailing)
+	SettleClock += Dt;
+	if (bDocking)
+	{
+		TickDock(Dt);
+	}
+	else if (Path.Num() > 0)
 	{
 		TickSailing(Dt);
 	}
@@ -895,10 +1052,29 @@ void AVLTroopShip::Tick(float DeltaSeconds)
 			}
 		}
 	}
-	// it rides the water: a slow heave and roll (more under way). The units aboard stand on the hull and ride with it
+	if (bLanded && PlankClock < PlankDropSeconds + 0.1f)
+	{
+		PlankClock += Dt;
+		PlacePlank();
+	}
+	// a berth within reach (the player's ship, not docked): the dock button shows while there is one
+	DockCheck += Dt;
+	if (bLanded || bDocking || Team != UVLBattle::Player)
+	{
+		bCanDock = false;
+	}
+	else if (DockCheck > 0.3f)
+	{
+		DockCheck = 0.f;
+		UVLFleet* Fleet = UVLFleet::Get(this);
+		bCanDock = Fleet && Fleet->EnsureChart(SeaZ) && Fleet->FindBerth(FVector2D(GetActorLocation()), DockRange, FVector2D(GetActorLocation()), this, DockBerth);
+	}
+	// it rides the water: a slow heave and roll (more under way), and a bob as it settles in a berth. The units aboard
+	// stand on the hull and ride with it
 	const float Way = FMath::Clamp(Speed / FMath::Max(Cruise, 1.f), 0.f, 1.f);
-	const float Heave = 5.f * FMath::Sin(BobClock * 0.9f) + 3.f * Way * FMath::Sin(BobClock * 1.7f);
-	const float Roll = (0.8f + 0.9f * Way) * FMath::Sin(BobClock * 0.7f + 1.f);
+	const float Settle = FMath::Exp(-3.2f * SettleClock);
+	const float Heave = 5.f * FMath::Sin(BobClock * 0.9f) + 3.f * Way * FMath::Sin(BobClock * 1.7f) - 9.f * Settle * FMath::Cos(SettleClock * 8.f);
+	const float Roll = (0.8f + 0.9f * Way) * FMath::Sin(BobClock * 0.7f + 1.f) + 2.6f * Settle * FMath::Cos(SettleClock * 9.f) * LandSide;
 	const float Pitch = (0.35f + 0.5f * Way) * FMath::Sin(BobClock * 0.55f);
 	Hull->SetRelativeLocationAndRotation(FVector(0.f, 0.f, Heave), FRotator(Pitch, 0.f, Roll));
 	TickTroops(Dt);
@@ -958,28 +1134,83 @@ AVLTroopShip* AVLTroopShip::Pick(const UWorld* World, const FVector& Origin, con
 	return Best;
 }
 
-bool AVLTroopShip::OrderFromView(AVLKing* Commander, APlayerController* PC, const FVector2D& Point, const FVector& Ground)
+AVLTroopShip* AVLTroopShip::Selected(const UObject* WorldContext)
 {
+	const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const AVLKing* Commander = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr;
 	AVLTroopShip* Ship = Commander ? Cast<AVLTroopShip>(Commander->GetSelected()) : nullptr;
+	const UVLCommand* Command = UVLCommand::Get(World);
+	return Ship && Command && Ship->Team == Commander->Team && Command->NumSelected() == 0 ? Ship : nullptr;
+}
+
+namespace
+{
+	/** Where a click of the view is for a ship: the land or the quay under the pointer (Ground, if it is above the
+	 *  sea), else where the pointer's ray meets the sea. False: the pointer is on the sky. */
+	bool PointerTarget(const APlayerController* PC, const FVector2D& Point, const FVector& Ground, float SeaZ, FVector& Out)
+	{
+		Out = Ground;
+		if (Ground.IsZero() || Ground.Z < SeaZ + 20.f)
+		{
+			FVector Origin, Dir;
+			if (!PC || !PC->DeprojectScreenPositionToWorld(Point.X, Point.Y, Origin, Dir) || Dir.Z > -0.01f)
+			{
+				return false;
+			}
+			Out = Origin + Dir * ((SeaZ - Origin.Z) / Dir.Z);
+		}
+		return true;
+	}
+}
+
+bool AVLTroopShip::OrderFromView(AVLKing* Commander, APlayerController* PC, const FVector2D& Point, const FVector& Ground, bool bQueue)
+{
+	AVLTroopShip* Ship = Selected(Commander);
 	UVLCommand* Command = UVLCommand::Get(Commander);
-	if (!Ship || !PC || !Command || Ship->Team != Commander->Team || Command->NumSelected() > 0)
+	if (!Ship || !PC || !Command)
 	{
 		return false;
 	}
-	// the land or the quay under the pointer; else where its ray meets the sea
-	FVector Target = Ground;
-	if (Ground.IsZero() || Ground.Z < Ship->SeaZ + 20.f)
-	{
-		FVector Origin, Dir;
-		if (!PC->DeprojectScreenPositionToWorld(Point.X, Point.Y, Origin, Dir) || Dir.Z > -0.01f)
-		{
-			return true;
-		}
-		Target = Origin + Dir * ((Ship->SeaZ - Origin.Z) / Dir.Z);
-	}
-	if (Ship->SailTo(Target))
+	FVector Target;
+	if (PointerTarget(PC, Point, Ground, Ship->SeaZ, Target) && Ship->SailTo(Target, bQueue))
 	{
 		Command->ShowMarker(FVector(Target.X, Target.Y, FMath::Max(Target.Z, Ship->SeaZ)));
+		AVLGameMode::PlayOrderSound(Commander);
+	}
+	return true;
+}
+
+bool AVLTroopShip::OrderFromMap(const UObject* WorldContext, const FVector& At, bool bQueue)
+{
+	AVLTroopShip* Ship = Selected(WorldContext);
+	UVLCommand* Command = UVLCommand::Get(WorldContext);
+	if (!Ship || !Command)
+	{
+		return false;
+	}
+	// (a point of the map: the land there means its shore, as a click on the land does)
+	if (Ship->SailTo(FVector(At.X, At.Y, Ship->SeaZ), bQueue))
+	{
+		Command->ShowMarker(FVector(At.X, At.Y, Ship->SeaZ));
+		AVLGameMode::PlayOrderSound(WorldContext);
+		UE_LOG(LogSovereignRealms, Log, TEXT("minimap: the ship sent to %.0f %.0f%s"), At.X, At.Y, bQueue ? TEXT(" (queued)") : TEXT(""));
+	}
+	return true;
+}
+
+bool AVLTroopShip::PatrolClick(AVLKing* Commander, APlayerController* PC, const FVector2D& Point, bool bShift)
+{
+	AVLTroopShip* Ship = Selected(Commander);
+	UVLCommand* Command = UVLCommand::Get(Commander);
+	if (!Ship || !PC || !Command)
+	{
+		return false;
+	}
+	FVector Target;
+	if (PointerTarget(PC, Point, FVector::ZeroVector, Ship->SeaZ, Target) && Ship->OrderPatrol(Target, bShift))
+	{
+		Command->ShowMarker(FVector(Target.X, Target.Y, Ship->SeaZ));
 		AVLGameMode::PlayOrderSound(Commander);
 	}
 	return true;
@@ -1059,10 +1290,13 @@ void UVLFleet::SpawnShips()
 	{
 		for (AActor* M : Moored)
 		{
-			FVector At;
-			float Yaw = 0.f;
-			FVector2D Shore = FVector2D::ZeroVector;
-			if (!FindBerth(M, At, Yaw, Shore))
+			// by the mooring; and if the units cannot walk to any shore there (the quay is cut off from the land), the
+			// nearest shore of the whole coast they can walk to
+			const FVector Home = M->GetActorLocation();
+			FVLBerth Berth;
+			UVLGrid* Grid = UVLGrid::Get(this);
+			if (!Grid || !Grid->EnsureBuilt() || !EnsureChart(Home.Z)
+				|| !(FindBerth(FVector2D(Home), 4500.f, FVector2D(Home), nullptr, Berth) || FindBerth(FVector2D(Home), 1e7f, FVector2D(Home), nullptr, Berth)))
 			{
 				UE_LOG(LogSovereignRealms, Log, TEXT("ship: no berth by %s"), *M->GetName());
 				continue;
@@ -1077,7 +1311,9 @@ void UVLFleet::SpawnShips()
 					Team = Mat && Mat->GetName().Contains(TEXT("Enemy")) ? UVLBattle::Enemy : Team;
 				}
 			}
-			if (AVLTroopShip* Ship = SpawnShip(At, Yaw, Team))
+			const FVector2D Lie = Snug(Berth);
+			const FVector At(Lie.X, Lie.Y, Home.Z);
+			if (SpawnShip(At, Berth.Yaw, Team))
 			{
 				// the troop ship is the port's ship now: the one the level moored there makes room for it (not if the
 				// berth is another shore altogether)
@@ -1090,11 +1326,6 @@ void UVLFleet::SpawnShips()
 				{
 					UE_LOG(LogSovereignRealms, Warning, TEXT("ship: no shore by %s that units can walk to: the troop ship lies %.0f m from it"), *M->GetName(), FVector::Dist2D(At, M->GetActorLocation()) / 100.f);
 				}
-				Ship->ShoreDir = Shore;             // (the berth is a chart's cell off the quay: it comes alongside from there)
-				Ship->bComingAlongside = true;
-				Ship->Slid = 0.f;
-				Ship->bLanded = false;
-				Ship->PlacePlank();
 			}
 		}
 	}
@@ -1104,29 +1335,17 @@ void UVLFleet::SpawnShips()
 	}
 }
 
-bool UVLFleet::FindBerth(const AActor* Moored, FVector& OutAt, float& OutYaw, FVector2D& OutShore) const
+bool UVLFleet::FindBerth(const FVector2D& Around, float Radius, const FVector2D& Prefer, const AVLTroopShip* For, FVLBerth& Out) const
 {
-	UVLFleet* Self = const_cast<UVLFleet*>(this);
 	UVLGrid* Grid = UVLGrid::Get(this);
-	const FVector Home = Moored->GetActorLocation();
-	if (!Grid || !Grid->EnsureBuilt() || !Self->EnsureChart(Home.Z))
+	if (!Grid || !Grid->IsBuilt() || DimX <= 0)
 	{
 		return false;
 	}
-	FIntPoint C0;
-	if (!ToCell(FVector2D(Home), C0))
-	{
-		return false;
-	}
+	const FIntPoint C0(FMath::Clamp(FMath::FloorToInt((Around.X - Origin.X) / CellSize), 0, DimX - 1), FMath::Clamp(FMath::FloorToInt((Around.Y - Origin.Y) / CellSize), 0, DimY - 1));
+	const int32 R = FMath::Min(FMath::CeilToInt(Radius / CellSize), FMath::Max(DimX, DimY));
+	const float ForYaw = For ? For->GetActorRotation().Yaw : 0.f;
 	float BestScore = TNumericLimits<float>::Max();
-	// by the mooring; and if the units cannot walk to any shore there (the quay is cut off from the land), the nearest
-	// shore of the whole coast they can walk to
-	for (const int32 R : { FMath::CeilToInt(4500.f / CellSize), FMath::Max(DimX, DimY) })
-	{
-	if (BestScore < TNumericLimits<float>::Max())
-	{
-		break;
-	}
 	const float Along[] = { VLTroopShipDeck::SternX + 40.f, VLTroopShipDeck::SternX * 0.5f, 0.f, VLTroopShipDeck::StemX * 0.45f, VLTroopShipDeck::StemX - 150.f };
 	for (int32 dy = -R; dy <= R; ++dy)
 	{
@@ -1139,14 +1358,15 @@ bool UVLFleet::FindBerth(const AActor* Moored, FVector& OutAt, float& OutYaw, FV
 			}
 			const FVector2D Mid = CellMid(C);
 			FVector2D Land;
-			if (!NearestLand(Mid, 900.f, Land))
+			if (FVector2D::DistSquared(Mid, Around) > FMath::Square(Radius) || !NearestLand(Mid, 900.f, Land))
 			{
 				continue;
 			}
 			const FVector2D Shore = (Land - Mid).GetSafeNormal();
 			for (const float Turn : { 90.f, -90.f })
 			{
-				// its side to that land: the whole hull in water, the land lying along it, a gangplank's reach of ground
+				// its side to that land: the whole hull in water and clear of other ships, the land lying along it, a
+				// gangplank's reach of ground
 				const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Shore.Y, Shore.X)) + Turn;
 				const FVector2D Fwd = Dir2D(Yaw);
 				const FVector2D Side(-Fwd.Y, Fwd.X);
@@ -1158,6 +1378,10 @@ bool UVLFleet::FindBerth(const AActor* Moored, FVector& OutAt, float& OutYaw, FV
 					{
 						const FVector2D P = Mid + Fwd * S + Side * W;
 						bFits = bFits && IsWater(P);
+						for (const TWeakObjectPtr<AVLTroopShip>& Other : Ships)
+						{
+							bFits = bFits && (!Other.IsValid() || Other.Get() == For || !Other->HullNear(P, 250.f));
+						}
 					}
 				}
 				// a straight shore: land abeam of it fore and aft as well, about as near as amidships
@@ -1172,7 +1396,7 @@ bool UVLFleet::FindBerth(const AActor* Moored, FVector& OutAt, float& OutYaw, FV
 				{
 					continue;
 				}
-				const FVector Gate(FVector2D(Mid + Fwd * VLTroopShipDeck::GateX + Side * (Port * VLTroopShipDeck::GateY)), Home.Z + VLTroopShipDeck::GateZ);
+				const FVector Gate(FVector2D(Mid + Fwd * VLTroopShipDeck::GateX + Side * (Port * VLTroopShipDeck::GateY)), ChartSeaZ + VLTroopShipDeck::GateZ);
 				const int32 Node = Grid->NearestNode(Gate, 14, Grid->MainRegion());
 				if (Node == INDEX_NONE)
 				{
@@ -1184,20 +1408,47 @@ bool UVLFleet::FindBerth(const AActor* Moored, FVector& OutAt, float& OutYaw, FV
 				{
 					continue;
 				}
-				// the nearest to the mooring, and a short gangplank
-				const float Score = FVector2D::Distance(Mid, FVector2D(Home)) + 0.5f * D;
+				// the nearest to where it is wanted, a short gangplank, and the heading that turns the ship least
+				const float Score = FVector2D::Distance(Mid, Prefer) + 0.5f * D + (For ? FMath::Abs(FMath::FindDeltaAngleDegrees(ForYaw, Yaw)) * 2.f : 0.f);
 				if (Score < BestScore)
 				{
 					BestScore = Score;
-					OutAt = FVector(Mid.X, Mid.Y, Home.Z);
-					OutYaw = Yaw;
-					OutShore = Shore;
+					Out.At = Mid;
+					Out.Yaw = Yaw;
+					Out.Shore = Shore;
+					Out.Land = N;
 				}
 			}
 		}
 	}
-	}
 	return BestScore < TNumericLimits<float>::Max();
+}
+
+FVector2D UVLFleet::Snug(const FVLBerth& Berth) const
+{
+	// sideways toward the land, 10 cm at a time, while the water beside the hull is clear all along it
+	const UWorld* World = GetWorld();
+	const FVector2D Fwd = Dir2D(Berth.Yaw);
+	FVector2D Side(-Fwd.Y, Fwd.X);
+	if (FVector2D::DotProduct(Side, Berth.Shore) < 0.f)
+	{
+		Side = -Side;
+	}
+	FVector2D At = Berth.At;
+	for (int32 Step = 0; World && Step < int32(MaxSlide / 10.f); ++Step)
+	{
+		bool bClear = true;
+		for (const float S : { VLTroopShipDeck::SternX + 60.f, VLTroopShipDeck::SternX * 0.5f, 0.f, VLTroopShipDeck::StemX * 0.4f, VLTroopShipDeck::StemX * 0.72f })
+		{
+			bClear = bClear && ClearWater(World, At + Fwd * S + Side * (VLTroopShipDeck::HalfBeam + SideGap + 10.f), ChartSeaZ, Probe);
+		}
+		if (!bClear)
+		{
+			break;
+		}
+		At += Side * 10.f;
+	}
+	return At;
 }
 
 // ------------------------------------------------------------------------------------------------ the chart
@@ -1245,6 +1496,7 @@ bool UVLFleet::EnsureChart(float SeaZ)
 	ChartSeaZ = SeaZ;
 	Water.Init(0, DimX * DimY);
 	const FCollisionQueryParams Params = ChartParams(World);
+	Probe = Params;
 	const FCollisionQueryParams SheetParams(SCENE_QUERY_STAT(VLFleetSheet), true);
 	ParallelFor(DimY, [&](int32 y)
 	{
@@ -1593,7 +1845,7 @@ namespace
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs CmdShip(TEXT("vl.Ship"),
-		TEXT("vl.Ship [#n] state | board <sel|all|heroes|near [m]|platoon N> [run] | put <who> | unload | sail X Y | stop | moor X Y Yaw | pos   (#n: which ship, default the player's first; X Y in cm)"),
+		TEXT("vl.Ship [#n] state | board <sel|all|heroes|near [m]|platoon N> [run] | put <who> | unload | sail X Y [queue] | patrol X Y [add] | dock | stop | moor X Y Yaw | pos   (#n: which ship, default the player's first; X Y in cm)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& InArgs, UWorld* World)
 		{
 			TArray<FString> Args(InArgs);
@@ -1624,9 +1876,9 @@ namespace
 						{
 							Health += U->GetHealthFrac();
 						}
-						UE_LOG(LogSovereignRealms, Log, TEXT("ship #%d %s team %d at %s yaw %.0f: %s; aboard %d of %d, coming %d, landed %d at %s, health of those aboard %.2f"), i, *Ship->GetName(), Ship->GetTeam(),
+						UE_LOG(LogSovereignRealms, Log, TEXT("ship #%d %s team %d at %s yaw %.0f: %s; aboard %d of %d, coming %d, landed %d at %s, health of those aboard %.2f; can dock %d at %s, last dock %.2f s"), i, *Ship->GetName(), Ship->GetTeam(),
 							*Ship->GetActorLocation().ToCompactString(), Ship->GetActorRotation().Yaw, *Ship->DescribeState(), In.Num(), AVLTroopShip::Capacity(), Ship->NumComing(), Ship->IsLanded() ? 1 : 0,
-							*Ship->GetLandPoint().ToCompactString(), In.Num() > 0 ? Health / In.Num() : 0.f);
+							*Ship->GetLandPoint().ToCompactString(), In.Num() > 0 ? Health / In.Num() : 0.f, Ship->CanDock() ? 1 : 0, *Ship->GetDockPoint().ToCompactString(), Ship->GetLastDockSeconds());
 					}
 					++i;
 				}
@@ -1662,8 +1914,17 @@ namespace
 			}
 			else if (Verb == TEXT("sail") && Args.Num() >= 3)
 			{
-				const bool bOk = Ship->SailTo(FVector(FCString::Atof(*Args[1]), FCString::Atof(*Args[2]), Ship->GetActorLocation().Z));
+				const bool bOk = Ship->SailTo(FVector(FCString::Atof(*Args[1]), FCString::Atof(*Args[2]), Ship->GetActorLocation().Z), Args.Last().ToLower() == TEXT("queue"));
 				UE_LOG(LogSovereignRealms, Log, TEXT("ship: sail %s"), bOk ? TEXT("ordered") : TEXT("refused"));
+			}
+			else if (Verb == TEXT("patrol") && Args.Num() >= 3)
+			{
+				const bool bOk = Ship->OrderPatrol(FVector(FCString::Atof(*Args[1]), FCString::Atof(*Args[2]), Ship->GetActorLocation().Z), Args.Last().ToLower() == TEXT("add"));
+				UE_LOG(LogSovereignRealms, Log, TEXT("ship: patrol %s"), bOk ? TEXT("ordered") : TEXT("refused"));
+			}
+			else if (Verb == TEXT("dock"))
+			{
+				UE_LOG(LogSovereignRealms, Log, TEXT("ship: dock %s"), Ship->Dock() ? TEXT("ordered") : TEXT("refused: no berth in reach"));
 			}
 			else if (Verb == TEXT("stop"))
 			{

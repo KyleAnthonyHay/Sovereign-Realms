@@ -2657,7 +2657,7 @@ void UVLCommand::Arm(EVLArm Mode)
 	{
 	case EVLArm::AttackGround: bOk = Units.ContainsByPredicate([](const AVLKing* U) { return UVLArcherCombat::CanFight(U); }); break;
 	case EVLArm::AttackMove: bOk = Units.ContainsByPredicate([](const AVLKing* U) { return CanAttack(U); }); break;
-	case EVLArm::Patrol: bOk = Units.Num() > 0; break;
+	case EVLArm::Patrol: bOk = Units.Num() > 0 || AVLTroopShip::Selected(this) != nullptr; break;      // (a troop ship patrols too)
 	case EVLArm::Guard: bOk = SelectionCanGuard(); break;
 	default: break;
 	}

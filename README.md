@@ -117,7 +117,7 @@ There are two ways to play, switched with **Tab**.
 | Shift + right click | a point on the selection's pathway (as in the first draft): units already on an order walk there after it, in order; idle ones start at once. A plain right click replaces the pathway. **On a foe's unit or building: queued** (`UVLCommand::OrderChain`): they attack it after what they are doing, then the next foe, a building, a walk (Shift + right click on the ground after an attack is the chain's next walk); a dashed line through the chain (red attacks, blue walks) with numbered plates, as the Builders' queue |
 | Right click on the Watch Tower | the archers of the selection walk to its door and appear on the lookout (8 posts); anyone else waits by the door |
 | Right click on the Troop Ship | the selection walks to the foot of its gangplank and goes aboard, one after another (24 soldiers; King David and Jonathan besides, on the stern castle); those it has no room for stay ashore. Only while its gangplank is out (it lies at a quay or a shore). See *The troop ship* |
-| Select the Troop Ship (click it) | its panel: who is aboard, **Unload** (everyone down the gangplank, forming up on the shore). **Right click the water: it sails there**, round the land; right click a shore, a quay or a pier: it goes as near as the water lets it, turns its side to the land and comes alongside (the gangplank goes out where ground is within its reach). Troops aboard can also be selected and sent somewhere: they step ashore first; at sea they stay aboard |
+| Select the Troop Ship (click it) | its panel: who is aboard, **Unload** (everyone down the gangplank, forming up on the shore). **Right click the water (or the minimap): it sails there**, round the land; **Shift + right click: one more point of its course**, sailed in order (blue dashed lines, as the troops' pathway). Right click a shore, a quay or a pier (also as the last Shift point): it sails there and **docks**. **P, then a click on the water: it patrols** between where it lies and there (Shift + click: one more point of the loop; orange lines), until its next order. Within 30 m of a berth a **DOCK button** shows over the berth and in the panel: a click and it swings its side to the land and slides in (1 to 1.5 s), and the gangplank drops. Troops aboard can also be selected and sent somewhere: they step ashore first; at sea they stay aboard |
 | Select the Watch Tower | its panel (the selection panel, bottom middle) shows who mans it; its **Lookout** button brings them down. An archer on the lookout can also be selected and sent somewhere: it comes down first |
 | F | the next formation: Line, Column, Wedge, Square, Loose (melee in front, archers behind) |
 | A (a tap), then left click | attack-move: the selection marches there fighting what it meets, and marches on after each fight (Shift + click: one more point of the way; a click on a foe attacks it). **No attack-ground for archers any more** (the owner's call, 2026-11-22: no key, no button; `vl.ArmGround` and `UVLCommand::OrderAttackGround` are kept for tests) |
@@ -1412,13 +1412,32 @@ without a reference picture, from the grain ship's art language).
   of ground of the path grid's main region that is no more than 1.9 m under or 1.2 m over the port's sill. **Unload**
   (the panel's button, `Unload`): down the gangplank one after another, to a block formed 6.5 m inland. An order to
   units aboard a landed ship: they step ashore and take it; at sea it is refused (an alert).
-- **Sailing** (`SailTo`; the ship selected, a right click): `UVLFleet` charts the level once on 2.5 m cells: water
-  a hull floats in is a cell where a water sheet lies at the ships' sea level and nothing stands in it or over it
-  down to the draught (ground, rocks, piers, quays, bridges); the ship's middle keeps to cells whose neighbours are
-  all water. Routes are A* over those, pulled straight; it sails at 9 m/s, turns 26 degrees a second and loses way
-  off its heading. At the end, with land within 14 m, it turns its side to the land and comes sideways to 55 cm off
-  it; leaving a berth it first comes sideways off it. It cannot leave the water, and it cannot be attacked or sunk
-  (it is no building: no `Team:` or `Selectable` tag; the pointer finds it by its hull's and sail's boxes).
+- **Sailing** (`SailTo`; the ship selected, a right click on the water or the minimap): `UVLFleet` charts the level
+  once on 2.5 m cells: water a hull floats in is a cell where a water sheet lies at the ships' sea level and nothing
+  stands in it or over it down to the draught (ground, rocks, piers, quays, bridges); the ship's middle keeps to
+  cells whose neighbours are all water. Routes are A* over those, pulled straight; it sails at 9 m/s, turns 26
+  degrees a second and loses way off its heading; leaving a berth it first comes sideways off it. **Shift + right
+  click** (`SailTo(..., bQueue)`): one more point of its course, as the troops' Shift pathway; the points are sailed
+  in order, passed under way, and the last one, if it is on or by land, is docked at. **Patrol** (`OrderPatrol`;
+  **P**, then a left click on the water, Shift + click for more points: the troops' own key, hint and armed click,
+  `UVLCommand::Arm`): it loops between where it lay and its points until its next order; a patrol's points are
+  always water (a click on land: the nearest water), and docking ends it. The course is drawn with the troops'
+  dashed lines: blue for a course and its queued points, orange for a patrol's loop. It cannot leave the water, and
+  it cannot be attacked or sunk (it is no building: no `Team:` or `Selectable` tag; the pointer finds it by its
+  hull's and sail's boxes).
+- **Docking** (`Dock`, `UVLFleet::FindBerth`): a berth is an open cell with land within 9 m lying straight along
+  the hull, the whole hull in water and clear of other ships, and ground of the path grid's main region within a
+  gangplank's reach of the entry port on that side. While the player's ship is not docked it looks three times a
+  second for a berth whose middle is within **30 m** of its own (`DockRange`); while there is one, a **DOCK button**
+  stands over the place the gangplank would go, and beside Unload in its panel. A click (or the end of a course
+  sent to a shore or a quay) starts the move: the ship picks the heading along the shore that turns it least (so
+  whichever entry port then faces the land is used), and goes into the berth in one eased move of **1 to 1.5 s**
+  (by distance and swing; fast in, settling at the end): the turn is done by three quarters of the move, it slides
+  along the shore with the move and toward the shore last, standing off by what the swing of its ends needs, so no
+  end passes through a quay's corner; then the gangplank drops (0.3 s) and the hull bobs as it settles. Measured:
+  1.40 s from 23.6 m (Realm v3's west dock), 1.17 s at its east dock, 1.33 s and 1.12 s at Realm v2's east quay.
+- **The gangplank**: units walk up and down it with their own walk (the ship moves them along it at a walk and
+  gives their movement the velocity their pose is drawn from), facing the way they go.
 - **Where ships come from** (when play starts): an actor tagged `TroopShip`, `TroopShip:0` or `TroopShip:1` (the
   team) is the mooring: its place is the ship's pivot (on the waterline), its yaw the ship's (bow +X); a static mesh
   actor there (the level's own `SM_TroopShip`, so the ship shows in the editor) is hidden. A level with none and
@@ -1427,7 +1446,7 @@ without a reference picture, from the grain ship's art language).
 - **The interface**: a plate over the player's ship says how many are aboard ("24 / 24 + 1": the heroes after the
   plus); selected, its panel takes the selection panel's place.
 - Console: `vl.Ship [#n] state | board <sel|all|heroes|near [m]|platoon N> [run] | put <who> | unload | sail X Y |
-  stop | moor X Y Yaw | pos`. The check: `python Tools/troopship_test.py shots perf` (PIE on L_RealmV2: boards 24 of
+  patrol X Y [add] | dock | stop | moor X Y Yaw | pos` (`sail X Y queue`: one more point). The check: `python Tools/troopship_test.py shots perf` (PIE on L_RealmV2: boards 24 of
   26 and the king where the player's ship lies with the player's own clicks, sails round the island, comes alongside
   the east port's quay, unloads, marches inland).
 - **Realm v2's shores** (found by the ship, not changed): the west port's quay and its stair are cut off from the
@@ -1435,9 +1454,10 @@ without a reference picture, from the grain ship's art language).
   beaches are coves the path grid's main region does not reach. The player's ship therefore lies at the south
   beach (the nearest shore units can walk to, 278 m from the port; the grain ship stays at the pier) and can land
   there and at the east port. Realm v3: both ships lie at their ports' piers.
-- **Not done**: the enemy's commander does not use its ship. Units on the gangplank slide (no walk pose while the
-  ship carries them). The ship turns on the spot when it comes alongside (its ends can pass through a quay's corner).
-  The minimap's right click does not sail it.
+- **Not done**: the enemy's commander does not use its ship (the owner: fine for now). The hero boards from the
+  overview only. The checks: `python Tools/troopship_dock_test.py realmv3|realmv2 shots` (the dock button and the
+  move, boarding and unloading at the dock, the minimap, a course of three points ending in a dock, a patrol of
+  two laps).
 
 ## The water's depth (`UVLWaterLook`, `VLWaterLook.*`; `M_VoxWater`)
 
