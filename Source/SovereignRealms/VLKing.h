@@ -434,6 +434,9 @@ public:
 	float LookSpeedFar = 0.45f;
 
 	void CycleLookSpeed();
+	/** The settings slider (Mouse sensitivity): 0.1 .. 2.0, to every unit the player may take over; bSave writes it
+	 *  to the user settings (on letting go of the slider, not every frame of a drag). */
+	void SetLookSpeed(float Speed, bool bSave);
 
 	/** Invert look (Esc menu / I): bit 1 left-right, bit 2 up-down; saved. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Camera")

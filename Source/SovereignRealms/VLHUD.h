@@ -388,6 +388,7 @@ private:
 	int32 PickDifficulty = 1;
 	float PendingScale = 1.f;
 	bool bSettingsDirty = false;
+	bool bLookSpeedDirty = false;      // (the Mouse sensitivity slider moved: saved once it is let go)
 	float MasterVolume = 1.f;
 	int32 FrameCap = 2;                // 30, 40, 60, 120, unlimited
 	bool bPlatoonsCollapsed = false;

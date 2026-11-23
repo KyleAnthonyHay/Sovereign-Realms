@@ -376,7 +376,7 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 #if PLATFORM_MAC
 	const int32 NumRows = 12;
 #else
-	const int32 NumRows = 14;       // (Display mode, Resolution and VSync where the Mac has its Window row)
+	const int32 NumRows = 13;       // (Display mode and Resolution where the Mac has its Window row)
 #endif
 	// (a view too low for the panel, a 1280 x 720 window or a large Interface scale: drawn smaller, whole)
 	const FFit Fit(*this, FitScale(600.f, 92.f + NumRows * 46.f + 2.f * 34.f + 96.f + 24.f));
@@ -436,6 +436,43 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 		if (B.bClicked) { Click(); bSettingsDirty = true; }
 		return B.bClicked;
 	};
+	// every choice side by side, the current one lit ("Low | Medium | High"): one click picks it (user request
+	// 2026-11-23, in place of a button cycling through them). Returns the one picked this frame, or INDEX_NONE.
+	// Ids: VLId::Setting + 20 + Row * 8 + choice.
+	auto Segments = [&](int32 Row, std::initializer_list<const TCHAR*> Names, int32 Current) -> int32
+	{
+		const int32 N = int32(Names.size());
+		const float Gap = U(4.f), Left = SX, Right = VX;
+		const float SegW = (Right - Left - Gap * (N - 1)) / FMath::Max(N, 1);
+		const float Size = N >= 5 ? U(14.f) : U(15.f);
+		int32 Picked = INDEX_NONE, i = 0;
+		for (const TCHAR* Name : Names)
+		{
+			const float L = FMath::RoundToFloat(Left + i * (SegW + Gap));
+			const FBox2D Box(FVector2D(L, RY + U(6.f)), FVector2D(FMath::RoundToFloat(L + SegW), RY + RowH - U(6.f)));
+			const bool bOn = i == Current;
+			const FBtn B = Button(Box, VLId::Setting + 20 + Row * 8 + i);
+			if (bOn)
+			{
+				Fill(Box.Min.X, Box.Min.Y, Box.Max.X - Box.Min.X, Box.Max.Y - Box.Min.Y, A(Gold, 0.30f));
+				Outline(Box, GoldBright, FMath::Max(1.f, U(1.5f)));
+			}
+			else
+			{
+				ButtonFrame(Box, B, true);
+			}
+			TextIn(FBox2D(Box.Min + FVector2D(0.f, B.bHeld && !bOn ? U(1.f) : 0.f), Box.Max), Name, Size,
+				bOn ? GoldBright : FMath::Lerp(Parchment, GoldBright, B.Hot), AlignCentre, Bold);
+			if (B.bClicked && !bOn)
+			{
+				Click();
+				bSettingsDirty = true;
+				Picked = i;
+			}
+			++i;
+		}
+		return Picked;
+	};
 	// a section's heading, as on the controls screen
 	auto Head = [&](const TCHAR* Name)
 	{
@@ -448,25 +485,43 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 	// Graphics (UVLGraphics): the quality preset brings its own render scale, which can then be changed by itself
 	Head(TEXT("GRAPHICS"));
 	Label(TEXT("Quality"));
-	if (Choice(VLId::Setting + 8, UVLGraphics::QualityName(UVLGraphics::GetQuality()), nullptr))
 	{
-		UVLGraphics::SetQuality(GetWorld(), (UVLGraphics::GetQuality() + UVLGraphics::NumQualities - 1) % UVLGraphics::NumQualities);     // High, Medium, Low
+		const int32 Pick = Segments(0, { TEXT("Low"), TEXT("Medium"), TEXT("High") }, UVLGraphics::GetQuality());
+		if (Pick != INDEX_NONE) { UVLGraphics::SetQuality(GetWorld(), Pick); }
 	}
 	RY += RowH;
 	Label(TEXT("Render scale"));
-	if (Choice(VLId::Setting + 9, FString::Printf(TEXT("%d%%"), UVLGraphics::GetRenderScale()), nullptr)) { UVLGraphics::CycleRenderScale(GetWorld()); }
+	{
+		// (the settings row's choices; a scale set from the console between them lights none)
+		static const int32 Scales[] = { 50, 60, 67, 75, 85, 100 };
+		int32 ScaleNow = INDEX_NONE;
+		for (int32 i = 0; i < UE_ARRAY_COUNT(Scales); ++i) { if (Scales[i] == UVLGraphics::GetRenderScale()) { ScaleNow = i; } }
+		const int32 Pick = Segments(1, { TEXT("50%"), TEXT("60%"), TEXT("67%"), TEXT("75%"), TEXT("85%"), TEXT("100%") }, ScaleNow);
+		if (Pick != INDEX_NONE) { UVLGraphics::SetRenderScale(GetWorld(), Scales[Pick]); }
+	}
 	RY += RowH;
 	Label(TEXT("Dynamic resolution"));
-	if (Choice(VLId::Setting + 10, UVLGraphics::DynamicResName(UVLGraphics::GetDynamicRes()), nullptr)) { UVLGraphics::CycleDynamicRes(GetWorld()); }
+	{
+		const int32 Pick = Segments(2, { TEXT("Off"), TEXT("60 fps"), TEXT("40 fps"), TEXT("30 fps") }, UVLGraphics::GetDynamicRes());
+		if (Pick != INDEX_NONE) { UVLGraphics::SetDynamicRes(GetWorld(), Pick); }
+	}
 	RY += RowH;
 	Label(TEXT("Frame rate limit"));
-	if (Choice(VLId::Setting + 4, MenuFpsCaps[FrameCap] > 0 ? FString::Printf(TEXT("%d fps"), MenuFpsCaps[FrameCap]) : FString(TEXT("Unlimited")), nullptr)) { FrameCap = (FrameCap + 1) % 5; ApplySettings(); }
+	{
+		// MenuFpsCaps: 30, 40, 60, 120, none
+		const int32 Pick = Segments(3, { TEXT("30"), TEXT("40"), TEXT("60"), TEXT("120"), TEXT("None") }, FrameCap);
+		if (Pick != INDEX_NONE) { FrameCap = Pick; ApplySettings(); }
+	}
 	RY += RowH;
 	// the window (saved in GameUserSettings by UVLGraphics, as F11 / Alt+Enter and a dragged edge are; the editor's
 	// play window is the editor's own)
 #if PLATFORM_MAC
 	Label(TEXT("Window"));
-	if (Choice(VLId::Setting + 11, !UVLGraphics::CanChangeWindow() ? FString(TEXT("Editor window")) : FString(UVLGraphics::IsFullscreen() ? TEXT("Full screen") : TEXT("Windowed")), nullptr))
+	if (!UVLGraphics::CanChangeWindow())
+	{
+		Choice(VLId::Setting + 11, FString(TEXT("Editor window")), nullptr);
+	}
+	else if (Segments(6, { TEXT("Windowed"), TEXT("Full screen") }, UVLGraphics::IsFullscreen() ? 1 : 0) != INDEX_NONE)
 	{
 		UVLGraphics::ToggleFullscreen();
 	}
@@ -474,11 +529,17 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 #else
 	// Windows: the display mode (a window, borderless full screen at the desktop's size, exclusive full screen at a
 	// mode of the display's), the resolution and VSync. UVLGraphics makes the change in its next tick, never here in
-	// the draw, and asks for an exclusive mode to be confirmed (DrawDisplayConfirm).
+	// the draw. No size is passed: full screen takes the display's native resolution, and a window out of full screen
+	// is maximized (the screen's resolution), so nothing has to be set by hand.
 	Label(TEXT("Display mode"));
-	if (Choice(VLId::Setting + 11, !UVLGraphics::CanChangeWindow() ? FString(TEXT("Editor window")) : FString(UVLGraphics::DisplayModeName(UVLGraphics::GetDisplayMode())), nullptr))
+	if (!UVLGraphics::CanChangeWindow())
 	{
-		UVLGraphics::CycleDisplayMode();
+		Choice(VLId::Setting + 11, FString(TEXT("Editor window")), nullptr);
+	}
+	else
+	{
+		const int32 Pick = Segments(4, { TEXT("Windowed"), TEXT("Borderless"), TEXT("Full screen") }, UVLGraphics::GetDisplayMode());
+		if (Pick != INDEX_NONE) { UVLGraphics::SetDisplay(Pick, FIntPoint::ZeroValue); }
 	}
 	RY += RowH;
 	Label(TEXT("Resolution"));
@@ -507,22 +568,35 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 		}
 	}
 	RY += RowH;
-	Label(TEXT("VSync"));
-	if (Choice(VLId::Setting + 14, UVLGraphics::IsVSync() ? TEXT("On") : TEXT("Off"), nullptr)) { UVLGraphics::SetVSync(!UVLGraphics::IsVSync()); }
-	RY += RowH;
+	// (no VSync row: it is always on, no tearing; user request 2026-11-23. UVLGraphics::OnWorldBeginPlay)
 #endif
 	Head(TEXT("CAMERA"));
 	Label(TEXT("Camera angle"));
 	if (Choice(VLId::Setting + 5, AVLKing::CameraAngleName(Me ? Me->GetCameraAngle() : 0), TEXT("V")) && Me) { Me->CycleCameraAngle(); }
 	RY += RowH;
-	Label(TEXT("Look speed"));
-	if (Choice(VLId::Setting + 6, FString::Printf(TEXT("%.0f%%"), (Me ? Me->GetLookSpeedSetting() : 0.5f) * 100.f), TEXT("L")) && Me) { Me->CycleLookSpeed(); }
+	Label(TEXT("Mouse sensitivity"));
+	{
+		// a slider (user request 2026-11-23), 10% .. 200% in steps of 5; applied while dragged, saved when let go
+		// (L still steps through the quarters)
+		float Speed = Me ? Me->GetLookSpeedSetting() : 0.5f;
+		if (Slider(SliderBox(), VLId::Setting + 6, Speed, 0.1f, 2.f) && Me)
+		{
+			Me->SetLookSpeed(FMath::RoundToFloat(Speed * 20.f) / 20.f, false);
+			bLookSpeedDirty = true;
+		}
+		if (bLookSpeedDirty && ActiveId != VLId::Setting + 6 && Me)
+		{
+			Me->SetLookSpeed(Me->GetLookSpeedSetting(), true);
+			bLookSpeedDirty = false;
+		}
+		Value(FString::Printf(TEXT("%.0f%%"), (Me ? Me->GetLookSpeedSetting() : 0.5f) * 100.f));
+	}
 	RY += RowH;
 	Label(TEXT("Invert look"));
 	if (Choice(VLId::Setting + 7, AVLKing::LookInvertName(Me ? Me->GetLookInvert() : 0), TEXT("I")) && Me) { Me->CycleLookInvert(); }
 	RY += RowH;
 
-	Text(TEXT("U music   V camera angle   L look speed   I invert look   Esc back"), X + W * 0.5f, RY + U(8.f), U(14.f), Dim, AlignCentre);
+	Text(TEXT("U music   V camera angle   L mouse sensitivity   I invert look   Esc back"), X + W * 0.5f, RY + U(8.f), U(14.f), Dim, AlignCentre);
 	const float BW = U(220.f);
 	if (MenuButton(FBox2D(FVector2D(X + (W - BW) * 0.5f, Y + H - U(74.f)), FVector2D(X + (W + BW) * 0.5f, Y + H - U(24.f))), VLId::Screen, TEXT("DONE")))
 	{

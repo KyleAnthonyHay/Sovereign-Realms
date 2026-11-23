@@ -3054,17 +3054,25 @@ void AVLKing::CycleLookSpeed()
 	{
 		Next = 0.25f;
 	}
-	LookSpeedSetting = Next;
+	SetLookSpeed(Next, true);
+}
+
+void AVLKing::SetLookSpeed(float Speed, bool bSave)
+{
+	LookSpeedSetting = FMath::Clamp(Speed, 0.1f, 2.f);
 	for (TActorIterator<AVLKing> It(GetWorld()); It; ++It)
 	{
 		It->LookSpeedSetting = LookSpeedSetting;
 	}
-	if (GConfig)
+	if (bSave)
 	{
-		GConfig->SetFloat(TEXT("SovereignRealms.Camera"), TEXT("LookSpeed"), LookSpeedSetting, GGameUserSettingsIni);
-		GConfig->Flush(false, GGameUserSettingsIni);
+		if (GConfig)
+		{
+			GConfig->SetFloat(TEXT("SovereignRealms.Camera"), TEXT("LookSpeed"), LookSpeedSetting, GGameUserSettingsIni);
+			GConfig->Flush(false, GGameUserSettingsIni);
+		}
+		UE_LOG(LogSovereignRealms, Log, TEXT("look speed: %.0f%%"), LookSpeedSetting * 100.f);
 	}
-	UE_LOG(LogSovereignRealms, Log, TEXT("look speed: %.0f%%"), LookSpeedSetting * 100.f);
 }
 
 void AVLKing::CycleCameraAngle()

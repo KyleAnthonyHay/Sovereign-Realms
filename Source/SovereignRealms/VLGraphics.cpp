@@ -363,6 +363,21 @@ void UVLGraphics::Apply(UWorld* World)
 void UVLGraphics::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
+#if PLATFORM_WINDOWS
+	// VSync always on in the game on Windows: no tearing (user request 2026-11-23; there is no settings row for it).
+	// Set every match start, so an install saved with it off is put right too.
+	if (!GIsEditor && !IsVSync())
+	{
+		SetVSync(true);
+	}
+	else if (!GIsEditor)
+	{
+		if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("r.VSync")))
+		{
+			Var->Set(1, ECVF_SetByGameSetting);
+		}
+	}
+#endif
 	Apply(&InWorld);
 	UE_LOG(LogSovereignRealms, Log, TEXT("graphics: quality %s, render scale %d%%"), QualityName(Quality), RenderScale);
 }
@@ -669,7 +684,11 @@ namespace
 		EWindowMode::Type Mode = EWindowMode::Windowed;
 		FIntPoint Size = FIntPoint::ZeroValue;      // (0: none to set, as borderless full screen: the desktop's)
 		bool bNeedsConfirm = false;
+		bool bMaximize = false;                     // (Windows: a window out of full screen fills the screen, maximized)
 	};
+	// A maximize waiting for the window to be a window again (the mode change lands a frame or two later).
+	bool bMaximizePending = false;
+	int32 MaximizeTries = 0;
 	FDisplayRequest DisplayRequest;
 	// An exclusive full screen mode that the player has not confirmed yet, and what to go back to.
 	const float DisplayConfirmTime = 15.f;
@@ -851,20 +870,37 @@ void UVLGraphics::SetDisplay(int32 Mode, FIntPoint Resolution)
 		DisplayBackMode = bWindow ? NowMode : EWindowMode::WindowedFullscreen;
 		DisplayBackSize = bWindow && NowMode != EWindowMode::WindowedFullscreen ? NowSize : FIntPoint::ZeroValue;
 	}
+	const bool bWasFullscreen = IsFullscreen();
 	DisplayRequest.bPending = true;
 	DisplayRequest.Mode = ToWindowMode(Mode);
 	DisplayRequest.Size = Resolution;
+	DisplayRequest.bMaximize = false;
 	if (DisplayRequest.Mode == EWindowMode::WindowedFullscreen)
 	{
 		DisplayRequest.Size = FIntPoint::ZeroValue;
 	}
 	else if (Resolution.X <= 0 || Resolution.Y <= 0)
 	{
+#if PLATFORM_WINDOWS
+		// No size asked for: the screen's own. Full screen at the display's native mode; a window out of full screen
+		// keeps the screen's resolution (maximized: the whole screen less the title bar and the taskbar), never an old
+		// remembered size. A size picked in the Resolution row is taken as it is.
+		if (DisplayRequest.Mode == EWindowMode::Windowed && bWasFullscreen)
+		{
+			DisplayRequest.Size = DesktopSize();
+			DisplayRequest.bMaximize = true;
+		}
+		else
+		{
+			DisplayRequest.Size = DisplayRequest.Mode == EWindowMode::Windowed ? WindowedSize() : DesktopSize();
+		}
+#else
 		DisplayRequest.Size = DisplayRequest.Mode == EWindowMode::Windowed ? WindowedSize() : DesktopSize();
+#endif
 	}
-	// The display shows an exclusive mode or it does not (a black screen, "out of range"): that one is confirmed by
-	// the player. A window and borderless full screen are the desktop's own mode: nothing to confirm.
-	DisplayRequest.bNeedsConfirm = DisplayRequest.Mode == EWindowMode::Fullscreen;
+	// Applied at once, no "keep this mode?" question (user request 2026-11-23): the exclusive modes offered are the
+	// display's own (GetSupportedFullscreenResolutions), so none leaves the screen dark.
+	DisplayRequest.bNeedsConfirm = false;
 }
 
 void UVLGraphics::ApplyPendingDisplay()
@@ -874,12 +910,31 @@ void UVLGraphics::ApplyPendingDisplay()
 	{
 		RevertDisplay();            // (nobody confirmed the exclusive mode: the screen may be showing nothing)
 	}
+	if (bMaximizePending && !DisplayRequest.bPending)
+	{
+		// once the window is a window again (a few frames at most), maximized: the screen's resolution in a window
+		EWindowMode::Type Mode = EWindowMode::Windowed;
+		FIntPoint Size;
+		const TSharedPtr<SWindow> Window = GameWindow(Mode, Size) && GEngine && GEngine->GameViewport ? GEngine->GameViewport->GetWindow() : nullptr;
+		if (Window.IsValid() && Mode == EWindowMode::Windowed)
+		{
+			Window->Maximize();
+			bMaximizePending = false;
+			UE_LOG(LogSovereignRealms, Log, TEXT("window: maximized (the screen's resolution in a window)"));
+		}
+		else if (++MaximizeTries > 120)
+		{
+			bMaximizePending = false;   // (it never became a window: nothing to maximize)
+		}
+	}
 	if (!DisplayRequest.bPending || !S)
 	{
 		return;
 	}
 	const FDisplayRequest R = DisplayRequest;
 	DisplayRequest.bPending = false;
+	bMaximizePending = R.bMaximize;
+	MaximizeTries = 0;
 	S->SetFullscreenMode(R.Mode);
 	if (R.Size.X > 0 && R.Size.Y > 0)
 	{

@@ -77,8 +77,9 @@ public:
 	static const TCHAR* DisplayModeName(int32 Mode);
 	/** Windowed -> borderless full screen -> full screen (exclusive; Windows only) -> windowed. */
 	static void CycleDisplayMode();
-	/** The mode and the size asked for (a size of 0: the window's remembered one, or the desktop's). An exclusive full
-	 *  screen mode has to be confirmed (ConfirmDisplay) within DisplayConfirmSeconds, or the display goes back. */
+	/** The mode and the size asked for, applied at once with no confirmation. A size of 0: the screen's own (full
+	 *  screen at the native mode; on Windows a window out of full screen is maximized, keeping the screen's resolution;
+	 *  otherwise the window's remembered size). DisplayConfirmSeconds stays 0 (kept for the HUD's prompt, now unused). */
 	static void SetDisplay(int32 Mode, FIntPoint Resolution);
 	/** The size drawn at: the window's, or the display's in full screen. */
 	static FIntPoint GetResolution();
