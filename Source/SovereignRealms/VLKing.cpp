@@ -17,14 +17,14 @@
 #include "VLFootDust.h"
 #include "VLSwordsmanCombat.h"
 #include "VLBattle.h"
-#include "VLConstruction.h"
 #include "VLTroop.h"
+#include "VLConstruction.h"
 #include "Camera/CameraActor.h"
-#include "Camera/CameraComponent.h"
 #include "Components/SkeletalMeshComponent.h"      // (these four: the file also builds on its own, outside the unity blob)
 #include "Engine/Engine.h"
 #include "Misc/ConfigCacheIni.h"
 #include "UObject/Package.h"
+#include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -2699,22 +2699,6 @@ void AVLKing::PollInput(float DeltaSeconds)
 		}
 	}
 
-	if ((PC->WasInputKeyJustPressed(EKeys::Tab) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top)) && !bDead)
-	{
-		SetHeroMode(!bHeroMode);
-	}
-	if (PC->WasInputKeyJustPressed(EKeys::V))
-	{
-		// (in the overview with troops selected V is Guard, as in the main game: OverviewCommands)
-		const UVLCommand* Cmd = UVLCommand::Get(this);
-		if (bHeroMode || !Cmd || !Cmd->SelectionCanGuard())
-		{
-			CycleCameraAngle();     // Classic (steep) > Low > Battlefield (shallow), as in the main game
-		}
-	}
-	if (PC->WasInputKeyJustPressed(EKeys::C))
-	{
-		SetView(ViewMode == 1 ? (bHeroMode ? 0 : 3) : 1);
 	// J: the other hero. From King David (or any unit, or the overview) the controls go to Jonathan, the archer prince,
 	// once he is in the field (he comes to the castle at its third level: UVLBattle::TickJonathan); from Jonathan
 	// they go back to King David. Enter / a double click on either in the overview does the same.
@@ -2741,6 +2725,22 @@ void AVLKing::PollInput(float DeltaSeconds)
 			return;
 		}
 	}
+	if ((PC->WasInputKeyJustPressed(EKeys::Tab) || PC->WasInputKeyJustPressed(EKeys::Gamepad_FaceButton_Top)) && !bDead)
+	{
+		SetHeroMode(!bHeroMode);
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::V))
+	{
+		// (in the overview with troops selected V is Guard, as in the main game: OverviewCommands)
+		const UVLCommand* Cmd = UVLCommand::Get(this);
+		if (bHeroMode || !Cmd || !Cmd->SelectionCanGuard())
+		{
+			CycleCameraAngle();     // Classic (steep) > Low > Battlefield (shallow), as in the main game
+		}
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::C))
+	{
+		SetView(ViewMode == 1 ? (bHeroMode ? 0 : 3) : 1);
 	}
 
 	float Fwd = (PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::Up) ? 1.f : 0.f) - (PC->IsInputKeyDown(EKeys::S) || PC->IsInputKeyDown(EKeys::Down) ? 1.f : 0.f);
