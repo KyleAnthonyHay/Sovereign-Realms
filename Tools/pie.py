@@ -15,10 +15,12 @@ import subprocess
 import sys
 import time
 
+import vl_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INBOX = os.path.join(ROOT, "Saved", "VLCommands.txt")
 SHOTS = os.path.join(ROOT, "Saved", "Screenshots", "VL")
-LOG = os.path.expanduser("~/Library/Logs/Unreal Engine/SovereignRealmsEditor/SovereignRealms.log")
+LOG = vl_env.editor_log()
 MCP = [sys.executable, os.path.join(ROOT, "Tools", "ue_mcp.py"), "call", "EditorToolset.EditorAppToolset"]
 
 
@@ -44,7 +46,7 @@ def log(pattern="", n=40):
     if not os.path.exists(LOG):
         print("no log at", LOG)
         return
-    with open(LOG, errors="replace") as f:
+    with open(LOG, encoding="utf-8", errors="replace") as f:
         lines = [l.rstrip() for l in f if "LogSovereignRealms" in l and (not pattern or re.search(pattern, l))]
     for l in lines[-n:]:
         print(re.sub(r"^\[[^\]]*\]\[[ \d]*\]", "", l))

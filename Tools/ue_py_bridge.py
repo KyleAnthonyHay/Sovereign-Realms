@@ -24,7 +24,7 @@ def _tick(dt):
     _state["t"] = 0.0
     for path in sorted(glob.glob(os.path.join(_INBOX, "*.py"))):
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 src = f.read()
             os.remove(path)
         except OSError:
@@ -45,7 +45,7 @@ def _tick(dt):
         sys.last_traceback = sys.last_value = sys.last_type = None
         gc.collect()
         tmp = path[:-3] + ".tmp"
-        with open(tmp, "w") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             f.write(status + "\n" + buf.getvalue())
         os.replace(tmp, path[:-3] + ".out")
 

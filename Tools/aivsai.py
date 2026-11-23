@@ -23,8 +23,10 @@ import subprocess
 import sys
 import time
 
+import vl_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UE = os.environ.get("UE_ROOT", "/Users/Shared/Epic Games/UnrealInstall/UE_5.8") + "/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor"
+UE = vl_env.editor_cmd_binary()
 BAL = os.path.join(ROOT, "Saved", "Balance")
 LETTER = {"E": 0, "N": 1, "H": 2}
 NAME = {0: "Easy", 1: "Normal", 2: "Hard"}

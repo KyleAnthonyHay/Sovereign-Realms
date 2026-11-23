@@ -8,5 +8,5 @@ import unreal
 
 _bridge = os.path.join(os.path.abspath(unreal.Paths.project_dir()), "Tools", "ue_py_bridge.py")
 if os.path.exists(_bridge):
-    with open(_bridge) as _f:
+    with open(_bridge, encoding="utf-8") as _f:
         exec(compile(_f.read(), _bridge, "exec"), {"__name__": "__main__", "__file__": _bridge, "unreal": unreal})

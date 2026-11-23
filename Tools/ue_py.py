@@ -18,19 +18,21 @@ def main(argv):
     if argv[0] == "-c":
         src, rest = argv[1], argv[2:]
     else:
-        with open(argv[0]) as f:
+        with open(argv[0], encoding="utf-8") as f:
             src = f.read()
         rest = argv[1:]
     timeout = float(rest[0]) if rest else 600.0
     os.makedirs(INBOX, exist_ok=True)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")      # (a Windows console that is not UTF-8)
     base = os.path.join(INBOX, time.strftime("%H%M%S_") + uuid.uuid4().hex[:6])
-    with open(base + ".tmp", "w") as f:
+    with open(base + ".tmp", "w", encoding="utf-8") as f:
         f.write(src)
     os.replace(base + ".tmp", base + ".py")
     end = time.time() + timeout
     while time.time() < end:
         if os.path.exists(base + ".out"):
-            with open(base + ".out") as f:
+            with open(base + ".out", encoding="utf-8", errors="replace") as f:
                 status, _, body = f.read().partition("\n")
             os.remove(base + ".out")
             sys.stdout.write(body)
