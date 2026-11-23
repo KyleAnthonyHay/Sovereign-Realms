@@ -1,4 +1,5 @@
 #include "SovereignRealms.h"
+#include "VLLoadingScreen.h"
 #include "Modules/ModuleManager.h"
 #if PLATFORM_MAC
 #include "Async/Fundamental/Scheduler.h"
@@ -81,6 +82,7 @@ class FSovereignRealmsModule : public FDefaultGameModuleImpl
 public:
 	virtual void StartupModule() override
 	{
+		VLLoadingScreen::Startup();
 #if PLATFORM_MAC
 		PostWorldInitHandle = FWorldDelegates::OnPostWorldInitialization.AddLambda([](UWorld* World, const UWorld::InitializationValues)
 		{
@@ -94,6 +96,7 @@ public:
 
 	virtual void ShutdownModule() override
 	{
+		VLLoadingScreen::Shutdown();
 #if PLATFORM_MAC
 		if (PostWorldInitHandle.IsValid())
 		{
