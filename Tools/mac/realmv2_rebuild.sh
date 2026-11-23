@@ -1,14 +1,14 @@
 #!/bin/sh
-# Rebuild Realm v2 (L_RealmV2) end to end (editor open, not in PIE):  sh Tools/realmv2_rebuild.sh [layout|blender|ruins]
+# Rebuild Realm v2 (L_RealmV2) end to end (editor open, not in PIE):  sh Tools/mac/realmv2_rebuild.sh [layout|blender|ruins]
 #   (no argument) ground + water + sea + barriers + plan in Blender, import them, build /Game/Maps/L_RealmV2
 #   layout        only the plan changed (things moved, no ground, water or hazard changed): realmv2.json + the level, no import
 #   blender       only the Blender part (no editor needed): the meshes and the plan
 #   ruins         the ruins' and the ports' meshes (Tools/blender/assets/ruins.py, ports.py) and their import: once, and after changing them
-# The tall trees' and the plants' further levels of detail are the realm's (sh Tools/realm_rebuild.sh trees).
+# The tall trees' and the plants' further levels of detail are the realm's (sh Tools/mac/realm_rebuild.sh trees).
 # The balance report (walking distances from each castle) needs scipy: it is measured with the tools' python first and
 # kept in realmv2.json by the Blender run.
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-B=/Applications/Blender.app/Contents/MacOS/Blender
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+B="${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}"
 PY="$ROOT/Tools/.venv/bin/python"
 [ -x "$PY" ] && "$PY" "$ROOT/Tools/blender/realmv2_layout.py" --balance | grep -vE "^realmv2:"
 if [ "$1" = "ruins" ]; then

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Package a standalone Mac build:  sh Tools/package.sh [Shipping|Development]
+# Package a standalone Mac build:  sh Tools/mac/package.sh [Shipping|Development]
 # Result: Builds/Mac/SovereignRealms.app (double-click it; first time: right-click > Open, it is unsigned).
 #   Shipping (the default)   the build to play: no console, no log, no test hooks (the command inbox Saved/VLCommands.txt
 #                            and vl.Record are compiled out), no debug files, its symbols stripped
@@ -7,13 +7,13 @@
 # VL_STRIP=0 leaves the Shipping executable's symbols in (crash reports with names; about 100 MB more).
 # The engine's own -archive step copies an app without its game data on this setup, so the complete staged app is
 # copied over it instead. Close the editor first (the game and the editor fight over the audio device otherwise).
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 UE="${UE_ROOT:-/Users/Shared/Epic Games/UnrealInstall/UE_5.8}"
 CONFIG="${1:-Shipping}"
 case "$CONFIG" in
     Shipping) EXTRA="-nodebuginfo" ;;
     Development) EXTRA="" ;;
-    *) echo "usage: sh Tools/package.sh [Shipping|Development]"; exit 2 ;;
+    *) echo "usage: sh Tools/mac/package.sh [Shipping|Development]"; exit 2 ;;
 esac
 "$UE/Engine/Build/BatchFiles/RunUAT.sh" BuildCookRun -project="$ROOT/SovereignRealms.uproject" -platform=Mac \
     -clientconfig="$CONFIG" -specifiedarchitecture=arm64 -build -cook -stage -pak -noP4 -utf8output $EXTRA > "$ROOT/Saved/package.log" 2>&1 \

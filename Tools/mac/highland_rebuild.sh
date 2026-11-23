@@ -1,13 +1,13 @@
 #!/bin/sh
-# Rebuild the highlands (L_Highlands) end to end (editor open, not in PIE):  sh Tools/highland_rebuild.sh [layout]
+# Rebuild the highlands (L_Highlands) end to end (editor open, not in PIE):  sh Tools/mac/highland_rebuild.sh [layout]
 #   (no argument) ground + water + sea + backdrop + barriers + plan in Blender, import them, build /Game/Maps/L_Highlands
 #   layout        only the plan changed (things moved, no ground, water or hazard changed): highland.json + the level, no import
 #   blender       only the Blender part (no editor needed): the meshes and the plan
-# The tall trees' second level of detail is the realm's (sh Tools/realm_rebuild.sh trees).
+# The tall trees' second level of detail is the realm's (sh Tools/mac/realm_rebuild.sh trees).
 # The balance report (walking distances from each castle) needs scipy: it is measured with the tools' python first and
 # kept in highland.json by the Blender run.
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-B=/Applications/Blender.app/Contents/MacOS/Blender
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+B="${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}"
 PY="$ROOT/Tools/.venv/bin/python"
 [ -x "$PY" ] && "$PY" "$ROOT/Tools/blender/highland_layout.py" --balance | grep -vE "^highland:"
 if [ "$1" = "layout" ]; then

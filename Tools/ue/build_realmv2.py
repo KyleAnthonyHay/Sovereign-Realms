@@ -2,7 +2,7 @@
 assets/realmv2_terrain.py): the third battle map, with the town's light and look (run inside the editor, not during
 PIE). Written from the second battle map's builder; the level is made the same way and carries the same contract:
 
-    python3 Tools/ue_py.py Tools/ue/build_realmv2.py          (sh Tools/realmv2_rebuild.sh does everything)
+    python3 Tools/ue_py.py Tools/ue/build_realmv2.py          (sh Tools/mac/realmv2_rebuild.sh does everything)
 
 Import first (editor open): the ground tiles in SourceArt/Meshes/realmv2_tiles.json, SM_RealmV2Water,
 SM_RealmV2Sea, SM_RealmV2Barrier, SM_Ruin_*, SM_Port_*.

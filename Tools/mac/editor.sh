@@ -1,10 +1,10 @@
 #!/bin/sh
 # Editor lifecycle for scripted work on macOS (Live Coding does not work there).
-#   Tools/editor.sh quit      save dirty packages, quit, wait until the process and the MCP port are gone
-#   Tools/editor.sh build     build SovereignRealmsEditor (editor must be closed)
-#   Tools/editor.sh start     launch on the project and wait for the MCP server (port 8000)
-#   Tools/editor.sh rebuild   quit + build + start
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+#   Tools/mac/editor.sh quit      save dirty packages, quit, wait until the process and the MCP port are gone
+#   Tools/mac/editor.sh build     build SovereignRealmsEditor (editor must be closed)
+#   Tools/mac/editor.sh start     launch on the project and wait for the MCP server (port 8000)
+#   Tools/mac/editor.sh rebuild   quit + build + start
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 UE="${UE_ROOT:-/Users/Shared/Epic Games/UnrealInstall/UE_5.8}"
 running() { pgrep -f "UnrealEditor.app/Contents/MacOS/UnrealEditor" >/dev/null; }
 listening() { lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; }

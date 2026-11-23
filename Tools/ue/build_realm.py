@@ -1,7 +1,7 @@
 """Builds /Game/Maps/L_Realm from SourceArt/realm.json (Tools/blender/realm_layout.py + assets/realm_terrain.py): the
 battle map of References/Remake/battlefield.png, with the town's light and look (run inside the editor, not during PIE):
 
-    python3 Tools/ue_py.py Tools/ue/build_realm.py          (sh Tools/realm_rebuild.sh does everything)
+    python3 Tools/ue_py.py Tools/ue/build_realm.py          (sh Tools/mac/realm_rebuild.sh does everything)
 
 Import first (editor open): the ground tiles in SourceArt/Meshes/realm_tiles.json, SM_RealmWater, SM_RealmSea,
 SM_RealmBackdrop, SM_RealmBarrier.

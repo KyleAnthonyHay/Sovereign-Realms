@@ -1,13 +1,13 @@
 #!/bin/sh
-# Rebuild the realm (L_Realm) end to end (editor open, not in PIE):  sh Tools/realm_rebuild.sh [layout]
+# Rebuild the realm (L_Realm) end to end (editor open, not in PIE):  sh Tools/mac/realm_rebuild.sh [layout]
 #   (no argument) ground + water + sea + backdrop + barriers + plan in Blender, import them, build /Game/Maps/L_Realm
 #   trees         the tall trees' further levels of detail (Tools/blender/assets/tree_lods.py -> LOD 1, 2 of SM_Tree2_*) and the small plants'
 #                 (Tools/ue/plant_lods.py): once, and after importing the trees or the plants again
 #   layout        only the plan changed (things moved, no ground, water or hazard changed): realm.json + the level, no import
 # The balance report (walking distances from each castle) needs scipy: it is measured with the tools' python first and
 # kept in realm.json by the Blender run.
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-B=/Applications/Blender.app/Contents/MacOS/Blender
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+B="${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}"
 PY="$ROOT/Tools/.venv/bin/python"
 [ -x "$PY" ] && "$PY" "$ROOT/Tools/blender/realm_layout.py" --balance | grep -vE "^realm:"
 if [ "$1" = "trees" ]; then

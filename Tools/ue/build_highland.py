@@ -2,7 +2,7 @@
 assets/highland_terrain.py): the second battle map, with the town's light and look (run inside the editor, not during
 PIE). Written from build_realm.py; the level is made the same way and carries the same contract:
 
-    python3 Tools/ue_py.py Tools/ue/build_highland.py          (sh Tools/highland_rebuild.sh does everything)
+    python3 Tools/ue_py.py Tools/ue/build_highland.py          (sh Tools/mac/highland_rebuild.sh does everything)
 
 Import first (editor open): the ground tiles in SourceArt/Meshes/highland_tiles.json, SM_HighlandWater, SM_HighlandSea,
 SM_HighlandBackdrop, SM_HighlandBarrier.

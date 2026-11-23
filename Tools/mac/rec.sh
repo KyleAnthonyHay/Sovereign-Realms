@@ -1,9 +1,9 @@
 #!/bin/sh
 # Record a motion preview in a running PIE session (see README, "Motion previews"):
-#   Tools/rec.sh <name> <frames> "<frame> <console command>" ...
+#   Tools/mac/rec.sh <name> <frames> "<frame> <console command>" ...
 # The frames (30 a second of game time, whatever the real frame rate) land in Saved/Screenshots/VL/<name>_NNN.png;
 # each "<frame> <command>" runs when the recording reaches that frame. Waits until the last frame is written.
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NAME="$1"; FRAMES="$2"; shift 2
 rm -f "$ROOT/Saved/Screenshots/VL/${NAME}"_[0-9][0-9][0-9].png
 set -- "$@"

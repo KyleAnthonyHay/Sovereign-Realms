@@ -2,7 +2,7 @@
 
     python3 Tools/ue_py.py Tools/ue/realmv2_lods.py
 
-From Tools/blender/assets/realmv2_terrain.py (import SM_RealmV2Ground_<i>_<j>_L1 and _L2 first: sh Tools/realmv2_rebuild.sh
+From Tools/blender/assets/realmv2_terrain.py (import SM_RealmV2Ground_<i>_<j>_L1 and _L2 first: sh Tools/mac/realmv2_rebuild.sh
 does): LOD 1 = _L1 (the same ground, its flat faces joined into quads of up to 1 m) from SWITCH[0] metres from the hero
 camera, LOD 2 = _L2 (up to 4 m) from SWITCH[1]; the overview switches at 4/3 of these (as the trees: tree_lods.py).
 The shape does not change at all (no coarse ground anywhere: the owner's rule); what goes is the block-to-block tint and
