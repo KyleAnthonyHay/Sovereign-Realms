@@ -126,7 +126,7 @@ Views: **base** the hero's follow camera at the player's castle; **mountain** a 
 
 ### In the editor (PIE), for comparison with the Mac's `realmv2_perf.sh` figures
 
-`Tools\windows\editor.ps1 start`, then `Tools\windowsealmv2_perf.ps1 profile`: PIE in a floating window, a fresh
+`Tools\windows\editor.ps1 start`, then `Tools\windows\realmv2_perf.ps1 profile`: PIE in a floating window, a fresh
 Easy match (`vl.StartMatch 0`: the starting troops only, not the Test World), `vl.Perf` at each view. The game's
 60 fps cap is on, as in the Mac's runs.
 
