@@ -101,7 +101,7 @@ _PAL = [
     # the beard and brows (near black-brown) and the afro (a warmer, lighter brown, as on the sheet)
     ("hair",     "#33211A", "paint", "hair"), ("hair_l", "#45301F", "paint", "hair"), ("hair_d", "#241712", "paint", "hair"),
     ("hair_h",   "#553A2A", "paint", "hair"),
-    ("fro",      "#3E271D", "paint", "hair"), ("fro_l", "#4E3326", "paint", "hair"), ("fro_d", "#2F1D15", "paint", "hair"),
+    ("fro",      "#3A2218", "paint", "hair"), ("fro_l", "#4A2D20", "paint", "hair"), ("fro_d", "#2C1912", "paint", "hair"),
     ("fro_dd",   "#22150F", "paint", "hair"),
     ("brow",     "#2A1B14", "paint", "hair"),
     ("fur",      "#F7D6A4", "wool", "fur"), ("fur_l", "#FFE9C4", "wool", "fur"), ("fur_d", "#E6B982", "wool", "fur"),
@@ -1178,15 +1178,15 @@ def archer_face(P, F, z0, front=-11.0, hw=12.0, top=None, skin="skin", shade="sk
         b(4.8, 5.7, -11.55 + d, -11.35 + d, 112.6 + K, 113.5 + K, glint, sx=sx, bevel=0.2)            # the glint in each eye
 
 
-AFRO = dict(c=(0.0, 3.0, 127.0), r=(22.5, 20.5, 18.0))     # the afro: an ellipsoid of 4 u cubes about the skull (u)
+AFRO = dict(c=(0.0, 4.0, 122.0), r=(16.5, 19.5, 17.5))     # the afro: an ellipsoid of 4 u cubes about the skull (u), before its loose cubes
 
 
 def build_head():
     """Jonathan's head: King David's skull and the ARCHER's face (archer_face: one smooth skin plate, her eyes with
     their centred pupils and glints, a short mouth line) made a young man's: level brows, a firm nose, and King David's
     short square beard (the jaw and chin, up the cheeks to the sideburns, a moustache over the mouth) trimmed a little
-    shorter. No crown: a big round afro of chunky brown cubes, standing well clear of the skull on top, at the sides
-    (over the ears, down to the jaw) and behind, with a fringe over the brow."""
+    shorter. No crown: a round afro of chunky brown cubes hugging the skull (the sheet's size), on top, at the sides
+    (behind the ears, down to the jaw) and behind, with a fringe over the brow."""
     P = Part("Head")
     F = Frame()
     g = Grid(F, -18, 18, -19, 19, 100, 140, cs=2)
@@ -1194,64 +1194,78 @@ def build_head():
     AX = np.abs(X)
     g.box(-12, 12, -11, 11, 106, 130, "skin")
     sk = g.solid()
-    g.paint(sk & (AX > 10) & (Y < -1) & (Z < 112), "hair")     # the beard along the jaw, seen from the side ...
-    g.paint(sk & (AX > 10) & (Y < -5) & (Z < 120), "hair")     # ... rising to the sideburns
-    g.paint(sk & (Z < 108) & (Y < 1), "hair")                  # ... and under the chin
-    g.box(-12, 12, -11, -3, 104, 106, "hair")                  # the beard under the jaw
+    g.carve(sk & (AX > 10) & (Y < -7) & (Z < 108))             # the jaw's corners cut back: the chin is narrower than the cheeks
+    sk = g.solid()
+    g.paint(sk & (AX > 10) & (Y < -3) & (Z < 110), "hair")     # the beard along the jaw, seen from the side ...
+    g.paint(sk & (AX > 10) & (Y < -7) & (Z < 116), "hair")     # ... rising, thinner, to the sideburns
+    g.paint(sk & (Z < 108) & (Y < -1) & (AX < 10), "hair")     # ... and under the chin
+    g.box(-8, 8, -11, -5, 104, 106, "hair")                    # the beard under the chin: narrower than the jaw
     # the scalp under the afro: back (down to the nape), sides, top
     g.box(-14, 14, 11, 13, 104, 132, "fro_d")
     g.fill((AX > 12) & (AX < 14) & (Y > 3) & (Y < 13) & (Z > 106) & (Z < 132), "fro_d")
     g.fill((AX > 12) & (AX < 14) & (Y > -11) & (Y < 3) & (Z > 120) & (Z < 132), "fro_d")
     g.box(-12, 12, -11, 13, 130, 132, "fro_d")
-    g.fill((AX > 12) & (AX < 14) & (Y > -9) & (Y < -3) & (Z > 112) & (Z < 122), "hair_d")    # the sideburns, down into the beard
-    g.fill((AX > 12) & (AX < 14) & (Y > -11) & (Y < -1) & (Z > 106) & (Z < 112), "hair")     # the beard over the jaw's corner
+    g.fill((AX > 12) & (AX < 14) & (Y > -9) & (Y < -5) & (Z > 110) & (Z < 120), "hair_d")    # the sideburns, down into the beard
+    g.fill((AX > 12) & (AX < 14) & (Y > -11) & (Y < -5) & (Z > 108) & (Z < 110), "hair")     # the beard over the jaw's corner
     g.fill((AX > 12) & (AX < 14) & (Y > -3) & (Y < 3) & (Z > 112) & (Z < 120), "skin_l")     # ears
     emit(P, g, lim=(8, 14), lims={"hair": (4, 9), "hair_d": (5, 10), "fro_d": (6, 12), "skin_l": (8, 9)}, shade=0.3, seed=61)
     b = lambda *a, **k: P.blk(F, *a, **k)
     for sx in (1, -1):
         b(13.6, 14.8, -1.6, 1.8, 114.6, 118.4, "skin_d", sx=sx)    # the hollow of the ear
-    # ---- THE FACE: the archer's, on a plate in front of the skull (its front at -12), her heights + 6
+    # ---- THE FACE: the archer's, on a plate in front of the skull (its front at -12), her heights + 6. The plate is
+    # in two pieces so the chin can be narrower than the cheeks (their seam is under the beard).
     archer_face(P, F, 106.0, front=-12.0, hw=12.0, top=128.0, brow="brow", nose=(1.6, 3.2, 1.0), brow_t=2.0,
-                brow_x=(2.4, 9.8), brow_dip=0.3, mouth=2.6)
-    # ---- the beard, one layer proud of the face: big plain blocks. The chin and jaw, a short square goatee, round the
-    # mouth, stepping up the cheeks to the sideburns; a moustache.
-    bd = lambda x0, x1, z0, z1, nm="hair", y0=-13.0: b(x0, x1, y0, -11.9, z0, z1, nm, bevel=0.12)
-    bd(-12.0, 12.0, 106.0, 109.2)                              # chin and jaw
-    bd(-6.0, 6.0, 104.4, 107.0, "hair", -13.5)                 # the goatee, just below the chin
+                brow_x=(2.4, 9.8), brow_dip=0.3, mouth=2.6, plate=False)
+    b(-12.0, 12.0, -12.0, -11.0, 108.0, 128.0, "skin", bevel=0.03)
+    b(-10.0, 10.0, -12.0, -11.0, 106.0, 108.0, "skin", bevel=0.03)
+    # ---- the beard, one layer proud of the face, shaped to the jaw as on the sheet (no solid bar): it follows the
+    # jawline in steps down to a rounded chin (12 u wide at the jaw's corners, then 10, 7 and 4.5 at the tip), thins up
+    # the cheeks into the sideburns, and frames the mouth: a moustache with its ends coming down either side of it.
+    # Staggered blocks of a few sizes and depths, so its edge is stepped, not a rectangle's.
+    bd = lambda x0, x1, z0, z1, nm="hair", y0=-13.0, **k: b(x0, x1, y0, -11.9, z0, z1, nm, bevel=0.12, **k)
+    bd(-7.0, 7.0, 104.6, 108.6, "hair", -13.6)                 # the chin
+    bd(-4.5, 4.5, 103.4, 104.8, "hair_d", -13.3)               # ... and its rounded tip
     for sx in (1, -1):
-        b(3.2, 12.0, -13.0, -11.9, 109.2, 111.0, "hair", sx=sx, bevel=0.12)          # round the mouth
-        b(8.0, 12.0, -13.0, -11.9, 111.0, 113.6, "hair_l", sx=sx, bevel=0.12)        # up the cheeks ...
-        b(10.0, 12.0, -12.8, -11.9, 113.6, 116.4, "hair", sx=sx, bevel=0.12)         # ... to the sideburns
-        b(10.6, 12.0, -12.5, -11.9, 116.4, 119.0, "hair_d", sx=sx, bevel=0.12)
-        b(3.6, 5.8, -13.5, -11.9, 109.0, 111.6, "hair_d", sx=sx, bevel=0.12)         # the moustache's ends
-    b(-5.8, 5.8, -13.6, -11.9, 110.8, 112.3, "hair_d", bevel=0.12)                  # the moustache
-    # ---- the afro: 4 u cubes filling an ellipsoid about the skull, its surface broken up (cubes missing, cubes standing
-    # proud), three browns. It leaves the face open: nothing in front of the face plate below the hairline, the sides
-    # come down to the jaw behind the cheeks.
+        bd(7.0, 10.0, 106.0, 109.4, "hair_l", -13.2, sx=sx)    # the jaw, a step up from the chin
+        bd(9.6, 12.0, 108.0, 111.4, "hair", -13.0, sx=sx)      # the jaw's corner, another step up
+        bd(10.7, 12.0, 111.4, 115.0, "hair_l", -12.6, sx=sx)   # up the cheek, thinner ...
+        bd(11.3, 12.0, 115.0, 119.0, "hair_d", -12.4, sx=sx)   # ... to the sideburn, thinner still
+        bd(3.6, 6.0, 108.2, 111.6, "hair_d", -13.5, sx=sx)     # the moustache's ends, down beside the mouth to the chin
+    bd(-5.6, 5.6, 110.9, 112.2, "hair_d", -13.6)               # the moustache
+    # ---- the hairline: a fringe of chunky blocks over the brow, a little ragged, and the hair coming down at the temples
+    for i, (y0, z0, nm) in enumerate(((-13.3, 125.6, "fro_d"), (-13.9, 124.6, "fro"), (-13.4, 125.8, "fro_l"), (-14.0, 125.0, "fro"), (-13.3, 124.4, "fro_d"), (-13.8, 125.6, "fro"))):
+        b(-12.0 + 4.0 * i, -8.0 + 4.0 * i, y0, -11.9, z0, 130.6 if i in (0, 5) else 128.4, nm, bevel=0.1)
+    for sx in (1, -1):
+        b(10.2, 12.6, -13.4, -11.9, 119.0, 125.4, "fro_d", sx=sx, bevel=0.1)
+    # ---- the afro, to the sheet's measure (its three heads, against the 24 u skull): 42 u wide, 40 u front to back,
+    # its top 14 u above the crown, widest at eye level, so a full round dome and not a cap; it stands 7 to 9 u off the
+    # skull at the sides and behind and comes down to the jaw there. 4 u cubes filling an ellipsoid, its surface
+    # broken up (cubes missing, cubes standing a little proud, a few smaller ones on top of them), three browns.
+    # It leaves the face open: below the top of the ears there is hair only behind them (the ears, the cheeks and the
+    # sideburns into the beard show, as drawn), and a fringe of chunky blocks stands over the brow.
     cs = 4.0
     f = Grid(F, -28, 28, -24, 28, 104, 148, cs=cs)
     X, Y, Z = f.X, f.Y, f.Z
     AX = np.abs(X)
     (cx, cy, cz), (rx, ry, rz) = AFRO["c"], AFRO["r"]
-    d = (X / rx) ** 2 + ((Y - cy) / ry) ** 2 + ((Z - cz) / rz) ** 2 + (f.hash(1, 51) - 0.5) * 0.28
+    d = (X / rx) ** 2 + ((Y - cy) / ry) ** 2 + ((Z - cz) / rz) ** 2 + (f.hash(1, 51) - 0.5) * 0.12
     fro = d < 1.0
-    fro &= ~((AX < 12) & (Y > -12) & (Y < 12) & (Z < 132))     # the skull itself
     fro &= ~((AX < 12) & (Y < -8) & (Z < 128))                 # the face stays open under the fringe
-    fro &= ~((Y < -12) & (Z < 122))                            # nothing in front of the cheeks
-    fro &= ~((AX < 16) & (Y < -8) & (Z < 114))                 # ... nor over the beard's corners
-    fro &= (Z > 108) | (Y > 4)                                 # the nape: only the back comes down that far
+    fro &= ~((Y < 4) & (Z < 120))                              # the ears, the cheeks and the sideburns show: hair only behind the ears
+    fro &= ~((Y < -12) & (Z < 124))                            # nothing in front of the temples
+    fro &= (Z > 108) | (Y > 8)                                 # the nape: only the back comes down that far
     cur = fro & (AX < 6) & (Z > 132)                           # no crumbs: keep what hangs together with the crown
     while True:
         nxt = dilate(cur) & fro
         if nxt.sum() == cur.sum():
             break
         cur = nxt
-    fro = cur
+    fro = cur & ~((AX < 12) & (Y > -8) & (Y < 12) & (Z < 132))      # ... less the skull itself (the cubes over the brow stand in front of it)
     f.fill(fro, "fro")
     hh = f.hash(1, 53)
     f.paint(fro & (hh < 0.30), "fro_l")
     f.paint(fro & (hh > 0.72), "fro_d")
-    emit(P, f, lim=(4, 8), shade=0.5, proud_p=0.55, proud=(0.4, 1.6), seed=63, cjit=0.04, core_rgb=PRGB[PI["fro_dd"]] * 0.8)
+    emit(P, f, lim=(4, 4), shade=0.5, proud_p=0.6, proud=(0.4, 1.5), seed=63, cjit=0.04, core_rgb=PRGB[PI["fro_d"]])      # (every cube its own block, as drawn)
     # loose cubes standing out of the mass, here and there (square to it, as on the sheet)
     rng = np.random.default_rng(17)
     for (i, j, k) in np.argwhere(fro & f.surface()):
@@ -1263,13 +1277,13 @@ def build_head():
                 q = (i + sg * di, j + sg * dj, k + sg * dk)
                 if not (0 <= q[0] < f.n[0] and 0 <= q[1] < f.n[1] and 0 <= q[2] < f.n[2]) or not fro[q]:
                     nrm[ax] += sg
-        if np.abs(nrm).sum() == 0 or nrm[2] < 0 or (nrm[1] < 0 and Z[i, j, k] < 126):
+        if np.abs(nrm).sum() == 0 or nrm[2] < 0 or (nrm[1] < 0 and Z[i, j, k] < 126) or (nrm[0] != 0 and Z[i, j, k] < 128):     # (none out sideways by the ears)
             continue
         ax = int(np.abs(nrm).argmax())
         out = np.zeros(3)
         out[ax] = np.sign(nrm[ax])
-        size = float(rng.choice((3.0, 4.0)))
-        c = np.array([X[i, j, k], Y[i, j, k], Z[i, j, k]]) + out * (cs / 2 + size / 2 - 1.0)
+        size = 4.0                                          # (a whole cube: a smaller one leaves black slits beside its neighbours)
+        c = np.array([X[i, j, k], Y[i, j, k], Z[i, j, k]]) + out * (cs / 2 + size / 2 - 1.8)     # (1.2 to 2.2 u proud)
         name = ("fro", "fro_l", "fro_d")[int(rng.integers(0, 3))]
         P.add(Frame(F.R, F.w(c)), [-size / 2] * 3, [size / 2] * 3, PI[name], 0.07 * size, cull=False,
               rgb=np.clip(PRGB[PI[name]] * rng.uniform(0.95, 1.05), 0, 1))
@@ -2028,9 +2042,9 @@ def main():
         shot("three_quarter", az=-32, el=8, dist=6.9, target=(0.0, 0, 0.93), res=(900, 1200), lens=105)
         shot("three_quarter_back", az=148, el=10, dist=6.9, target=(0.0, 0, 0.93), res=(900, 1200), lens=105)
     if want("face"):
-        tiles = [shot("face_front", 0, 0, dist=6.0, target=(0, 0, 1.49), res=(800, 800), lens=170),
-                 shot("face_34", -33, -6, dist=6.0, target=(0, 0, 1.49), res=(800, 800), lens=170),
-                 shot("face_side", -90, 0, dist=6.0, target=(0, 0, 1.49), res=(800, 800), lens=170)]
+        tiles = [shot("face_front", 0, 0, dist=6.0, target=(0, 0, 1.44), res=(800, 800), lens=170),
+                 shot("face_34", -33, -6, dist=6.0, target=(0, 0, 1.44), res=(800, 800), lens=170),
+                 shot("face_side", -90, 0, dist=6.0, target=(0, 0, 1.44), res=(800, 800), lens=170)]
         montage(tiles, pv("face"), H=800)
         stack([REF, pv("face_front")], pv("face_compare"), W=800, crops=[(205, 140, 395, 310), None])
     if want("game"):
