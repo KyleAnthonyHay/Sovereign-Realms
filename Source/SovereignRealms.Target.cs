@@ -17,5 +17,11 @@ public class SovereignRealmsTarget : TargetRules
 			bAllowLTCG = true;
 			bOverrideBuildEnvironment = true;
 		}
+		// Win64 Shipping keeps the engine's defaults, on purpose. With an installed (launcher) engine the engine's
+		// own objects are prebuilt, so anything that changes the build environment needs bOverrideBuildEnvironment;
+		// MSVC's link-time code generation over them (bAllowLTCG) multiplies the link time for a gain confined to this
+		// module's few hot loops, and is not measured yet (Docs/Optimization/Windows/PROPOSAL.md, "Not done").
+		// What a Windows Shipping build needs is done by the packaging instead (Tools/windows/package.ps1): the
+		// symbols are separate .pdb files there, so nothing has to be stripped from the executable.
 	}
 }
