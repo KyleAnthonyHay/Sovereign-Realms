@@ -1298,7 +1298,7 @@ void UVLConstruction::ShowRising(FVLBuildingState& B, float Progress)
 	R->SetActorScale3D(FVector(S.X, S.Y, S.Z * FMath::Max(0.06f, P)));
 }
 
-static TAutoConsoleVariable<int32> CVarPropInstances(TEXT("vl.Opt.PropInstances"), 0, TEXT("1: a building's wheat tufts are the instances of one component a mesh. 0: an actor each, as before (for buildings raised after it is set)"));
+static TAutoConsoleVariable<int32> CVarPropInstances(TEXT("vl.Opt.PropInstances"), 1, TEXT("1: a building's wheat tufts are the instances of one component a mesh. 0: an actor each, as before (for buildings raised after it is set)"));
 
 void UVLConstruction::SpawnProps(FVLBuildingState& B)
 {

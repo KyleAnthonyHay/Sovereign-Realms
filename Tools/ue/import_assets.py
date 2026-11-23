@@ -107,6 +107,8 @@ def build_materials():
     mel.connect_material_expressions(mul2, "", emul, "A")
     mel.connect_material_expressions(em, "", emul, "B")
     mel.connect_material_property(emul, "", MP.MP_EMISSIVE_COLOR)
+    # (the game's own instanced meshes, made at run time: the smoke, the motes; Tools/ue/material_usage.py)
+    mel.set_material_usage(mat, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat, False)
 

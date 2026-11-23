@@ -73,6 +73,9 @@ class G:
 
     def finish(self):
         mel.layout_material_expressions(self.mat)
+        if self.mat.get_name() == "M_VoxSway":
+            # (a farm's wheat is instanced by the game at run time: Tools/ue/material_usage.py)
+            mel.set_material_usage(self.mat, unreal.MaterialUsage.MATUSAGE_INSTANCED_STATIC_MESHES)
         mel.recompile_material(self.mat)
         eal.save_loaded_asset(self.mat, False)
 
