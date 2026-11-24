@@ -3982,8 +3982,8 @@ namespace
 			J = Battle->GetJonathan(Played->Team);
 			if (!J)
 			{
-				UE_LOG(LogSovereignRealms, Log, TEXT("vl.Jonathan: not in the field (castle level %d, he comes at %d; %.0f s to wait)"), Battle->GetCastleLevel(Played->Team),
-					VLRules::JonathanCastleLevel, Battle->GetJonathanWait(Played->Team));
+				UE_LOG(LogSovereignRealms, Log, TEXT("vl.Jonathan: not in the field (castle level %d, unlocked at %d; %s; %.0f s to wait)"), Battle->GetCastleLevel(Played->Team),
+					VLRules::JonathanCastleLevel, Battle->IsJonathanBought(Played->Team) ? TEXT("bought") : TEXT("not bought"), Battle->GetJonathanWait(Played->Team));
 				return;
 			}
 			const UCharacterMovementComponent* Move = J->GetCharacterMovement();

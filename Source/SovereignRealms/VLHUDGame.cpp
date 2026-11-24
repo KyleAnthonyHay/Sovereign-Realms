@@ -357,7 +357,7 @@ void AVLHUD::DrawJonathanOffer(const FBox2D& Row)
 		Icon(EVLIcon::Castle, Row.Max.X - U(34.f), Row.Min.Y + (RowH - U(24.f)) * 0.5f, U(24.f), FLinearColor(0.45f, 0.45f, 0.5f, 0.8f));
 		return;
 	}
-	Text(TEXT("Unlocked  ·  the archer prince, no training"), TX, Row.Min.Y + U(24.f), U(13.f), GoldBright);
+	Text(TEXT("Unlocked  ·  no training"), TX, Row.Min.Y + U(24.f), U(13.f), GoldBright);
 	// Buy: the price on the button, red where the stores fall short
 	const FString Why = Battle->JonathanBuyRefusal(UVLBattle::Player);
 	const bool bEnabled = Why.IsEmpty();
