@@ -1475,10 +1475,10 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 	for (int32 i = 0; i < Commands.Num(); ++i, BX += BS + Gap)
 	{
 		const FCommand& C = Commands[i];
-		const FBox2D CmdBox(FVector2D(BX, BY), FVector2D(BX + BS, BY + BS));
-		const FBtn B = IconButton(CmdBox, VLId::Command + i, C.Which, C.Kind == CmdControl ? nullptr : C.Key, true, C.bActive);
+		const FBox2D CommandBox(FVector2D(BX, BY), FVector2D(BX + BS, BY + BS));
+		const FBtn B = IconButton(CommandBox, VLId::Command + i, C.Which, C.Kind == CmdControl ? nullptr : C.Key, true, C.bActive);
 		Text(C.Label, BX + BS * 0.5f, BY + BS + U(4.f), BS < U(50.f) ? U(12.f) : U(13.f), B.bHover ? Parchment : Dim, AlignCentre);
-		if (B.bHover) { SetTooltip(CmdBox, C.Title, { C.Line }); }
+		if (B.bHover) { SetTooltip(CommandBox, C.Title, { C.Line }); }
 		if (B.bRightClicked && C.Kind == CmdForm) { Click(); Command->CycleFormation(); continue; }
 		if (!B.bClicked) { continue; }
 		Click();

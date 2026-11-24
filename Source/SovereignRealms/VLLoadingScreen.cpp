@@ -303,28 +303,28 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 				FSlateDrawElement::MakeText(Out, Layer, Geo.ToPaintGeometry(FVector2f(Extent.X * 1.5f + 8.f, Extent.Y) / Dpi, FSlateLayoutTransform(At / Dpi)),
 					String, Font, ESlateDrawEffect::None, Color);
 			};
-			const FLinearColor Gold(VLStyle::Gold.ToFColor(false)), Parchment(VLStyle::Parchment.ToFColor(false)), Dim(VLStyle::Dim.ToFColor(false));
+			const FLinearColor TextGold(VLStyle::Gold.ToFColor(false)), TextParchment(VLStyle::Parchment.ToFColor(false)), TextDim(VLStyle::Dim.ToFColor(false));     // (not Gold / Parchment / Dim: a unity build puts VLStyle's in scope)
 			const float Line = FMath::Max(FMath::RoundToFloat(Size.Y * 0.030f), 10.f);
 			const float WordsY = GroundY + Z * 3.f + Size.Y * 0.045f;
 			if (bLoaded && Shared->bWait)
 			{
 				// (pulsing: it is his to dismiss now)
 				const float Pulse = 0.55f + 0.45f * FMath::Abs(FMath::Sin(float(Now - LoadedAt) * 2.6f));
-				Text(TEXT("PRESS ENTER TO PLAY"), Line * 1.15f, Size.X * 0.5f, WordsY, 1, Gold.CopyWithNewOpacity(Pulse), TEXT("Bold"));
+				Text(TEXT("PRESS ENTER TO PLAY"), Line * 1.15f, Size.X * 0.5f, WordsY, 1, TextGold.CopyWithNewOpacity(Pulse), TEXT("Bold"));
 				Text(bPlayer ? TEXT("Space / Up: jump      Down: duck") : TEXT("Space or Up: take the reins. Jump what is on the ground, duck the crows."),
-					Line * 0.62f, Size.X * 0.5f, WordsY + Line * 1.9f, 1, Dim, TEXT("Regular"));
+					Line * 0.62f, Size.X * 0.5f, WordsY + Line * 1.9f, 1, TextDim, TEXT("Regular"));
 			}
 			else
 			{
 				const FString Word(TEXT("LOADING"));
-				Text(Word + FString::ChrN(int32(Now * 2.5) % 4, TEXT('.')), Line, Size.X * 0.5f, WordsY, 1, Gold, TEXT("Bold"), &Word);       // (the word stays put as the dots come)
+				Text(Word + FString::ChrN(int32(Now * 2.5) % 4, TEXT('.')), Line, Size.X * 0.5f, WordsY, 1, TextGold, TEXT("Bold"), &Word);       // (the word stays put as the dots come)
 			}
 			{
 				const float Right = Size.X - Size.Y * 0.045f, Top = BandTop + Size.Y * 0.022f;
-				Text(FString::Printf(TEXT("%05d"), int32(Score)), Line * 1.1f, Right, Top, 2, bPlayer ? Parchment : Dim, TEXT("Bold"));
+				Text(FString::Printf(TEXT("%05d"), int32(Score)), Line * 1.1f, Right, Top, 2, bPlayer ? TextParchment : TextDim, TEXT("Bold"));
 				if (Best > 0)
 				{
-					Text(FString::Printf(TEXT("BEST %05d"), Best), Line * 0.62f, Right, Top + Line * 1.5f, 2, Dim, TEXT("Regular"));
+					Text(FString::Printf(TEXT("BEST %05d"), Best), Line * 0.62f, Right, Top + Line * 1.5f, 2, TextDim, TEXT("Regular"));
 				}
 			}
 			return Layer;
