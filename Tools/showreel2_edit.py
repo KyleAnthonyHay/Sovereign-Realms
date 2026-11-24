@@ -28,24 +28,44 @@ FPS = 30
 BRAND = os.path.join(ROOT, "References", "Branding")
 
 # Ruach's grids (fitted to the song's onsets: Saved/Showreel/work2/beats2.py): the battle section is on a 0.4210 s
-# beat from 140.395 s (its bars: 147.131, 148.815, ... the section breaks off at 179.127); the intro's on 0.4300 s
+# beat from 140.395 s (its bars: 147.131, 148.815, ... the section breaks off at 179.127); the intro's on 0.4314 s
 # from 2.97 s (its swell at 27.17, the hit at 30.58).
 REELS = {
     "battle": dict(
         dir="reel2_battle", title="SovereignRealms_Battle", song_in=148.815, length=32.0, beat=0.4210,
         fade_in=0.0, music_fade_in=0.05, music_fade_out=1.4,
         grade=dict(sat=1.14, contrast=1.10, lift=-0.015, warm=0.0, vignette=0.22),
-        logo="sovereign_realms_wordmark.png", logo_w=1100, logo_in=29.6, dark_from=28.75, dark_to=29.55,
-        poster=None,
-        edl=[],
+        logo="sovereign_realms_wordmark.png", logo_w=1100, logo_in=30.3, dark_from=29.2, dark_to=30.2,
+        poster=("b_charge_lens", 42),
+        edl=[
+            ('b_rush', 0.000, 0),
+            ('b_landing', 3.368, 100),
+            ('b_jonathan', 5.894, 0),
+            ('b_clash_low', 9.262, 20),
+            ('b_corners', 12.630, 40),
+            ('b_tower_volley', 14.314, 99),
+            ('b_charge_lens', 15.998, 20),
+            ('b_jonathan2', 18.524, 0),
+            ('b_wave', 21.892, 30),
+            ('b_king_charge', 25.260, 5, 0.8),
+        ],
     ),
     "kingdom": dict(
-        dir="reel3_kingdom", title="SovereignRealms_Kingdom", song_in=2.97, length=32.0, beat=0.4300,
-        fade_in=0.6, music_fade_in=0.4, music_fade_out=1.6,
+        dir="reel3_kingdom", title="SovereignRealms_Kingdom", song_in=2.97, length=31.0, beat=0.4314,
+        fade_in=0.3, music_fade_in=0.4, music_fade_out=1.6,
         grade=dict(sat=1.06, contrast=1.05, lift=0.0, warm=0.03, vignette=0.28),
-        logo="sovereign_realms_logo_full.png", logo_w=760, logo_in=28.1, dark_from=26.9, dark_to=28.0,
-        poster=None,
-        edl=[],
+        logo="sovereign_realms_logo_full.png", logo_w=760, logo_in=27.6, dark_from=26.4, dark_to=27.5,
+        poster=("k_flowers", 100),
+        edl=[
+            ('k_ship', 0.000, 60),
+            ('k_vista', 3.451, 20),
+            ('k_flowers', 6.902, 20),
+            ('k_canopy', 10.354, 20),
+            ('k_march', 13.805, 10),
+            ('k_jonathan', 16.393, 20),
+            ('k_town', 19.844, 40),
+            ('k_castle', 22.433, 0),
+        ],
     ),
 }
 
