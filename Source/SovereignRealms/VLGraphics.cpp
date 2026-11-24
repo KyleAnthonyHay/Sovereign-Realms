@@ -9,6 +9,8 @@
 #include "GameFramework/GameUserSettings.h"
 #include "Widgets/SWindow.h"
 #include "Engine/PointLight.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/DirectionalLightComponent.h"
 #include "Components/LightComponent.h"
 #include "Engine/PostProcessVolume.h"
 #include "Engine/World.h"
@@ -180,6 +182,81 @@ namespace
 				UVLGraphics::SetRenderScale(World, FCString::Atoi(*Args[0]));
 			}
 			UE_LOG(LogSovereignRealms, Log, TEXT("graphics: quality %s, render scale %d%%"), UVLGraphics::QualityName(UVLGraphics::GetQuality()), UVLGraphics::GetRenderScale());
+		}));
+
+	// ---- the sun, for recording the showreel at another hour (capture only: nothing calls it; the level's own sun is
+	// the game's, and `vl.Sun reset` puts it back). The sky (SkyAtmosphere) and the sky light (real-time capture) follow it.
+	struct FSunStart
+	{
+		TWeakObjectPtr<UDirectionalLightComponent> Light;
+		FRotator Rotation;
+		float Intensity = 0.f;
+		bool bUseTemperature = false;
+		float Temperature = 6500.f;
+		EComponentMobility::Type Mobility = EComponentMobility::Movable;
+	};
+	FSunStart GSunStart;
+
+	UDirectionalLightComponent* FindSun(UWorld* World)
+	{
+		UDirectionalLightComponent* Best = nullptr;
+		for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+		{
+			UDirectionalLightComponent* C = Cast<UDirectionalLightComponent>(It->GetLightComponent());
+			if (C && (!Best || C->IsUsedAsAtmosphereSunLight()))
+			{
+				Best = C;
+			}
+		}
+		return Best;
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs CmdSun(TEXT("vl.Sun"),
+		TEXT("vl.Sun [Pitch Yaw [Intensity [Kelvin]]] | reset: turn the level's sun (pitch below 0: above the horizon; -8 a sunset), its strength (lux) and colour temperature, for recording; no arguments: log it; reset: as the level has it"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UDirectionalLightComponent* Sun = World ? FindSun(World) : nullptr;
+			if (!Sun)
+			{
+				UE_LOG(LogSovereignRealms, Log, TEXT("vl.Sun: no directional light"));
+				return;
+			}
+			if (GSunStart.Light.Get() != Sun)
+			{
+				GSunStart.Light = Sun;
+				GSunStart.Rotation = Sun->GetComponentRotation();
+				GSunStart.Intensity = Sun->Intensity;
+				GSunStart.bUseTemperature = Sun->bUseTemperature;
+				GSunStart.Temperature = Sun->Temperature;
+				GSunStart.Mobility = Sun->Mobility;
+			}
+			if (Args.Num() >= 1 && Args[0].Equals(TEXT("reset"), ESearchCase::IgnoreCase))
+			{
+				Sun->SetWorldRotation(GSunStart.Rotation);
+				Sun->SetIntensity(GSunStart.Intensity);
+				Sun->SetUseTemperature(GSunStart.bUseTemperature);
+				Sun->SetTemperature(GSunStart.Temperature);
+			}
+			else if (Args.Num() >= 2)
+			{
+				if (Sun->Mobility != EComponentMobility::Movable)
+				{
+					Sun->SetMobility(EComponentMobility::Movable);
+				}
+				Sun->SetWorldRotation(FRotator(FCString::Atof(*Args[0]), FCString::Atof(*Args[1]), 0.f));
+				if (Args.Num() >= 3)
+				{
+					Sun->SetIntensity(FCString::Atof(*Args[2]));
+				}
+				if (Args.Num() >= 4)
+				{
+					Sun->SetUseTemperature(true);
+					Sun->SetTemperature(FCString::Atof(*Args[3]));
+				}
+			}
+			const FRotator R = Sun->GetComponentRotation();
+			UE_LOG(LogSovereignRealms, Log, TEXT("vl.Sun: pitch %.1f yaw %.1f, %.2f lux, %s %.0f K (the level's: pitch %.1f yaw %.1f, %.2f lux)"), R.Pitch, R.Yaw, Sun->Intensity,
+				Sun->bUseTemperature ? TEXT("temperature") : TEXT("no temperature"), Sun->Temperature, GSunStart.Rotation.Pitch, GSunStart.Rotation.Yaw, GSunStart.Intensity);
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdDynRes(TEXT("vl.Gfx.DynRes"), TEXT("0 Off, 1 Target 60 fps, 2 Target 40 fps, 3 Target 30 fps (not saved)"),

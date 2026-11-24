@@ -33,6 +33,8 @@ INBOX = os.path.join(SAVED, "VLCommands.txt")
 SHOTS_DIR = os.path.join(SAVED, "Screenshots", "VL")
 OUT = os.path.join(ROOT, "Saved", "Showreel")
 FLAG = r"C:\Dev\ThermalWatchdog\OVERHEAT.flag"
+STILLS = os.environ.get("VL_STILLS") or os.path.join(OUT, "stills")
+FRAMES = os.path.join(OUT, "frames")      # where a recording's frames go (Tools/showreel2_shots.py points it per reel)
 
 
 def hot():
@@ -53,11 +55,11 @@ def send(cmds, timeout=30.0):
     return True
 
 
-def view_cmd(c, t, fov):
-    """vl.View free from a camera and a look-at point, plan metres."""
+def view_cmd(c, t, fov, dpitch=0.0, dyaw=0.0):
+    """vl.View free from a camera and a look-at point, plan metres (dpitch / dyaw: a hand's shake, degrees)."""
     dx, dy, dz = t[0] - c[0], t[1] - c[1], t[2] - c[2]
-    yaw = math.degrees(math.atan2(-dy, dx))
-    pitch = math.degrees(math.atan2(dz, math.hypot(dx, dy)))
+    yaw = math.degrees(math.atan2(-dy, dx)) + dyaw
+    pitch = math.degrees(math.atan2(dz, math.hypot(dx, dy))) + dpitch
     return "vl.View free %.1f %.1f %.1f %.3f %.3f %.2f" % (c[0] * 100, -c[1] * 100, c[2] * 100, pitch, yaw, fov)
 
 
@@ -98,9 +100,26 @@ def ease(s, kind="inout", k=2.0):
     return (1 - 1 / k) * sm + (1 / k) * s if k > 1 else sm
 
 
-def path_cmds(cam, frames, easing="inout", k=2.0):
-    """cam: dict(pos=[...], look=[...], fov=[...]) of keys; returns one vl.View per frame."""
+def shake(i, fps, amp, hz, seed=0):
+    """A hand-held camera's wander: (dx, dy, dz, dpitch, dyaw) at frame i; amp = (metres, degrees). Sums of sines at
+    unrelated rates (smooth, never repeating within a shot), plus a faster, smaller tremor."""
+    t = i / float(fps)
     out = []
+    for k in range(5):
+        v = 0.0
+        for j, (f, w) in enumerate(((1.0, 1.0), (1.73, 0.55), (2.91, 0.3), (5.3, 0.12))):
+            ph = math.sin((seed + 1) * 12.9898 + k * 78.233 + j * 37.719) * 43758.5453
+            ph = (ph - math.floor(ph)) * 2 * math.pi
+            v += w * math.sin(2 * math.pi * hz * f * t + ph)
+        out.append(v / 1.4 * (amp[0] if k < 3 else amp[1]))
+    return out
+
+
+def path_cmds(cam, frames, easing="inout", k=2.0, fps=30, seed=0):
+    """cam: dict(pos=[...], look=[...], fov=[...]) of keys, and optionally shake=(metres, degrees, hz); returns one
+    vl.View per frame."""
+    out = []
+    sh = cam.get("shake")
     for i in range(frames):
         s = ease(i / max(frames - 1, 1), easing, k)
         c = spline(cam["pos"], s)
@@ -118,7 +137,12 @@ def path_cmds(cam, frames, easing="inout", k=2.0):
             t = spline(cam["look"], s) if len(cam["look"]) > 1 else cam["look"][0]
         fovs = cam.get("fov", [60.0])
         fov = spline([(f,) for f in fovs], s)[0] if len(fovs) > 1 else fovs[0]
-        out.append(view_cmd(c, t, fov))
+        if sh:
+            d = shake(i, fps, sh[:2], sh[2], seed)
+            c = (c[0] + d[0], c[1] + d[1], c[2] + d[2])
+            out.append(view_cmd(c, t, fov, d[3], d[4]))
+        else:
+            out.append(view_cmd(c, t, fov))
     return out
 
 
@@ -155,7 +179,7 @@ def record(name, frames, at, fps=30, settle=3.0, first=None):
             break
         time.sleep(0.25)
     time.sleep(0.8)
-    dst = os.path.join(OUT, "frames", name)
+    dst = os.path.join(FRAMES, name)
     if os.path.isdir(dst):
         shutil.rmtree(dst)
     os.makedirs(dst)
@@ -179,7 +203,7 @@ def still(name, settle=2.5):
     while not os.path.exists(path) and time.time() < end:
         time.sleep(0.1)
     time.sleep(0.4)
-    dst = os.path.join(OUT, "stills")
+    dst = STILLS
     os.makedirs(dst, exist_ok=True)
     if os.path.exists(path):
         shutil.move(path, os.path.join(dst, name + ".png"))
@@ -204,6 +228,12 @@ def main(a):
         import showreel_shots as S
         for name in a[1:]:
             S.run(name)
+    elif a[0] == "rec2":
+        # the second and third reels' shots (Tools/showreel2_shots.py): frames to Saved/Showreel/<reel>/frames/<shot>
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import showreel2_shots as S2
+        for name in a[1:]:
+            S2.run(name)
     else:
         print(__doc__)
     return 0

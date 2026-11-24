@@ -598,6 +598,9 @@ namespace
 		TEXT("1: a unit standing with nothing to do (settled on a floor that does not move, no order) has its movement component switched off until it is asked to move, is put elsewhere or loses its floor. 0: every unit's ticks every frame"));
 	TAutoConsoleVariable<int32> CVarGarrisonSleep(TEXT("vl.Opt.GarrisonSleep"), 1,
 		TEXT("1: a unit standing on a tower's lookout has its movement component switched off until it leaves (it never walks there). 0: it ticks as every unit"));
+	// (for recording the showreel: the white flash reads as a glitch in a still; the game keeps it)
+	TAutoConsoleVariable<int32> CVarHitFlash(TEXT("vl.Opt.HitFlash"), 1,
+		TEXT("1: a unit that is hurt flashes white for a moment, as always. 0: no flash (capture only: Tools/showreel.py)"));
 }
 
 void AVLKing::SetMovementAwake(bool bAwake)
@@ -3726,7 +3729,7 @@ void AVLKing::ReceiveDamage(float Amount, AActor* From)
 	Health = FMath::Max(0.f, Health - Amount);
 	LastHurtTime = GetWorld()->GetTimeSeconds();
 	HitPauseLeft = FMath::Max(0.f, HitPauseSeconds);
-	FlashLeft = FMath::Max(0.f, HitFlashSeconds);
+	FlashLeft = CVarHitFlash.GetValueOnGameThread() != 0 ? FMath::Max(0.f, HitFlashSeconds) : 0.f;
 	if (FlashMID && !bFlashOn && FlashLeft > 0.f)
 	{
 		for (UStaticMeshComponent* PartMesh : Meshes)
