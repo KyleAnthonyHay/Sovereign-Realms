@@ -110,7 +110,7 @@ def stuck():
     n = bad = 0
     for l in lines:
         m = re.search(r"unit .* at\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)", l)
-        if not m:
+        if not m or l.rstrip().endswith("on the tower"):      # (a tower's archers stand on its platform)
             continue
         x, y, z = float(m.group(1)) / 100.0, -float(m.group(2)) / 100.0, float(m.group(3)) / 100.0
         n += 1
