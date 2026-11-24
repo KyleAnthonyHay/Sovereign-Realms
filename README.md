@@ -296,7 +296,7 @@ only while a Builder works at it.
 | Gold Mine (Economy) | `SM_MineCliff`, on a gold vein only: a neutral mine (taken over) or the ruin of a fallen one | 140 gold | 32 s | - |
 | Barracks (Military) | `SM_BarracksYard` | 110 gold | 32 s | - |
 | Archery Range (Military) | `SM_ArcheryHall` | 125 gold | 32 s | - |
-| Watch Tower (Defence) | `SM_WatchTower` (its lookout tag added when done) | 160 gold | 54 s | 2, +1 a castle level |
+| Watch Tower (Defence) | `SM_WatchTower` (its lookout tag added when done) | 160 gold | 54 s | 3, +1 a castle level |
 
 Limits count only what a side raised in the match (the map's own farms and tower are its endowment). The first draft
 never built a town hall, so it is not in the menu. Prices are the first draft's (`GranaryStats` 120 gold, `TreasuryStats`

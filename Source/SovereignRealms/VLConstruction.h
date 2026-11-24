@@ -53,7 +53,7 @@ namespace VLBuild
 	constexpr float VeinSnap = 1800.f;              // a mine snaps onto a vein this near the pointer (cm)
 	// how many a kingdom may raise, by its castle's level (sites count; the level's own buildings do not)
 	constexpr int32 FarmLimitBase = 3, FarmLimitPerLevel = 1;
-	constexpr int32 TowerLimitBase = 2, TowerLimitPerLevel = 1;
+	constexpr int32 TowerLimitBase = 3, TowerLimitPerLevel = 1;   // 3 at castle level 1 (was 2), 4, 5, ...
 	/** Builders a kingdom may have at a castle level (the main game's FSRCastleLevel::Builders: 2, 3, 3, 4, 4, 5, 6). */
 	int32 MaxBuilders(int32 CastleLevel);
 	constexpr int32 StartBuilders = 1;              // each side, when a match starts on a map with both castles
