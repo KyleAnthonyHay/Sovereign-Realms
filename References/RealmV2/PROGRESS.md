@@ -15,6 +15,19 @@
   The project had no birds (only the deprecated main game's `SRBirds`, a procedural mesh); the loop / beat / glide idea
   is taken from it.
 
+## 2026-11-23: open sea all round (owner: "increase the circumference of the map area so the ship has more room")
+- The map is 780 m square (it was the ground tiles' 640): `MAP_EDGE = 390` in `Tools/ue/build_realmv2.py` places a
+  `MapEdge` slab (invisible, no collision, tagged Ground) 2 x 390 m square at the seabed. The path grid takes its
+  bounds from the Ground meshes, and from those bounds come the overview's whole-map zoom (now 3,727 m) and its pan
+  limits, the minimap, the troop ship's chart (840 m: 30 m more each way), the water look and the AI's maps. The
+  coast reaches 309 m from the middle at most and the islets 319 m: 81 m of open sea beyond the coast, 71 m beyond the
+  islets. Every new cell is under water, so no unit stands there (`vl.Path` to the new sea: "no walkable ground").
+- The sea mesh reaches 1,700 m from the middle (`FAR` in `realmv2_terrain.py`, was 600) and the seabed slab is
+  3,600 m square, so the overview all the way out, panned to the edge, sees no end to the water.
+- Grid 1560 x 1560 cells of 50 cm. Checks: `Tools/troopship_dock_test.py realmv2`: 0 failures, including the new
+  `lap` (an eight-point course on a ring 350 m out, all the way round in 324 s, afloat throughout).
+  `Tools/realmv2_test.py routes stuck`: pass (`stuck` now skips a tower's archers on its platform).
+
 ## Files
 - Tools/blender/realmv2_layout.py (plan; `--debug` -> Saved/realmv2_plan.png + balance table), realmv2_cam.py,
   assets/realmv2_terrain.py, assets/ruins.py, Tools/ue/build_realmv2.py, Tools/realmv2_rebuild.sh,

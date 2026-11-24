@@ -758,7 +758,8 @@ prints the balance table), `highland_cam.py`, `assets/highland_terrain.py`, `Too
 
 ## Realm v2 (`L_RealmV2`): the third, biggest battle map
 
-An island, 640 m square with the sea round it. After `References/RealmV2/`: `PLAN.md` (the owner's brief),
+An island, 640 m square, in a map 780 m square (81 m of open sea round the coast for the troop ship: `MAP_EDGE` in
+`Tools/ue/build_realmv2.py`, as on Realm v3). After `References/RealmV2/`: `PLAN.md` (the owner's brief),
 `layout_annotated.png` and `layout_island_suggestion.png` (the layout: the second is the later word), and for the look
 and the scale `visual_inspiration.png`, `scale_and_clouds.png`, `terrain_pockets.png`, `port.png`. Made by its own
 scripts, written from the highlands': `Tools/blender/realmv2_layout.py` (the plan; `--debug` draws
@@ -868,7 +869,9 @@ seeded). It carries the realm's contract (the tags, `TeamStart:0/1`, `Rally:0/1`
 
 ## Realm v3 (`L_RealmV3`): the fourth battle map, the compact island
 
-An island 512 m square, after `References/RealmV3/`: `concept_plan.png` and `concept_threequarter.png` (the owner's
+An island 512 m square in a map 620 m square (80 m of open sea all round it for the troop ship; `MAP_EDGE` in
+`Tools/ue/build_realmv3.py`, a hidden `MapEdge` slab tagged Ground that the path grid's bounds, the overview, the
+minimap and the ship's chart all follow), after `References/RealmV3/`: `concept_plan.png` and `concept_threequarter.png` (the owner's
 concept), `PLAN.md` (the design: sizes, elevations, every coordinate, how it answers the brief) and `PROGRESS.md`
 (the state, the checks and their numbers). Made by Realm v2's pipeline, copied: `Tools/blender/realmv3_layout.py`
 (the plan; `--debug` draws `Saved/realmv3_plan.png`, `--balance` prints the routes), `realmv3_cam.py`,

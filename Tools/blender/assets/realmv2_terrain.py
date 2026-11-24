@@ -10,7 +10,7 @@ grid) and exports
                           two where nothing tells them apart. Snow is white paint on the heights' treads
   SM_RealmV2Water         every sheet of fresh water at its own level (the rivers, the two reaches above the north
                           falls, the creek's pond, pool and brook) and the falls between them
-  SM_RealmV2Sea           the sea round the island, one sheet of 2 m voxels 1200 m square with holes under the land,
+  SM_RealmV2Sea           the sea round the island, one sheet of 2 m voxels 3400 m square with holes under the land,
                           its flat faces joined (merge_far). Nothing lies beyond it: no backdrop
   SM_RealmV2Barrier       walls nobody sees, half a metre thick, along the edge of the plan's hazard map (the rivers'
                           banks, the creek, the rims of the plateau, the terraces, the bluffs and the towers' hills):
@@ -30,7 +30,7 @@ from voxlib import Vox, IDS
 
 TILE = 32.0
 BLOCK = 64.0         # the ground is meshed in blocks of this size (2 x 2 tiles)
-FAR = 600.0          # the sea reaches this far from the middle
+FAR = 1700.0         # the sea reaches this far from the middle (the overview all the way out, panned to the map's edge, sees about 1.7 km)
 BV = 2.0             # the sea's voxel
 WALL_TOP = 30.0      # the hidden walls' top (they stand where people walk: the upper terrace is at 22 m)
 SNOW = "#f2f6fb"

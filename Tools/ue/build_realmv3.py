@@ -214,7 +214,7 @@ def seabed(terrain):
     """One flat slab under the open sea (the voxel ground stops a few metres out from the cliffs)."""
     cube = eal.load_asset("/Engine/BasicShapes/Cube")
     a = eas.spawn_actor_from_object(cube, vec(0, 0, terrain["seabed"] - 0.55), unreal.Rotator(0, 0, 0))
-    a.set_actor_scale3d(unreal.Vector(1400.0, 1400.0, 1.0))
+    a.set_actor_scale3d(unreal.Vector(3600.0, 3600.0, 1.0))         # (under the whole sea mesh: 1400 / 1700 m from the middle)
     a.set_folder_path("Terrain")
     a.set_actor_label("Seabed")
     c = a.static_mesh_component

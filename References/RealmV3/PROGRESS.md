@@ -50,6 +50,16 @@
 3. **A pass begins square at the ramp's foot** (`ramp_fields`, `act`): its floor's round end once cut a 1.25 m step
    across the ramp's last metres, which the plan's route got round along the edges and the game's did not.
 
+## The third round (2026-11-23 night): open sea all round, for the troop ship
+- The map is 620 m square (the ground tiles' 502): `MAP_EDGE = 310` in `Tools/ue/build_realmv3.py` places a `MapEdge`
+  slab (invisible, no collision, tagged Ground) at the seabed; the path grid's bounds, and so the overview's whole-map
+  zoom (2,952 m) and limits, the minimap, the ship's chart (680 m) and the AI's maps reach 310 m from the middle. The
+  coast reaches 230 m at most, the islets 245 m: 80 m of open sea beyond the coast, 65 m beyond the islets. All the
+  new cells are under water. Grid 1240 x 1240 cells, built in 0.69 s.
+- The sea mesh reaches 1,400 m (`FAR`, was 520), the seabed slab 3,600 m square.
+- `Tools/troopship_dock_test.py realmv3`: 0 failures, the new `lap` included (ring 270 m out, 360 degrees, 254 s).
+  `realmv3_test.py around routes`: pass. Shot: Saved/Screenshots/VL/troopship_lap.png (the overview all the way out).
+
 ## Checks after the second round (2026-11-23 evening, PIE on L_RealmV3, Windows)
 - `Tools/realmv3_test.py routes around times build stuck`: all pass (Saved/realmv3_test.log; `build stuck` again on a
   fresh match, Saved/realmv3_test_build.log: 0 failed). The new `build` spot in plateau A's south-east corner asks for
