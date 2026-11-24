@@ -65,10 +65,11 @@ namespace VLRules
 		// is a troop's, 420 / 760 cm/s (the owner's call, 2026-11-22: he walks with his men; it was 520 / 950).
 		static const FTroop King = [] { FTroop T; T.Health = 600.f; T.Damage = 45.f; T.BuildingScale = 1.f; T.Acquire = 4000.f; T.Sight = 1690.f; T.Pop = 0; T.TrainSeconds = 0.f;
 			T.WalkSpeed = 420.f; T.RunSpeed = 760.f; return T; }();
-		// The Spy (the main game's Scout): 90 hp, 8 a blow every 1.2 s (x0.2 against buildings), picks no fights (no
-		// acquire range), sees 26 m, noticed at 45% of the usual distance, 875 cm/s (a Shieldbearer did 450: 1.94x),
-		// 350 gold + 200 food, 12 s at the castle.
-		static const FTroop Spy = [] { FTroop T; T.Health = 90.f; T.Damage = 8.f; T.BuildingScale = 0.2f; T.Acquire = 0.f; T.Pop = 1; T.Cost.Gold = 350; T.Cost.Food = 200;
+		// The Spy (the main game's Scout): 90 hp, picks no fights (no acquire range), sees 26 m, noticed at 45% of the
+		// usual distance, 875 cm/s (a Shieldbearer did 450: 1.94x), 350 gold + 200 food, 12 s at the castle. Its weapon
+		// is a weak bow (the owner's call, 2026-11-23: "scout should have a weak bow"; it had a blow of 8 every 1.2 s):
+		// an arrow of 18 (the archer's 40: 45%), x0.2 against buildings; the rest of its bow is VLRules::Spy*.
+		static const FTroop Spy = [] { FTroop T; T.Health = 90.f; T.Damage = SpyArrowDamage; T.BuildingScale = 0.2f; T.Acquire = 0.f; T.Pop = 1; T.Cost.Gold = 350; T.Cost.Food = 200;
 			T.TrainSeconds = 24.f; T.Sight = 3380.f; T.Notice = 0.45f; T.WalkSpeed = 875.f; T.RunSpeed = 1100.f; return T; }();
 		// Jonathan, the archer prince: the second hero, an archer. Free, no housing (he comes with the castle's third
 		// level). Three quarters of King David's health and three and a half archers'; an arrow of 60 (the archer's 40

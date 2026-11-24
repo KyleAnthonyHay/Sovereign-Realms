@@ -511,7 +511,13 @@ void UVLArcherCombat::TickHands(AVLKing* Unit, float Dt)
 	{
 		return;
 	}
-	Unit->bRightMouseAims = true;       // the right button draws the bow: it does not turn the camera
+	// THE SPY'S BOW (its weak one, AVLTroop::BeginPlay): its right button is its spyglass (UVLSpy, which owns the right
+	// button then), so its bow is the left button: a click is a quick draw and shot at the crosshair
+	const bool bSpy = Unit->KindId() == EVLUnitKind::Spy;
+	if (!bSpy)
+	{
+		Unit->bRightMouseAims = true;   // the right button draws the bow: it does not turn the camera
+	}
 	if (TestLookTime > 0.f)
 	{
 		// (vl.Bow look) the hero camera turned until the crosshair's ray passes through the point, as the mouse would
@@ -530,7 +536,7 @@ void UVLArcherCombat::TickHands(AVLKing* Unit, float Dt)
 	// The right button (the right trigger): held, it draws; let go, she looses. The left button (the left shoulder)
 	// while it is held LOCKS the draw: she stays drawn with the right button let go, and the next right press looses.
 	// The left button on a locked draw lets the string down; with no draw at all it is a blow with the bow.
-	const bool bRight = bTestDraw || (!bMenu && (PC->IsInputKeyDown(EKeys::RightMouseButton) || PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis) > 0.4f));
+	const bool bRight = bTestDraw || (!bSpy && !bMenu && (PC->IsInputKeyDown(EKeys::RightMouseButton) || PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis) > 0.4f));
 	const bool bRightPressed = bRight && !bWasRight;
 	bWasRight = bRight;
 	if (bMenu)
@@ -547,7 +553,14 @@ void UVLArcherCombat::TickHands(AVLKing* Unit, float Dt)
 		}
 		else if ((PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) && !CommandModifier(PC) && !Unit->HeroClickTaken()) || PC->WasInputKeyJustPressed(EKeys::Gamepad_LeftShoulder))
 		{
-			LeftButton();           // (a click that selected or ordered, AVLKing::HeroCommands, is not the bow's)
+			if (!bSpy)
+			{
+				LeftButton();       // (a click that selected or ordered, AVLKing::HeroCommands, is not the bow's)
+			}
+			else if (Phase == EPhase::Rest && BashTime < 0.f)
+			{
+				Shoot();            // (the Spy: a quick shot)
+			}
 		}
 	}
 	const bool bHeld = bRight && !bLetDown && BashTime < 0.f;
@@ -1220,6 +1233,18 @@ void UVLArcherCombat::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 		Pose(Unit, DeltaTime);      // (as the shot stands: its arrow leaves from where this puts it)
 	}
 	TickShot(Unit, DeltaTime);
+	if (Unit->KindId() == EVLUnitKind::Spy)
+	{
+		// the Spy's spyglass is in its drawing hand: put away while it shoots (UVLSpy raises it again)
+		if (USceneComponent* Glass = Unit->GetJoint(TEXT("Spyglass")))
+		{
+			const bool bShow = Phase == EPhase::Rest || Phase == EPhase::Loose;
+			if (Glass->IsVisible() != bShow)
+			{
+				Glass->SetVisibility(bShow, true);
+			}
+		}
+	}
 	// While a shot is on its way the figure is posed in every Tick, seen or not: the arrow leaves from where the pose
 	// has it (a shot takes several frames to get to the loose, so the pose is there in time). Otherwise the unit poses
 	// her, bow arm and all, only when she is seen (AVLKing::RigLate).

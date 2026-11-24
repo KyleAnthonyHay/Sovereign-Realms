@@ -334,6 +334,51 @@
     0.66022
    ],
    "parent": "HandR"
+  },
+  "Bow": {
+   "mesh": "SM_Spy_Bow",
+   "pivot": [
+    0.38604,
+    -0.15535,
+    0.63056
+   ],
+   "parent": "ForeL"
+  },
+  "BowStringU": {
+   "mesh": "SM_Spy_BowStringU",
+   "pivot": [
+    0.55024,
+    -0.48789,
+    0.95902
+   ],
+   "parent": "Bow"
+  },
+  "BowStringL": {
+   "mesh": "SM_Spy_BowStringL",
+   "pivot": [
+    0.61942,
+    0.2131,
+    0.3956
+   ],
+   "parent": "Bow"
+  },
+  "Quiver": {
+   "mesh": "SM_Spy_Quiver",
+   "pivot": [
+    0.2125,
+    0.3375,
+    0.925
+   ],
+   "parent": "Chest"
+  },
+  "Arrow": {
+   "mesh": "SM_Spy_Arrow",
+   "pivot": [
+    -0.37198,
+    -0.24229,
+    0.66022
+   ],
+   "parent": "HandR"
   }
  },
  "spyglass": {
@@ -384,5 +429,64 @@
    0.3875,
    0.9875
   ]
+ },
+ "wrist_l": 25.0,
+ "bow": {
+  "part": "Bow",
+  "hand": "L",
+  "parent": "ForeL",
+  "grip": [
+   0.38604,
+   -0.15535,
+   0.63056
+  ],
+  "axis": [
+   -0.07669,
+   -0.77715,
+   0.62463
+  ],
+  "string_dir": [
+   0.96971,
+   0.08758,
+   0.22803
+  ],
+  "length": 1.1,
+  "string_offset": 0.205,
+  "string_parts": [
+   "BowStringU",
+   "BowStringL"
+  ]
+ },
+ "arrow": {
+  "part": "Arrow",
+  "hand": "R",
+  "parent": "HandR",
+  "grip": [
+   -0.37198,
+   -0.24229,
+   0.66022
+  ],
+  "length": 0.65,
+  "tip_offset": 0.425
+ },
+ "quiver": {
+  "part": "Quiver",
+  "parent": "Chest",
+  "pivot": [
+   0.2125,
+   0.3375,
+   0.925
+  ],
+  "axis": [
+   0.37461,
+   0.0,
+   0.92718
+  ],
+  "mouth": [
+   0.27337,
+   0.3375,
+   1.07567
+  ],
+  "arrows": 7
  }
 }

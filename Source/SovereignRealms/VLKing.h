@@ -109,7 +109,7 @@ public:
 	/** The point of the ground under it. */
 	FVector GetFeet() const;
 	/** An archer: stands behind the melee in a formation, and can man the watch tower. */
-	bool IsRanged() const { const EVLUnitKind K = KindId(); return K == EVLUnitKind::Archer || K == EVLUnitKind::Jonathan; }
+	bool IsRanged() const { const EVLUnitKind K = KindId(); return K == EVLUnitKind::Archer || K == EVLUnitKind::Jonathan || K == EVLUnitKind::Spy; }     // (the Spy: its weak bow, VLRules::Spy*)
 	/** Jonathan, the archer prince: a troop in the code (ordered, selected and taken over as one), a hero in the game. */
 	bool IsJonathan() const { return KindId() == EVLUnitKind::Jonathan; }
 	const FString& GetKind() const { return UnitKind; }

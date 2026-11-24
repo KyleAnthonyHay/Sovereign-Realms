@@ -940,14 +940,24 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   click on a foe's unit or building attacks it. Swordsmen run a moving foe down (a fresh route every 0.6 s, given up
   after a dozen that get no closer) and go for a building's walls; archers lead a moving foe and walk into range
   again when it leaves it. Arrows strike the bodies of foes they pass (never friends). The dead topple and are gone.
-- **The Spy** (the first draft's Scout, `ESRUnitType::Scout`; `VLRules::Troop("Spy")`, `UVLSpy`): 90 health, 8 a blow
-  (x0.2 against buildings), 350 gold + 200 food, 24 s at the **Castle**, 1 housing. Three rules, checked when it is
+- **The Spy** (the first draft's Scout, `ESRUnitType::Scout`; `VLRules::Troop("Spy")`, `UVLSpy`): 90 health, **a weak bow**
+  (the owner's call, 2026-11-23; it had a blow of 8): the archer's bow and code (`UVLArcherCombat`, as Jonathan's), set
+  up in `AVLTroop::BeginPlay` from `VLRules::Spy*`: **18 an arrow** (the archer's 40: 45%; x0.2 against buildings)
+  **every 3.4 s** on orders (hers 2.4), **from 22 m** (hers 31.2 m; 38 m from a tower's lookout, hers 54.6 m), arrows at
+  52 m/s (hers 62): **5.3 damage a second against her 16.7, a third**, from a little over two thirds of her reach. It
+  is a ranged unit to the orders and the AI (`AVLKing::IsRanged`: attack orders, attack-ground, a tower's lookout,
+  formations put it with the archers) but stays a scout: the same sight, speed and notice, still no acquire range (it
+  answers when struck and shoots when ordered). Its model carries a short plain bow in its left fist, a small quiver
+  of seven low on its back by the left shoulder, and its arrow in the right fist with the spyglass, which it puts
+  away while it shoots (`SM_Spy_Bow`, `_BowStringU/L`, `_Quiver`, `_Arrow`; `Tools/blender/assets/troop_spy.py`).
+  350 gold + 200 food, 24 s at the **Castle**, 1 housing. Three rules, checked when it is
   queued (`UVLBattle::SpyRefusal`): the castle at **level 3**, **one at a time** (alive or in training), and a
   **5-minute wait** between two, counted from the moment the last was queued and paid for; no batches. The castle's
   panel has its recruit button (the Scout's: "Castle level 3" / "In training" / "In the field · 3:12" / "Ready in
   3:12"), the upgrade button one slot to its left. **Very fast**: 8.75 m/s on the march and 11 m/s at a run (a
   swordsman 4.2 / 7.6), a 2.6 m stride. **Picks no fights**: no sight of its own to go for foes, it answers no calls
-  for help and joins no recruit platoon; played, a left click is a light blow. **Hard to notice** (`FTroop::Notice`
+  for help and joins no recruit platoon; played, **a left click is a quick shot of its bow** at the crosshair (the right
+  button stays its spyglass). **Hard to notice** (`FTroop::Notice`
   0.45): enemy troops go for it only within 45% of their sight (a swordsman at 7.6 m instead of 16.9 m, an archer at
   8.8 m) and let it go at 45% of their usual chase; towers and the castle's walls shoot it only inside 45% of their
   reach; the enemy commander sees it (its memory, its "foes at my buildings" alarm) only at 45% of its 26 m. A direct

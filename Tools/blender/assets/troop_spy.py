@@ -17,6 +17,11 @@ it. If the King's rig changes, change that block (and the few places marked RIG)
 spy's own and ride on the King's: "Spyglass" (in the right fist, on HandR: the game raises it to the eye, UVLSpy),
 and "HoodA" > "HoodB" (the hood's loose tail down the back, on Head: swung as cloth by UVLSpy, and its vertices carry
 a sway weight in their colour's alpha for the wind material, slot "sway").
+ITS WEAK BOW (the owner's call, 2026-11-23: "scout should have a weak bow"): the archer's parts and joints, so the
+archer's code (UVLArcherCombat) carries it, draws it and shoots it: "Bow" in the left fist (rides on ForeL; a short
+plain hunting bow, 1.1 m against her 1.4 m recurve, no gold), "BowStringU" / "BowStringL" (its string's halves), "Arrow"
+(in the right fist, on HandR, where the spyglass is: the game puts the glass away while it shoots) and "Quiver" (a small
+leather one low on the back, left of the bedroll, its mouth leaning to the left shoulder; rides on Chest).
 
 The block engine (Part, Grid, emit, cull, the baked shading, the mesh) and the preview stage are copies of king_b.py's
 (marked below), so this script does not depend on that file while it is being worked on.
@@ -53,8 +58,8 @@ REF = os.path.join(V.ROOT, "References", "Remake", "spy.png")
 # engine swings as cloth. The spy's own: "Spyglass" rides on HandR (origin at the middle of its grip in the fist);
 # "HoodA" > "HoodB" hang from the Head.
 ORDER = ["Body", "Chest", "Head", "HoodA", "HoodB", "ArmL", "ForeL", "ArmR", "ForeR", "HandR", "LegL", "ShinL", "LegR", "ShinR", "Cape",
-         "Spyglass"]
-PARENT = {"Chest": "Body", "Head": "Chest", "ArmL": "Chest", "ArmR": "Chest", "ForeL": "ArmL", "ForeR": "ArmR", "HandR": "ForeR",
+         "Spyglass", "Bow", "BowStringU", "BowStringL", "Quiver", "Arrow"]
+PARENT = {"Bow": "ForeL", "BowStringU": "Bow", "BowStringL": "Bow", "Quiver": "Chest", "Arrow": "HandR", "Chest": "Body", "Head": "Chest", "ArmL": "Chest", "ArmR": "Chest", "ForeL": "ArmL", "ForeR": "ArmR", "HandR": "ForeR",
           "ShinL": "LegL", "ShinR": "LegR", "Cape": "Chest", "Spyglass": "HandR", "HoodA": "Head", "HoodB": "HoodA"}
 CAPE_COLS, CAPE_ROWS = 5, 4
 CAPE_U = (-0.72, -0.25, 0.25, 0.72)           # the columns' borders, as a share of the cape's half width
@@ -75,6 +80,8 @@ JOINTS = {                                    # u, world
     "ShinL": (12, 0, KNEE_Z), "ShinR": (-12, 0, KNEE_Z),
     "Cape": (0, 16, 104),
     "HoodA": (0, 19, 131), "HoodB": (0, 23, 118),             # the hinges of the hood's tail
+    "Quiver": (17, 27, 74),                                   # the middle of the quiver: low on the back, left of the bedroll
+    "Bow": None, "BowStringU": None, "BowStringL": None, "Arrow": None,    # (set while building)
     # set while building: ForeL / ForeR (the elbows, build_arm), HandR (the wrist), Spyglass (the middle of its grip
     # in the right fist, build_spyglass), Cape<col><row> (the middle of each panel's top edge, build_cape)
 }
@@ -83,6 +90,7 @@ WRIST_AT = (25, -0.5, 52.0)                   # the wrist, in the forearm's fram
 GRIP = (24.8, -3.5, 45.8)                     # the middle of the spyglass's grip in the fist, in the forearm's frame
 HOOD_SWAY = (133.0, 103.0)                    # the tail's sway weight: 0 at this height, 1 at that (u)
 EYE = (-6.0, -13.0, 120.0)                    # the pupil of the right eye (the spyglass is raised to it)
+WRIST_L = 25.0                                # the bow fist is modelled turned up this much more at the wrist (the archer's)
 # ==================================================================================================
 
 MATN = ["paint", "gold", "metal", "wool", "glow", "sway"]
@@ -117,6 +125,11 @@ _PAL = [
     ("gem_w",    "#FFF4DA", "paint", "gem"),
     ("glow",     "#FFAE30", "glow", "glow"), ("glow_l", "#FFD470", "glow", "glow"),
     ("core",     "#17120F", "paint", "core"),
+    # the bow, its string and its arrows (the archer's colours, a plainer wood)
+    ("wood",     "#7A5432", "paint", "leather"), ("wood_l", "#946A40", "paint", "leather"), ("wood_d", "#5C3C20", "paint", "leather"),
+    ("shaft",    "#6A452A", "paint", "leather"), ("shaft_l", "#C9A56E", "paint", "leather"),
+    ("fletch",   "#E0D6B8", "paint", "cloth"), ("fletch_d", "#8A9A5A", "paint", "cloth"),
+    ("string",   "#E6DABE", "paint", "cloth"),
 ]
 PN = [None] + [p[0] for p in _PAL]
 PI = {n: i for i, n in enumerate(PN)}
@@ -383,7 +396,7 @@ def _ladder():
 
 
 PUP, PDN = _ladder()
-NOSHADE = ("white", "pupil", "lip", "gem_w", "core", "brow", "glow", "glow_l", "lens", "lens_l")
+NOSHADE = ("white", "pupil", "lip", "gem_w", "core", "brow", "glow", "glow_l", "lens", "lens_l", "string")
 
 
 def emit(part, g, lim=(8, 16), pref=None, lims=None, shade=0.35, proud_p=0.3, proud=(0.1, 0.35), bevel=1.0, cjit=0.03,
@@ -951,11 +964,19 @@ def build_arm(s):
     f(24.2, 25.8, -8.4, -7.7, 63.2, 64.8, "belt_dd", bevel=0.15)
     f(17.5, 32.5, -7.5, 7.5, 68.0, 69.4, "bracer_l")          # its upper lip
     if s > 0:
-        # the free fist in its glove: one block, four finger bars, a thumb
-        f(19.2, 31.0, -3.0, 6.4, 41.6, 52.0, "glove")
-        for (z0, z1, nm, dy) in ((42.0, 44.6, "glove_d", 0.0), (44.6, 47.1, "glove", 0.5), (47.1, 49.6, "glove_l", 0.6), (49.6, 52.0, "glove", 0.2)):
-            f(19.4, 30.8, -7.4 - dy, -3.0, z0, z1, nm)
-        f(18.0, 24.5, -9.0, -6.6, 47.6, 51.2, "glove_l")      # thumb
+        # the bow hand (the archer's): the gloved fist, modelled turned up a little more at the wrist, closed round the
+        # bow's grip, so the bow stands nearly upright while the forearm is held level
+        wx, wy, wz = WRIST_AT
+        Hf = Fo.sub(RX(-WRIST_L), (s * wx, 0.0, wz))
+        GX, GY, GZ = GRIP
+        f(21.5, 28.5, -4.4, 3.4, 49.0, 53.0, "glove_d")       # wrist
+        h = lambda *q, **k: Q.blk(Hf, *q, sx=s, **k)
+        h(20.4, 30.2, GY - 5.1, GY + 5.5, 43.6, 51.0, "glove")
+        for i, (nm, dz) in enumerate((("glove_l", 0.3), ("glove", 0.0), ("glove_d", 0.2), ("glove", 0.6))):
+            y0 = GY - 5.3 + i * 2.75
+            h(19.6, 31.0, y0, y0 + 2.75, 40.4 + dz, 46.4, nm)
+        h(18.2, 21.6, GY - 6.0, GY + 1.6, 45.6, 49.4, "glove_l")   # thumb
+        P.bow_part = build_bow(Hf, Hf.w((s * GX, GY, GZ)), s)
     else:
         # RIG: the right hand, its own part turning at the wrist, closed round the spyglass in a hammer grip: the tube
         # runs through the fist from back to front (across the forearm), the eyepiece behind the little finger, the
@@ -973,7 +994,115 @@ def build_arm(s):
         h(18.2, 21.6, GY - 6.0, GY + 1.6, 45.6, 49.4, "glove_l")   # the thumb, lying along the tube on the inside
         P.hand_part = H
         P.glass_part = build_spyglass(Fo, (s * GX, GY, GZ))
+        P.arrow_part = build_arrow(Fo, Fo.w((s * GX, GY, GZ)))      # (in the same fist: shown only while it shoots)
     return P, Q
+
+
+# ---------------------------------------------------------------------------------------------------- the weak bow
+# The archer's bow, arrow and quiver (troop_archer.py build_bow / build_arrow / build_quiver), smaller and plainer: a
+# short hunting bow with no gold, a small quiver of seven. Frames and joints as hers, so UVLArcherCombat poses them.
+
+BOW_H, BOW_D = 44.0, 16.0                     # half length (u; hers 57), how far the limbs come back toward the string (hers 21)
+BOW_NOCK = 0.82
+BOW_CANT = 82.0
+
+
+def bow_curve(z):
+    t = np.minimum(np.abs(z) / BOW_H, 1.0)
+    a = BOW_D * (t / BOW_NOCK) ** 1.55
+    b = BOW_D * (1.0 - 0.5 * (np.maximum(t - BOW_NOCK, 0.0) / (1.0 - BOW_NOCK)) ** 1.2)
+    return np.where(t <= BOW_NOCK, a, b)
+
+
+def build_bow(Hf, grip, s):
+    """The bow as its own part, origin at the middle of the grip, modelled as it sits in the left fist. Its frame: +z up
+    the upper limb, +y from the grip toward the string, x through its thickness."""
+    JOINTS["Bow"] = tuple(float(v) for v in grip)
+    P = Part("Bow")
+    c, sn = math.cos(math.radians(BOW_CANT)), math.sin(math.radians(BOW_CANT))
+    bz = Hf.R @ np.array([0.0, -1.0, 0.0])
+    by = Hf.R @ np.array([s * sn, 0.0, c])
+    bx = np.cross(by, bz)
+    B = Frame(np.stack([bx, by, bz], axis=1), grip)
+    P.frame = B
+    g = Grid(B, -3, 3, -9, 27, -48, 48, cs=3)
+    Y, Z = g.Y, g.Z
+    y0, y1 = bow_curve(Z - 1.5), bow_curve(Z + 1.5)
+    limb = (Y > np.minimum(y0, y1) - 3.6) & (Y < np.maximum(y0, y1) + 3.6) & (np.abs(Z) < BOW_H) & (np.abs(Z) > 6)
+    g.fill(limb, "wood")
+    AZ = np.abs(Z)
+    g.paint(limb & (AZ > 40), "wood_d")                                                  # dark horn tips
+    g.paint(limb & (AZ > 18) & (AZ < 21), "wood_l")
+    emit(P, g, lim=((6, 6), (6, 9), (6, 15)), pref="z", shade=0.5, proud_p=0.3, seed=191)
+    b = lambda *q, **k: P.blk(B, *q, **k)
+    for i, z in enumerate((-7.0, -2.4, 2.4)):                 # the grip, wrapped in leather
+        b(-2.6, 2.6, -3.2, 3.2, z, z + (4.6 if i != 1 else 4.8), ("belt_d", "belt", "belt_d")[i], bevel=0.12)
+    ys = BOW_D + 0.4
+    zn = BOW_H * BOW_NOCK
+    P.string_parts = {}
+    for key, sg in (("BowStringU", 1.0), ("BowStringL", -1.0)):
+        JOINTS[key] = tuple(float(v) for v in B.w((0.0, ys, sg * zn)))
+        S = Part(key)
+        cuts = np.linspace(0.0, sg * zn, 5)
+        for i in range(4):
+            S.blk(B, -0.45, 0.45, ys - 0.45, ys + 0.45, cuts[i], cuts[i + 1], "string", bevel=0.2, tint=(1.0, 0.93)[i % 2], cull=False)
+        S.blk(B, -0.8, 0.8, ys - 0.8, ys + 0.8, 0.0, sg * 2.5, "belt_l", bevel=0.2, cull=False)
+        P.string_parts[key] = S
+    P.string_y = ys
+    return P
+
+
+ARROW_TIP, ARROW_NOCK = -34.0, 18.0           # along the arrow from the fist: the point, the nock (u; hers -40, 20)
+
+
+def build_arrow(Fo, grip):
+    """The loose arrow, origin where the right fist holds it; -z runs to the point (forward, across the forearm)."""
+    JOINTS["Arrow"] = tuple(float(v) for v in grip)
+    P = Part("Arrow")
+    S = Frame(Fo.R @ np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]]), grip)
+    P.frame = S
+    b = lambda *q, **k: P.blk(S, *q, cull=False, **k)
+    cuts = (ARROW_NOCK - 1.0, 6.0, -10.0, -22.0, ARROW_TIP + 3.6)
+    for i in range(4):
+        b(-0.65, 0.65, -0.65, 0.65, cuts[i + 1], cuts[i], "shaft_l", bevel=0.2, tint=(1.0, 0.93, 1.0, 0.95)[i])
+    b(-1.4, 1.4, -0.55, 0.55, ARROW_TIP + 1.4, ARROW_TIP + 4.0, "steel_d", bevel=0.15)
+    b(-0.8, 0.8, -0.55, 0.55, ARROW_TIP, ARROW_TIP + 1.6, "steel", bevel=0.15)
+    b(-2.4, 2.4, -0.4, 0.4, 9.0, 16.0, "fletch_d", bevel=0.1)                            # green-grey fletching
+    b(-0.4, 0.4, -2.4, 2.4, 9.5, 15.5, "fletch", bevel=0.1)
+    b(-0.85, 0.85, -0.85, 0.85, ARROW_NOCK - 1.2, ARROW_NOCK, "shaft", bevel=0.2)
+    return P
+
+
+QUIVER_ARROWS = 7
+QUIVER_TILT = 22.0                            # its mouth leans toward the left shoulder (hers: -19, the right)
+
+
+def build_quiver():
+    """A small leather quiver low on the back, left of the bedroll, with seven arrows."""
+    P = Part("Quiver")
+    Qf = Frame(RY(QUIVER_TILT), P.joint)
+    P.frame = Qf
+    g = Grid(Qf, -6, 6, -6, 6, -16, 14, cs=2)
+    Z = g.Z
+    g.box(-5, 5, -4, 4, -14, 10, "belt")
+    body = g.bm(-5, 5, -4, 4, -14, 10)
+    g.paint(body & (Z < -10), "belt_dd")
+    g.paint(body & (Z > -4) & (Z < -2), "belt_l")
+    g.box(-6, 6, -5, 5, 10, 13, "belt_d")                     # a thick leather rim
+    emit(P, g, lim=((4, 8), (4, 8), (6, 12)), lims={"belt_d": ((4, 6), (4, 6), (3, 3)), "belt_l": ((4, 8), (4, 8), (2, 2))}, shade=0.5, seed=195)
+    b = lambda *q, **k: P.blk(Qf, *q, **k)
+    b(-5.4, 5.4, -4.4, 4.4, -15.5, -13.5, "belt_dd")
+    b(-4.0, 4.0, -3.0, 3.0, 10.0, 12.5, "belt_dd", cull=False)
+    spots = ((-2.6, -1.6, 32.0), (0.0, -1.8, 29.0), (2.6, -1.6, 33.0), (-2.6, 1.4, 28.0), (0.0, 1.6, 34.0), (2.6, 1.4, 30.0), (-1.2, 0.0, 31.0))[:QUIVER_ARROWS]
+    for i, (ax, ay, top) in enumerate(spots):
+        Qa = Qf.sub(RX(-ay * 2.4 + (1.5 if i % 2 else -1.5)) @ RY(ax * 2.2) @ RZ(i * 37.0 % 90.0), (ax, ay, 8.0))
+        a = lambda *q, **k: P.blk(Qa, *q, cull=False, **k)
+        a(ax - 0.7, ax + 0.7, ay - 0.7, ay + 0.7, 8.0, top - 1.0, "shaft", bevel=0.2, tint=(1.0, 0.88, 1.1)[i % 3])
+        a(ax - 2.3, ax + 2.3, ay - 0.4, ay + 0.4, top - 8.5, top - 2.0, ("fletch_d", "fletch")[i % 2], bevel=0.1)
+        a(ax - 0.4, ax + 0.4, ay - 2.3, ay + 2.3, top - 8.0, top - 2.5, ("fletch", "fletch_d")[i % 2], bevel=0.1)
+        a(ax - 0.9, ax + 0.9, ay - 0.9, ay + 0.9, top - 1.2, top, "shaft_l", bevel=0.2)
+    P.mouth = Qf.w((0.0, 0.0, 13.0))
+    return P
 
 
 GLASS_EYE, GLASS_LENS = 11.0, -28.0           # the ends of the spyglass along its axis (u from the middle of the grip)
@@ -1377,14 +1506,14 @@ def build_body(arms, head):
     return B, P
 
 
-WHOLE = ["Body", "Head", "ArmL", "ArmR", "LegL", "LegR", "Cape", "Spyglass"]
+WHOLE = ["Body", "Head", "ArmL", "ArmR", "LegL", "LegR", "Cape", "Spyglass", "Quiver"]
 
 
 def wholes(parts):
     """The limbs as the single rigid pieces they are while every elbow, knee, wrist and cloth hinge is at rest."""
     return {"Body": Combo(parts["Body"], parts["Chest"]), "Head": Combo(parts["Head"], parts["HoodA"], parts["HoodB"]),
-            "ArmL": Combo(parts["ArmL"], parts["ForeL"]),
-            "ArmR": Combo(parts["ArmR"], parts["ForeR"], parts["HandR"]), "LegL": Combo(parts["LegL"], parts["ShinL"]),
+            "ArmL": Combo(parts["ArmL"], parts["ForeL"], parts["Bow"], parts["BowStringU"], parts["BowStringL"]),
+            "ArmR": Combo(parts["ArmR"], parts["ForeR"], parts["HandR"]), "Quiver": parts["Quiver"], "LegL": Combo(parts["LegL"], parts["ShinL"]),
             "LegR": Combo(parts["LegR"], parts["ShinR"]), "Cape": Combo(*[parts[k] for k in ORDER if k.startswith("Cape")]),
             "Spyglass": parts["Spyglass"]}
 
@@ -1401,6 +1530,11 @@ def build_spy():
     for q in parts.values():
         q.finalize()
     parts["Spyglass"] = parts["ArmR"].glass_part.finalize()
+    parts["Arrow"] = parts["ArmR"].arrow_part.finalize()
+    parts["Bow"] = parts["ArmL"].bow_part.finalize()
+    for k, q in parts["Bow"].string_parts.items():
+        parts[k] = q.finalize()
+    parts["Quiver"] = build_quiver().finalize()
     parts["Body"], parts["Chest"] = [q.finalize() for q in build_body(
         [Combo(parts["ArmL"], parts["ForeL"]), Combo(parts["ArmR"], parts["ForeR"], parts["HandR"])],
         Combo(parts["Head"], parts["HoodA"], parts["HoodB"]))]
@@ -1421,13 +1555,15 @@ def check_pose(parts, pts, label, **ang):
     for k in WHOLE:
         if k == "Spyglass":
             posed[k] = rotated(pts[k], parts["ArmR"].joint, "x", axes["ArmR"][1])
+        elif k == "Quiver":
+            posed[k] = pts[k]                                 # (on the Chest, which stands still in these checks)
         else:
             posed[k] = rotated(pts[k], parts[k].joint, axes[k][0], axes[k][1])
     occ = {k: occ_grid(posed[k], 0.5) for k in WHOLE}
     bad = []
     for i, a in enumerate(WHOLE):
         for b in WHOLE[i + 1:]:
-            if {a, b} in ({"Body", "LegL"}, {"Body", "LegR"}, {"Body", "Head"}, {"Spyglass", "ArmR"}):
+            if {a, b} in ({"Body", "LegL"}, {"Body", "LegR"}, {"Body", "Head"}, {"Spyglass", "ArmR"}, {"Quiver", "Body"}):
                 continue
             both = occ[a] & occ[b]
             n = int(both.sum())
@@ -1748,7 +1884,18 @@ def main():
                               dir=[round(float(v), 5) for v in sg.frame.R @ np.array([0.0, 0.0, -1.0])],
                               eye_end=m(sg.eye_end), lens_end=m(sg.lens_end), length=round((GLASS_EYE - GLASS_LENS) * U, 5)),
                 eye=m(EYE), hood=dict(parts=["HoodA", "HoodB"], parent="Head", sway=[HOOD_SWAY[0] * U, HOOD_SWAY[1] * U]),
-                lantern=dict(part="Chest", pos=m(LANTERN)))
+                lantern=dict(part="Chest", pos=m(LANTERN)), wrist_l=WRIST_L,
+                # its weak bow, in the archer's format (SM_Archer.json): metres and unit vectors in Blender axes
+                bow=dict(part="Bow", hand="L", parent=PARENT["Bow"], grip=pivot("Bow"),
+                         axis=[round(float(v), 5) for v in parts["Bow"].frame.R[:, 2]],
+                         string_dir=[round(float(v), 5) for v in parts["Bow"].frame.R[:, 1]],
+                         length=round(2 * BOW_H * U, 5), string_offset=round(parts["Bow"].string_y * U, 5),
+                         string_parts=["BowStringU", "BowStringL"]),
+                arrow=dict(part="Arrow", hand="R", parent=PARENT["Arrow"], grip=pivot("Arrow"),
+                           length=round((ARROW_NOCK - ARROW_TIP) * U, 5), tip_offset=round(-ARROW_TIP * U, 5)),
+                quiver=dict(part="Quiver", parent=PARENT["Quiver"], pivot=pivot("Quiver"),
+                            axis=[round(float(v), 5) for v in parts["Quiver"].frame.R[:, 2]],
+                            mouth=m(parts["Quiver"].mouth), arrows=QUIVER_ARROWS))
     with open(os.path.join(V.MESHES, NAME + ".json"), "w") as f:
         json.dump(meta, f, indent=1)
     print("wrote %s.json" % NAME)

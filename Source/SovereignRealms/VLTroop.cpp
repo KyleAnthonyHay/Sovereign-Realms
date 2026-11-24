@@ -3,6 +3,7 @@
 #include "VLArcherCombat.h"
 #include "VLBattle.h"
 #include "VLSpy.h"
+#include "SovereignRealms.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 AVLTroop::AVLTroop()
@@ -45,7 +46,25 @@ void AVLTroop::BeginPlay()
 			Bow->CarryArmPitch = 32.f;
 		}
 	}
-	else if (Rules.WalkSpeed > 0.f)
+	else if (KindId() == EVLUnitKind::Spy)
+	{
+		// THE SPY's weak bow (VLRules::Spy*): the archer's, weaker, slower and shorter
+		if (UVLArcherCombat* Bow = UVLArcherCombat::For(this))
+		{
+			Bow->ArrowDamage = Rules.Damage;
+			Bow->ShotInterval = VLRules::SpyShotInterval;
+			Bow->Range = VLRules::SpyBowRange;
+			Bow->TowerRange = VLRules::SpyTowerRange;
+			Bow->ArrowSpeed = VLRules::SpyArrowSpeed;
+			Bow->BashDamage = 4.f;
+			// its quiver (SM_Spy.json "quiver"): small, low on the back, its mouth leaning to the LEFT shoulder (22 degrees)
+			Bow->QuiverAxis = FVector(0.f, -0.37461f, 0.92718f);
+			Bow->QuiverMouth = 16.25f;
+			Bow->GrabAbove = 12.f;
+			UE_LOG(LogSovereignRealms, Log, TEXT("%s: a weak bow: %.0f an arrow every %.1f s to %.0f m (an archer: 40 every 2.4 s to 31 m)"), *GetDisplayName(), Bow->ArrowDamage, Bow->ShotInterval, Bow->Range / 100.f);
+		}
+	}
+	if (!IsJonathan() && Rules.WalkSpeed > 0.f)
 	{
 		WalkSpeed = Rules.WalkSpeed;
 		RunSpeed = FMath::Max(Rules.RunSpeed, Rules.WalkSpeed);

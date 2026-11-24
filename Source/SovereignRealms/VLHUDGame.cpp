@@ -71,7 +71,7 @@ namespace
 	int32 KindIndex(const AVLKing* U)
 	{
 		const FString& K = U->GetKind();
-		return !U->IsTroop() ? 2 : (U->IsRanged() ? 1 : (K == TEXT("Spy") ? 3 : (K == TEXT("Builder") ? 4 : 0)));
+		return !U->IsTroop() ? 2 : (K == TEXT("Spy") ? 3 : (U->IsRanged() ? 1 : (K == TEXT("Builder") ? 4 : 0)));     // (the Spy is ranged too: its own)
 	}
 
 	/** The portrait of a kind (KindIndex). */
@@ -2137,10 +2137,10 @@ void AVLHUD::DrawHeroBits()
 		const FString Help = King->IsTroop()
 			? (King->IsJonathan()
 				? TEXT("WASD move   Shift run   Space jump   Hold right mouse: draw (a long draw), let go: shoot   Left click while drawing: lock the draw   Left click: bash with the bow   J: King David   Tab overview   Esc menu")
-				: King->IsRanged()
+				: King->IsRanged() && King->GetKind() != TEXT("Spy")
 				? TEXT("WASD move   Hold right mouse: draw, let go: shoot   Left click while drawing: lock the draw (right click shoots, left click lets down)   Left click: bash with the bow   Tab overview   Esc menu")
 				: (King->GetKind() == TEXT("Spy")
-					? TEXT("WASD move   Shift run   Space jump   Hold right mouse: look through the spyglass (far ahead)   Left click: a light blow   Tab overview   Esc menu")
+					? TEXT("WASD move   Shift run   Space jump   Hold right mouse: look through the spyglass (far ahead)   Left click: a quick shot of its bow   Tab overview   Esc menu")
 					: (King->GetKind() == TEXT("Builder")
 						? TEXT("WASD move   Shift run   Space jump   Left click: swing the hammer   Tab overview (select the king + Enter to go back to him)   Esc menu")
 						: TEXT("WASD move   Shift run   Space jump   Left click swing   ") TEXT("R select / command   Tab overview (select the king + Enter to go back to him)   Esc menu"))))

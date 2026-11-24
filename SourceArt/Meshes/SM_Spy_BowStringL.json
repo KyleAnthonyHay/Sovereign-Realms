@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_BowStringL",
+ "faces": 110,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.0454,
+   -0.3548,
+   -0.0036
+  ],
+  [
+   0.0061,
+   0.0024,
+   0.288
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.61942,
+  0.2131,
+  0.3956
+ ],
+ "part": "BowStringL",
+ "triangles": 220,
+ "blocks": 5
+}

@@ -1,0 +1,26 @@
+{
+ "name": "SM_Spy_Quiver",
+ "faces": 936,
+ "collision": "none",
+ "bounds": [
+  [
+   -0.1336,
+   -0.0697,
+   -0.2033
+  ],
+  [
+   0.2222,
+   0.073,
+   0.3966
+  ]
+ ],
+ "lights": [],
+ "pivot": [
+  0.2125,
+  0.3375,
+  0.925
+ ],
+ "part": "Quiver",
+ "triangles": 1872,
+ "blocks": 61
+}

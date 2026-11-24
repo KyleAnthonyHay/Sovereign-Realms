@@ -159,6 +159,15 @@ namespace VLRules
 	constexpr int32 SpyCastleLevel = 3;          // the castle level a kingdom needs before it can train its Spy
 	constexpr int32 MaxSpies = 1;                // alive and in training
 	constexpr float SpyCooldown = 300.f;         // seconds between two, from the moment the last was queued and paid for
+	// its weak bow (UVLArcherCombat, as Jonathan's; AVLTroop::BeginPlay): an archer's bow, clearly weaker. 18 an arrow
+	// (the archer's 40) every 3.4 s on orders (her 2.4): 5.3 damage a second against her 16.7, a third; it shoots from
+	// 22 m (her 31.2 m), 38 m from a lookout (her 54.6 m), and its arrows are slower (5200 cm/s, her 6210). A scout's
+	// sidearm: it still picks no fights of its own (no acquire range), but answers when struck and shoots on orders.
+	constexpr float SpyArrowDamage = 18.f;
+	constexpr float SpyShotInterval = 3.4f;
+	constexpr float SpyBowRange = 2200.f;
+	constexpr float SpyTowerRange = 3800.f;
+	constexpr float SpyArrowSpeed = 5200.f;
 	// JONATHAN, the archer prince: the second hero (unit kind "Jonathan": an AVLTroop with the played archer's bow).
 	// He is not there at the start: he comes to the castle when it reaches JonathanCastleLevel (UVLBattle::TickJonathan),
 	// free and taking no housing, and comes back there JonathanRespawnSeconds after he falls (while the castle stands
