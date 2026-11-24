@@ -32,7 +32,7 @@ BRAND = os.path.join(ROOT, "References", "Branding")
 # from 2.97 s (its swell at 27.17, the hit at 30.58).
 REELS = {
     "battle": dict(
-        dir="reel2_battle", title="SovereignRealms_Battle", song_in=148.815, length=32.0, beat=0.4210,
+        dir="reel2_battle", title="SovereignRealms_Battle", song_in=148.815, length=32.5, beat=0.4210,
         fade_in=0.0, music_fade_in=0.05, music_fade_out=1.4,
         grade=dict(sat=1.14, contrast=1.10, lift=-0.015, warm=0.0, vignette=0.22),
         logo="sovereign_realms_wordmark.png", logo_w=1100, logo_in=30.3, dark_from=29.2, dark_to=30.2,
