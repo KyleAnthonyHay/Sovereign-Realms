@@ -259,6 +259,50 @@ namespace
 				Sun->bUseTemperature ? TEXT("temperature") : TEXT("no temperature"), Sun->Temperature, GSunStart.Rotation.Pitch, GSunStart.Rotation.Yaw, GSunStart.Intensity);
 		}));
 
+	// ---- the see-through outline (M_Silhouette, a blendable of the level's post-process volume), for recording the
+	// showreel without it (capture only; the HUD mutes it behind the title screen the same way). 0: its weight is put
+	// to 0 on every volume, each frame (a new match's volume too); 1: the weights it had are given back.
+	TAutoConsoleVariable<int32> CVarSilhouette(TEXT("vl.Opt.Silhouette"), 1,
+		TEXT("1: the player's units show gold through walls and trees, as always. 0: no outline (capture only: Tools/showreel.py)"));
+	struct FMutedOutline
+	{
+		TWeakObjectPtr<APostProcessVolume> Volume;
+		int32 Index = 0;
+		float Weight = 1.f;
+	};
+	TArray<FMutedOutline> GMutedOutlines;
+
+	void UpdateSilhouetteMute(UWorld* World)
+	{
+		if (CVarSilhouette.GetValueOnGameThread() == 0)
+		{
+			for (TActorIterator<APostProcessVolume> It(World); It; ++It)
+			{
+				TArray<FWeightedBlendable>& Blends = It->Settings.WeightedBlendables.Array;
+				for (int32 i = 0; i < Blends.Num(); ++i)
+				{
+					if (Blends[i].Object && Blends[i].Weight > 0.f && Blends[i].Object->GetName().Contains(TEXT("Silhouette")))
+					{
+						GMutedOutlines.Add({ *It, i, Blends[i].Weight });
+						Blends[i].Weight = 0.f;
+						UE_LOG(LogSovereignRealms, Log, TEXT("graphics: silhouette muted (vl.Opt.Silhouette 0)"));
+					}
+				}
+			}
+		}
+		else if (GMutedOutlines.Num() > 0)
+		{
+			for (const FMutedOutline& M : GMutedOutlines)
+			{
+				if (APostProcessVolume* V = M.Volume.Get(); V && V->Settings.WeightedBlendables.Array.IsValidIndex(M.Index) && V->Settings.WeightedBlendables.Array[M.Index].Weight == 0.f)
+				{
+					V->Settings.WeightedBlendables.Array[M.Index].Weight = M.Weight;
+				}
+			}
+			GMutedOutlines.Reset();
+		}
+	}
+
 	FAutoConsoleCommandWithWorldAndArgs CmdDynRes(TEXT("vl.Gfx.DynRes"), TEXT("0 Off, 1 Target 60 fps, 2 Target 40 fps, 3 Target 30 fps (not saved)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
@@ -710,6 +754,10 @@ void UVLGraphics::Tick(float DeltaTime)
 	// the window: a change the Settings screen asked for (here, outside any draw), and an exclusive mode nobody confirmed
 	ApplyPendingDisplay();
 	UpdateScreenPercentage(false);
+	if (UWorld* World = GetWorld(); World && World->IsGameWorld())
+	{
+		UpdateSilhouetteMute(World);
+	}
 	if (UWorld* World = GetWorld(); World && !World->IsPaused())
 	{
 		FogCheckIn -= DeltaTime;
