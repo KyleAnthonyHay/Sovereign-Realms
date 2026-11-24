@@ -151,7 +151,7 @@ public:
 	/** The overview, over a point (vl.Look). Zoom < 0 and Yaw = max keep what they are. */
 	void LookAt(const FVector& Point, float InZoom, float InYaw);
 	void SetArmed(bool bDrawn) { bArmed = bDrawn; }
-	/** One swing. In the battle stance each further call is the next of the combo: side slash, diagonal cut, up-down-up. */
+	/** One swing. In the battle stance each further call is the next of the combo: side slash, diagonal cut, rising cut. */
 	void Attack(int32 Kind = -1);
 
 	/** Confirmed damage: he flashes white (HitFlashSeconds) and his pose holds still for HitPauseSeconds. Only what is
@@ -945,7 +945,7 @@ private:
 	float AttackTime = -1.f;   // seconds into a swing, or < 0 (the game's clock: the hit lands by it)
 	float SwingTime = -1.f;    // the same, as shown
 	bool bAttackQueued = false;
-	/** Which swing: 0 the side slash, 1 the diagonal cut, 2 up-down-up. Clicks while he is in the battle stance go on
+	/** Which swing: 0 the side slash, 1 the diagonal cut, 2 the rising cut (3: a Builder's hammer, up-down-up). Clicks while he is in the battle stance go on
 	 *  through them in turn; once the stance has lapsed the next click starts at the side slash again. */
 	int32 SwingKind = 0;
 	int32 HitsLanded = 0;      // blows of this swing that have landed

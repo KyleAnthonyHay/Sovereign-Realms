@@ -1775,7 +1775,7 @@ Console commands for testing (in the game's console, or `Tools/pie.py run "<cmd>
 | Command | Does |
 | --- | --- |
 | `vl.Attack` | a click: the next swing of the combo |
-| `vl.Attack 1` / `2` / `3` | that swing: side slash / diagonal cut / up-down-up |
+| `vl.Attack 1` / `2` / `3` | that swing: side slash / diagonal cut / rising cut |
 | `vl.Draw 0\|1` | sheathe / draw |
 | `vl.Jump` | jump |
 | `vl.Move Forward Right Seconds [run]` | as if the keys (and Shift) were held |

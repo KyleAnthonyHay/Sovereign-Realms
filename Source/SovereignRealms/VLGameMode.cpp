@@ -148,7 +148,7 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdAttack(TEXT("vl.Attack"), TEXT("vl.Attack [1|2|3]: a click (draws first if need be; in the battle stance the next swing of the combo), or that swing: 1 side slash, 2 diagonal cut, 3 up-down-up"),
+	FAutoConsoleCommandWithWorldAndArgs CmdAttack(TEXT("vl.Attack"), TEXT("vl.Attack [1|2|3]: a click (draws first if need be; in the battle stance the next swing of the combo), or that swing: 1 side slash, 2 diagonal cut, 3 rising cut"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (AVLKing* King = FindKing(World))

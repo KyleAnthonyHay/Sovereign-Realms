@@ -1031,8 +1031,8 @@ void AVLKing::Attack(int32 Kind)
 	}
 	if (AttackTime < 0.f)
 	{
-		// still in the battle stance: the next cut of the combo (side slash, diagonal cut, up-down-up); otherwise the first
-		StartSwing(GuardHold > 0.f ? (SwingKind + 1) % 3 : 0);
+		// still in the battle stance: the next cut of the combo (side slash, diagonal cut, rising cut); otherwise the first
+		StartSwing(GuardHold > 0.f ? (SwingKind >= 2 ? 0 : SwingKind + 1) : 0);
 	}
 	else
 	{
@@ -1049,6 +1049,10 @@ void AVLKing::StartSwing(int32 Kind)
 		FMemory::Memcpy(SwingCarry, SwingShown, sizeof(SwingCarry));
 	}
 	SwingKind = FMath::Clamp(Kind, 0, 2);
+	if (SwingKind == 2 && UnitKind == TEXT("Builder"))
+	{
+		SwingKind = 3;                       // a Builder's third is his hammer's up-down-up (Swings[3]), not the sword's rising cut
+	}
 	AttackTime = 0.f;
 	SwingTime = 0.f;
 	HitsLanded = 0;
@@ -3910,7 +3914,7 @@ namespace
 		SP_Guard,
 		SP_SideWind, SP_SideMid, SP_SideHit, SP_SideFollow,   // (a) the side slash: a broad sweep from his right across his body
 		SP_DiagWind, SP_DiagHit, SP_DiagFollow,               // (b) the diagonal cut: from over the right shoulder down to his left
-		SP_LowLeft, SP_FrontRise, SP_HighRight                // (c) up-down-up: rising from low left, down again (SP_DiagHit), rising again
+		SP_LowLeft, SP_FrontRise, SP_HighRight                // (c) the rising cut: from low at his left up across his front
 	};
 
 	struct FSwing
@@ -3925,12 +3929,22 @@ namespace
 		float HitAt[3];       // when the blows land
 	};
 
-	const FSwing Swings[3] =
+	const FSwing Swings[4] =
 	{
 		{ 0.46f, 0.80f, 6, { 0.f, 0.24f, 0.36f, 0.445f, 0.63f, 1.f }, { SP_Guard, SP_SideWind, SP_SideMid, SP_SideHit, SP_SideFollow, SP_Guard },
 		  { 0, 0, 1, 3, 2, 0 }, 1, { 0.445f } },
 		{ 0.46f, 0.80f, 5, { 0.f, 0.26f, 0.445f, 0.63f, 1.f }, { SP_Guard, SP_DiagWind, SP_DiagHit, SP_DiagFollow, SP_Guard },
 		  { 0, 0, 1, 2, 0 }, 1, { 0.445f } },
+		// (c) the rising cut, the combo's last: one wind-up (coiled low at his left, where the diagonal cut left the
+		// blade), one blow rising across his front, the follow-through up at his right, back to the guard. It was
+		// up-down-up, three blows in a second (the owner, 2026-11-24: "the third swing has two swings in it"): now one
+		// blow, the whole swing's damage, landing as the blade passes his front. The way back from up at his right to
+		// the guard is slow and eased (0.3 s), so it reads as lowering the sword and not as a second cut; a click
+		// queued meanwhile chains from the top of it, where the side slash's wind-up begins anyway.
+		{ 0.72f, 0.62f, 5, { 0.f, 0.26f, 0.42f, 0.58f, 1.f }, { SP_Guard, SP_LowLeft, SP_FrontRise, SP_HighRight, SP_Guard },
+		  { 0, 0, 1, 2, 0 }, 1, { 0.42f } },
+		// (d) the Builder's hammer at his work (and a played Builder's third blow): the old up-down-up, three blows
+		// (VLConstruction's work calls for swing 2; StartSwing gives a Builder this one)
 		{ 1.0f, 0.86f, 9, { 0.f, 0.10f, 0.19f, 0.29f, 0.43f, 0.53f, 0.64f, 0.75f, 1.f },
 		  { SP_Guard, SP_LowLeft, SP_FrontRise, SP_HighRight, SP_DiagHit, SP_LowLeft, SP_FrontRise, SP_HighRight, SP_Guard },
 		  { 0, 0, 1, 2, 1, 2, 1, 2, 0 }, 3, { 0.19f, 0.43f, 0.64f } },
@@ -4127,7 +4141,7 @@ void AVLKing::Animate(float Dt, float AnimDt)
 		}
 		if (bComboQueued && T >= Now.ChainAt)
 		{
-			StartSwing((SwingKind + 1) % 3);
+			StartSwing(SwingKind >= 2 ? 0 : SwingKind + 1);
 		}
 		else if (T >= 1.f)
 		{
