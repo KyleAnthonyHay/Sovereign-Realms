@@ -6,6 +6,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
 
 namespace
 {
@@ -18,6 +19,9 @@ namespace
 	}
 
 	const FTransform SkyHidden(FRotator::ZeroRotator, FVector(0.f, 0.f, -100000.f), FVector(0.001f));
+
+	// (for recording the showreel at sunset: the clouds are unlit white and do not take the evening's colour)
+	TAutoConsoleVariable<int32> CVarClouds(TEXT("vl.Opt.Clouds"), 1, TEXT("1: the voxel clouds drift over the map, as always. 0: hidden (capture only: Tools/showreel.py)"));
 }
 
 AVLSky::AVLSky()
@@ -91,6 +95,11 @@ void AVLSky::Tick(float DeltaSeconds)
 		}
 	}
 
+	const bool bCloudsOn = CVarClouds.GetValueOnGameThread() != 0;
+	if (Clouds->IsVisible() != bCloudsOn)
+	{
+		Clouds->SetVisibility(bCloudsOn);
+	}
 	// ---- clouds: boxes on a 2 m grid round a middle that drifts; puffed away near the camera and under it
 	const int32 Per = FMath::Max(1, PuffsPerCloud);
 	const int32 NumPuffs = Clouds->GetInstanceCount();
