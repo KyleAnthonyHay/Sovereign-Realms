@@ -666,6 +666,14 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 				{
 					Lines.Add(FString::Printf(TEXT("Jonathan: fallen, back at the castle in %s."), *Countdown(Battle->GetJonathanWait(UVLBattle::Player))));
 				}
+				else if (!Battle->IsJonathanUnlocked(UVLBattle::Player))
+				{
+					Lines.Add(FString::Printf(TEXT("Jonathan, the archer prince: locked (unlocks at Castle level %d)."), VLRules::JonathanCastleLevel));
+				}
+				else
+				{
+					Lines.Add(FString::Printf(TEXT("Jonathan, the archer prince: unlocked. Buy him in the list: %d gold + %d food, at the castle at once."), VLRules::JonathanGold, VLRules::JonathanFood));
+				}
 				Lines.Add(TEXT("Click: the list of your heroes (click one to go to him, twice to play him)."));
 			}
 			else
