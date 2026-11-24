@@ -189,6 +189,12 @@ along the ground or over the top of a target. A crosshair on the sky: the arrow 
 under it: the bow is fully drawn, and letting go looses at once (earlier, she finishes the draw first). A locked draw
 keeps the full bar, with a paler frame. It only shows the shot's state: an arrow flies the same however long it is held.
 
+**The sword's bar** (2026-11-24, "so we know when the sword is cooled down"): playing King David or a swordsman, the
+same bar shows each swing (`AVLKing::GetSwingCooldown`): it fills, white, from the swing's start to the moment the next
+click swings at once (the swing's chain point: 0.37 s of the side slash and the diagonal cut, 0.45 s of the rising
+cut), then turns green with the tick, and stays half a second after the swing. A click before it is green is not lost:
+it queues the next cut of the combo.
+
 **Streaks**: every arrow in flight draws a thin pale-gold line along the stretch it has just flown, tapering to
 nothing over `vl.Arrow.TrailLength` 0.4 s of flight, `vl.Arrow.TrailWidth` 5 cm wide at the arrow (never under a pixel
 and a half on screen, so it reads from the overview); when the arrow lands the streak runs out behind it.

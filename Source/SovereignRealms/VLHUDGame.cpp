@@ -2260,17 +2260,20 @@ void AVLHUD::DrawHeroBits()
 		// that fills from the button going down to the bow fully drawn. Until then letting go only queues the shot (she
 		// finishes the draw first): the bar is white as it fills. Once it is full it turns green, with a tick under it: let go, and the
 		// arrow leaves at once. A locked draw (a left click while drawing) shows as the full bar with a paler frame.
+		// The sword's swing (King David, a swordsman played; AVLKing::GetSwingCooldown) shows in the same bar: it fills
+		// over the swing up to the moment the next click swings at once, then turns green with the tick (a click before
+		// then is not lost: it queues the next cut of the combo).
 		float HintDrop = 0.f;
-		if (const UVLArcherCombat* Bow = bHero && !King->IsDead() ? UVLArcherCombat::For(King, false) : nullptr)
+		const UVLArcherCombat* Bow = bHero && !King->IsDead() ? UVLArcherCombat::For(King, false) : nullptr;
 		{
 			float Drawn = 0.f;
 			bool bReady = false;
-			if (Bow->GetDrawState(Drawn, bReady))
+			if (Bow ? Bow->GetDrawState(Drawn, bReady) : (bHero && King->GetSwingCooldown(Drawn, bReady)))
 			{
 				const float BW = U(64.f), BH = FMath::Max(3.f, U(5.f)), BX = FMath::RoundToFloat(CX - BW * 0.5f), BY = CY + G + L + U(8.f);
 				const float Pulse = bReady ? 0.5f + 0.5f * FMath::Sin(float(GetWorld()->GetRealTimeSeconds()) * 9.f) : 0.f;
 				const FLinearColor Ready = FMath::Lerp(Good, FLinearColor(0.62f, 1.f, 0.55f, 1.f), Pulse);
-				const FLinearColor Frame = bReady ? (Bow->IsDrawLocked() ? Parchment : Good) : FLinearColor(Dim.R, Dim.G, Dim.B, 0.9f);
+				const FLinearColor Frame = bReady ? (Bow && Bow->IsDrawLocked() ? Parchment : Good) : FLinearColor(Dim.R, Dim.G, Dim.B, 0.9f);
 				Fill(BX - 1.f, BY - 1.f, BW + 2.f, BH + 2.f, FLinearColor(0.f, 0.f, 0.f, 0.55f));
 				Fill(BX, BY, FMath::RoundToFloat(BW * Drawn), BH, bReady ? Ready : FLinearColor(1.f, 1.f, 1.f, 0.92f));
 				Outline(FBox2D(FVector2D(BX - 1.f, BY - 1.f), FVector2D(BX + BW + 1.f, BY + BH + 1.f)), Frame, 1.f);

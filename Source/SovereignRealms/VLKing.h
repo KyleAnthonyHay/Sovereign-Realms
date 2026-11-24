@@ -245,6 +245,11 @@ public:
 	bool IsArmed() const { return bArmed; }
 	/** In the middle of a swing. */
 	bool IsSwinging() const { return AttackTime >= 0.f; }
+	/** For the bar under the crosshair (AVLHUD::DrawHeroBits), the sword's answer to UVLArcherCombat::GetDrawState:
+	 *  OutFill 0..1 of the way from a swing's start to the moment the next click swings at once (its ChainAt; a click
+	 *  before then is queued and follows on); bOutReady from then on, and for a moment after the swing. False: no
+	 *  swing on or just over (or no sword). It only reads the swing's clock. */
+	bool GetSwingCooldown(float& OutFill, bool& bOutReady) const;
 	AActor* GetSelected() const { return Selected.Get(); }
 	FString GetSelectedName() const;
 

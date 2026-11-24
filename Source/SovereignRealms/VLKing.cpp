@@ -4082,6 +4082,26 @@ namespace
 	}
 }
 
+bool AVLKing::GetSwingCooldown(float& OutFill, bool& bOutReady) const
+{
+	OutFill = 1.f;
+	bOutReady = true;
+	if (IsDead() || !bArmed || (bTroop && !UVLSwordsmanCombat::CanFight(this)))
+	{
+		return false;
+	}
+	if (AttackTime >= 0.f)
+	{
+		const FSwing& Now = Swings[SwingKind];
+		const float T = AttackTime / FMath::Max(Now.Seconds, 0.01f);
+		OutFill = FMath::Clamp(T / FMath::Max(Now.ChainAt, 0.01f), 0.f, 1.f);
+		bOutReady = T >= Now.ChainAt;
+		return true;
+	}
+	// just after the swing: still shown, full and ready, for a moment (the battle stance's clock: GuardHold)
+	return GuardHold > 0.f && GuardSeconds - GuardHold < 0.5f;
+}
+
 void AVLKing::Animate(float Dt, float AnimDt)
 {
 	if (!Loaded || !Rig.Body || !Rig.Chest)
