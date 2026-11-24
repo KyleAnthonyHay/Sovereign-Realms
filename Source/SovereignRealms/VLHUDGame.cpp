@@ -11,15 +11,16 @@
 #include "VLTroopShip.h"
 #include "VLBattle.h"
 #include "VLConstruction.h"
+#include "VLTroop.h"
 #include "VLEnemyAI.h"
 #include "VLGrid.h"
-#include "VLArcherCombat.h"
 #include "VLFog.h"
+#include "VLArcherCombat.h"
 #include "VLSwordsmanCombat.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Canvas.h"
-#include "Engine/TextureRenderTarget2D.h"
 #include "CanvasItem.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -247,6 +248,11 @@ void AVLHUD::DrawChipList()
 		ChipList = 0;
 		return;
 	}
+	if (ChipList == 3)
+	{
+		DrawHeroList();
+		return;
+	}
 	const bool bBuilders = ChipList == 1;
 	TArray<AVLKing*> Who;
 	if (bBuilders)
@@ -309,7 +315,7 @@ void AVLHUD::DrawChipList()
 		Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, RowH, bSel ? FLinearColor(0.20f, 0.155f, 0.05f, 0.95f) : FMath::Lerp(Inset, ButtonHot, B.Hot * 0.7f));
 		if (bSel || B.bHover) { Outline(Row, bSel ? Gold : A(GoldBright, 0.8f), FMath::Max(1.f, U(1.f))); }
 		const float PS = U(36.f);
-		Portrait(Un->IsJonathan() ? EVLPortrait::Archer : VLPortraitOf(Un->GetKind()), Row.Min.X + U(6.f), Row.Min.Y + (RowH - PS) * 0.5f, PS);      // (Jonathan: the archer's face until he has a portrait of his own)
+		Portrait(VLPortraitOf(Un->GetKind()), Row.Min.X + U(6.f), Row.Min.Y + (RowH - PS) * 0.5f, PS);
 		const float TX = Row.Min.X + U(6.f) + PS + U(10.f);
 		const float Frac = Un->GetHealthFrac();
 		Text(Un->GetDisplayName(), TX, Row.Min.Y + U(4.f), U(15.f), Parchment, AlignLeft, Bold);
@@ -325,6 +331,109 @@ void AVLHUD::DrawChipList()
 		if (B.bClicked) { GoTo({ Un }); return; }
 	}
 	// a click anywhere else puts the list away (its own chip toggles it)
+	if (PCtrl && PCtrl->WasInputKeyJustPressed(EKeys::LeftMouseButton) && bMouse && !Box.IsInside(Mouse) && !ChipListChip.IsInside(Mouse))
+	{
+		ChipList = 0;
+	}
+}
+
+void AVLHUD::DrawHeroList()
+{
+	// (DrawChipList has checked the battle, the overview and the top bar)
+	UVLBattle* Battle = UVLBattle::Get(this);
+	UVLCommand* Command = UVLCommand::Get(this);
+	AVLKing* David = nullptr;
+	for (AVLKing* Un : Battle->AllUnits())
+	{
+		if (Un && !Un->IsTroop() && Un->Team == UVLBattle::Player)
+		{
+			David = Un;
+			break;
+		}
+	}
+	AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Player);
+	struct FHeroRow { AVLKing* Unit; FString Name; EVLPortrait Face; float Wait; };
+	TArray<FHeroRow, TInlineAllocator<2>> Rows;
+	const bool bCastle = Battle->GetCastle(UVLBattle::Player) != nullptr;
+	Rows.Add({ David, TEXT("King David"), EVLPortrait::King, David && !David->IsAlive() ? FMath::Max(0.f, VLRules::KingRespawnSeconds - David->DeadFor()) : 0.f });
+	Rows.Add({ Jonathan, TEXT("Jonathan"), EVLPortrait::Jonathan, Jonathan && Jonathan->IsAlive() ? 0.f : Battle->GetJonathanWait(UVLBattle::Player) });
+	const APawn* Played = PCtrl ? PCtrl->GetPawn() : nullptr;
+	const float W = U(400.f), Pad = U(8.f), HeadH = U(30.f), RowH = U(46.f), Gap = U(4.f);
+	const float H = HeadH + Rows.Num() * (RowH + Gap) + Pad;
+	const float X = FMath::Clamp(FMath::RoundToFloat(ChipListChip.Min.X), U(8.f), FMath::Max(U(8.f), View.X - W - U(8.f))), Y = TopBarRect.Max.Y + U(6.f);
+	const FBox2D Box(FVector2D(X, Y), FVector2D(X + W, Y + H));
+	HudPanel(Box);
+	Text(TEXT("HEROES"), X + U(14.f), Y + U(7.f), U(15.f), GoldBright, AlignLeft, Bold, U(2.f));
+	Text(TEXT("click: go to and select   ·   twice: play him"), Box.Max.X - U(14.f), Y + U(9.f), U(12.f), Dim, AlignRight);
+	float RY = Y + HeadH;
+	for (int32 i = 0; i < Rows.Num(); ++i)
+	{
+		const FHeroRow& R = Rows[i];
+		AVLKing* Un = R.Unit && R.Unit->IsAlive() ? R.Unit : nullptr;
+		const FBox2D Row(FVector2D(X + Pad, RY), FVector2D(Box.Max.X - Pad, RY + RowH));
+		RY += RowH + Gap;
+		const FBtn B = Button(Row, VLId::ChipRow + 1 + i);
+		const bool bSel = Un && Command->IsSelected(Un);
+		Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, RowH, bSel ? FLinearColor(0.20f, 0.155f, 0.05f, 0.95f) : FMath::Lerp(Inset, ButtonHot, (Un ? B.Hot : 0.f) * 0.7f));
+		if (Un && (bSel || B.bHover)) { Outline(Row, bSel ? Gold : A(GoldBright, 0.8f), FMath::Max(1.f, U(1.f))); }
+		const float PS = U(36.f);
+		Portrait(R.Face, Row.Min.X + U(6.f), Row.Min.Y + (RowH - PS) * 0.5f, PS, Un ? FLinearColor::White : FLinearColor(1.f, 0.55f, 0.5f, 0.85f));
+		const float TX = Row.Min.X + U(6.f) + PS + U(10.f);
+		Text(R.Name, TX, Row.Min.Y + U(4.f), U(15.f), Un ? Parchment : Dim, AlignLeft, Bold);
+		// played / in the field (what he is doing) / fallen: back at the castle in so long
+		FString State;
+		FLinearColor StateCol = Dim;
+		if (Un && Un == Played)
+		{
+			State = TEXT("Played");
+			StateCol = GoldBright;
+		}
+		else if (Un)
+		{
+			State = TEXT("Alive  ·  ") + UnitDoing(this, Un);
+		}
+		else
+		{
+			State = bCastle ? FString::Printf(TEXT("Fallen  ·  back at the castle in %s"), *Countdown(R.Wait)) : FString(TEXT("Fallen"));
+			StateCol = Refuse;
+		}
+		Text(State, TX, Row.Min.Y + U(24.f), U(13.f), StateCol);
+		if (Un)
+		{
+			const float Frac = Un->GetHealthFrac();
+			Text(FString::Printf(TEXT("%.0f / %.0f"), FMath::CeilToFloat(Un->GetHealth()), Un->MaxHealth), Row.Max.X - U(10.f), Row.Min.Y + U(5.f), U(13.f), Frac < HealthBarRed ? Refuse : Parchment, AlignRight, Bold);
+			Meter(Row.Max.X - U(10.f) - U(70.f), Row.Min.Y + U(27.f), U(70.f), U(6.f), Frac, Health(Frac));
+			if (B.bHover)
+			{
+				HoverUnit = Un;
+			}
+		}
+		if (B.bClicked)
+		{
+			if (!Un)
+			{
+				Click(true);
+				continue;
+			}
+			// a click: selected and looked at (the list stays open); a second on the same row within 0.35 s: played
+			// (as Enter with him selected, or J)
+			const bool bDouble = HeroListLast == i && Now - HeroListLastTime < 0.35;
+			HeroListLast = i;
+			HeroListLastTime = Now;
+			Click();
+			if (bDouble)
+			{
+				PendingHeroView = Un;
+				ChipList = 0;
+				UE_LOG(LogSovereignRealms, Log, TEXT("hud: hero list: %s played"), *R.Name);
+				return;
+			}
+			King->SelectByName(i == 0 ? FString(TEXT("king")) : Un->GetDisplayName());
+			Command->Select({ Un });
+			King->LookAt(Un->GetFeet(), -1.f, 1e31f);
+			UE_LOG(LogSovereignRealms, Log, TEXT("hud: hero list: went to %s"), *R.Name);
+		}
+	}
 	if (PCtrl && PCtrl->WasInputKeyJustPressed(EKeys::LeftMouseButton) && bMouse && !Box.IsInside(Mouse) && !ChipListChip.IsInside(Mouse))
 	{
 		ChipList = 0;
@@ -2247,6 +2356,62 @@ void AVLHUD::DrawHeroBits()
 		if (!Commanding.IsEmpty())
 		{
 			Text(Commanding, Box.Min.X + U(16.f), Box.Min.Y + RowY + PS + U(28.f), U(13.f), Dim);
+		}
+		// more than one hero (Jonathan has come): the box drops down a row for each of the others, as the Builders' chip
+		// drops its list (the top bar's hero chip opens the full list in the overview: DrawHeroList). Each row: face,
+		// name, health, state ("J: play him", "Fallen: back in 1:12"); with the pointer shown a click plays him (J)
+		if (Battle)
+		{
+			AVLKing* David = nullptr;
+			for (AVLKing* Un : Battle->AllUnits())
+			{
+				if (Un && !Un->IsTroop() && Un->Team == UVLBattle::Player)
+				{
+					David = Un;
+					break;
+				}
+			}
+			AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Player);
+			if (David && (Jonathan || Battle->HasJonathanCome(UVLBattle::Player)))
+			{
+				const APawn* Played = PCtrl ? PCtrl->GetPawn() : nullptr;
+				struct FOther { AVLKing* Unit; const TCHAR* Name; EVLPortrait Face; float Wait; };
+				TArray<FOther, TInlineAllocator<2>> Others;
+				if (Played != David) { Others.Add({ David, TEXT("King David"), EVLPortrait::King, David->IsAlive() ? 0.f : FMath::Max(0.f, VLRules::KingRespawnSeconds - David->DeadFor()) }); }
+				if (!Jonathan || Played != Jonathan) { Others.Add({ Jonathan, TEXT("Jonathan"), EVLPortrait::Jonathan, Jonathan && Jonathan->IsAlive() ? 0.f : Battle->GetJonathanWait(UVLBattle::Player) }); }
+				float OY = Box.Max.Y;
+				for (int32 i = 0; i < Others.Num(); ++i)
+				{
+					const FOther& O = Others[i];
+					AVLKing* Un = O.Unit && O.Unit->IsAlive() ? O.Unit : nullptr;
+					const FBox2D Row(FVector2D(Box.Min.X, OY), FVector2D(Box.Max.X, OY + U(40.f)));
+					OY = Row.Max.Y;
+					HudPanel(Row);
+					const FBtn B = Button(Row, VLId::CornerRepair + 1 + i);
+					if (Un && B.Hot > 0.f) { Fill(Row.Min.X + U(4.f), Row.Min.Y + U(4.f), Row.Max.X - Row.Min.X - U(8.f), U(32.f), A(ButtonHot, 0.5f * B.Hot)); }
+					const float FS = U(28.f);
+					Portrait(O.Face, Row.Min.X + U(16.f), Row.Min.Y + U(6.f), FS, Un ? FLinearColor::White : FLinearColor(1.f, 0.55f, 0.5f, 0.85f));
+					const float TX = Row.Min.X + U(16.f) + FS + U(10.f);
+					Text(O.Name, TX, Row.Min.Y + U(4.f), U(14.f), Un ? Parchment : Dim, AlignLeft, Bold);
+					Text(Un ? FString(TEXT("J: play him")) : FString::Printf(TEXT("Fallen  ·  back in %s"), *Countdown(O.Wait)), TX, Row.Min.Y + U(21.f), U(12.f), Un ? Dim : Refuse);
+					if (Un)
+					{
+						const float F = Un->GetHealthFrac();
+						Text(FString::Printf(TEXT("%.0f / %.0f"), FMath::CeilToFloat(Un->GetHealth()), Un->MaxHealth), Row.Max.X - U(16.f), Row.Min.Y + U(5.f), U(12.f), F < HealthBarRed ? Refuse : Parchment, AlignRight, Bold);
+						Meter(Row.Max.X - U(16.f) - U(80.f), Row.Min.Y + U(24.f), U(80.f), U(6.f), F, Health(F));
+						if (B.bClicked)
+						{
+							Click();
+							PendingHeroView = Un;        // (played, as J does)
+							UE_LOG(LogSovereignRealms, Log, TEXT("hud: hero box: %s played"), O.Name);
+						}
+					}
+					else if (B.bClicked)
+					{
+						Click(true);
+					}
+				}
+			}
 		}
 	}
 	// the controls of the hero view along the bottom

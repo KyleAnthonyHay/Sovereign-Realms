@@ -11,6 +11,7 @@
 #include "VLFog.h"
 #include "VLCommand.h"
 #include "VLConstruction.h"
+#include "VLTroop.h"
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
 #include "Engine/World.h"
@@ -624,6 +625,10 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 		EVLPortrait Face = EVLPortrait::King;
 		float Bar = -1.f;
 		bool bLocked = false;
+		// more than one hero (King David, and Jonathan once he has come to the castle): the hero's chip opens a list of
+		// them, as the Builders' does (DrawChipList 3)
+		AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Player);
+		const bool bHeroes = i == 0 && (Jonathan || Battle->HasJonathanCome(UVLBattle::Player));
 		if (i == 0)
 		{
 			// the hero: his health, or how long until he rises again at the castle
@@ -649,7 +654,23 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 				Count = TEXT("-");
 				Col = Dim;
 			}
-			Lines.Add(TEXT("Click: select him   ·   twice: his hero view."));
+			if (bHeroes)
+			{
+				Title = TEXT("Heroes: King David and Jonathan");
+				if (Jonathan && Jonathan->IsAlive())
+				{
+					Lines.Add(FString::Printf(TEXT("Jonathan: %.0f / %.0f health."), Jonathan->GetHealth(), Jonathan->MaxHealth));
+				}
+				else
+				{
+					Lines.Add(FString::Printf(TEXT("Jonathan: fallen, back at the castle in %s."), *Countdown(Battle->GetJonathanWait(UVLBattle::Player))));
+				}
+				Lines.Add(TEXT("Click: the list of your heroes (click one to go to him, twice to play him)."));
+			}
+			else
+			{
+				Lines.Add(TEXT("Click: select him   ·   twice: his hero view."));
+			}
 		}
 		else if (i == 1)
 		{
@@ -716,22 +737,30 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 			const float CW = TextIn(Row(TX), Count, Count.Len() > 5 ? U(15.f) : U(21.f), Col, AlignLeft, Bold);
 			if (!SubText.IsEmpty()) { TextIn(Row(TX + CW + U(5.f)), SubText, U(14.f), Dim, AlignLeft); }
 		}
-		if (i > 0 && ChipList == i)
+		const int32 ListId = bHeroes ? 3 : i;
+		if (bHeroes)
+		{
+			// a second, smaller face over the first's corner: there is more than one hero (the list opens on a click)
+			const float JS = U(20.f);
+			Portrait(EVLPortrait::Jonathan, CX + PS - JS * 0.6f, Y + (H - PS) * 0.5f + PS - JS * 0.75f, JS, Jonathan && Jonathan->IsAlive() ? FLinearColor::White : FLinearColor(1.f, 0.55f, 0.5f, 0.85f));
+		}
+		if ((i > 0 || bHeroes) && ChipList == ListId)
 		{
 			// (its list is open under it: lit, with a chevron)
 			Fill(Seg.Min.X, Seg.Max.Y - U(9.f), Seg.Max.X - Seg.Min.X, U(3.f), GoldBright);
 			ChipListChip = Seg;
 		}
 		if (B.bHover && ChipList == 0) { SetTooltip(FBox2D(FVector2D(CX, Y), FVector2D(CX, Y + H + U(4.f))), Title, Lines); }
-		if (B.bClicked && i > 0)
+		if (B.bClicked && (i > 0 || bHeroes))
 		{
-			// the Builders' and the Spy's chips open a list of them (each with what it is doing): DrawChipList
+			// the Builders' and the Spy's chips open a list of them (each with what it is doing), and the hero's when
+			// there is more than one: DrawChipList
 			Click();
 			if (!King->IsHeroMode())
 			{
-				ChipList = ChipList == i ? 0 : i;
+				ChipList = ChipList == ListId ? 0 : ListId;
 				ChipListChip = Seg;
-				UE_LOG(LogSovereignRealms, Log, TEXT("hud: top bar %s: list %s (%d)"), *Title, ChipList == i ? TEXT("opened") : TEXT("closed"), Who.Num());
+				UE_LOG(LogSovereignRealms, Log, TEXT("hud: top bar %s: list %s (%d)"), *Title, ChipList == ListId ? TEXT("opened") : TEXT("closed"), bHeroes ? 2 : Who.Num());
 			}
 		}
 		else if (B.bClicked)

@@ -458,6 +458,8 @@ public:
 	/** Seconds until he may come (back) to the castle; and, for testing (vl.Jonathan castle), the side's castle raised
 	 *  straight to the level he comes at. Returns the castle's level. */
 	float GetJonathanWait(int32 Team) const { return (Team == 0 || Team == 1) ? JonathanWait[Team] : 0.f; }
+	/** He has been in the field this match (the HUD's hero list keeps his row while he waits to come back). */
+	bool HasJonathanCome(int32 Team) const { return (Team == 0 || Team == 1) && bJonathanCame[Team]; }
 	int32 RaiseCastleForJonathan(int32 Team);
 	/** Troops alive (not the king), and waiting in training queues. */
 	int32 GetPopulation(int32 Team) const;

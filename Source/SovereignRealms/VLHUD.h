@@ -40,11 +40,12 @@ enum class EVLIcon : uint8
 
 /** Cells of the portrait atlas /Game/Voxel/UI/T_UI_Portraits (Tools/blender/render_portraits.py): head-and-shoulders
  *  renders of the voxel characters, in this order. */
-enum class EVLPortrait : uint8 { King, Swordsman, Archer, Spy, Builder };
+enum class EVLPortrait : uint8 { King, Swordsman, Archer, Spy, Builder, Jonathan };     // (an atlas without his cell: the archer's)
 
 /** A unit's portrait by its kind ("King", "Swordsman", "Archer", "Spy", "Builder"). */
 inline EVLPortrait VLPortraitOf(const FString& Kind)
 {
+	if (Kind == TEXT("Jonathan")) { return EVLPortrait::Jonathan; }
 	return Kind == TEXT("Archer") ? EVLPortrait::Archer : (Kind == TEXT("King") ? EVLPortrait::King : (Kind == TEXT("Spy") ? EVLPortrait::Spy
 		: (Kind == TEXT("Builder") ? EVLPortrait::Builder : EVLPortrait::Swordsman)));
 }
@@ -267,12 +268,18 @@ private:
 	void DrawBuilderButton(const FBox2D& R, AActor* Castle);
 	float TopChipsWidth() const;
 	void DrawTopChips(float X, float Y, float H);
-	/** The list under the Builders' chip (1) or the Spy's (2): a row per unit with what it is doing; a click goes to it
-	 *  and selects it, hovering marks it in the world (HoverUnit). 0: closed. */
+	/** The list under the Builders' chip (1), the Spy's (2) or the hero's (3: King David and Jonathan, once Jonathan has
+	 *  come): a row per unit with what it is doing; a click goes to it and selects it (a hero's: twice, plays him),
+	 *  hovering marks it in the world (HoverUnit). 0: closed. */
 	void DrawChipList();
 	/** The castle panel's row of its corners (VLCastleCorners.cpp): a small bar for each of the four (grey: no archer
 	 *  at this level, red: knocked out), and for the player's, Repair (its price in gold) or how the repair stands. */
 	void DrawCornerRow(float X, float Y, float Right, AActor* Castle);
+	/** The hero's list (ChipList 3): King David and Jonathan, each with his face, health and state (played, in the
+	 *  field, or back at the castle in so long); a click goes to him and selects him, a second within 0.35 s plays him. */
+	void DrawHeroList();
+	int32 HeroListLast = -1;
+	double HeroListLastTime = -10.0;
 	int32 ChipList = 0;
 	FBox2D ChipListChip = FBox2D(ForceInit);
 	/** The command card's Assign picker (six platoon chips over the Assign button); drawn by DrawTroopSelection. */

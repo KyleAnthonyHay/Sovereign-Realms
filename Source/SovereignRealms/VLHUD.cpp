@@ -628,7 +628,7 @@ void AVLHUD::DrawHUD()
 		if (King && Hero->IsAlive())
 		{
 			King->TakeControlOf(Hero);
-			UE_LOG(LogSovereignRealms, Log, TEXT("hud: top bar King David double-clicked: his hero view"));
+			UE_LOG(LogSovereignRealms, Log, TEXT("hud: %s played: the hero view (the hero chip or list)"), *Hero->GetDisplayName());
 		}
 	}
 }
@@ -914,12 +914,16 @@ void AVLHUD::Portrait(EVLPortrait Which, float X, float Y, float Size, const FLi
 	if (!PortraitAtlas || PortraitAtlas->GetSizeY() <= 0)
 	{
 		// (no atlas imported yet: the main game's pixel portraits)
-		static const EVLIcon Old[5] = { EVLIcon::Crown, EVLIcon::PortraitShield, EVLIcon::PortraitArcher, EVLIcon::PortraitScout, EVLIcon::PortraitBuilder };
-		Icon(Old[FMath::Clamp(int32(Which), 0, 4)], X, Y, Size, Tint, bEnemy);
+		static const EVLIcon Old[6] = { EVLIcon::Crown, EVLIcon::PortraitShield, EVLIcon::PortraitArcher, EVLIcon::PortraitScout, EVLIcon::PortraitBuilder, EVLIcon::PortraitArcher };
+		Icon(Old[FMath::Clamp(int32(Which), 0, 5)], X, Y, Size, Tint, bEnemy);
 		return;
 	}
 	// one row of square cells
 	const float Cells = FMath::Max(1.f, FMath::RoundToFloat(float(PortraitAtlas->GetSizeX()) / PortraitAtlas->GetSizeY()));
+	if (float(int32(Which)) >= Cells)
+	{
+		Which = Which == EVLPortrait::Jonathan ? EVLPortrait::Archer : EVLPortrait::Swordsman;      // (an atlas made before his cell)
+	}
 	const FLinearColor T = bEnemy ? FLinearColor(Tint.R, Tint.G * 0.78f, Tint.B * 0.74f, Tint.A) : Tint;
 	DrawTexture(PortraitAtlas, FMath::RoundToFloat(X), FMath::RoundToFloat(Y), FMath::RoundToFloat(Size), FMath::RoundToFloat(Size),
 		float(int32(Which)) / Cells, 0.f, 1.f / Cells, 1.f, Lin(T), BLEND_Translucent);

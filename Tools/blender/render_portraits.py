@@ -2,10 +2,10 @@
 all, packed side by side into SourceArt/UI/T_UI_Portraits.png (128 px cells, transparent background) for AVLHUD.
 
     /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup --python Tools/blender/render_portraits.py \
-        [-- [--samples N] [--gpu]]
+        [-- [--samples N] [--gpu] [--only Spy,Jonathan]]
     python3 Tools/ue_py.py Tools/ue/import_ui.py        (then, in the editor: the atlas into /Game/Voxel/UI)
 
-The cells, in order (AVLHUD's EVLPortrait): King David, Swordsman, Archer, Spy, Builder. The characters are assembled
+The cells, in order (AVLHUD's EVLPortrait): King David, Swordsman, Archer, Spy, Builder, Jonathan. The characters are assembled
 from their part jsons as Tools/blender/render_style_refs.py does (its studio light and framing are reused).
 """
 import os
@@ -26,7 +26,8 @@ import voxlib as V  # noqa: E402
 
 CELL = 128          # pixels per portrait in the atlas
 RENDER = 384        # rendered at this size, then scaled down (smooth edges, crisp voxels)
-ORDER = [("SM_KingB", "King"), ("SM_Swordsman", "Swordsman"), ("SM_Archer", "Archer"), ("SM_Spy", "Spy"), ("SM_Builder", "Builder")]
+ORDER = [("SM_KingB", "King"), ("SM_Swordsman", "Swordsman"), ("SM_Archer", "Archer"), ("SM_Spy", "Spy"), ("SM_Builder", "Builder"),
+         ("SM_Jonathan", "Jonathan")]
 HEAD_PARTS = ("Head", "HoodA", "HoodB", "Chest", "ArmL", "ArmR", "Cape", "Quiver", "Pack")
 AZ, EL = 22.0, 6.0  # a little from the figure's left (the light's side), nearly level
 OUT = os.path.join(V.ROOT, "SourceArt", "UI", "T_UI_Portraits.png")
@@ -61,11 +62,32 @@ def portrait(rig, dst):
     print("rendered", rig, dst)
 
 
+def old_cells():
+    """The cells of the atlas as it stands (--only keeps the others as they are)."""
+    if not os.path.exists(OUT):
+        return []
+    img = bpy.data.images.load(OUT)
+    w, h = img.size
+    px = np.empty(w * h * 4, np.float32)
+    img.pixels.foreach_get(px)
+    bpy.data.images.remove(img)
+    a = px.reshape(h, w, 4)
+    return [a[:, i * CELL:(i + 1) * CELL].copy() for i in range(w // CELL)] if h == CELL else []
+
+
 def main():
     tmp = os.path.join(R.TMP, "portraits")
     os.makedirs(tmp, exist_ok=True)
+    # --only Spy,Jonathan: render only those cells and keep the rest of the atlas (when a figure's parts are not all
+    # exported on this machine, or one character has changed)
+    only = set(_ARGV[_ARGV.index("--only") + 1].split(",")) if "--only" in _ARGV else None
+    old = old_cells() if only else []
     cells = []
-    for rig, name in ORDER:
+    for i, (rig, name) in enumerate(ORDER):
+        if only is not None and name not in only and i < len(old):
+            cells.append(old[i])
+            print("kept", name)
+            continue
         p = os.path.join(tmp, name + ".png")
         portrait(rig, p)
         img = bpy.data.images.load(p)
