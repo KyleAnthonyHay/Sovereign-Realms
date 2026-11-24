@@ -25,9 +25,9 @@ class APostProcessVolume;
  * ridge or a cliff stops it sooner. The circle each eye reveals is that outline, filled. Units: times their kind's
  * sight over a swordsman's (VLRules::FTroop::Sight: archers and Jonathan 1.15, the Spy 2.0), scaled by vl.Fog.KindScale.
  * Buildings: the same from the middle of their footprint, pushed out to their walls. WATCH TOWERS see TowerView
- * (vl.Fog.TowerView, 1.35) times their shooting range from their walls (24 / 27 / 30 m: 32.4 / 36.45 / 40.5 m) on flat
+ * (vl.Fog.TowerView, 1.8; was 1.35) times their shooting range from their walls (24 / 27 / 30 m: 43.2 / 48.6 / 54 m) on flat
  * ground, combined with the height rule: the eye's height is chosen so the -30 degree cone lands there on flat ground
- * (18.7 / 21.0 / 23.4 m, about the tower's own top), and the same per-direction ray then sees further from a plateau
+ * (24.9 / 28.1 / 31.2 m, over the tower's top), and the same per-direction ray then sees further from a plateau
  * and less against a slope. A tower's own archers are part of it (not eyes of their own); archers the player sends up
  * to the lookout are eyes from the lookout's floor.
  *

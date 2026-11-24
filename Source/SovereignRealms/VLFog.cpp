@@ -29,7 +29,7 @@ static TAutoConsoleVariable<float> CVarFogEye(TEXT("vl.Fog.EyeHeight"), 2000.f, 
 static TAutoConsoleVariable<float> CVarFogAngle(TEXT("vl.Fog.Angle"), 30.f, TEXT("degrees below the horizontal the eye looks down at; where that cone meets the terrain is how far it sees."));
 static TAutoConsoleVariable<float> CVarFogMax(TEXT("vl.Fog.MaxRadius"), 9000.f, TEXT("cm: the longest a view ray is marched (before the kind's scale)."));
 static TAutoConsoleVariable<float> CVarFogKind(TEXT("vl.Fog.KindScale"), 1.f, TEXT("0: every kind sees alike; 1: each kind's radius times its sight over a swordsman's (archer 1.15, Spy 2.0)."));
-static TAutoConsoleVariable<float> CVarFogTower(TEXT("vl.Fog.TowerView"), 1.35f, TEXT("a watch tower sees this many times its shooting range (from its walls, on flat ground; the height rule on top)."));
+static TAutoConsoleVariable<float> CVarFogTower(TEXT("vl.Fog.TowerView"), 1.8f, TEXT("a watch tower sees this many times its shooting range (from its walls, on flat ground; the height rule on top)."));
 static TAutoConsoleVariable<float> CVarFogLayer(TEXT("vl.Fog.Layer"), 1750.f, TEXT("cm: the fog's top over the smoothed terrain (a watch tower's tip is at 2060)."));
 static TAutoConsoleVariable<float> CVarFogDensity(TEXT("vl.Fog.Density"), 0.0016f, TEXT("1/cm: the unexplored fog's density (the optical depth is this x the path through the layer: dense at a grazing look, thin looking down)."));
 static TAutoConsoleVariable<float> CVarFogExplored(TEXT("vl.Fog.ExploredDensity"), 0.00035f, TEXT("1/cm: the explored (not visible) fog's density."));

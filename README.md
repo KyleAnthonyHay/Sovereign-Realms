@@ -1222,10 +1222,12 @@ there), on Flatlands and the title screen. The enemy commander keeps its own per
   Kinds see their sight over a swordsman's (`FTroop::Sight`): archers and Jonathan x1.15, **the Spy x2**
   (`vl.Fog.KindScale` 0..1). A tower's own archers are part of the tower; archers sent up to its lookout are eyes
   from its floor. A unit in the water looks from its surface.
-- **Watch towers see 35 % past their reach**: on flat ground 1.35 x the shooting range from the walls, 32.4 / 36.45 /
-  40.5 m at levels 1-3 (`vl.Fog.TowerView`), combined with the height rule: the eye is put where the 30-degree cone
-  lands there (18.7 / 21.0 / 23.4 m, about the tower's own top) and the same ray then sees further from a plateau,
-  less against a slope (Realm v3's home towers: 37.8-75 m; one of Realm v2's at the foot of a rise 26.8-40.8 m). The
+- **Watch towers see 80 % past their reach** (raised from 35 % on 2026-11-24, "towers should give more view"): on
+  flat ground 1.8 x the shooting range from the walls, 43.2 / 48.6 / 54 m at levels 1-3 (`vl.Fog.TowerView`; was
+  1.35: 32.4 / 36.45 / 40.5 m), combined with the height rule: the eye is put where the 30-degree cone lands there
+  (24.9 / 28.1 / 31.2 m, over the tower's top) and the same ray then sees further from a plateau, less against a
+  slope, never past the 90 m ray cap (`vl.Fog.MaxRadius`). At 1.35 Realm v3's home towers saw 37.8-75 m and one of
+  Realm v2's at the foot of a rise 26.8-40.8 m; at 1.8 those grow by about a third. The
   other buildings: the unit's rule from their middle, pushed out to their walls. The selected tower shows it as a
   dashed blue outline beside its orange reach, and **the selected troops' dashed sight ring is their fog outline**.
 - **What the fog hides**: enemy units (and ships) not on a visible cell are hidden in the world, and have no bar,
