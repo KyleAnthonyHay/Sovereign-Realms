@@ -1709,6 +1709,31 @@ void AVLKing::SetCommandMode(bool bOn)
 	}
 }
 
+void AVLKing::GetCommandArmy(TArray<AVLKing*>& Out) const
+{
+	// the army: every swordsman and archer of his side that can be ordered. Not King David, not the unit played, not
+	// Jonathan (a hero, played with J), not Builders or the Spy, not a watch tower's own archers, not those on a
+	// tower's lookout or aboard a ship (garrisoned), not the ambient ones.
+	Out.Reset();
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (!Battle)
+	{
+		return;
+	}
+	for (AVLKing* U : Battle->AllUnits())
+	{
+		if (!U || U == this || U->Team != Team || !U->IsAlive() || !U->IsTroop() || U->bAmbient || U->bTowerGuard || U->IsGarrisoned())
+		{
+			continue;
+		}
+		const EVLUnitKind K = U->KindId();
+		if (K == EVLUnitKind::Swordsman || K == EVLUnitKind::Archer || K == EVLUnitKind::Other)
+		{
+			Out.Add(U);
+		}
+	}
+}
+
 void AVLKing::GetCommandPlanned(TArray<AVLKing*>& Out) const
 {
 	Out.Reset();
@@ -1808,11 +1833,18 @@ bool AVLKing::CommandOrder(APlayerController* PC, bool bQueue)
 			}
 		}
 	}
+	bool bAll = false;
+	if (Units.Num() == 0)
+	{
+		// nobody selected: the whole army takes it (GetCommandArmy)
+		GetCommandArmy(Units);
+		bAll = true;
+	}
 	if (Units.Num() == 0)
 	{
 		if (Battle)
 		{
-			Battle->PushAlert(TEXT("Command mode: left click a troop to select it first (Shift + click adds more)"));
+			Battle->PushAlert(TEXT("Command mode: no troops to command (train swordsmen or archers)"));
 			Battle->Play2D(TEXT("S_UIError"), 0.4f);
 		}
 		return false;
@@ -1828,8 +1860,8 @@ bool AVLKing::CommandOrder(APlayerController* PC, bool bQueue)
 		Hit = this;                         // the pointer on him: they guard him (OrderOn)
 		Ground = GetFeet();
 	}
-	UE_LOG(LogSovereignRealms, Log, TEXT("hero command mode: order %d unit(s), ground %s, on %s%s%s"), Units.Num(), *Ground.ToCompactString(), *GetNameSafe(Hit),
-		bQueue ? TEXT(" (queued)") : TEXT(""), bDouble ? TEXT(" (at a run)") : TEXT(""));
+	UE_LOG(LogSovereignRealms, Log, TEXT("hero command mode: order %d unit(s)%s, ground %s, on %s%s%s"), Units.Num(), bAll ? TEXT(" (all the army: nobody selected)") : TEXT(""),
+		*Ground.ToCompactString(), *GetNameSafe(Hit), bQueue ? TEXT(" (queued)") : TEXT(""), bDouble ? TEXT(" (at a run)") : TEXT(""));
 	if (!OrderOn(Units, Hit, Ground, bDouble, bQueue))
 	{
 		return false;

@@ -90,7 +90,7 @@ namespace
 		{ TEXT("LMB"), TEXT("Attack: your own blow (not in command mode)") },
 		{ TEXT("R"), TEXT("Command mode on / off: clicks at the crosshair command") },
 		{ TEXT("Cmd mode: LMB troop"), TEXT("Select it alone (Shift: add / remove; twice: play)") },
-		{ TEXT("Cmd mode: RMB"), TEXT("Foe / building: attack it; ground: go (twice: run)") },
+		{ TEXT("Cmd mode: RMB"), TEXT("Attack / go there: the selection, else all troops") },
 		{ TEXT("Cmd mode: Shift + RMB"), TEXT("Queue: building A, then B, a walk, then C") },
 		{ TEXT("... the order given"), TEXT("They keep it and are let go (Shift: once let go)") },
 		{ TEXT("RMB friend / King"), TEXT("Troop: follow it. King, Builder, building: guard") },
