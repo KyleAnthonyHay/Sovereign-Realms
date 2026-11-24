@@ -611,7 +611,11 @@ the level. `Tools/.venv/bin/python Tools/blender/realm_layout.py --debug` draws 
   - **in a wall** (`References/Remake/mine_in_wall.png`; `minehill.embed`): no level pad round the mine and no trench.
     The cliff stands as it is beside the mine and over it, its terraces run on over the mine's rock, and only the
     portal's bay (the landing, the rail ramp, the steps) is cut out of the rock, with 2 m of level ground before it for
-    the road. The home mines: the realm's in the mountain's foot and the east ridge (whose wall comes out to it), the
+    the road, **and the tunnel behind the portal** (`TUNNEL`, 3.4 x 3.8 m in the mine's own space: the ground is a
+    height field, so where it stood higher than the mine's floor it filled the tunnel and its face closed the mouth;
+    owner, 2026-11-24: "no proper hole in the mines"). The mine's own rock is the tunnel's roof; where the hill over it
+    is higher than that rock, a narrow cleft is left above it (3 m deep at Realm v3's two inner home mines, 18 m up
+    Realm v2's centre-east wall). The home mines: the realm's in the mountain's foot and the east ridge (whose wall comes out to it), the
     highlands' in the foot of each side's bluff (which comes out to it); the mine stands 2.5 m proud of the face.
     The realm's neutral mine in the mountain's east face likewise.
   - **in a hill** (`References/Remake/mine_mound.png`; `minehill.hill`, `HILLS` in the layouts): the neutral mines of

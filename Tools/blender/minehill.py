@@ -111,6 +111,13 @@ HM = [
     [0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.25, 0.25, 0, 0, 0, 0, 0, 0.25, 0],
 ]
 BAY = (-1.0, 8.0, -0.5)         # the portal's bay in the mine's own space: from x, to x, back to y (its landing, ramp and steps)
+# The tunnel behind the portal (range_mine.py: 2.5 m wide and high, 3 m in, dark walls, a roof of the mine's own rock):
+# from x, to x, from y, to y, in the mine's own space, a little wider than its walls (the bounds between the plan's cell
+# centres, so that a mine and its twin turned half round cut the same cells). The ground is a height field, so
+# where it stands higher than the mine's floor there it fills the tunnel and its face closes the mouth (owner,
+# 2026-11-24: "no proper hole in the mines"); embed takes it down under the tunnel's floor. The mine's rock is the roof.
+TUNNEL = (0.8, 4.2, -1.0, 2.8)
+TUNNEL_FLOOR = 0.75             # metres over the mine's floor: just under the tunnel's gravel (0.875 .. 1.0 m)
 
 
 def embed(X, Y, h, x, y, z, yaw, apron=2.0):
@@ -131,5 +138,8 @@ def embed(X, Y, h, x, y, z, yaw, apron=2.0):
     front = (lx > BAY[0]) & (lx < BAY[1]) & (ly <= -HY) & (ly > -HY - apron)
     out = np.where(front, np.minimum(out, z), out)
     # under the rest of the mine the ground is never below its floor (no gap under its rock where the land falls away)
-    out = np.where(inside & ~bay, np.maximum(out, z - 0.25), out)
+    tunnel = (lx > TUNNEL[0]) & (lx < TUNNEL[1]) & (ly > TUNNEL[2]) & (ly < TUNNEL[3])
+    out = np.where(inside & ~bay & ~tunnel, np.maximum(out, z - 0.25), out)
+    # the tunnel is open: no ground in it (its floor, walls and roof are the mine's own)
+    out = np.where(tunnel, np.minimum(out, z + TUNNEL_FLOOR), out)
     return out, bay | front

@@ -150,7 +150,9 @@ MESAS = [
     dict(name="knoll_s", poly=_oval(-56, -226, 24, 15), z=5.0, top="wild"),
     dict(name="knoll_se", poly=_oval(168, -122, 18, 13), z=5.0, top="wild"),
     dict(name="knoll_nw", poly=_oval(-128, 262, 20, 14), z=6.0, top="wild"),
-    dict(name="knoll_w", poly=_oval(-268, -196, 16, 22), z=5.0, top="wild"),
+    # (south of the west port's stair: it was _oval(-268, -196, 16, 22), whose flank reached over the stair's head, so
+    # the quay was cut off from the land by one-metre steps, and which buried the harbour tower's foot; 2026-11-24)
+    dict(name="knoll_w", poly=_oval(-264, -206, 13, 16), z=5.0, top="wild"),
     dict(name="knoll_e", poly=_oval(196, -238, 20, 12), z=4.0, top="wild"),
 ]
 # ---- the ways up: (name, from (x, y, z), to (x, y, z), half width, surface). The floor rises evenly from one end to the
@@ -200,13 +202,15 @@ def _coast():
 COAST = _coast()
 ISLETS = [(-150.0, -313.0, 5.0), (40.0, 313.0, 5.5), (313.0, -60.0, 5.0), (-313.0, 220.0, 5.0), (228.0, -312.0, 6.0)]
 # a port: the quay (a shelf of the cliff's foot at DOCK_Z: x0, y0, x1, y1), the stair down to it (a RAMPS entry), the
-# pier (SM_Dock: its land end, its yaw), and what stands there (mesh, x, y, z, yaw)
+# pier (SM_Dock: its land end, its yaw), and what stands there (mesh, x, y, z, yaw). SM_Port_Arch stands 1 m out from
+# the cliff's face (the quay's inner edge): half a metre further in, the face lay in the plane of the arch's dark back
+# and flickered through it in the opening (as on Realm v3; 2026-11-24)
 PORTS = (
     dict(team=0, quay=(-305.0, -197.0, -292.0, -157.0), sign=-1.0, dock=((-305.0, -166.0), -90.0),
-         things=[("SM_Port_Warehouse", -298.5, -189.0, DOCK_Z, -90.0), ("SM_Port_Crane", -301.5, -159.5, DOCK_Z, -90.0), ("SM_Port_Arch", -292.5, -182.0, DOCK_Z, -90.0),
+         things=[("SM_Port_Warehouse", -298.5, -189.0, DOCK_Z, -90.0), ("SM_Port_Crane", -301.5, -159.5, DOCK_Z, -90.0), ("SM_Port_Arch", -293.0, -182.0, DOCK_Z, -90.0),
                  ("SM_Port_Tower", -283.0, -202.0, 0.0, -90.0)]),
     dict(team=1, quay=(292.0, 130.0, 305.0, 170.0), sign=1.0, dock=((305.0, 161.0), 90.0),
-         things=[("SM_Port_Warehouse", 298.5, 138.0, DOCK_Z, 90.0), ("SM_Port_Crane", 301.5, 167.5, DOCK_Z, 90.0), ("SM_Port_Arch", 292.5, 145.0, DOCK_Z, 90.0),
+         things=[("SM_Port_Warehouse", 298.5, 138.0, DOCK_Z, 90.0), ("SM_Port_Crane", 301.5, 167.5, DOCK_Z, 90.0), ("SM_Port_Arch", 293.0, 145.0, DOCK_Z, 90.0),
                  ("SM_Port_Tower", 283.0, 124.0, 0.0, 90.0)]),
 )
 

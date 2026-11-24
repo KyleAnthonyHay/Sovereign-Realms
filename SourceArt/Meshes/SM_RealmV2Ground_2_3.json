@@ -1,12 +1,12 @@
 {
  "name": "SM_RealmV2Ground_2_3",
- "faces": 7515,
+ "faces": 8561,
  "collision": "complex",
  "bounds": [
   [
    -256.0,
    -224.0,
-   1.5
+   0.75
   ],
   [
    -224.0,
