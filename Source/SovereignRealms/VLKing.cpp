@@ -10,6 +10,7 @@
 #include "VLArcherCombat.h"
 #include "VLGameMode.h"
 #include "VLGrid.h"
+#include "VLFog.h"
 #include "VLTroopShip.h"
 #include "VLCommand.h"
 #include "AIController.h"
@@ -1270,7 +1271,7 @@ AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* 
 	}
 	for (AVLKing* Unit : PickBattle ? PickBattle->AllUnits() : PickLocal)
 	{
-		if (Unit->IsDead() || Unit == Skip)
+		if (Unit->IsDead() || Unit == Skip || UVLFog::HidesUnit(Unit))      // (an enemy in the fog of war cannot be picked)
 		{
 			continue;
 		}
@@ -1341,7 +1342,7 @@ AActor* AVLKing::PickAt(APlayerController* PC, const FVector2D& Point, FVector* 
 		for (AActor* A : SelectableList)
 		{
 			const UStaticMeshComponent* SMC = A->FindComponentByClass<UStaticMeshComponent>();
-			if (!SMC || !SMC->GetStaticMesh())
+			if (!SMC || !SMC->GetStaticMesh() || UVLFog::HidesActor(A))
 			{
 				continue;
 			}

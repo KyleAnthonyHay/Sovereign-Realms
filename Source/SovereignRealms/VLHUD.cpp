@@ -12,6 +12,7 @@
 #include "VLArcherCombat.h"
 #include "VLSwordsmanCombat.h"
 #include "VLGraphics.h"
+#include "VLFog.h"
 #include "AudioDevice.h"
 #include "CanvasItem.h"
 #include "Components/StaticMeshComponent.h"
@@ -747,7 +748,7 @@ const AVLHUD::FUnitFrame& AVLHUD::UnitsThisFrame()
 		{
 			for (AVLKing* Unit : Battle->AllUnits())
 			{
-				if (!Unit->IsDead())
+				if (!Unit->IsDead() && !UVLFog::HidesUnit(Unit))      // (an enemy in the fog of war: no bar, diamond or dot)
 				{
 					UnitFrame.Live.Add(Unit);
 				}
@@ -1662,6 +1663,16 @@ void AVLHUD::DrawRangeCircles()
 			const float Ang = 2.f * PI * i / N;
 			const FVector2D P = C + FVector2D(FMath::Cos(Ang), FMath::Sin(Ang)) * R;
 			Out.Add(FVector(P.X, P.Y, GroundZ(P, RefZ) + 15.f));
+			// what the player's tower sees (the fog of war's outline, dashed: its reach x vl.Fog.TowerView and the ground's lie)
+			TArray<FVector> TowerView;
+			if (St->Team == UVLBattle::Player && UVLFog::Get(this) && UVLFog::Get(this)->Outline(B, TowerView))
+			{
+				for (int32 i = 0; i < TowerView.Num(); i += 2)
+				{
+					const FVector S0 = Project(TowerView[i]), S1 = Project(TowerView[(i + 1) % TowerView.Num()]);
+					if (S0.Z > 0.f && S1.Z > 0.f) { DrawLine(S0.X, S0.Y, S1.X, S1.Y, SightCircle, FMath::Max(1.f, U(2.f))); }
+				}
+			}
 		}
 	};
 	auto Reach = [](AVLKing* U) -> float
@@ -1677,7 +1688,8 @@ void AVLHUD::DrawRangeCircles()
 	TArray<FDisc> SightDiscs, ReachDiscs;
 	for (AVLKing* Un : Units)
 	{
-		SightDiscs.Add({ FVector2D(Un->GetActorLocation()), Sight(Un) });
+		const float FogR = UVLFog::Get(this) ? UVLFog::Get(this)->ViewRadius(Un) : 0.f;
+		SightDiscs.Add({ FVector2D(Un->GetActorLocation()), FogR > 0.f ? FogR : Sight(Un) });
 		if (Reach(Un) > 0.f) { ReachDiscs.Add({ FVector2D(Un->GetActorLocation()), Reach(Un) }); }
 	}
 	auto Covered = [](const TArray<FDisc>& Discs, const FVector2D& P, const FVector2D& Own)
@@ -1712,7 +1724,7 @@ void AVLHUD::DrawRangeCircles()
 		{
 			C.At = P;
 			C.ReachRadius = R;
-			MakeRing(P, Sight(Un), Un->GetFeet().Z, C.Sight);
+			if (UVLFog* Fog = UVLFog::Get(this); !Fog || !Fog->Outline(Un, C.Sight)) { MakeRing(P, Sight(Un), Un->GetFeet().Z, C.Sight); }    // (the fog of war on: what it sees)
 			if (R > 0.f) { MakeRing(P, R, Un->GetFeet().Z, C.Reach); } else { C.Reach.Reset(); }
 		}
 		const bool bEnemy = Un->Team == UVLBattle::Enemy;
