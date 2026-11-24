@@ -1,300 +1,234 @@
-"""King David running, as 8-bit pixel art: the loading screen's sprite (Source/SovereignRealms/VLLoadingScreen.cpp).
+"""The loading screen's art (Source/SovereignRealms/VLLoadingScreen.cpp): King David running, and what he jumps.
 
-    Tools/.venv/Scripts/python Tools/blender/assets/king_run_sprite.py [--dump]
+    Tools/.venv/Scripts/python Tools/blender/assets/king_run_sprite.py
 
-    -> SourceArt/UI/T_UI_KingRun.png               the sheet: FRAMES cells of CELL px side by side, he runs to the right
-       SourceArt/Previews/kingdavid_run_8bit.gif   the cycle at 6x, on the loading screen's background
-       SourceArt/Previews/kingdavid_run_8bit.png   the sheet at 6x
-       SourceArt/UI/T_UI_Emblem.png                the emblem of References/Branding at 256 px, for the same screen
+    -> SourceArt/UI/T_UI_KingRun.png        the run: 8 cells side by side, he runs to the right
+       SourceArt/UI/T_UI_RunnerProps.png    the runner's obstacles: a rock, a barrel, stakes, an arrow, a crow (2 frames)
+       SourceArt/UI/T_UI_Emblem.png         the emblem of References/Branding at 256 px
+       Source/SovereignRealms/VLLoadingArt.inl   the cells' sizes and places, for the widget (generated: do not edit)
+       SourceArt/Previews/kingdavid_run_8bit.gif, .png   the cycle and the sheet at 3x, on the loading screen's background
 
-Drawn by hand, not rendered: King B (king_b.py) pixelated from a render of the model came out as noise at this size
-(the fur mantle swallows the head, and his face is not on the side a profile shows), so he is a paper puppet of pixels
-instead, in king_b's own colours and proportions (stocky, a big head under the crown, the fur mantle, the green cape
-with its gold hem, steel greaves, the sword in its sheath on the near hip):
+The run is the owner's pack, References/KingRunSprite (see its README.txt): king_run_strip.png, 8 cells of 128 x 128
+side by side, binary alpha, one palette, played 0..7 at 12 fps. It goes in as it is (no trimming, no re-centring: the
+cells share their registration), and the widget puts the pack's pivot, pixel (84, 120) of every cell, on the ground at
+his column. On screen a pixel of it is a whole number of the screen's (2 at 1080p: the cell is 256 px).
+Ducking he runs crouched: References/KingCrouchRunSprite, the same format and pivot, as T_UI_KingCrouchRun (frame for
+frame with the run, so the widget switches between them at the same frame).
+What can be hit of him is measured here from his silhouette, frame by frame: the columns his body fills (at least
+BODY_ROWS of the cell's rows opaque: the trailing cape and the sword's tip do not count), from his crown to his soles.
+The obstacles are our own, painted by hand below (PROPS) at half that resolution, to sit with his fat pixels.
 
-  * HEAD, TORSO and MANTLE are grids painted by hand;
-  * the limbs are short thick strokes between the joints of a run cycle (LEG, the arms against the legs), the far ones
-    in the shade colours;
-  * the cape is a band streaming out behind with a ripple running down it;
-  * each piece is drawn back to front with a 1 px dark outline of its own, so a near limb stands off what is behind
-    it; no anti-aliasing anywhere, 16 colours (PALETTE);
-  * FIXES are single pixels painted over a frame afterwards (--dump prints the frames as text to find them by).
-
-The sheet goes into the game with Tools/ue/import_loading.py (point filtered, no mips, UI group). No Blender needed
-(it lives here beside king_b.py, whose figure it draws).
+Everything goes into the game with Tools/ue/import_loading.py (point filtered, no mips, UI group). No Blender needed
+(the script lives here beside king_b.py, whose figure the first version of it drew).
 """
-import math
 import os
-import sys
 
 import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-SHEET = os.path.join(ROOT, "SourceArt", "UI", "T_UI_KingRun.png")
+PACK = os.path.join(ROOT, "References", "KingRunSprite")
+CROUCH_PACK = os.path.join(ROOT, "References", "KingCrouchRunSprite")
+UI = os.path.join(ROOT, "SourceArt", "UI")
+SHEET = os.path.join(UI, "T_UI_KingRun.png")
+CROUCH_SHEET = os.path.join(UI, "T_UI_KingCrouchRun.png")
+PROPS_SHEET = os.path.join(UI, "T_UI_RunnerProps.png")
+INL = os.path.join(ROOT, "Source", "SovereignRealms", "VLLoadingArt.inl")
 GIF = os.path.join(ROOT, "SourceArt", "Previews", "kingdavid_run_8bit.gif")
 
-FRAMES = 8
-CELL = (64, 48)                 # one frame of the sheet (px)
-GROUND = 45                     # the row his soles stand on
-FPS = 11
+FPS = 12                        # the pack's (king_run_animation.json)
+CELL = 128
+PIVOT = (84, 120)               # the pack's shared pivot, from the cell's top left: his feet on the ground line
+BODY_ROWS = 60
+BACKGROUND = (11, 18, 32)       # the loading screen's (VLLoadingScreen.cpp)
 
-# 16 colours, king_b._PAL's: the outline first
-PALETTE = {
-    "k": "#120D0B",                                       # outline, pupil
-    "G": "#FFB616", "g": "#C27A0E", "R": "#D8551C",       # gold, its shade, the crown's gems
-    "S": "#C87439", "s": "#98501F",                       # skin, its shade
-    "H": "#3E2B20", "h": "#553A2A",                       # hair and beard, dark leather
-    "B": "#7B4A24",                                       # belt, sleeves, boots
-    "F": "#F7D6A4", "f": "#C79864",                       # the fur mantle, its shade
-    "C": "#4F6E1F", "c": "#6B8F2E", "d": "#2F4516",       # the cape and tunic: green, lit, shaded
-    "M": "#8A888E", "W": "#CFCAC8",                       # steel, its shine
+# The obstacles, a character a pixel (each twice the run's pixels on the sheet). They come at him from the right.
+PROP_COLOURS = {
+    "k": "#120D0B",
+    "m": "#69676F", "M": "#8A888E", "W": "#C4C0C0",       # stone, steel
+    "g": "#4F6E1F",                                       # moss
+    "b": "#5A3418", "B": "#7B4A24", "L": "#96602F",       # a barrel's staves
+    "t": "#7E4E2B", "T": "#A46C3E", "Y": "#C9965E",       # cut wood
+    "R": "#D8551C", "F": "#F7D6A4",                       # an arrow's feathers
+    "c": "#2B3147", "C": "#4A5478", "G": "#FFB616", "e": "#ECE7E1",   # a crow
 }
-BACKGROUND = "#0B1220"          # the loading screen's (VLLoadingScreen.cpp)
-KEYS = list(PALETTE)
-
-HEAD = [                        # he looks right; NECK is the pixel of the grid that sits on the shoulders
-    "..G.G.G.G.G..",
-    "..GGGGGGGGG..",
-    "..GRGGWGGRG..",
-    "..ggggggggg..",
-    ".HHHHHHSSSS..",
-    ".HhHHHSSSSSS.",
-    ".HHHHHSSWkSS.",
-    ".HhHHsSSSSSSS",
-    ".HHHHHsSSSSS.",
-    "..HHHhHHHHHH.",
-    "..HHHHHhHHHH.",
-    "...HHhHHHHH..",
-    "....HHHHhH...",
+PROPS = [
+    ("Rock", [
+        "....kkkkk....",
+        "..kkWWMMMkk..",
+        ".kWWMMMMMMMk.",
+        "kWMMMMMmMMMMk",
+        "kMMgMMMmmMMMk",
+        "kMggMMMMmMMmk",
+        "kMMMMmMMMMmmk",
+        "kmMMmmmMMmmmk",
+        ".kkkkkkkkkkk.",
+    ]),
+    ("Barrel", [
+        "..kkkkkkk..",
+        ".kLLLLLLLk.",
+        "kkMMWMMMMkk",
+        "kLBLBBLBBbk",
+        "kLBLBBLBBbk",
+        "kLBLBBLBBbk",
+        "kLBLBBLBBbk",
+        "kLBLBBLBBbk",
+        "kLBLBBLBBbk",
+        "kLBLBBLBBbk",
+        "kkMMWMMMMkk",
+        "kLBLBBLBBbk",
+        ".kbBbbBbbk.",
+        "..kkkkkkk..",
+    ]),
+    ("Stakes", [
+        ".......k.......",
+        "..k...kYk...k..",
+        ".kYk..kTk..kYk.",
+        ".kTTk.kTk.kTTk.",
+        "..kTk.kTk.kTk..",
+        "..kTTkkTkkTTk..",
+        "...kTkkTkkTk...",
+        "...kTTkTkTTk...",
+        ".kkkkTTTTTkkkk.",
+        "kttttTTTTTttttk",
+        ".kkkkTtTtTkkkk.",
+        "....kTkTkTk....",
+        "...kTTkTkTTk...",
+        "...kTkkTkkTk...",
+        "..kTTkkTkkTTk..",
+        "..kkk.kkk.kkk..",
+    ]),
+    ("Arrow", [
+        "..k.........kkk.",
+        ".kWkkkkkkkkkRFRk",
+        "kWWTTTTTTTTTFRFk",
+        ".kWkkkkkkkkkRFRk",
+        "..k.........kkk.",
+    ]),
+    ("CrowA", [                 # wings up
+        ".......kk......",
+        "......kcCk.....",
+        ".....kcCCk.....",
+        "..kkkkCCCkk....",
+        ".kcckcCCCcckkk.",
+        "kGGcecccccccCck",
+        ".kkccccccccckk.",
+        "...kkccccckk...",
+        ".....kkkkk.....",
+        "...............",
+    ]),
+    ("CrowB", [                 # wings down
+        "...............",
+        "...............",
+        "..kkk..........",
+        ".kcckkkkkkkkkk.",
+        "kGGcecccccccCck",
+        ".kkccCCCcccckk.",
+        "...kkCCCkkkk...",
+        "....kcCCk......",
+        ".....kcCk......",
+        "......kk.......",
+    ]),
 ]
-NECK = (5, 12)
-TORSO = [                       # leaning into the run; HIP is where the legs hang from, SHOULDER the near arm, BACK the cape
-    ".............",
-    ".............",
-    "...CCCCCCC...",
-    "...CCCCCCCc..",
-    "...CCCCCCCc..",
-    "...CCCCGCCc..",
-    "...CCCCCCCc..",
-    "...dCCCCCCc..",
-    "...BBBGBBBB..",
-    "...CCCCCCCc..",
-    "..CCCdCCCCc..",
-    "..CCdCCCCCc..",
-    "..CdCCCCdCc..",
-    "..GGGGGGGGg..",
-]
-MANTLE = [                      # the fur over his shoulders, on the torso's grid: over the arm, under the beard
-    "...FFFFFFFF..",
-    ".FFFFFFFFFFF.",
-    "FFFFFFFFFFFFF",
-    ".FFfFFFFFfFF.",
-    "..ffFfffFff..",
-]
-HIP, SHOULDER, BACK = (7, 10), (7, 4), (3, 2)
-
-# The run, one stride of the near leg: (thigh, shin) in degrees from straight down, positive swings backwards; the far
-# leg is half a stride on.  0 contact, 1 down, 2 passing, 3 push-off, 4 lifted behind, 5 heel up, 6 knee through, 7 reach.
-LEG = [(-42, 10), (-20, 44), (8, 24), (36, 6), (44, 60), (20, 100), (-30, 100), (-56, 60)]
-LIFT = [0, 0, 0, 2, 0, 0, 0, 2]           # px off the ground (the two frames in the air)
-THIGH, SHIN, UPPER, FORE = 6.0, 6.0, 4.5, 4.5
-
-# Painted over by hand: frame -> [(x, y, palette key, or "." for nothing)], x from the left and y from the top of the cell
-FIXES = {
-}
 
 
 def hex_rgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
 
 
-class Canvas:
-    def __init__(self):
-        self.px = np.full((CELL[1], CELL[0]), -1, np.int32)
-        self.layer = None
+def run_sheet(pack=PACK, name="king_run_animation.json", out=SHEET):
+    import json
+    anim = json.load(open(os.path.join(pack, name), encoding="utf-8"))
+    assert anim["frame_size"] == {"w": CELL, "h": CELL} and anim["fps"] == FPS, anim
+    assert (anim["pivot_pixels_top_left_origin"]["x"], anim["pivot_pixels_top_left_origin"]["y"]) == PIVOT, anim
+    im = Image.open(os.path.join(pack, anim["sheet"])).convert("RGBA")
+    sheet = np.asarray(im)
+    n = anim["frame_count"]
+    assert sheet.shape == (CELL, CELL * n, 4), sheet.shape
+    assert set(np.unique(sheet[..., 3])) <= {0, 255}, "the pack's alpha is binary"
+    im.save(out)
+    boxes = []
+    for i in range(n):
+        m = sheet[:, i * CELL:(i + 1) * CELL, 3] > 0
+        cols = np.where(m.sum(axis=0) >= BODY_ROWS)[0]
+        rows = np.where(m.any(axis=1))[0]
+        # as the widget wants it: behind / in front of the pivot's column, the soles and the crown above the ground
+        boxes.append((PIVOT[0] - int(cols.min()), int(cols.max()) + 1 - PIVOT[0], max(0, PIVOT[1] - 1 - int(rows.max())), PIVOT[1] - int(rows.min())))
+        print("  frame %d: body columns %d..%d, rows %d..%d" % (i, cols.min(), cols.max(), rows.min(), rows.max()))
+    print("wrote %s: %d frames of %d x %d (copied from the pack)" % (out, n, CELL, CELL))
+    air = max(range(n), key=lambda i: boxes[i][2])         # the frame with his soles highest: the jump's pose
+    return sheet, n, air, boxes
 
-    def begin(self):
-        self.layer = np.full(self.px.shape, -1, np.int32)
 
-    def dot(self, x, y, key):
-        x, y = int(round(x)), int(round(y))
-        if 0 <= x < CELL[0] and 0 <= y < CELL[1]:
-            self.layer[y, x] = KEYS.index(key)
-
-    def stroke(self, a, b, r, key):
-        """Every pixel within r of the segment a-b."""
-        ax, ay, bx, by = a[0], a[1], b[0], b[1]
-        dx, dy = bx - ax, by - ay
-        for y in range(int(min(ay, by) - r - 1), int(max(ay, by) + r + 2)):
-            for x in range(int(min(ax, bx) - r - 1), int(max(ax, bx) + r + 2)):
-                t = 0.0 if dx == dy == 0 else max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)))
-                if (x - ax - t * dx) ** 2 + (y - ay - t * dy) ** 2 <= r * r:
-                    self.dot(x, y, key)
-
-    def stamp(self, grid, x0, y0):
-        for y, row in enumerate(grid):
+def props_sheet():
+    cells = []
+    for name, rows in PROPS:
+        w = len(rows[0])
+        assert all(len(r) == w for r in rows), name
+        g = np.zeros((len(rows), w, 4), np.uint8)
+        for y, row in enumerate(rows):
             for x, k in enumerate(row):
                 if k != ".":
-                    self.dot(x0 + x, y0 + y, k)
-
-    def end(self):
-        """Lays the piece over what is drawn, a dark line round it."""
-        solid = self.layer >= 0
-        edge = np.zeros_like(solid)
-        edge[1:] |= solid[:-1]
-        edge[:-1] |= solid[1:]
-        edge[:, 1:] |= solid[:, :-1]
-        edge[:, :-1] |= solid[:, 1:]
-        self.px[edge & ~solid] = 0
-        self.px[solid] = self.layer[solid]
-        self.layer = None
-
-
-def polar(p, deg, length):
-    """From p, length px along a limb hanging deg from straight down (positive: backwards, to the left)."""
-    a = math.radians(deg)
-    return (p[0] - math.sin(a) * length, p[1] + math.cos(a) * length)
-
-
-def leg_points(hip, thigh, shin):
-    knee = polar(hip, thigh, THIGH)
-    ankle = polar(knee, thigh + shin, SHIN)
-    a = math.radians(thigh + shin)
-    toe = (ankle[0] + math.cos(a) * 2.6, ankle[1] + math.sin(a) * 2.6)
-    return knee, ankle, toe
-
-
-def draw_leg(cv, hip, thigh, shin, near):
-    knee, ankle, toe = leg_points(hip, thigh, shin)
-    cv.begin()
-    cv.stroke(hip, knee, 2.0, "B" if near else "h")
-    cv.stroke(knee, ankle, 1.6, "M")
-    if near:                                                   # the greave's shine, down its front
-        a = math.radians(thigh + shin)
-        f = (math.cos(a) * 0.9, math.sin(a) * 0.9)
-        cv.stroke((knee[0] + f[0], knee[1] + f[1]), ((knee[0] + ankle[0]) * 0.5 + f[0], (knee[1] + ankle[1]) * 0.5 + f[1]), 0.5, "W")
-    cv.stroke(ankle, toe, 1.2, "B" if near else "h")
-    cv.end()
-
-
-def draw_arm(cv, shoulder, upper, bend, near):
-    elbow = polar(shoulder, upper, UPPER)
-    fist = polar(elbow, upper - bend, FORE)
-    cv.begin()
-    cv.stroke(shoulder, elbow, 1.6, "B" if near else "h")
-    cv.stroke(elbow, fist, 1.4, "M" if near else "h")
-    if near:
-        cv.stroke(elbow, ((elbow[0] + fist[0]) * 0.5, (elbow[1] + fist[1]) * 0.5), 0.5, "W")
-    cv.stroke(fist, fist, 1.5, "S" if near else "s")
-    cv.end()
-
-
-def draw_cape(cv, root, f):
-    """A band from the back of the shoulders streaming out behind, a ripple running down it, the gold hem at its end."""
-    cv.begin()
-    n = 21
-    ph = 2.0 * math.pi * f / 4.0                                # (two ripples a stride: one a step)
-    for t in range(n + 1):
-        u = t / n
-        cy = root[1] + 3.0 + 9.0 * u + 2.4 * u * math.sin(6.0 * u - ph)
-        half = 3.4 + 1.9 * u
-        top, bot = int(round(cy - half)), int(round(cy + half))
-        x = root[0] - t
-        hem = t >= n - 1
-        for y in range(top, bot + 1):
-            if hem:
-                k = "g" if y >= bot - 1 else "G"
-            elif y == top:
-                k = "c"
-            elif y >= bot - 1:
-                k = "d"
-            else:
-                k = "C"
-            cv.dot(x, y, k)
-        if not hem and t % 6 == 4:                               # the gold studs along it
-            cv.dot(x, int(round(cy)), "G")
-    cv.end()
-
-
-def frame(f):
-    a = 2.0 * math.pi * f / FRAMES
-    tl, sl = LEG[f]
-    tr, sr = LEG[(f + FRAMES // 2) % FRAMES]
-    # the hips as high as the lower foot leaves them (so he rises and sinks as he runs), then the air
-    low = max(max(p[1] for p in leg_points((0.0, 0.0), t, s)) for t, s in ((tl, sl), (tr, sr)))
-    hip = (37.0, float(round(GROUND - 1.2 - low - LIFT[f])))
-    tx, ty = int(hip[0]) - HIP[0], int(hip[1]) - HIP[1]
-    shoulder = (tx + SHOULDER[0], ty + SHOULDER[1])
-    cv = Canvas()
-    draw_cape(cv, (tx + BACK[0], ty + BACK[1]), f)
-    draw_arm(cv, (shoulder[0] + 1, shoulder[1]), -40.0 * math.cos(a) + 6.0, 62.0, False)
-    draw_leg(cv, (hip[0] + 1, hip[1]), tr, sr, False)
-    draw_leg(cv, hip, tl, sl, True)
-    cv.begin()
-    cv.stamp(TORSO, tx, ty)
-    cv.end()
-    # the sword in its sheath on the near hip: the grip up and forward, the scabbard down and back
-    mouth = (hip[0] + 1.0, hip[1] - 2.0)
-    swing = 48.0 + 5.0 * math.sin(2.0 * a)
-    cv.begin()
-    cv.stroke(mouth, polar(mouth, swing, 11.0), 1.0, "B")
-    cv.stroke(polar(mouth, swing, 10.0), polar(mouth, swing, 11.5), 1.0, "G")
-    cv.stroke(mouth, polar(mouth, swing + 180.0, 1.0), 1.6, "G")
-    cv.stroke(polar(mouth, swing + 180.0, 2.0), polar(mouth, swing + 180.0, 4.0), 0.8, "h")
-    cv.stroke(polar(mouth, swing + 180.0, 5.0), polar(mouth, swing + 180.0, 5.0), 1.0, "G")
-    cv.end()
-    draw_arm(cv, shoulder, 40.0 * math.cos(a) + 6.0, 78.0, True)
-    cv.begin()
-    cv.stamp(MANTLE, tx, ty)
-    cv.end()
-    cv.begin()
-    cv.stamp(HEAD, tx + 7 - NECK[0], ty + 1 - NECK[1] + (1 if f in (1, 5) else 0))
-    cv.end()
-    for x, y, k in FIXES.get(f, ()):
-        cv.px[y, x] = -1 if k == "." else KEYS.index(k)
-    return cv.px
+                    g[y, x] = hex_rgb(PROP_COLOURS[k]) + (255,)
+        cells.append((name, np.repeat(np.repeat(g, 2, axis=0), 2, axis=1)))
+    H = max(c.shape[0] for _, c in cells)
+    W = sum(c.shape[1] + 2 for _, c in cells)
+    sheet = np.zeros((H, W, 4), np.uint8)
+    where, x = [], 0
+    for name, c in cells:
+        sheet[:c.shape[0], x:x + c.shape[1]] = c
+        where.append((name, x, c.shape[1], c.shape[0]))
+        x += c.shape[1] + 2
+    Image.fromarray(sheet, "RGBA").save(PROPS_SHEET)
+    print("wrote %s: %d x %d, %s" % (PROPS_SHEET, W, H, ", ".join(n for n, *_ in where)))
+    return sheet, where
 
 
 def main():
-    pal = np.array([hex_rgb(PALETTE[k]) for k in KEYS], np.uint8)
-    W, H = CELL
-    out = [frame(f) for f in range(FRAMES)]
-    rgba = np.zeros((H, W * FRAMES, 4), np.uint8)
-    for f, res in enumerate(out):
-        m = res >= 0
-        cell = rgba[:, f * W:(f + 1) * W]
-        cell[m, :3] = pal[res[m]]
-        cell[m, 3] = 255
-        box = np.argwhere(m)
-        assert box[:, 0].min() > 0 and box[:, 0].max() < H - 1 and box[:, 1].min() > 0 and box[:, 1].max() < W - 1, "frame %d touches its cell's edge" % f
-    os.makedirs(os.path.dirname(SHEET), exist_ok=True)
-    Image.fromarray(rgba, "RGBA").save(SHEET)
-    used = sorted({KEYS[i] for res in out for i in np.unique(res) if i >= 0})
-    print("wrote %s: %d x %d, %d frames, %d colours (%s)" % (SHEET, rgba.shape[1], rgba.shape[0], FRAMES, len(used), "".join(used)))
-
-    Z = 6                                      # the previews, on the loading screen's background
-    os.makedirs(os.path.dirname(GIF), exist_ok=True)
-    sheet = Image.fromarray(rgba, "RGBA")
-    bg = Image.new("RGBA", sheet.size, hex_rgb(BACKGROUND) + (255,))
-    bg.alpha_composite(sheet)
-    bg.convert("RGB").resize((sheet.width * Z, sheet.height * Z), Image.NEAREST).save(GIF[:-4] + ".png")
-    gif = [bg.crop((f * W, 0, (f + 1) * W, H)).convert("RGB").resize((W * Z, H * Z), Image.NEAREST) for f in range(FRAMES)]
-    gif[0].save(GIF, save_all=True, append_images=gif[1:], duration=int(round(1000.0 / FPS)), loop=0)
-    print("wrote", GIF)
-    # the emblem that stands over him on the loading screen: the branding's, at 256 px
+    os.makedirs(UI, exist_ok=True)
+    sheet, n, air, boxes = run_sheet()
+    _, cn, _, crouch = run_sheet(CROUCH_PACK, "king_crouch_run_animation.json", CROUCH_SHEET)
+    assert cn == n, "the crouch-run has as many frames as the run (it takes over at the same one)"
+    cw = ch = CELL
+    props, where = props_sheet()
     emblem = os.path.join(ROOT, "References", "Branding", "sovereign_realms_emblem.png")
     if os.path.exists(emblem):
-        small = os.path.join(os.path.dirname(SHEET), "T_UI_Emblem.png")
-        Image.open(emblem).convert("RGBA").resize((256, 256), Image.LANCZOS).save(small)
-        print("wrote", small)
-    if "--dump" in sys.argv:
-        for f, res in enumerate(out):
-            print("frame", f)
-            print("    " + "".join(str(x % 10) for x in range(W)))
-            for y in range(H):
-                print("%3d %s" % (y, "".join("." if i < 0 else KEYS[i] for i in res[y])))
+        Image.open(emblem).convert("RGBA").resize((256, 256), Image.LANCZOS).save(os.path.join(UI, "T_UI_Emblem.png"))
+
+    lines = ["// Generated by Tools/blender/assets/king_run_sprite.py from the sheets it writes: do not edit.",
+             "// The cells of /Game/Voxel/UI/T_UI_KingRun and T_UI_RunnerProps, in the run's pixels.",
+             "namespace VLLoadingArt",
+             "{",
+             "	constexpr int32 RunFrames = %d;" % n,
+             "	constexpr float RunFps = %d.f;" % FPS,
+             "	constexpr float CellW = %d.f, CellH = %d.f;" % (cw, ch),
+             "	constexpr float PivotX = %d.f, PivotY = %d.f;   // the pack's pivot: on the ground, at his column" % PIVOT,
+             "	constexpr int32 AirFrame = %d;          // his soles highest: the jump's pose" % air,
+             "	struct FHit { float Back, Front, Foot, Head; };   // what can be hit of him in a frame: from the pivot's column, above the ground",
+             "	constexpr FHit Hit[] = { %s };" % ", ".join("{ %d.f, %d.f, %d.f, %d.f }" % b for b in boxes),
+             "	constexpr FHit CrouchHit[] = { %s };   // the crouch-run (T_UI_KingCrouchRun): the same cells, pivot and frame count" % ", ".join("{ %d.f, %d.f, %d.f, %d.f }" % b for b in crouch),
+             "\tconstexpr float PropsW = %d.f, PropsH = %d.f;" % (props.shape[1], props.shape[0]),
+             "\tstruct FProp { float X, W, H; };       // its cell: from X, W wide, H tall from the sheet's top",
+             "\tenum EProp : int32 { %s };" % ", ".join(n for n, *_ in where),
+             "\tconstexpr FProp Props[] = { %s };" % ", ".join("{ %d.f, %d.f, %d.f }" % (x, w, h) for _, x, w, h in where),
+             "}", ""]
+    with open(INL, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines))
+    print("wrote", INL)
+
+    Z = 3                                      # the previews, on the loading screen's background
+    os.makedirs(os.path.dirname(GIF), exist_ok=True)
+    im = Image.fromarray(sheet, "RGBA")
+    bg = Image.new("RGBA", im.size, BACKGROUND + (255,))
+    bg.alpha_composite(im)
+    bg.convert("RGB").resize((im.width * Z, im.height * Z), Image.NEAREST).save(GIF[:-4] + ".png")
+    gif = [bg.crop((i * cw, 0, (i + 1) * cw, ch)).convert("RGB").resize((cw * Z, ch * Z), Image.NEAREST) for i in range(n)]
+    gif[0].save(GIF, save_all=True, append_images=gif[1:], duration=int(round(1000.0 / FPS)), loop=0)
+    pb = Image.new("RGBA", (props.shape[1], props.shape[0]), BACKGROUND + (255,))
+    pb.alpha_composite(Image.fromarray(props, "RGBA"))
+    pb.convert("RGB").resize((pb.width * Z * 2, pb.height * Z * 2), Image.NEAREST).save(GIF[:-4] + "_props.png")
+    print("wrote", GIF)
 
 
 if __name__ == "__main__":

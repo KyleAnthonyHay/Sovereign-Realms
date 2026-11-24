@@ -1,0 +1,32 @@
+{
+  "name": "crouch_run_right",
+  "fps": 12,
+  "loop": true,
+  "frame_count": 8,
+  "frame_size": {
+    "w": 128,
+    "h": 128
+  },
+  "pivot_pixels_top_left_origin": {
+    "x": 84,
+    "y": 120
+  },
+  "sheet": "king_crouch_run_strip.png",
+  "columns": 8,
+  "rows": 1,
+  "spacing": 0,
+  "margin": 0,
+  "frames": [
+    "frames/king_crouch_run_00.png",
+    "frames/king_crouch_run_01.png",
+    "frames/king_crouch_run_02.png",
+    "frames/king_crouch_run_03.png",
+    "frames/king_crouch_run_04.png",
+    "frames/king_crouch_run_05.png",
+    "frames/king_crouch_run_06.png",
+    "frames/king_crouch_run_07.png"
+  ],
+  "filter": "nearest",
+  "mipmaps": false,
+  "root_motion": false
+}
