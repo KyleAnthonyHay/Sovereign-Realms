@@ -12,6 +12,9 @@ SM_RealmV3Barrier.
   tag TeamStart:0 / TeamStart:1    a TargetPoint in front of each castle (the PlayerStart stands on TeamStart:0)
   tag Rally:0 / Rally:1            a TargetPoint by each side's road to its ramp, where its troops gather
   tags Basin, PassNW, PassSE       a TargetPoint in the basin's middle and in each pass (terrain only: nothing captures them)
+  tag Ground          MapEdge: an invisible slab without collision at the seabed, MAP_EDGE m from the middle
+                      every way: it sets the map's extent (the path grid's bounds; from them the overview's
+                      furthest zoom and its limits, the minimap, the troop ship's chart): open sea all round
   tag Ground          every ground tile and SM_RealmV3Ramps, the base ramps' smooth slope (the path grid stands on them)
   tag Water           SM_RealmV3Sea: collision only for the path grid's own queries
   tag Barrier         SM_RealmV3Barrier: hidden walls that block pawns and nothing else: the plateaus' rims, the sides of
@@ -180,6 +183,33 @@ def sky(layout):
     return len(sk["clouds"]), len(sk["flocks"]) * int(sk.get("birds_per_flock", 6))
 
 
+# The map's extent (owner, 2026-11-23: "increase the circumference of the map area so the ship has more room to
+# travel"): the coast reaches 230 m from the middle at most, the islets 245 m: 80 m of open sea beyond the coast, 65 m beyond the islets.
+# The ship's chart reaches 30 m further (UVLFleet's ChartMargin); the sea mesh, the seabed and the water look further still.
+MAP_EDGE = 310.0
+
+
+def map_edge(terrain):
+    """The map's extent: a slab tagged Ground, 2 x MAP_EDGE m square at the seabed, that nobody sees and nothing hits.
+    The path grid takes its bounds from the Ground meshes' bounds, so its cells reach out over the open sea (all of them
+    under water: no unit stands there) and everything sized from those bounds goes as far."""
+    cube = eal.load_asset("/Engine/BasicShapes/Cube")
+    a = eas.spawn_actor_from_object(cube, vec(0, 0, terrain["seabed"] - 0.55), unreal.Rotator(0, 0, 0))
+    a.set_actor_scale3d(unreal.Vector(MAP_EDGE * 2.0, MAP_EDGE * 2.0, 0.01))
+    a.set_folder_path("Bounds")
+    a.set_actor_label("MapEdge")
+    a.tags = [unreal.Name("Ground")]
+    c = a.static_mesh_component
+    c.set_editor_property("use_default_collision", False)
+    c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+    c.set_collision_response_to_all_channels(CR.ECR_IGNORE)
+    c.set_editor_property("cast_shadow", False)
+    c.set_editor_property("affect_distance_field_lighting", False)
+    c.set_editor_property("affect_dynamic_indirect_lighting", False)
+    c.set_visibility(False)
+    return a
+
+
 def seabed(terrain):
     """One flat slab under the open sea (the voxel ground stops a few metres out from the cliffs)."""
     cube = eal.load_asset("/Engine/BasicShapes/Cube")
@@ -218,6 +248,7 @@ def main():
         sheet.tags = [unreal.Name("Ground")]
     water("SM_RealmV3Sea")
     seabed(layout["terrain"])
+    map_edge(layout["terrain"])
     _forest, in_wood, wood_kinds = forest(layout)
     has_barrier = barrier() is not None
     red = eal.load_asset("/Game/Voxel/Materials/MI_Vox_cloth_Enemy") if eal.does_asset_exist("/Game/Voxel/Materials/MI_Vox_cloth_Enemy") else None
