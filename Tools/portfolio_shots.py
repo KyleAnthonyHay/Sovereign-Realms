@@ -80,6 +80,7 @@ def run_spec(name, s, frames=None, step=None, look=None):
     R.send(P.CLEAN + (look or S2.LOOK[s.get("reel", "battle")]))
     if "setup" in s:
         s["setup"](name)
+        R.send(P.CLEAN + (look or S2.LOOK[s.get("reel", "battle")]))
     n0 = s["frames"]
     frames = frames or n0
     step = step or s.get("step", 30)
@@ -137,3 +138,192 @@ reel("r_ship", dict(S1.SHOTS["06_troop_ship"], fresh="match"))
 reel("r_king_castle", dict(S1.SHOTS["13_king_castle"], fresh="match"))
 reel("r_battle_line", dict(S1.SHOTS["07_battle_line"], fresh="match"), frames=120)
 reel("r_king_charge", dict(S1.SHOTS["08_king_charge"], fresh="match"), frames=120)
+
+
+# ================================================================ the troop ship
+def board_setup(name):
+    R.send(["vl.SpawnTeam Swordsman 0 %s 24" % U(222, -126), "vl.SelectUnits swordsmen"])
+    time.sleep(1.5)
+
+
+# troops file up the gangplank onto the ship at its quay: the camera low on the quay behind them
+reel("s_boarding", dict(fresh="match", setup=board_setup, frames=150, settle=0.3, easing="inout", k=1.2,
+                        pre=["vl.SelectUnits swordsmen"], at=[(0, "vl.Ship #1 board sel")],
+                        cam=dict(pos=[(229.5, -128.0, -3.3), (231.0, -128.8, -3.2)],
+                                 look=[(242.0, -133.0, -2.2), (243.0, -133.5, -2.0)], fov=[46, 42], shake=(0.02, 0.2, 0.5))))
+
+
+def deck_cam(i, n):
+    # on the deck aft, looking forward along her course over the troops and the bow, the cliff to port
+    import math
+    x0, y0 = S1.ship_at(i)
+    x1, y1 = S1.ship_at(min(i + 10, n - 1) if i + 10 < 240 else i)
+    if (x1, y1) == (x0, y0):
+        x1, y1 = S1.ship_at(i - 10)
+        x1, y1 = 2 * x0 - x1, 2 * y0 - y1
+    d = math.hypot(x1 - x0, y1 - y0) or 1.0
+    ux, uy = (x1 - x0) / d, (y1 - y0) / d
+    return (x0 - ux * 7.0, y0 - uy * 7.0, 3.2), (x0 + ux * 30.0, y0 + uy * 30.0, -1.0), 70.0
+
+
+def ship_put(name):
+    R.send(["vl.SpawnTeam Swordsman 0 %s 21" % U(200, -120), "vl.SelectUnits swordsmen"])
+    time.sleep(1.0)
+    R.send(["vl.Ship #1 put sel"])
+    time.sleep(1.5)
+
+
+reel("s_deck", dict(fresh="match", setup=ship_put, frames=240, settle=4.0, pre=["vl.Ship #1 moor 27200 21500 -107"],
+                    at=[(0, "vl.Ship #1 sail 25200 15000")], cam_fn=deck_cam), frames=120, step=15)
+reel("s_sail", dict(S1.SHOTS["06_troop_ship"], fresh="match", setup=ship_put), frames=120, step=15)
+
+
+@shot
+def r_raze():
+    # the enemy's first farm razed (reel 1's staging: a fresh match, waits for the farm, then the swordsmen at it)
+    spec = dict(S1.SHOTS["11_raze_farm"])
+    spec.pop("setup")
+    S1.raze("11_raze_farm")
+    spec.update(cam=S1.SHOTS["11_raze_farm"]["cam"], pre=S1.SHOTS["11_raze_farm"]["pre"], fresh=None)
+    run_spec("r_raze", spec, frames=100)
+
+
+# ================================================================ gameplay, the HUD on (Saved/Portfolio/gameplay_ui)
+# The fog of war on (it is part of the game), the two capture variables still off. vl.Shot <name> ui.
+UI = ["vl.Music 0", "vl.Opt.HitFlash 0", "vl.Opt.Silhouette 0"] + P.MIDDAY
+
+
+def ui_fresh(fog=1):
+    S2.fresh("match")
+    P.hud(True)
+    R.send(UI + ["vl.Fog %d" % fog])
+    time.sleep(1.0)
+
+
+def cursor(u, v):
+    """the real pointer over the game's window at (u, v) of its view (the placing ghost follows the pointer)"""
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    hwnd = user32.FindWindowW(None, None)
+    found = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def each(h, _):
+        n = ctypes.create_unicode_buffer(256)
+        user32.GetWindowTextW(h, n, 256)
+        if "SovereignRealms" in n.value or "Sovereign Realms" in n.value:
+            found.append(h)
+        return True
+    user32.EnumWindows(each, 0)
+    if not found:
+        print("no game window")
+        return
+    hwnd = found[0]
+    r = wintypes.RECT()
+    user32.GetClientRect(hwnd, ctypes.byref(r))
+    pt = wintypes.POINT(int(r.right * u), int(r.bottom * v))
+    user32.ClientToScreen(hwnd, ctypes.byref(pt))
+    user32.SetForegroundWindow(hwnd)
+    user32.SetCursorPos(pt.x, pt.y)
+
+
+@shot
+def ui_build():
+    # the build menu open and a farm's ghost on the player's plateau; then laid, and the Builders at work on it
+    ui_fresh()
+    R.send(["vl.Mode overview", "vl.Look %s 0.22" % U(150, -160)])
+    time.sleep(2.0)
+    R.send(["vl.Place menu"])
+    time.sleep(0.5)
+    R.send(["vl.Place farm"])
+    cursor(0.42, 0.42)
+    time.sleep(1.0)
+    cursor(0.43, 0.43)
+    P.snap("ui_place_farm", 2.0, ui=True)
+    R.send(["vl.Input click 0.43 0.43"])
+    time.sleep(1.0)
+    R.send(["vl.Place off", "vl.Work Farm"])
+    cursor(0.98, 0.5)
+    for k, wait in enumerate((14, 10)):
+        time.sleep(wait)
+        P.snap("ui_farm_site_%d" % k, 0.5, ui=True)
+
+
+@shot
+def ui_hero():
+    # King David in the hero view at the head of his troops, sword drawn; then command mode (R) with them selected
+    ui_fresh()
+    R.send(["vl.SpawnTeam Swordsman 0 %s 20" % U(118, -112), "vl.SpawnTeam Archer 0 %s 10" % U(124, -108)])
+    R.send(["vl.Mode hero", "vl.View follow", "vl.Teleport %s 1500 135" % U(112, -118), "vl.Draw 1", "vl.Orbit 150 -12 520"])
+    time.sleep(3.0)
+    P.snap("ui_hero_king", 1.0, ui=True)
+    R.send(["vl.SelectUnits troops", "vl.HeroOrder mode on"])
+    time.sleep(1.0)
+    R.send(["vl.HeroAim %s 6" % U(95, -95), "vl.HeroOrder corder"])
+    time.sleep(1.5)
+    P.snap("ui_command_mode", 0.5, ui=True)
+    R.send(["vl.HeroOrder mode off"])
+
+
+@shot
+def ui_jonathan():
+    # Jonathan, played, draws his bow at the enemy coming up the hill (the hero view's crosshair, his health)
+    ui_fresh(fog=0)
+    R.send(["vl.Jonathan castle"])
+    time.sleep(2.0)
+    R.send(["vl.Jonathan spawn", "vl.Jonathan play", "vl.Mode hero", "vl.View follow"])
+    time.sleep(2.0)
+    R.send(["vl.Teleport %s 1500 135" % U(100, -100), "vl.SpawnTeam Swordsman 1 %s 15" % U(70, -60)])
+    time.sleep(2.0)
+    R.send(["vl.Bow aim %s" % U(72, -62, 12), "vl.Bow draw 1"])
+    time.sleep(1.2)
+    P.snap("ui_jonathan_draw", 0.3, ui=True)
+
+
+@shot
+def ui_overview_battle():
+    # the overview over the basin: the player's army selected, on an attack-move at the enemy's (routes, minimap)
+    ui_fresh(fog=1)
+    R.send(S2.ARMY + ["vl.Teleport %s 600 180" % U(11, 0)])
+    time.sleep(1.0)
+    R.send(["vl.Mode overview", "vl.Look %s 0.45" % U(-2, 4), "vl.SelectUnits swordsmen", "vl.AttackMove selection %s run" % U(-34, 0)])
+    cursor(0.98, 0.5)
+    time.sleep(2.5)
+    P.snap("ui_overview_battle", 0.3, ui=True)
+
+
+@shot
+def ui_castle():
+    # the castle selected in the overview: its level card and upgrade
+    ui_fresh(fog=1)
+    R.send(["vl.Give gold 2000", "vl.Give food 2000", "vl.Mode overview", "vl.Look %s 0.2" % U(126, -136), "vl.Select Castle"])
+    cursor(0.98, 0.5)
+    P.snap("ui_castle", 3.0, ui=True)
+
+
+# the same, the camera further back and higher on the quay, over the troops' shoulders as they go aboard
+reel("s_boarding2", dict(fresh="match", setup=board_setup, frames=150, settle=0.3, easing="inout", k=1.2,
+                         pre=["vl.SelectUnits swordsmen"], at=[(0, "vl.Ship #1 board sel")],
+                         cam=dict(pos=[(230.5, -124.0, -1.0), (232.0, -124.8, -1.2)],
+                                  look=[(244.0, -133.0, -0.5), (244.5, -133.4, -0.7)], fov=[52, 50])), frames=100, step=15)
+
+
+def deck_cam2(i, n):
+    # at the bow, a man's height over the deck, looking aft and to port over the troops, the mast and the cliff
+    x, y, z = deck_cam(i, n)[0]
+    ux, uy = (deck_cam(i, n)[1][0] - x) / 37.0, (deck_cam(i, n)[1][1] - y) / 37.0
+    x0, y0 = x + ux * 7.0, y + uy * 7.0
+    px, py = -uy, ux                              # to port (left of her course)
+    return (x0 + ux * 5.0 - px * 1.2, y0 + uy * 5.0 - py * 1.2, 2.0), (x0 - ux * 6.0 + px * 6.0, y0 - uy * 6.0 + py * 6.0, 1.6), 74.0
+
+
+reel("s_deck2", dict(fresh="match", setup=ship_put, frames=240, settle=4.0, pre=["vl.Ship #1 moor 27200 21500 -107"],
+                     at=[(0, "vl.Ship #1 sail 25200 15000")], cam_fn=deck_cam2), frames=80, step=10)
+
+
+# the player's archers in profile, low, loosing over the charge (the battle staging; they hold their ground)
+reel("b_archers_side", dict(fresh="match", setup=S2.battle(), frames=120, settle=0.4, easing="inout", k=1.2,
+                            pre=S2.CHARGE + ["vl.Hold archers", "vl.Walk %s run" % U(-30, 0)],
+                            cam=dict(pos=[(31.0, -9.5, 5.2), (30.0, -9.0, 5.3)], look=[(24.0, 4.0, 6.6), (23.0, 4.0, 6.8)],
+                                     fov=[44, 42], shake=(0.02, 0.2, 0.5))))
