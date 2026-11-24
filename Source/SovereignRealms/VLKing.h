@@ -687,6 +687,7 @@ public:
 	}
 
 private:
+	friend struct FVLSaveIO;        // (saved games, VLSave.*: health, the order it is on, both cameras)
 	void BuildFigure();
 	/** A blow of a swing landing (Share: its part of the swing's damage): the dummies in front of him rock, and the
 	 *  foe in front of him (the one he is fighting, if it is there) or else a foe's building takes it. */

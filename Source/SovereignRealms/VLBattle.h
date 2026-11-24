@@ -513,6 +513,7 @@ public:
 	/** Pulls a building down (demolished by its own side: no alert of a loss, not counted as one). */
 	void Raze(AActor* Building);
 	friend struct FVLDuels;      // (balance duels: a tower raised at a level of its choosing)
+	friend struct FVLSaveIO;     // (saved games, VLSave.*: the match's state read and put back)
 	/** Takes a building out of the battle without a fall (a site cancelled, a level's barracks at a match's start). */
 	void Forget(AActor* Building);
 

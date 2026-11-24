@@ -192,7 +192,8 @@ void AVLHUD::SetScreen(EVLScreen InScreen)
 		SaveSettings();
 	}
 	bConfirm = false;
-	if (InScreen == EVLScreen::NewGame || InScreen == EVLScreen::Settings || InScreen == EVLScreen::Controls)
+	SaveAsk = INDEX_NONE;
+	if (IsSubScreen(InScreen))
 	{
 		// a sub-screen: over the pause menu in a match, else over the title screen
 		if (Base == EVLScreen::None || Base == EVLScreen::End)
@@ -238,6 +239,7 @@ void AVLHUD::OpenSub(EVLScreen NewSub)
 		SaveSettings();         // leaving Settings: keep what was changed
 	}
 	bConfirm = false;
+	SaveAsk = INDEX_NONE;
 	if (NewSub == EVLScreen::None)
 	{
 		Sub = EVLScreen::None;
@@ -337,6 +339,11 @@ void AVLHUD::OnEscape()
 		bConfirm = false;
 		return;
 	}
+	if (SaveAsk != INDEX_NONE)
+	{
+		SaveAsk = INDEX_NONE;       // (the question over a slot: no)
+		return;
+	}
 	if (Sub != EVLScreen::None)
 	{
 		OpenSub(EVLScreen::None);
@@ -380,6 +387,7 @@ void AVLHUD::MenuInput(APlayerController* PC, AVLKing* Me)
 		const UVLBattle* Battle = UVLBattle::Get(this);
 		Click();
 		if (bConfirm) { DoConfirmed(); }
+		else if (Sub == EVLScreen::SaveGame || Sub == EVLScreen::LoadGame) { /* (a slot is picked with the pointer) */ }
 		else if (Sub == EVLScreen::NewGame) { SaveSettings(); OpenMatch(this, PickMap, PickDifficulty); }
 		else if (Sub != EVLScreen::None) { OpenSub(EVLScreen::None); }
 		else if (Base == EVLScreen::Main) { OpenSub(EVLScreen::NewGame); }
@@ -575,6 +583,7 @@ void AVLHUD::DrawHUD()
 	}
 
 	UpdateTitleBackdrop();
+	SaveKeys();                 // F5 the quicksave, F9 loads it
 
 	if (Base != EVLScreen::Main)
 	{

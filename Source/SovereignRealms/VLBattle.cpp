@@ -11,6 +11,7 @@
 #include "VLCharacterData.h"
 #include "VLConstruction.h"
 #include "VLMatchLog.h"
+#include "VLSave.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -3244,11 +3245,18 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("match started on %s: %s, difficulty %s, %d buildings"), *World->GetMapName(), bBattle ? TEXT("a battle") : TEXT("a sandbox (no enemy castle)"),
 		DifficultyName(Difficulty), Buildings.Num());
+	// a saved game being loaded (UVLSaves::Load opened this map for it): its state takes the fresh match's place,
+	// here, before the battle's first tick
+	UVLSaves::OnMatchStarted(this);
 }
 
 void UVLBattle::SetupTestWorld()
 {
 	bTestWorld = true;
+	if (UVLSaves::WasRestored(this))
+	{
+		return;                     // (a saved Test World: it stands as it was saved, not as it starts)
+	}
 	UWorld* World = GetWorld();
 	UVLConstruction* Construction = UVLConstruction::Get(this);
 	UVLCommand* Command = UVLCommand::Get(this);

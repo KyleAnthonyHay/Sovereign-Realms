@@ -242,6 +242,7 @@ private:
 	void PlacePlank();
 
 	friend class UVLFleet;
+	friend struct FVLSaveIO;        // (saved games, VLSave.*)
 };
 
 /**
@@ -289,6 +290,7 @@ public:
 	float GetSeaZ() const { return ChartSeaZ; }
 
 private:
+	friend struct FVLSaveIO;        // (saved games, VLSave.*)
 	void SpawnShips();
 	bool ToCell(const FVector2D& P, FIntPoint& Out) const;
 	FVector2D CellMid(const FIntPoint& C) const { return Origin + (FVector2D(C) + 0.5f) * CellSize; }

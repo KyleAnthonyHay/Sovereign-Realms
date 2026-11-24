@@ -498,6 +498,24 @@ void UVLFog::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	if (bPendingRestore)
+	{
+		// a saved game's: what was explored and seen then
+		for (const TWeakObjectPtr<const AActor>& A : PendingSeen)
+		{
+			if (A.IsValid()) { Seen.Add(A); }
+		}
+		const bool bSet = SetExplored(PendingExplored, PendingDim);
+		if (bSet)
+		{
+			for (int32 i = 0; i < Explored.Num(); ++i) { ShowExp[i] = Explored[i] ? 255 : 0; }
+		}
+		UE_LOG(LogSovereignRealms, Log, TEXT("fog: a saved game's put back (%s, %d buildings seen)"), bSet ? TEXT("explored cells") : TEXT("its grid differs: not the explored cells"), PendingSeen.Num());
+		PendingExplored.Reset();
+		PendingSeen.Reset();
+		PendingDim = 0;
+		bPendingRestore = false;
+	}
 	if (!bActive)
 	{
 		bActive = true;
@@ -889,6 +907,24 @@ bool UVLFog::SetExplored(const TArray<uint8>& In, int32 InDim)
 	Explored = In;
 	NextUpdate = 0.0;
 	return true;
+}
+
+void UVLFog::GetSeen(TArray<const AActor*>& Out) const
+{
+	Out.Reset();
+	for (const TWeakObjectPtr<const AActor>& A : Seen)
+	{
+		if (A.IsValid()) { Out.Add(A.Get()); }
+	}
+}
+
+void UVLFog::RestoreLater(const TArray<uint8>& InExplored, int32 InDim, const TArray<const AActor*>& InSeen)
+{
+	PendingExplored = InExplored;
+	PendingDim = InDim;
+	bPendingRestore = true;
+	PendingSeen.Reset();
+	for (const AActor* A : InSeen) { PendingSeen.Add(A); }
 }
 
 void UVLFog::LogInfo(const AActor* Focus)

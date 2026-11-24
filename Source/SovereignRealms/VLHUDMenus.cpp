@@ -8,6 +8,7 @@
 #include "VLKing.h"
 #include "VLGameMode.h"
 #include "VLBattle.h"
+#include "VLSave.h"
 #include "Engine/Canvas.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -162,19 +163,33 @@ void AVLHUD::DrawMainMenu()
 	Text(TEXT("RAISE A KINGDOM   ·   HOLD THE LINE"), X, Y, U(17.f), A(Parchment, 0.9f * In), AlignLeft, Bold, U(3.f));
 	Y += U(64.f);
 
-	// entries
+	// entries. Continue: the game saved last (its map and time beside the label), when there is one
 	const float BW = U(340.f), BH = U(56.f), Gap = U(12.f);
-	const TCHAR* Labels[4] = { TEXT("NEW GAME"), TEXT("HOW TO PLAY"), TEXT("SETTINGS"), TEXT("QUIT") };
-	const EVLScreen Opens[4] = { EVLScreen::NewGame, EVLScreen::Controls, EVLScreen::Settings, EVLScreen::None };
-	for (int32 i = 0; i < 4; ++i)
+	FVLSaveInfo Last;
+	const bool bCanContinue = UVLSaves::MostRecent(Last);
+	const int32 N = 6, Quit = N - 1;
+	const TCHAR* Labels[N] = { TEXT("CONTINUE"), TEXT("NEW GAME"), TEXT("LOAD GAME"), TEXT("HOW TO PLAY"), TEXT("SETTINGS"), TEXT("QUIT") };
+	const EVLScreen Opens[N] = { EVLScreen::None, EVLScreen::NewGame, EVLScreen::LoadGame, EVLScreen::Controls, EVLScreen::Settings, EVLScreen::None };
+	for (int32 i = 0; i < N; ++i)
 	{
 		const FBox2D Box(FVector2D(X, Y), FVector2D(X + BW, Y + BH));
-		const bool bOpen = i == 3 ? bConfirm : (Sub == Opens[i] && !bConfirm);
-		if (MenuButton(Box, VLId::Menu + i, Labels[i], true, bOpen))
+		const bool bOpen = i == Quit ? bConfirm : (i > 0 && Sub == Opens[i] && !bConfirm);
+		if (MenuButton(Box, VLId::Menu + i, Labels[i], i > 0 || bCanContinue, bOpen))
 		{
-			if (bOpen) { bConfirm = false; OpenSub(EVLScreen::None); }
-			else if (i == 3) { OpenSub(EVLScreen::None); AskConfirm(EConfirm::Quit); }
+			if (i == 0)
+			{
+				// (the save's map opens with its match put back: UVLSaves::Load)
+				UE_LOG(LogSovereignRealms, Log, TEXT("hud: Continue: %s"), *UVLSaves::SlotTitle(Last.Slot));
+				if (UVLSaves* Saves = UVLSaves::Get(this)) { Saves->Load(Last.Slot); }
+			}
+			else if (bOpen) { bConfirm = false; OpenSub(EVLScreen::None); }
+			else if (i == Quit) { OpenSub(EVLScreen::None); AskConfirm(EConfirm::Quit); }
 			else { OpenSub(Opens[i]); }
+		}
+		if (i == 0 && bCanContinue && Sub == EVLScreen::None && !bConfirm)
+		{
+			Text(FString::Printf(TEXT("%s, %s played"), *Last.MapTitle, *ClockText(Last.Clock)), X + BW + U(16.f), Y + U(9.f), U(15.f), A(Parchment, 0.9f * In));
+			Text(UVLSaves::DateText(Last.SavedAt), X + BW + U(16.f), Y + U(30.f), U(13.f), A(Dim, In));
 		}
 		Y += BH + Gap;
 	}
@@ -202,7 +217,7 @@ void AVLHUD::DrawPauseMenu()
 		return;
 	}
 
-	const int32 N = 7;
+	const int32 N = 9;
 	const FFit Fit(*this, FitScale(420.f, 104.f + N * 64.f + 56.f));        // (a view too small for it: drawn smaller)
 	const float W = U(420.f), BH = U(54.f), Gap = U(10.f);
 	const float H = U(104.f) + N * (BH + Gap) + U(56.f);
@@ -210,23 +225,28 @@ void AVLHUD::DrawPauseMenu()
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
 	Text(TEXT("PAUSED"), X + W * 0.5f, Y + U(26.f), U(32.f), GoldBright, AlignCentre, Bold, U(6.f));
 	Rule(X + U(40.f), Y + U(78.f), W - U(80.f));
-	const TCHAR* Labels[N] = { TEXT("RESUME"), TEXT("RESTART"), TEXT("NEW GAME"), TEXT("CONTROLS"), TEXT("SETTINGS"), TEXT("QUIT TO MAIN MENU"), TEXT("QUIT GAME") };
+	const TCHAR* Labels[N] = { TEXT("RESUME"), TEXT("SAVE GAME"), TEXT("LOAD GAME"), TEXT("RESTART"), TEXT("NEW GAME"), TEXT("CONTROLS"), TEXT("SETTINGS"), TEXT("QUIT TO MAIN MENU"), TEXT("QUIT GAME") };
+	// (a match that is over has nothing to save)
+	const UVLSaves* Saves = UVLSaves::Get(this);
+	const bool bCanSave = Saves && Saves->SaveRefusal().IsEmpty();
 	float BY = Y + U(104.f);
 	for (int32 i = 0; i < N; ++i, BY += BH + Gap)
 	{
 		const FBox2D Box(FVector2D(X + U(34.f), BY), FVector2D(X + W - U(34.f), BY + BH));
-		if (!MenuButton(Box, VLId::Menu + 10 + i, Labels[i]))
+		if (!MenuButton(Box, VLId::Menu + 10 + i, Labels[i], i != 1 || bCanSave))
 		{
 			continue;
 		}
 		switch (i)
 		{
 		case 0: SetScreen(EVLScreen::None); break;
-		case 1: AskConfirm(EConfirm::Restart); break;
-		case 2: OpenSub(EVLScreen::NewGame); break;
-		case 3: OpenSub(EVLScreen::Controls); break;
-		case 4: OpenSub(EVLScreen::Settings); break;
-		case 5: AskConfirm(EConfirm::MainMenu); break;
+		case 1: OpenSub(EVLScreen::SaveGame); break;
+		case 2: OpenSub(EVLScreen::LoadGame); break;
+		case 3: AskConfirm(EConfirm::Restart); break;
+		case 4: OpenSub(EVLScreen::NewGame); break;
+		case 5: OpenSub(EVLScreen::Controls); break;
+		case 6: OpenSub(EVLScreen::Settings); break;
+		case 7: AskConfirm(EConfirm::MainMenu); break;
 		default: AskConfirm(EConfirm::Quit); break;
 		}
 	}
@@ -235,7 +255,7 @@ void AVLHUD::DrawPauseMenu()
 		? FString::Printf(TEXT("%s  ·  %s  ·  %s"), MapName(CurrentMap()), UVLBattle::DifficultyName(Battle->GetDifficulty()), *ClockText(Battle->GetClock()))
 		: FString::Printf(TEXT("%s  ·  sandbox"), MapName(CurrentMap()));
 	Text(Note, X + W * 0.5f, BY - U(4.f), U(14.f), Dim, AlignCentre);
-	Text(FString::Printf(TEXT("Enter resume  ·  M %s  ·  X quit"), MapName(OtherMap(0))), X + W * 0.5f, BY + U(14.f), U(13.f), Dim, AlignCentre);
+	Text(FString::Printf(TEXT("Enter resume  ·  F5 save  ·  F9 load  ·  M %s  ·  X quit"), MapName(OtherMap(0))), X + W * 0.5f, BY + U(14.f), U(13.f), Dim, AlignCentre);
 }
 
 // ---------------------------------------------------------------------------- victory / defeat
@@ -323,6 +343,8 @@ void AVLHUD::DrawSub(float CentreX)
 	case EVLScreen::NewGame: DrawNewGamePanel(CentreX); break;
 	case EVLScreen::Controls: DrawControlsPanel(CentreX, true); break;
 	case EVLScreen::Settings: DrawSettingsPanel(CentreX); break;
+	case EVLScreen::SaveGame: DrawSavesPanel(CentreX, true); break;
+	case EVLScreen::LoadGame: DrawSavesPanel(CentreX, false); break;
 	default: break;
 	}
 }
@@ -680,11 +702,11 @@ void AVLHUD::DrawConfirmPanel(float CentreX)
 	static const TCHAR* Titles[3] = { TEXT("RESTART THE MATCH?"), TEXT("QUIT TO THE MAIN MENU?"), TEXT("QUIT THE GAME?") };
 	static const TCHAR* Yes[3] = { TEXT("RESTART"), TEXT("QUIT"), TEXT("QUIT") };
 	const int32 K = int32(Confirm);
-	// is there a match that would be lost? (there are no saved games here)
+	// is there a match that would be lost? (what was saved stays: Save Game, F5, the autosave)
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const bool bInMatch = Base == EVLScreen::Pause && Battle && Battle->IsPlaying();
 	const FString Note = !bInMatch ? FString(TEXT("Until next time, sovereign."))
-		: (Confirm == EConfirm::Restart ? FString(TEXT("The battle starts over.")) : FString(TEXT("This match will be lost.")));
+		: (Confirm == EConfirm::Restart ? FString(TEXT("The battle starts over.")) : FString(TEXT("What is not saved will be lost.")));
 
 	const FFit Fit(*this, FitScale(520.f, 250.f));
 	const float W = U(520.f), H = U(250.f);

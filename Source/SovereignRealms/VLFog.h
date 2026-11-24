@@ -86,6 +86,11 @@ public:
 	void GetExplored(TArray<uint8>& Out, int32& OutDim, float& OutCell, FVector2D& OutOrigin) const;
 	/** Puts them back (only when the grid is the same; returns false otherwise). */
 	bool SetExplored(const TArray<uint8>& In, int32 InDim);
+	/** For saved games: the enemy buildings seen at least once. */
+	void GetSeen(TArray<const AActor*>& Out) const;
+	/** For saved games (UVLSaves, as the match starts): the explored cells and the buildings seen, put back on the
+	 *  fog's first update of this match (after its new-match reset), when the grid is the same (InDim). */
+	void RestoreLater(const TArray<uint8>& InExplored, int32 InDim, const TArray<const AActor*>& InSeen);
 
 	void LogInfo(const AActor* Focus);
 	void LogEyes();
@@ -129,6 +134,11 @@ private:
 	bool bInit = false;
 	bool bRevealAll = false;
 	bool bWasPlaying = false;
+	// a saved game's fog, waiting for the match's first update (RestoreLater)
+	TArray<uint8> PendingExplored;
+	int32 PendingDim = 0;
+	bool bPendingRestore = false;
+	TArray<TWeakObjectPtr<const AActor>> PendingSeen;
 	double NextUpdate = 0.0;
 	double LastTick = 0.0;
 	float Cell = 200.f;

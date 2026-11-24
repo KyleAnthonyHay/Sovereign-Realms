@@ -21,7 +21,9 @@ enum class EVLScreen : uint8
 	Pause,      // Esc: Resume, Restart, New Game, Controls, Settings, Main menu, Quit (the game is paused)
 	Settings,
 	End,        // victory / defeat, with the match's numbers
-	Controls    // every key (F1)
+	Controls,   // every key (F1)
+	SaveGame,   // the slots to save the match to (over the pause menu; VLHUDSaves.cpp)
+	LoadGame    // the slots to load (over the pause menu or the title screen)
 };
 
 /** Cells of the icon atlas /Game/Voxel/UI/T_UI_Icons (the main game's, Tools/ui/gen_ui_art.py), in its order. */
@@ -114,6 +116,13 @@ public:
 
 	/** The player's interface scale (Settings), 80..140%. */
 	static float InterfaceScale;
+	/** F5 (the quicksave written) / F9 (bLoad: the quicksave loaded), and vl.Quick. */
+	void QuickSave(bool bLoad);
+	/** Is this a screen drawn over the pause menu or the title screen (New Game, Settings, Controls, Save, Load)? */
+	static bool IsSubScreen(EVLScreen Screen)
+	{
+		return Screen == EVLScreen::NewGame || Screen == EVLScreen::Settings || Screen == EVLScreen::Controls || Screen == EVLScreen::SaveGame || Screen == EVLScreen::LoadGame;
+	}
 
 private:
 	enum class EConfirm : uint8 { Restart, MainMenu, Quit };
@@ -302,6 +311,14 @@ private:
 	void DrawControlsPanel(float CentreX, bool bCloseButton);
 	void DrawSettingsPanel(float CentreX);
 	void DrawNewGamePanel(float CentreX);
+	// ---- saved games (VLHUDSaves.cpp; UVLSaves): the Save Game / Load Game screens (a row a slot: its map, the time
+	// played, when it was saved), with a question before a slot is written over or a match in progress is left; F5
+	// the quicksave, F9 loads it; the title screen's Continue
+	void DrawSavesPanel(float CentreX, bool bSave);
+	/** F5 / F9, read once a frame while a match is played (or its pause menu is up). */
+	void SaveKeys();
+	/** The slot (of UVLSaves::AllSlots) waiting for its "write over it?" / "leave this match?", or INDEX_NONE. */
+	int32 SaveAsk = INDEX_NONE;
 	void DrawConfirmPanel(float CentreX);
 	/** "Keep this display mode?" with its countdown, over everything, while UVLGraphics waits for the answer. */
 	void DrawDisplayConfirm();

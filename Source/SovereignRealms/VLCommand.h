@@ -324,6 +324,7 @@ public:
 	static constexpr float MarkerSeconds = 0.7f;
 
 private:
+	friend struct FVLSaveIO;        // (saved games, VLSave.*)
 	struct FPlatoon
 	{
 		TArray<TWeakObjectPtr<AVLKing>> Members;

@@ -128,6 +128,7 @@ public:
 	const TArray<FTask>& GetTasks() const { return Tasks; }
 
 private:
+	friend struct FVLSaveIO;        // (saved games, VLSave.*)
 	void WalkToWork(AVLKing* Unit);
 	/** Between jobs: the next of the queue, once it stands (false: nothing left). */
 	bool StartNextTask(AVLKing* Unit);
@@ -294,6 +295,28 @@ public:
 	// ---- the match
 	/** A battle starts with no barracks and no archery range on either side: the level's are taken away. */
 	int32 ClearStartTrainers();
+
+	// ---- saved games (VLSave.*)
+	/** A building of a saved match, put back as it stood: the level's own actor (Actor) given its saved side and tags,
+	 *  or one raised in the match spawned again from its mesh (its trees cleared, its props raised, a watch tower's
+	 *  lookout); then a site's rising walls at Build, or a fallen one out of the way. Registered with the battle; the
+	 *  numbers (level, health, clocks, queue) are the caller's to set. Free, silent, no checks. OutChanged: the ground
+	 *  the path grid has to sample again. Null: its mesh is gone. */
+	struct FRestore
+	{
+		AActor* Actor = nullptr;
+		EVLBuilding Kind = EVLBuilding::None;
+		int32 Team = 0;
+		FString Mesh;
+		FVector Location = FVector::ZeroVector;
+		FRotator Rotation = FRotator::ZeroRotator;
+		float Build = 1.f;
+		bool bDestroyed = false;
+		bool bClaim = false;
+		bool bWasNeutral = false;
+	};
+	AActor* RestoreBuilding(const FRestore& In, TArray<FBox2D>& OutChanged);
+	friend struct FVLSaveIO;
 
 	void LogStatus() const;
 	/** vl.PlacementBench: the ghost's check at N places in a row from At (each twice: moved there, then standing still),

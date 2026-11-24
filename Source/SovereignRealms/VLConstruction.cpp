@@ -3357,3 +3357,149 @@ void UVLConstruction::TickFarmhands(float Dt)
 		}
 	}
 }
+
+// ------------------------------------------------------------------------------------------------ saved games
+
+AActor* UVLConstruction::RestoreBuilding(const FRestore& In, TArray<FBox2D>& OutChanged)
+{
+	UWorld* World = GetWorld();
+	UVLBattle* Battle = UVLBattle::Get(this);
+	if (!World || !Battle || In.Kind == EVLBuilding::None)
+	{
+		return nullptr;
+	}
+	AActor* A = In.Actor;
+	const bool bSpawned = A == nullptr;
+	if (bSpawned)
+	{
+		// raised in the match: the same actor PlaceBuilding makes
+		UStaticMesh* Mesh = LoadMesh(In.Mesh);
+		if (!Mesh)
+		{
+			return nullptr;
+		}
+		FActorSpawnParameters SP;
+		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AStaticMeshActor* New = World->SpawnActor<AStaticMeshActor>(In.Location, In.Rotation, SP);
+		if (!New)
+		{
+			return nullptr;
+		}
+		New->GetStaticMeshComponent()->SetMobility(EComponentMobility::Movable);
+		New->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+		New->Tags = { TEXT("Selectable"), *(TEXT("Name:") + FString(VLRules::Name(In.Kind))), TEXT("Built") };
+		SetTeamTag(New, In.Team);
+		ApplyTeamLook(New->GetStaticMeshComponent(), In.Team);
+		A = New;
+		// the trees that made way for it are gone again
+		FBox2D Cleared(ForceInit);
+		AVLForest::ClearTreesAroundDeferred(A, VLBuild::TreeMargin, false, Cleared);
+		if (Cleared.bIsValid)
+		{
+			OutChanged.Add(Cleared);
+		}
+	}
+	else
+	{
+		// the level's own: its side may have changed in the match (a mine claimed, or fallen and abandoned)
+		const FString Tag = TagValue(A, TEXT("Team:"));
+		const int32 Had = Tag.IsEmpty() ? UVLBattle::Player : (Tag.IsNumeric() ? FMath::Clamp(FCString::Atoi(*Tag), 0, 1) : UVLBattle::Neutral);
+		const bool bMine = In.Kind == EVLBuilding::Mine;
+		A->Tags.Remove(TEXT("Claim"));
+		A->Tags.Remove(TEXT("WasNeutral"));
+		A->Tags.Remove(TEXT("Abandoned"));
+		if (Had != In.Team)
+		{
+			SetTeamTag(A, In.Team);
+		}
+		if (In.bWasNeutral)
+		{
+			A->Tags.AddUnique(TEXT("WasNeutral"));
+		}
+		if (In.bClaim && !In.bDestroyed)
+		{
+			A->Tags.AddUnique(TEXT("Claim"));           // (it stands as it is until the claim is done)
+		}
+		else if (bMine && In.bDestroyed)
+		{
+			A->Tags.AddUnique(TEXT("Abandoned"));
+			ApplyTeamLook(MeshOf(A), UVLBattle::Neutral);
+		}
+		else if (Had != In.Team)
+		{
+			ApplyTeamLook(MeshOf(A), In.Team);
+		}
+	}
+	Battle->RegisterBuilding(A);
+	FVLBuildingState* St = Battle->FindBuilding(A);
+	if (!St)
+	{
+		if (bSpawned)
+		{
+			A->Destroy();
+		}
+		return nullptr;
+	}
+	St->Build = FMath::Clamp(In.Build, 0.f, 1.f);
+	St->Rest = A->GetActorLocation();
+	St->bDestroyed = In.bDestroyed;
+	St->Collapse = -1.f;
+	if (!In.Mesh.IsEmpty())
+	{
+		St->Mesh = In.Mesh;
+	}
+	UStaticMeshComponent* Own = MeshOf(A);
+	const bool bMineRuin = In.bDestroyed && In.Kind == EVLBuilding::Mine;
+	if (In.bDestroyed && !bMineRuin)
+	{
+		// down: out of sight and out of the way (a mine's ruin stands, abandoned)
+		A->SetActorHiddenInGame(true);
+		A->SetActorEnableCollision(false);
+	}
+	else if (St->IsSite() && !In.bDestroyed)
+	{
+		if (Own)
+		{
+			Own->SetVisibility(A->ActorHasTag(TEXT("Claim")));
+		}
+		ShowRising(*St, St->Build);
+	}
+	else if (!In.bDestroyed)
+	{
+		if (Own)
+		{
+			Own->SetVisibility(true);
+		}
+		if (bSpawned)
+		{
+			SpawnProps(*St);
+			if (In.Kind == EVLBuilding::Tower && !UVLCommand::IsTower(A))
+			{
+				// its lookout (as Finish gives it)
+				FName Tag = TowerLookout;
+				for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
+				{
+					if (*It != A && Own && It->GetStaticMeshComponent()->GetStaticMesh() == Own->GetStaticMesh())
+					{
+						const FString V = TagValue(*It, TEXT("Lookout:"));
+						if (!V.IsEmpty())
+						{
+							Tag = *(TEXT("Lookout:") + V);
+							break;
+						}
+					}
+				}
+				A->Tags.Add(Tag);
+			}
+		}
+	}
+	FVector2D BC, BH;
+	float BY = 0.f;
+	if (BoxOf(A, BC, BH, BY))
+	{
+		const float R = BH.Size() + 300.f;
+		OutChanged.Add(FBox2D(BC - FVector2D(R, R), BC + FVector2D(R, R)));
+	}
+	PlaceMemos.Reset();
+	return A;
+}
