@@ -190,7 +190,7 @@ def r_raze():
 
 # ================================================================ gameplay, the HUD on (Saved/Portfolio/gameplay_ui)
 # The fog of war on (it is part of the game), the two capture variables still off. vl.Shot <name> ui.
-UI = ["vl.Music 0", "vl.Opt.HitFlash 0", "vl.Opt.Silhouette 0"] + P.MIDDAY
+UI = ["DisableAllScreenMessages", "vl.Music 0", "vl.Opt.HitFlash 0", "vl.Opt.Silhouette 0"] + P.MIDDAY
 
 
 def ui_fresh(fog=1):
@@ -250,13 +250,34 @@ def ui_build():
         P.snap("ui_farm_site_%d" % k, 0.5, ui=True)
 
 
+def hero_king():
+    R.send(["vl.Mode hero", "vl.View follow", "vl.Teleport %s 1500 -45" % U(112, -118), "vl.Draw 1"])
+    time.sleep(2.0)
+    R.send(["vl.Orbit -45 -10 600"])
+    time.sleep(1.5)
+
+
+@shot
+def ui_hero_now():
+    # as ui_hero, in the match as it is
+    R.send(UI)
+    P.hud(True)
+    hero_king()
+    P.snap("ui_hero_king", 1.0, ui=True)
+    R.send(["vl.SelectUnits troops", "vl.HeroOrder mode on"])
+    time.sleep(1.0)
+    R.send(["vl.HeroAim %s 6" % U(95, -95), "vl.HeroOrder corder"])
+    time.sleep(1.5)
+    P.snap("ui_command_mode", 0.5, ui=True)
+    R.send(["vl.HeroOrder mode off"])
+
+
 @shot
 def ui_hero():
     # King David in the hero view at the head of his troops, sword drawn; then command mode (R) with them selected
     ui_fresh()
     R.send(["vl.SpawnTeam Swordsman 0 %s 20" % U(118, -112), "vl.SpawnTeam Archer 0 %s 10" % U(124, -108)])
-    R.send(["vl.Mode hero", "vl.View follow", "vl.Teleport %s 1500 135" % U(112, -118), "vl.Draw 1", "vl.Orbit 150 -12 520"])
-    time.sleep(3.0)
+    hero_king()
     P.snap("ui_hero_king", 1.0, ui=True)
     R.send(["vl.SelectUnits troops", "vl.HeroOrder mode on"])
     time.sleep(1.0)
@@ -274,9 +295,9 @@ def ui_jonathan():
     time.sleep(2.0)
     R.send(["vl.Jonathan spawn", "vl.Jonathan play", "vl.Mode hero", "vl.View follow"])
     time.sleep(2.0)
-    R.send(["vl.Teleport %s 1500 135" % U(100, -100), "vl.SpawnTeam Swordsman 1 %s 15" % U(70, -60)])
-    time.sleep(2.0)
-    R.send(["vl.Bow aim %s" % U(72, -62, 12), "vl.Bow draw 1"])
+    R.send(["vl.Teleport %s 1500 -127" % U(100, -100), "vl.SpawnTeam Swordsman 1 %s 15" % U(80, -74)])
+    time.sleep(1.5)
+    R.send(["vl.Bow aim %s" % U(82, -76, 15.5), "vl.Bow draw 1"])
     time.sleep(1.2)
     P.snap("ui_jonathan_draw", 0.3, ui=True)
 
@@ -297,9 +318,11 @@ def ui_overview_battle():
 def ui_castle():
     # the castle selected in the overview: its level card and upgrade
     ui_fresh(fog=1)
-    R.send(["vl.Give gold 2000", "vl.Give food 2000", "vl.Mode overview", "vl.Look %s 0.2" % U(126, -136), "vl.Select Castle"])
+    R.send(["vl.Give gold 2000", "vl.Give food 2000", "vl.Mode overview", "vl.Look %s 0.3" % U(128, -140)])
+    time.sleep(2.5)
+    R.send(["vl.Click 0.5 0.45"])
     cursor(0.98, 0.5)
-    P.snap("ui_castle", 3.0, ui=True)
+    P.snap("ui_castle", 2.0, ui=True)
 
 
 # the same, the camera further back and higher on the quay, over the troops' shoulders as they go aboard
@@ -327,3 +350,78 @@ reel("b_archers_side", dict(fresh="match", setup=S2.battle(), frames=120, settle
                             pre=S2.CHARGE + ["vl.Hold archers", "vl.Walk %s run" % U(-30, 0)],
                             cam=dict(pos=[(31.0, -9.5, 5.2), (30.0, -9.0, 5.3)], look=[(24.0, 4.0, 6.6), (23.0, 4.0, 6.8)],
                                      fov=[44, 42], shake=(0.02, 0.2, 0.5))))
+
+
+@shot
+def s_boarding3():
+    # troops walk out along the pier and up onto the moored troop ship, the camera at the pier's root on the quay
+    S2.fresh("match")
+    P.hud(False)
+    R.send(P.CLEAN + P.MIDDAY)
+    R.send(["vl.SpawnTeam Swordsman 0 %s 20" % U(224, -130), "vl.SelectUnits swordsmen"])
+    time.sleep(1.5)
+    v = P.V((219, -124, -1.0), (243, -134, -1.5), 55)
+    P.burst("s_boarding3", 120, [(0, v), (0, "vl.Ship #1 board sel")], 15, 0.5, [v, "vl.SelectUnits swordsmen"])
+
+
+def deck_cam3(i, n):
+    # on the stern, over the port rail: forward along the deck over the troops, the mast and the sail, sea ahead
+    # (offsets measured on the moored ship: 8.6 m aft of her centre and 3 m to port, looking 8.4 m ahead, 2.5 to starboard)
+    import math
+    x0, y0 = S1.ship_at(i)
+    j = min(i + 6, 239.0)
+    x1, y1 = S1.ship_at(j)
+    if j - i < 3:
+        xb, yb = S1.ship_at(i - 6)
+        x1, y1 = 2 * x0 - xb, 2 * y0 - yb
+    d = math.hypot(x1 - x0, y1 - y0) or 1.0
+    fx, fy = (x1 - x0) / d, (y1 - y0) / d
+    lx, ly = -fy, fx                               # port: to the left of her course
+    cam = (x0 - fx * 8.6 + lx * 3.0, y0 - fy * 8.6 + ly * 3.0, -0.3)
+    look = (x0 + fx * 8.4 - lx * 2.5, y0 + fy * 8.4 - ly * 2.5, -2.5)
+    return cam, look, 70.0
+
+
+reel("s_deck3", dict(fresh="match", setup=ship_put, frames=240, settle=4.0, pre=["vl.Ship #1 moor 27200 21500 -107"],
+                     at=[(0, "vl.Ship #1 sail 25200 15000")], cam_fn=deck_cam3), frames=80, step=10)
+
+
+# the town at its fullest (the Test World: every building raised, the castle at level 7) from high, at midday
+@shot
+def town():
+    S2.fresh("test")
+    P.hud(False)
+    R.send(P.CLEAN + P.MIDDAY)
+    P.scene([("t_town_high", (190, -215, 62), (120, -130, 12), 44),
+             ("t_town_low", (165, -175, 24), (122, -134, 14), 50),
+             ("t_town_wide", (240, -260, 110), (110, -120, 0), 46)])
+
+
+# ================================================================ Realm v2 (vl.Map realmv2, then vl.StartMatch 0)
+@shot
+def realmv2():
+    P.scene([
+        ("v2_mountain", (28 + 300 * -0.766, 146 + 300 * -0.643, 105), (28, 146, 112), 54),
+        ("v2_mountain_b", (28 + 290 * -0.42, 146 + 290 * -0.91, 135), (28, 146, 118), 50),
+        ("v2_island", (-60, -900, 520), (0, 40, 0), 46),
+        ("v2_island_w", (-850, -350, 480), (0, 30, 0), 46),
+    ])
+
+
+@shot
+def ui_jonathan2():
+    # Jonathan, played, among the player's archers in the basin battle: he draws on the enemy's charging line
+    S2.fresh("match")
+    P.hud(True)
+    R.send(UI + ["vl.Fog 0"])
+    S2.battle(["vl.Jonathan spawn", "vl.Jonathan play", "vl.Mode hero"])(None)
+    R.send(["vl.Teleport %s 520 -160" % U(*S2.J_AT), "vl.Bow aim %s" % S2.J_AIM, "vl.View follow"] + S2.CHARGE)
+    time.sleep(0.5)
+    R.send(["vl.Bow draw 1"])
+    time.sleep(1.3)
+    P.snap("ui_jonathan_battle", 0.2, ui=True)
+    R.send(["vl.Bow draw 0"])
+    time.sleep(1.5)
+    R.send(["vl.Bow draw 1"])
+    time.sleep(1.3)
+    P.snap("ui_jonathan_battle2", 0.2, ui=True)
