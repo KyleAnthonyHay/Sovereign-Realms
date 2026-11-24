@@ -1168,45 +1168,6 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   the Horseman (no voxel model yet); also deferred: saved games (the fog of war is in: see *Fog of war*). (Guard, patrol, march together and the
   other orders are back: *Standing orders*, `Docs/PORT_AUDIT.md`.)
 
-## The interface
-
-The first draft's interface (the first draft's `Player/SRHUD*.cpp` and `Docs/UI.md`, see the top) ported one to one: the same
-layout, panels, colours, fonts, icons, wording and behaviour, drawn immediate-mode on the HUD canvas by `AVLHUD` (no
-widgets), on this project's battle (`UVLBattle`), orders (`UVLCommand`) and units (`AVLKing`).
-
-| What | Where |
-| --- | --- |
-| Frame, input, primitives (panel, text, icon, button, slider, tooltip), world-space feedback | `Source/SovereignRealms/VLHUD.{h,cpp}` |
-| In-game HUD | `Source/SovereignRealms/VLHUDGame.cpp` |
-| Menus and shared screens | `Source/SovereignRealms/VLHUDMenus.cpp` |
-| Palette, world colours, button ids | `Source/SovereignRealms/VLHUDStyle.h` |
-| Icon atlas and title lettering (the first draft's) | `SourceArt/UI/*.png` -> `/Game/Voxel/UI` (`python3 Tools/ue_py.py Tools/ue/import_ui.py`) |
-| Unit portraits (the voxel characters' heads) | `Tools/blender/render_portraits.py` -> `SourceArt/UI/T_UI_Portraits.png` (King, Swordsman, Archer, Spy, Builder; 128 px cells) -> the same import |
-
-**Look.** Dark navy translucent panels with a bronze edge, a thin gold rule and gold corner brackets; parchment text,
-gold headings, parchment tooltips with dark ink; team blue / enemy red. The engine's Roboto through the Slate font
-cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everything is laid out in design units
-(pixels at 1080p) times `UI = max(view height / 1080, 0.8) x Interface scale`, capped so the bottom row fits.
-
-**While playing** (overview):
-
-    +---------------------------------------------------------------------------+
-    | [mode]   [ gold | food | troops | clock | enemy ]                [?] [||] |
-    |                    attack-ground hint, alerts (newest first)              |
-    |                                                                PLATOONS   |
-    |  +---------+ +--------- selection panel ---------+               1 ...     |
-    |  | minimap | +-----------------------------------+               2..6      |
-    +---------------------------------------------------------------------------+
-
-- **Resource bar**: gold and food (amount / what the stores hold, income a minute; shakes red on a refused purchase, the
-  icon swells when income lands, amber when the stores are full), troops `alive+training/cap` (amber at the cap), the
-  then the **hero, Builders and Spy chips** (`T_UI_Portraits`: King David's health, or "back in 0:12" while fallen; the
-  Builders alive/limit and +in training; the Spy 0/1, the wait before the next, greyed below castle level 3; **a click
-  on the Builders' or the Spy's chip opens the list of them** (`AVLHUD::DrawChipList`: what each is doing; click a row to
-  go to it and select it, hover to mark it in the world); a click on the hero's chip selects him and a double click
-  enters his hero view, as Enter with him selected), the clock, the enemy ("Enemy ready in 3:12" dim, amber under a
-  minute; "Enemy watching"; "Enemy attacking!" pulsing). Tooltips on each, **shown only while Option (Alt) is held**
-  (every tooltip of the interface: `AVLHUD::DrawTooltip`). Top right: Controls (F1) and Pause.
 ## Fog of war (`UVLFog`, `VLFog.*`; `M_FogOfWar`)
 
 The player's view of the map (the owner's call, 2026-11-23), on cells of 2 m over the map's square:
@@ -1252,6 +1213,45 @@ there), on Flatlands and the title screen. The enemy commander keeps its own per
   [perf]` (screenshots `Saved/Screenshots/VL/fog_*.png`).
 - Saved games: the explored cells are `UVLFog::GetExplored` / `SetExplored` (one byte a cell); not saved yet.
 
+## The interface
+
+The first draft's interface (the first draft's `Player/SRHUD*.cpp` and `Docs/UI.md`, see the top) ported one to one: the same
+layout, panels, colours, fonts, icons, wording and behaviour, drawn immediate-mode on the HUD canvas by `AVLHUD` (no
+widgets), on this project's battle (`UVLBattle`), orders (`UVLCommand`) and units (`AVLKing`).
+
+| What | Where |
+| --- | --- |
+| Frame, input, primitives (panel, text, icon, button, slider, tooltip), world-space feedback | `Source/SovereignRealms/VLHUD.{h,cpp}` |
+| In-game HUD | `Source/SovereignRealms/VLHUDGame.cpp` |
+| Menus and shared screens | `Source/SovereignRealms/VLHUDMenus.cpp` |
+| Palette, world colours, button ids | `Source/SovereignRealms/VLHUDStyle.h` |
+| Icon atlas and title lettering (the first draft's) | `SourceArt/UI/*.png` -> `/Game/Voxel/UI` (`python3 Tools/ue_py.py Tools/ue/import_ui.py`) |
+| Unit portraits (the voxel characters' heads) | `Tools/blender/render_portraits.py` -> `SourceArt/UI/T_UI_Portraits.png` (King, Swordsman, Archer, Spy, Builder; 128 px cells) -> the same import |
+
+**Look.** Dark navy translucent panels with a bronze edge, a thin gold rule and gold corner brackets; parchment text,
+gold headings, parchment tooltips with dark ink; team blue / enemy red. The engine's Roboto through the Slate font
+cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everything is laid out in design units
+(pixels at 1080p) times `UI = max(view height / 1080, 0.8) x Interface scale`, capped so the bottom row fits.
+
+**While playing** (overview):
+
+    +---------------------------------------------------------------------------+
+    | [mode]   [ gold | food | troops | clock | enemy ]                [?] [||] |
+    |                    attack-ground hint, alerts (newest first)              |
+    |                                                                PLATOONS   |
+    |  +---------+ +--------- selection panel ---------+               1 ...     |
+    |  | minimap | +-----------------------------------+               2..6      |
+    +---------------------------------------------------------------------------+
+
+- **Resource bar**: gold and food (amount / what the stores hold, income a minute; shakes red on a refused purchase, the
+  icon swells when income lands, amber when the stores are full), troops `alive+training/cap` (amber at the cap), the
+  then the **hero, Builders and Spy chips** (`T_UI_Portraits`: King David's health, or "back in 0:12" while fallen; the
+  Builders alive/limit and +in training; the Spy 0/1, the wait before the next, greyed below castle level 3; **a click
+  on the Builders' or the Spy's chip opens the list of them** (`AVLHUD::DrawChipList`: what each is doing; click a row to
+  go to it and select it, hover to mark it in the world); a click on the hero's chip selects him and a double click
+  enters his hero view, as Enter with him selected), the clock, the enemy ("Enemy ready in 3:12" dim, amber under a
+  minute; "Enemy watching"; "Enemy attacking!" pulsing). Tooltips on each, **shown only while Option (Alt) is held**
+  (every tooltip of the interface: `AVLHUD::DrawTooltip`). Top right: Controls (F1) and Pause.
 - **Build button and menu** (left of the selection panel, B): see *Building*. **A click off the menu** (the world, or
   another panel) **puts it away** and the Build button goes dark; the click is still the usual one, so on the ground it
   also lets the selection go. Sites show a hammer bar over them (red

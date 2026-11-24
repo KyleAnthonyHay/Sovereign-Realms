@@ -1640,6 +1640,16 @@ void AVLHUD::DrawRangeCircles()
 				const FVector S1 = Project(BuildingReach.Sight[(i + 1) % N]);
 				if (S0.Z > 0.f && S1.Z > 0.f) { DrawLine(S0.X, S0.Y, S1.X, S1.Y, Color, FMath::Max(1.f, U(2.5f))); }
 			}
+			// what the player's tower sees (the fog of war's outline, dashed: its reach x vl.Fog.TowerView and the ground's lie)
+			TArray<FVector> TowerView;
+			if (St->Team == UVLBattle::Player && UVLFog::Get(this) && UVLFog::Get(this)->Outline(B, TowerView))
+			{
+				for (int32 i = 0; i < TowerView.Num(); i += 2)
+				{
+					const FVector S0 = Project(TowerView[i]), S1 = Project(TowerView[(i + 1) % TowerView.Num()]);
+					if (S0.Z > 0.f && S1.Z > 0.f) { DrawLine(S0.X, S0.Y, S1.X, S1.Y, SightCircle, FMath::Max(1.f, U(2.f))); }
+				}
+			}
 		}
 		else
 		{
@@ -1672,16 +1682,6 @@ void AVLHUD::DrawRangeCircles()
 			const float Ang = 2.f * PI * i / N;
 			const FVector2D P = C + FVector2D(FMath::Cos(Ang), FMath::Sin(Ang)) * R;
 			Out.Add(FVector(P.X, P.Y, GroundZ(P, RefZ) + 15.f));
-			// what the player's tower sees (the fog of war's outline, dashed: its reach x vl.Fog.TowerView and the ground's lie)
-			TArray<FVector> TowerView;
-			if (St->Team == UVLBattle::Player && UVLFog::Get(this) && UVLFog::Get(this)->Outline(B, TowerView))
-			{
-				for (int32 i = 0; i < TowerView.Num(); i += 2)
-				{
-					const FVector S0 = Project(TowerView[i]), S1 = Project(TowerView[(i + 1) % TowerView.Num()]);
-					if (S0.Z > 0.f && S1.Z > 0.f) { DrawLine(S0.X, S0.Y, S1.X, S1.Y, SightCircle, FMath::Max(1.f, U(2.f))); }
-				}
-			}
 		}
 	};
 	auto Reach = [](AVLKing* U) -> float

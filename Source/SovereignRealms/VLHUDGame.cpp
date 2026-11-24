@@ -836,6 +836,27 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 	{
 		Fill(MapRect.Min.X, MapRect.Min.Y, Size.X, Size.Y, FLinearColor(0.10f, 0.14f, 0.07f, 1.f));
 	}
+	// the fog of war's veil (UVLFog: dark where unexplored, dimmed where explored, clear where seen now), its square
+	// of the world laid on the map through ToMap
+	UVLFog* Fog = UVLFog::Get(this);
+	if (Fog && !Fog->IsActive()) { Fog = nullptr; }
+	if (Fog && Fog->GetMaskTexture() && Canvas)
+	{
+		const FBox2D FB = Fog->GetBounds();
+		const FVector2D C0 = ToMap(FB.Min), C1 = ToMap(FVector2D(FB.Max.X, FB.Min.Y)), C2 = ToMap(FB.Max), C3 = ToMap(FVector2D(FB.Min.X, FB.Max.Y));
+		const FTexture* Tex = Fog->GetMaskTexture()->GetResource();
+		if (Tex)
+		{
+			FCanvasTriangleItem Tri(C0, C1, C2, FVector2D(0.f, 0.f), FVector2D(1.f, 0.f), FVector2D(1.f, 1.f), Tex);
+			Tri.SetColor(FLinearColor(0.02f, 0.025f, 0.04f, 1.f));
+			Tri.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Tri);
+			FCanvasTriangleItem Tri2(C0, C2, C3, FVector2D(0.f, 0.f), FVector2D(1.f, 1.f), FVector2D(0.f, 1.f), Tex);
+			Tri2.SetColor(FLinearColor(0.02f, 0.025f, 0.04f, 1.f));
+			Tri2.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Tri2);
+		}
+	}
 
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
@@ -844,6 +865,10 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 			continue;
 		}
 		const FVector2D At(B.Actor->GetActorLocation());
+		if (B.Team == UVLBattle::Enemy && Fog && !Fog->WasSeen(B.Actor.Get()))
+		{
+			continue;           // (the fog of war: not seen yet)
+		}
 		if (B.Team == UVLBattle::Neutral)
 		{
 			// a contested mine nobody holds: a gold mark, as the main game's free gold veins
@@ -1061,27 +1086,6 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 		bEnemy |= Unit->Team != UVLBattle::Player;
 		++Count[KindIndex(Unit)];
 		++Total;
-	// the fog of war's veil (UVLFog: dark where unexplored, dimmed where explored, clear where seen now), its square
-	// of the world laid on the map through ToMap
-	UVLFog* Fog = UVLFog::Get(this);
-	if (Fog && !Fog->IsActive()) { Fog = nullptr; }
-	if (Fog && Fog->GetMaskTexture() && Canvas)
-	{
-		const FBox2D FB = Fog->GetBounds();
-		const FVector2D C0 = ToMap(FB.Min), C1 = ToMap(FVector2D(FB.Max.X, FB.Min.Y)), C2 = ToMap(FB.Max), C3 = ToMap(FVector2D(FB.Min.X, FB.Max.Y));
-		const FTexture* Tex = Fog->GetMaskTexture()->GetResource();
-		if (Tex)
-		{
-			FCanvasTriangleItem Tri(C0, C1, C2, FVector2D(0.f, 0.f), FVector2D(1.f, 0.f), FVector2D(1.f, 1.f), Tex);
-			Tri.SetColor(FLinearColor(0.02f, 0.025f, 0.04f, 1.f));
-			Tri.BlendMode = SE_BLEND_Translucent;
-			Canvas->DrawItem(Tri);
-			FCanvasTriangleItem Tri2(C0, C2, C3, FVector2D(0.f, 0.f), FVector2D(1.f, 1.f), FVector2D(0.f, 1.f), Tex);
-			Tri2.SetColor(FLinearColor(0.02f, 0.025f, 0.04f, 1.f));
-			Tri2.BlendMode = SE_BLEND_Translucent;
-			Canvas->DrawItem(Tri2);
-		}
-	}
 		Engaged += IsFighting(Unit) ? 1 : 0;
 		HealthSum += Unit->GetHealthFrac();
 	}
@@ -1090,10 +1094,6 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 	const EVLFormation Shape = Command->SelectionFormation();
 
 	// command buttons, right-aligned (laid out first: the line under the title must stay clear of them). The main
-		if (B.Team == UVLBattle::Enemy && Fog && !Fog->WasSeen(B.Actor.Get()))
-		{
-			continue;           // (the fog of war: not seen yet)
-		}
 	// game's card: Attack-move, Stop, Hold, Patrol, Guard, Roam, Stance, Formation, March together, Disband,
 	// Dismiss; and this game's Attack ground and Control.
 	// (2026-11-22, the owner's call: no Attack-move, Attack ground, Stop or Hold buttons: attacking is a right click,
