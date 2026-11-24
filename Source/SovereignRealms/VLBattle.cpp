@@ -130,8 +130,8 @@ namespace VLRules
 					L.Housing = X.H; L.Ceiling = X.C; L.Storage = X.St; L.Archers = X.A; L.Damage = X.D; L.Interval = 1.4f; L.Range = 1000.f;
 					Castle.Add(L);
 				}
-				// the Watchtower: 50 / 85 / 120 damage every 1.2 / 0.95 / 0.8 s, reach 24 / 27 / 30 m
-				struct { int32 G; float S, D, I, R, Hp; } T[3] = { { 0, 0.f, 35.f, 1.2f, 2400.f, 1800.f }, { 250, 60.f, 60.f, 0.95f, 2700.f, 2300.f }, { 370, 80.f, 85.f, 0.8f, 3000.f, 2800.f } };
+				// the Watchtower: 50 / 85 / 120 damage every 1.2 / 0.95 / 0.8 s, reach 43.2 / 48.6 / 54 m (as far as it sees: 24 / 27 / 30 m until 2026-11-24)
+				struct { int32 G; float S, D, I, R, Hp; } T[3] = { { 0, 0.f, 35.f, 1.2f, 4320.f, 1800.f }, { 250, 60.f, 60.f, 0.95f, 4860.f, 2300.f }, { 370, 80.f, 85.f, 0.8f, 5400.f, 2800.f } };
 				for (const auto& X : T)
 				{
 					FLevel L = Make(X.G, 0, X.S, X.Hp);

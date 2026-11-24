@@ -1032,7 +1032,7 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   corners: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500, 4 archers and 21000 health; it was 12000 to 30000 until
   2026-11-23; **its archers stand on its corner turrets, which have health of their own**: see *The castle's corners*), Barracks 1600, Archery Range 1400 (levels:
   training x1.35 / x1.8), Farm 1000 (14 food every 6 s, houses 4; levels 20 / 27, 6 / 8), Gold Mine 1250 (10 gold
-  every 6 s; levels 16 / 23), Watch Tower 1800 (shoots 35 every 1.2 s to 24 m; levels 60 / 85, 0.95 / 0.8 s, 27 / 30 m; it was 50 / 85 / 120
+  every 6 s; levels 16 / 23), Watch Tower 1800 (shoots 35 every 1.2 s to 43.2 m; levels 60 / 85, 0.95 / 0.8 s, 48.6 / 54 m: as far as it sees (24 / 27 / 30 m until 2026-11-24); it was 50 / 85 / 120
   until the balance runs of 2026-11-22;
   archers on its lookout shoot too; **its own archers**: see below), Granary 900 / 1200 / 1500 and Treasury 1100 / 1450 / 1800 (+400 / 900 / 1600 storage; built from the Economy tab). The selected
   building's panel (bottom middle): health, what it does, the recruit button (Shift 5, Ctrl 10: each paid for and
@@ -1255,7 +1255,7 @@ there), on Flatlands and the title screen. The enemy commander keeps its own per
   (`vl.Fog.KindScale` 0..1). A tower's own archers are part of the tower; archers sent up to its lookout are eyes
   from its floor. A unit in the water looks from its surface.
 - **Watch towers see 80 % past their reach** (raised from 35 % on 2026-11-24, "towers should give more view"): on
-  flat ground 1.8 x the shooting range from the walls, 43.2 / 48.6 / 54 m at levels 1-3 (`vl.Fog.TowerView`; was
+  flat ground as far as it shoots (1.0 x the range since 2026-11-24, when the range became the sight), 43.2 / 48.6 / 54 m at levels 1-3 (`vl.Fog.TowerView`; was 1.8 x the old range, and before that
   1.35: 32.4 / 36.45 / 40.5 m), combined with the height rule: the eye is put where the 30-degree cone lands there
   (24.9 / 28.1 / 31.2 m, over the tower's top) and the same ray then sees further from a plateau, less against a
   slope, never past the 90 m ray cap (`vl.Fog.MaxRadius`). At 1.35 Realm v3's home towers saw 37.8-75 m and one of
