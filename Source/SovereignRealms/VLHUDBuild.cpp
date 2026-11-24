@@ -8,6 +8,7 @@
 #include "SovereignRealms.h"
 #include "VLKing.h"
 #include "VLBattle.h"
+#include "VLFog.h"
 #include "VLCommand.h"
 #include "VLConstruction.h"
 #include "CanvasItem.h"
@@ -304,7 +305,7 @@ void AVLHUD::DrawBuildFeedback()
 	// nobody works at it)
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
-		if (!B.IsAlive() || (!B.IsSite() && !B.bRepairing) || (B.Team != UVLBattle::Player && !B.IsSite()))
+		if (!B.IsAlive() || (!B.IsSite() && !B.bRepairing) || (B.Team != UVLBattle::Player && !B.IsSite()) || !UVLFog::InSight(B.Actor.Get()))
 		{
 			continue;
 		}

@@ -33,7 +33,7 @@ static TAutoConsoleVariable<float> CVarFogLayer(TEXT("vl.Fog.Layer"), 1750.f, TE
 static TAutoConsoleVariable<float> CVarFogDensity(TEXT("vl.Fog.Density"), 0.0018f, TEXT("1/cm: the unexplored fog's density."));
 static TAutoConsoleVariable<float> CVarFogExplored(TEXT("vl.Fog.ExploredDensity"), 0.00035f, TEXT("1/cm: the explored (not visible) fog's density."));
 static TAutoConsoleVariable<float> CVarFogWisps(TEXT("vl.Fog.Wisps"), 350.f, TEXT("cm: how far the fog's top rises and falls in drifting wisps."));
-static TAutoConsoleVariable<float> CVarFogBright(TEXT("vl.Fog.Bright"), 1.f, TEXT("the fog's brightness (x its colour)."));
+static TAutoConsoleVariable<float> CVarFogBright(TEXT("vl.Fog.Bright"), 0.85f, TEXT("the fog's brightness (x its colour)."));
 static TAutoConsoleVariable<float> CVarFogDesat(TEXT("vl.Fog.Desaturate"), 0.45f, TEXT("explored ground out of sight is greyed this much."));
 static TAutoConsoleVariable<float> CVarFogInterval(TEXT("vl.Fog.Interval"), 0.1f, TEXT("s between two vision updates."));
 static TAutoConsoleVariable<float> CVarFogFade(TEXT("vl.Fog.Fade"), 0.35f, TEXT("s: how long a cell takes to clear or cloud over."));
@@ -93,6 +93,18 @@ bool UVLFog::HidesActor(const AActor* Actor)
 {
 	const UVLFog* Fog = Actor ? Get(Actor) : nullptr;
 	return Fog && Fog->bActive && Fog->HiddenNow.Contains(Actor);
+}
+
+bool UVLFog::InSight(const AActor* Building)
+{
+	const UVLFog* Fog = Building ? Get(Building) : nullptr;
+	if (!Fog || !Fog->bActive || Fog->bRevealAll)
+	{
+		return true;
+	}
+	const UVLBattle* Battle = UVLBattle::Get(Building);
+	const FVLBuildingState* B = Battle ? Battle->FindBuilding(Building) : nullptr;
+	return !B || B->Team == UVLBattle::Player || Fog->InSightNow.Contains(Building);
 }
 
 bool UVLFog::ToCell(const FVector2D& P, int32& Out) const
@@ -489,8 +501,11 @@ void UVLFog::Tick(float DeltaSeconds)
 		const float Dt = LastTick > 0.0 ? float(FMath::Min(Now - LastTick, 0.5)) : 1.f;
 		LastTick = Now;
 		NextUpdate = Now + FMath::Max(0.02f, CVarFogInterval.GetValueOnGameThread());
+		const double T0 = FPlatformTime::Seconds();
 		UpdateVision();
 		UploadMask(Dt);
+		UpdateMs = (FPlatformTime::Seconds() - T0) * 1000.0;
+		UpdateMsMax = FMath::Max(UpdateMsMax, UpdateMs);
 		ApplyVisualParams();
 	}
 	UpdateHidden();
@@ -568,11 +583,12 @@ void UVLFog::UpdateVision()
 		}
 	}
 	for (int32 i = 0; i < Visible.Num(); ++i) { Explored[i] |= Visible[i]; }
-	// enemy buildings seen (any corner or the middle of their footprint on a visible cell)
+	// enemy buildings in sight (any corner or the middle of their footprint on a visible cell), and seen ever
+	InSightNow.Reset();
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
 		const AActor* A = B.Actor.Get();
-		if (!A || B.Team == UVLBattle::Player || Seen.Contains(A))
+		if (!A || B.Team == UVLBattle::Player)
 		{
 			continue;
 		}
@@ -585,6 +601,7 @@ void UVLFog::UpdateVision()
 			if (ToCell(P, C) && Visible[C])
 			{
 				Seen.Add(A);
+				InSightNow.Add(A);
 				break;
 			}
 		}
@@ -831,9 +848,10 @@ void UVLFog::LogInfo(const AActor* Focus)
 	int32 NV = 0, NE = 0;
 	for (int32 i = 0; i < Visible.Num(); ++i) { NV += Visible[i]; NE += Explored[i]; }
 	const float Tan = FMath::Tan(FMath::DegreesToRadians(CVarFogAngle.GetValueOnGameThread()));
-	UE_LOG(LogSovereignRealms, Log, TEXT("fog: %s%s, %d x %d cells of %.0f cm; visible %.1f %%, explored %.1f %%; %d eyes, %d hidden; flat-ground radius %.1f m (eye %.1f m, %.0f deg); material %s"),
+	UE_LOG(LogSovereignRealms, Log, TEXT("fog: %s%s, %d x %d cells of %.0f cm; visible %.1f %%, explored %.1f %%; %d eyes, %d hidden; update %.2f ms (most %.2f) every %.2f s; flat-ground radius %.1f m (eye %.1f m, %.0f deg); material %s"),
 		bActive ? TEXT("on") : TEXT("off"), bRevealAll ? TEXT(" (reveal all)") : TEXT(""), Dim, Dim, Cell, Visible.Num() ? 100.f * NV / Visible.Num() : 0.f, Explored.Num() ? 100.f * NE / Explored.Num() : 0.f,
-		Eyes.Num(), HiddenNow.Num(), CVarFogEye.GetValueOnGameThread() / Tan / 100.f, CVarFogEye.GetValueOnGameThread() / 100.f, CVarFogAngle.GetValueOnGameThread(), FogMID ? TEXT("drawn") : TEXT("missing"));
+		Eyes.Num(), HiddenNow.Num(), UpdateMs, UpdateMsMax, CVarFogInterval.GetValueOnGameThread(), CVarFogEye.GetValueOnGameThread() / Tan / 100.f, CVarFogEye.GetValueOnGameThread() / 100.f, CVarFogAngle.GetValueOnGameThread(), FogMID ? TEXT("drawn") : TEXT("missing"));
+	UpdateMsMax = 0.0;
 	if (Focus)
 	{
 		float Min = 0.f, Max = 0.f, EyeH = 0.f;

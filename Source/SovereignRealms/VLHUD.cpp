@@ -1300,7 +1300,7 @@ void AVLHUD::DrawHealthBars()
 	EndRects();
 	for (const FVLBuildingState& Bs : Battle->GetBuildings())
 	{
-		if (!Bs.IsAlive() || Bs.Team == UVLBattle::Neutral)
+		if (!Bs.IsAlive() || Bs.Team == UVLBattle::Neutral || !UVLFog::InSight(Bs.Actor.Get()))
 		{
 			continue;
 		}
@@ -2208,7 +2208,7 @@ void AVLHUD::DrawTrainingBars()
 	}
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
-		if (!B.IsAlive() || B.Queue.Num() == 0)
+		if (!B.IsAlive() || B.Queue.Num() == 0 || !UVLFog::InSight(B.Actor.Get()))      // (an enemy's in the fog of war: not shown)
 		{
 			continue;
 		}

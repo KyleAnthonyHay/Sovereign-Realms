@@ -65,6 +65,9 @@ public:
 	static bool HidesUnit(const AVLKing* Unit);
 	/** The same for any actor: a unit, an enemy building not seen yet, an enemy ship not seen now. */
 	static bool HidesActor(const AActor* Actor);
+	/** A building in sight now (a cell of its footprint visible), or the player's own, or the fog off: the HUD draws
+	 *  the bars over it (training, a site's progress, health) only then. */
+	static bool InSight(const AActor* Building);
 	/** 0 unexplored, 1 explored, 2 visible (2 everywhere while the fog is off). */
 	int32 StateAt(const FVector2D& World) const;
 	/** Has the player seen this enemy building (the minimap draws it only then)? True while the fog is off. */
@@ -142,8 +145,10 @@ private:
 	TSet<const AActor*> HiddenNow;                 // hidden from the player this frame (units, ships, buildings)
 	TSet<TWeakObjectPtr<AActor>> HiddenByUs;       // what SetActorHiddenInGame was called on by the fog
 	TSet<TWeakObjectPtr<const AActor>> Seen;       // enemy buildings seen at least once
+	TSet<const AActor*> InSightNow;                // enemy and neutral buildings in sight at the last update
 	TSet<TWeakObjectPtr<const AActor>> MapBuildings;   // the level's own (there when the match began)
 	uint32 EyeFrame = 0;
+	double UpdateMs = 0.0, UpdateMsMax = 0.0;      // the last vision update and mask upload (CPU), and the most since vl.Fog.Info
 
 	UPROPERTY(Transient) TObjectPtr<UTexture2D> MaskTex;
 	UPROPERTY(Transient) TObjectPtr<UTexture2D> HeightTex;
