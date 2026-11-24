@@ -355,6 +355,9 @@ public:
 	UPROPERTY() TArray<FVLSavedShip> Ships;
 	UPROPERTY() TArray<FVLSavedCommander> Commanders;
 	UPROPERTY() FVLSavedFog Fog;            // (Dim 0: no fog then, or a save from before it)
+	UPROPERTY() TArray<FString> RocksCleared;   // the rocks Builders took away (their actors' names; VLRocks.*)
+	UPROPERTY() TArray<FString> RockWorkNames;  // rocks with work done on them, and how much (seconds of one Builder's)
+	UPROPERTY() TArray<float> RockWork;
 
 	// ---- the orders
 	UPROPERTY() TArray<FVLSavedPlatoon> Platoons;

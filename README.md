@@ -401,6 +401,16 @@ a little more than a level-3 castle's own 1500, so one fully raised Granary doub
   commander claims through the same calls (`FVLCommander::TryBuild` > `CheckPlacement` + `PlaceBuilding`); its build
   order no longer has a mine step. `vl.Build mine X Y [enemy]` claims the free mine nearest that point;
   `vl.Construction` lists every mine and whose it is.
+- **Clearing rocks** (the owner's call, 2026-11-24: "builders should be able to remove rocks; it just takes a little
+  time"): the loose rocks and boulders the layouts scatter (`SM_Rock_A..E`, static mesh actors in each map's
+  `Realm/Rocks` folder; the mountains, ridges, crags and mesas are terrain and stay) block placing and walking. Select
+  Builders and **right-click a rock** (Shift: on the end of their queues): they walk to it and hammer at it, **10 s
+  with one Builder**, each further Builder adds as much again (`ExtraSpeed`, up to 4: 2.5 s). The rock sinks and
+  shrinks a little as they work, with stone dust at the blows; then it goes with a puff of dust and a rumble, and the
+  path grid is sampled again round it so the ground can be walked and built on. **Free.** `UVLRocks` (`VLRocks.*`;
+  `UVLBuilderWork` takes a rock as its job). Saved games keep the cleared rocks and the work done on others.
+  `vl.Rocks` (how many, cleared, at work), `vl.Rocks clear | order` (the rock nearest the played unit: gone now / the
+  Builders sent). No map has rocks as instances (the forest's instanced kinds are trees and plants; the scan logs any).
 - **The match's start**: a battle starts with no barracks or archery range on either side (the level's, if the map
   still has them, are taken away with their dummies and lamps: `ClearStartTrainers`); training starts once one is built.
 - **Console**: `vl.Build barracks|range|farm|mine|tower X Y [yaw] [enemy] [near]` (a site, paid; `near`: the nearest good

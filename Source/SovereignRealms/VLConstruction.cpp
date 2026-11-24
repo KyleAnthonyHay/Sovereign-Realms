@@ -12,6 +12,7 @@
 #include "VLCommand.h"
 #include "VLGrid.h"
 #include "VLForest.h"
+#include "VLRocks.h"
 #include "VLHUD.h"
 #include "VLGameMode.h"
 #include "VLSwordsmanCombat.h"
@@ -157,6 +158,12 @@ namespace
 	{
 		const FVector2D L = (P - C).GetRotated(-Yaw);
 		return FMath::Abs(L.X) <= H.X && FMath::Abs(L.Y) <= H.Y;
+	}
+
+	/** How far a Builder is from its job's walls: a building's (UVLBattle::DistanceTo), or a rock's side (VLRocks.*). */
+	float JobDistance(const UVLBattle* Battle, const AActor* Job, const FVector& From, FVector* OutPoint = nullptr)
+	{
+		return UVLRocks::IsRock(Job) ? UVLRocks::DistanceTo(Job, From, OutPoint) : Battle->DistanceTo(Job, From, OutPoint);
 	}
 
 	bool InPlayersHands(const AVLKing* U)
@@ -315,7 +322,7 @@ void UVLBuilderWork::Begin(AActor* Building, bool bInOrdered)
 	Walks = 0;
 	Stuck = 0.f;
 	SetComponentTickEnabled(true);
-	if (UVLBattle* Battle = UVLBattle::Get(this); Battle && Battle->DistanceTo(Building, Unit->GetFeet()) > VLBuild::Reach)
+	if (UVLBattle* Battle = UVLBattle::Get(this); Battle && JobDistance(Battle, Building, Unit->GetFeet()) > VLBuild::Reach)
 	{
 		bWorking = false;
 		WalkToWork(Unit);
@@ -361,7 +368,7 @@ bool UVLBuilderWork::StartNextTask(AVLKing* Unit)
 		}
 		AActor* B = T.Building.Get();
 		const FVLBuildingState* S = B ? Battle->FindBuilding(B) : nullptr;
-		if (S && S->Team == Unit->Team && NeedsWork(*S))
+		if ((S && S->Team == Unit->Team && NeedsWork(*S)) || UVLRocks::IsRock(B))      // (a rock still there: cleared in its turn)
 		{
 			Begin(B, true);
 			return true;
@@ -384,7 +391,7 @@ void UVLBuilderWork::WalkToWork(AVLKing* Unit)
 	// the point of its walls nearest the Builder, a step out from them; a crew spreads along the wall (each its own
 	// offset, by its number) so that they stand side by side, not on top of each other
 	FVector Wall;
-	Battle->DistanceTo(B, Unit->GetFeet(), &Wall);
+	JobDistance(Battle, B, Unit->GetFeet(), &Wall);
 	FVector Out = (Unit->GetFeet() - Wall).GetSafeNormal2D();
 	if (Out.IsNearlyZero())
 	{
@@ -423,8 +430,10 @@ void UVLBuilderWork::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 		}
 		return;
 	}
-	const FVLBuildingState* S = Battle->FindBuilding(B);
-	if (!S || S->Team != Unit->Team || !NeedsWork(*S))
+	// (a rock to clear: no building, its own work; VLRocks.*)
+	const bool bRock = UVLRocks::IsRock(B);
+	const FVLBuildingState* S = bRock ? nullptr : Battle->FindBuilding(B);
+	if (!bRock && (!S || S->Team != Unit->Team || !NeedsWork(*S)))
 	{
 		// done (or gone): it stands where it is and looks for the next job straight away
 		if (S && S->IsAlive() && bWorking)
@@ -440,13 +449,13 @@ void UVLBuilderWork::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 		bWorking = false;
 		return;                     // on the way
 	}
-	const float Dist = Battle->DistanceTo(B, Unit->GetFeet());
+	const float Dist = JobDistance(Battle, B, Unit->GetFeet());
 	if (Dist > VLBuild::Reach)
 	{
 		bWorking = false;
 		if (Walks >= 4)
 		{
-			UE_LOG(LogSovereignRealms, Log, TEXT("%s cannot get to %s (%.0f cm away): gives up"), *Unit->GetDisplayName(), *S->Name, Dist);
+			UE_LOG(LogSovereignRealms, Log, TEXT("%s cannot get to %s (%.0f cm away): gives up"), *Unit->GetDisplayName(), S ? *S->Name : *B->GetName(), Dist);
 			Stop();
 			JobSearch = 4.f;
 			return;
@@ -460,8 +469,18 @@ void UVLBuilderWork::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 		NextSwing = FMath::FRandRange(0.1f, 0.9f);          // each on its own beat
 	}
 	// it faces the wall and swings: the up-down-up blows of the sword's combo are the hammer's
+	if (bRock)
+	{
+		// the rock: each frame at it is work done (UVLRocks: 10 s with one Builder, shared out up to four)
+		if (UVLRocks* Rocks = UVLRocks::Get(this); Rocks && Rocks->AddWork(B, Unit, DeltaTime))
+		{
+			Stop();
+			JobSearch = 0.f;
+			return;
+		}
+	}
 	FVector Wall;
-	Battle->DistanceTo(B, Unit->GetFeet(), &Wall);
+	JobDistance(Battle, B, Unit->GetFeet(), &Wall);
 	FVector To = Dist > 1.f ? Wall - Unit->GetActorLocation() : B->GetActorLocation() - Unit->GetActorLocation();
 	To.Z = 0.f;
 	const float WantYaw = To.IsNearlyZero() ? Unit->GetActorRotation().Yaw : To.Rotation().Yaw;
@@ -483,7 +502,7 @@ void UVLBuilderWork::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 		{
 			// the blow lands: a hammer strike, now and then a saw stroke (the main game's recorded ones)
 			const FVector At = Unit->GetActorLocation() + Unit->GetActorForwardVector() * 60.f;
-			Battle->PlayAt(FMath::FRand() < 0.15f ? TEXT("S_Woodwork") : TEXT("S_BuildHammer"), At, 0.34f, 4500.f, 0.06f);
+			Battle->PlayAt(!bRock && FMath::FRand() < 0.15f ? TEXT("S_Woodwork") : TEXT("S_BuildHammer"), At, 0.34f, 4500.f, 0.06f);
 		}
 	}
 }

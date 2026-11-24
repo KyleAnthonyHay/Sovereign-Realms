@@ -16,6 +16,7 @@
 #include "AIController.h"
 #include "VLPlayerController.h"
 #include "VLFootDust.h"
+#include "VLRocks.h"
 #include "VLSwordsmanCombat.h"
 #include "VLBattle.h"
 #include "VLTroop.h"
@@ -1450,6 +1451,20 @@ bool AVLKing::OrderOn(TArray<AVLKing*> Units, AActor* Hit, const FVector& Ground
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	// Builders and a site or a damaged building of their side: they go to work on it (VLConstruction.*); the rest of
 	// the selection takes the order as usual
+	// Builders and a loose rock or boulder (the pointer on it): they go and clear it (VLRocks.*). The rest of the
+	// selection takes the order as usual
+	if (UVLRocks* Rocks = UVLRocks::Get(this); Rocks && (!Hit || UVLRocks::IsRock(Hit))
+		&& Units.ContainsByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); }))
+	{
+		if (AActor* Rock = UVLRocks::IsRock(Hit) ? Hit : Rocks->RockAt(Ground, 15.f); Rock && Rocks->OrderClear(Units, Rock, bQueue))
+		{
+			Units.RemoveAll([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U); });
+			if (Units.Num() == 0)
+			{
+				return true;
+			}
+		}
+	}
 	// Builders and a free gold mine (a neutral one, or one fallen and abandoned): they claim it (the mine's price; it
 	// is theirs when they have worked it through). The rest of the selection takes the order as usual
 	if (UVLConstruction* Construction = UVLConstruction::Get(this); Hit && Construction && Construction->IsFreeMine(Hit)

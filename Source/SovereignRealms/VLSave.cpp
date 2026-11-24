@@ -11,6 +11,7 @@
 #include "VLGrid.h"
 #include "VLHUD.h"
 #include "VLKing.h"
+#include "VLRocks.h"
 #include "VLSwordsmanCombat.h"
 #include "VLTroop.h"
 #include "VLTroopShip.h"
@@ -553,6 +554,12 @@ void FVLSaveIO::Capture(UWorld* World, UVLSaveGame& Out)
 		}
 	}
 
+	// ---- the rocks Builders cleared
+	if (const UVLRocks* Rocks = UVLRocks::Get(World))
+	{
+		Rocks->SaveTo(Out.RocksCleared, Out.RockWorkNames, Out.RockWork);
+	}
+
 	// ---- the player's view
 	const APlayerController* PC = World->GetFirstPlayerController();
 	if (const AVLKing* Me = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr)
@@ -750,6 +757,10 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 	for (int32 t = 0; t < 2 && t < In.Kingdoms.Num(); ++t)
 	{
 		Construction->FarmVariant[t] = In.Kingdoms[t].FarmVariant;
+	}
+	if (UVLRocks* Rocks = UVLRocks::Get(World))
+	{
+		Rocks->RestoreFrom(In.RocksCleared, In.RockWorkNames, In.RockWork, Changed);      // (the rocks Builders cleared go again)
 	}
 	if (Grid && Grid->EnsureBuilt() && Changed.Num() > 0)
 	{
