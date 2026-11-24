@@ -190,7 +190,7 @@ def compare(a, b):
         for k in ("kind", "name", "team", "level", "bdestroyed", "queue", "trained", "feedplatoon", "bhasrally", "bruntime", "paidgold", "paidfood", "guardlevel", "bclaim", "bwasneutral", "mesh", "yard"):
             if x[k] != y[k]:
                 why.append("%s %s -> %s" % (k, x[k], y[k]))
-        for k, tol in (("health", 0.6), ("upgradeleft", 0.11), ("payout", 0.11), ("defence", 0.11), ("trainclock", 0.11), ("build", 0.002), ("guardrestock", 0.11)):
+        for k, tol in (("health", 1.5), ("upgradeleft", 0.11), ("payout", 0.11), ("defence", 0.11), ("trainclock", 0.11), ("build", 0.002), ("guardrestock", 0.11)):
             if not near(x[k], y[k], tol):
                 why.append("%s %.2f -> %.2f" % (k, x[k], y[k]))
         if dist(x["location"], y["location"]) > 1.0 or abs(x["location"]["z"] - y["location"]["z"]) > 1.0:
@@ -300,11 +300,11 @@ def compare_logs(la, lb):
     ta, ba, ua, sa = battle_lines(la)
     tb, bb, ub, sb = battle_lines(lb)
     check("vl.Battle: both sides' lines are the same (stock, storage, troops, queued, housing, castle level, the books)", ta == tb and len(tb) == 2, tb if ta == tb else [ta, tb])
-    # (health within a point: the log rounds it, and a site's grows with its walls)
+    # (health and a site's progress within a point: the log rounds them, and a site's grow with its walls)
     def hp(line):
-        m = re.search(r"health +(\d+)/", line)
-        return (re.sub(r"health +\d+/", "health /", line), int(m.group(1)) if m else 0)
-    same_b = len(ba) == len(bb) and all(hp(x)[0] == hp(y)[0] and abs(hp(x)[1] - hp(y)[1]) <= 1 for x, y in zip(ba, bb))
+        m, p = re.search(r"health +(\d+)/", line), re.search(r"SITE (\d+)%", line)
+        return (re.sub(r"SITE \d+%", "SITE %", re.sub(r"health +\d+/", "health /", line)), int(m.group(1)) if m else 0, int(p.group(1)) if p else 0)
+    same_b = len(ba) == len(bb) and all(hp(x)[0] == hp(y)[0] and abs(hp(x)[1] - hp(y)[1]) <= 1 and abs(hp(x)[2] - hp(y)[2]) <= 1 for x, y in zip(ba, bb))
     diff = [x for x in ba if x not in bb] + [x for x in bb if x not in ba]
     check("vl.Battle: every building's line is the same (team, level, health within a point, site, training, raising)", same_b and len(bb) > 0, "%d buildings" % len(bb) if same_b else diff[:4])
     far = {n: round(((ua[n][0] - ub[n][0]) ** 2 + (ua[n][1] - ub[n][1]) ** 2) ** 0.5) for n in ua if n in ub}

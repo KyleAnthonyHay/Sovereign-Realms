@@ -97,8 +97,8 @@ void AVLHUD::DrawSavesPanel(float CentreX, bool bSave)
 		{
 			// the question, in the row's own place: written over (Save), or the match in progress left (Load)
 			const FString Ask = bSave ? FString(TEXT("Write over this save?")) : FString(TEXT("Load it? What is not saved will be lost."));
-			TextIn(FBox2D(FVector2D(TX, Box.Min.Y), FVector2D(Box.Max.X - U(330.f), Box.Max.Y)), Ask, U(16.f), Amber, AlignLeft);
-			const float BW = U(150.f), BG = U(10.f), BYy = Box.Min.Y + U(9.f), BHh = RowH - U(18.f);
+			TextIn(FBox2D(FVector2D(TX, Box.Min.Y), FVector2D(Box.Max.X - U(370.f), Box.Max.Y)), Ask, U(16.f), Amber, AlignLeft);
+			const float BW = U(170.f), BG = U(10.f), BYy = Box.Min.Y + U(9.f), BHh = RowH - U(18.f);
 			const FBox2D No(FVector2D(Box.Max.X - Pad - BW, BYy), FVector2D(Box.Max.X - Pad, BYy + BHh));
 			const FBox2D Yes(FVector2D(No.Min.X - BG - BW, BYy), FVector2D(No.Min.X - BG, BYy + BHh));
 			if (MenuButton(Yes, VLId::Screen + 47, bSave ? TEXT("OVERWRITE") : TEXT("LOAD"), true, true))
