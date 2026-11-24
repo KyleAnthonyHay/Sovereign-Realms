@@ -3376,9 +3376,20 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 			}
 			if (t == Player && Army.Num() > 0)
 			{
+				// King David is in platoon 1 with the starting army (the owner, 2026-11-24): he leads it (a platoon with
+				// the king in it has him for its leader, UVLCommand::PickLeader), so the starting troops are his guard
+				// (the hero view's command mode orders them with nobody selected). The Builder is not in it.
+				for (AVLKing* U : AllUnits())
+				{
+					if (U && U->Team == Player && !U->IsTroop() && !U->bAmbient && U->IsAlive())
+					{
+						Army.Insert(U, 0);
+						break;
+					}
+				}
 				if (UVLCommand* Command = UVLCommand::Get(this))
 				{
-					Command->AssignPlatoon(0, Army);        // the starting army is platoon 1 (the Builder is not in it)
+					Command->AssignPlatoon(0, Army);        // the king and the starting army are platoon 1
 				}
 			}
 		}

@@ -923,7 +923,7 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   map with `?Match=1?Difficulty=N`. Each side starts with 400 gold, 300 food, its castle and whatever else the map places
   (on the two battle maps: one gold mine and the watch tower beside it; **no farm**, **no barracks and no archery range**: the
   Builder raises them, and the enemy's commander lays a farm first, then the trainers), 3 swordsmen and 2 archers in front of its
-  castle by its `TeamStart:<team>` (the player's are platoon 1; King David stands at the PlayerStart), and **1 Builder**
+  castle by its `TeamStart:<team>` (the player's are platoon 1, **with King David in it as its leader**: his guard, which the hero view's command mode orders when nobody is selected; the platoon panel shows him and its formation puts him at the front; he stands at the PlayerStart), and **1 Builder**
   beside them. **The side whose castle falls loses**: the victory
   or defeat screen comes 1.6 s later (time, map, difficulty, troops recruited / lost, enemies slain, buildings lost /
   razed; Play Again, Main Menu, Keep Watching). Esc pauses (Resume, Restart, New Game, Controls, Settings, Quit to Main
