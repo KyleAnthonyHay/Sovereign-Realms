@@ -484,7 +484,7 @@ float UVLSwordsmanCombat::DistanceTo(const AVLKing* Unit, const AActor* To) cons
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	if (Battle && Battle->FindBuilding(To))
 	{
-		return FMath::Max(0.f, Battle->DistanceTo(To, Unit->GetFeet()) - VLRules::BuildingHitPad) + 100.f;     // to its hit box
+		return FMath::Max(0.f, Battle->DistanceTo(To, Unit->GetFeet()) - VLRules::MeleeBuildingPad) + 100.f;     // to its hit box (a blade's)
 	}
 	return FVector::Dist2D(To->GetActorLocation(), Unit->GetActorLocation());
 }

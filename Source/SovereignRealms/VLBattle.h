@@ -85,6 +85,9 @@ namespace VLRules
 	/** A building's hit box (UVLBattle::BuildingOnPath, BuildingAt, the sword's reach): its mesh's box grown this much
 	 *  round the sides and the top (cm), so a blade at its walls or an arrow at its eaves counts. */
 	constexpr float BuildingHitPad = 80.f;
+	/** The same for blades (the sword's reach and the swordsmen's closing in, UVLSwordsmanCombat::DistanceTo, AVLKing::HitDummies):
+	 *  wider, so troops crowding a building's walls, porches and props all reach it (was BuildingHitPad, 80, until 2026-11-23). */
+	constexpr float MeleeBuildingPad = 220.f;
 	/** The king heals when nothing has hurt him for this long (s), this much of his most health a second (both kings). */
 	constexpr float KingRestDelay = 8.f;
 	constexpr float KingRestRate = 0.04f;

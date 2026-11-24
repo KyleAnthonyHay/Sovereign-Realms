@@ -1104,8 +1104,8 @@ void AVLKing::HitDummies(float Share)
 				{
 					continue;
 				}
-				// (to its hit box: its walls grown by VLRules::BuildingHitPad, so a blade at the eaves or a prop still lands)
-				const float D = FMath::Max(0.f, Battle->DistanceTo(B.Actor.Get(), GetFeet(), &Wall) - VLRules::BuildingHitPad);
+				// (to its hit box for blades: its walls grown by VLRules::MeleeBuildingPad, so a blade at the eaves or a prop still lands)
+				const float D = FMath::Max(0.f, Battle->DistanceTo(B.Actor.Get(), GetFeet(), &Wall) - VLRules::MeleeBuildingPad);
 				const FVector To = (Wall - Me).GetSafeNormal2D();
 				if (D < BestB && (D < 40.f || FVector::DotProduct(To, Fwd) > 0.f))
 				{
