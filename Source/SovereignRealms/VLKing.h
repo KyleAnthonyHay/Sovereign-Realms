@@ -587,6 +587,13 @@ public:
 
 	/** Where the player's attention is: the unit in hero mode, the point the overview looks at otherwise. */
 	FVector GetListenFocus() const { return bHeroMode ? GetActorLocation() : OverviewFocus; }
+	/**
+	 * How far a sound at At is from the player's ear, for every 3D sound's fade (steps, swings, arrows, the shuffle,
+	 * UVLBattle::PlayAt): in the hero view the 2D distance from the unit played; in the overview the 2D distance from
+	 * the focus combined with how far the camera is pulled out beyond the default zoom, so zooming out fades everything,
+	 * a selected (followed) unit's steps too, while the default zoom sounds as before (the owner, 2026-11-24).
+	 */
+	float ListenDistance(const FVector& At) const;
 
 	/** What is under the mouse: the king, a selectable building, or nothing. Ground receives the point hit, if any. */
 	AActor* PickUnderCursor(APlayerController* PC, FVector* Ground = nullptr) const;

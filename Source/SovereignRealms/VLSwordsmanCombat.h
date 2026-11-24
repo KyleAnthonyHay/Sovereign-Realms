@@ -15,7 +15,7 @@ class USoundAttenuation;
  * by several fighters rocks once (about its own rest pose) and a company swinging together does not pile its sounds
  * up: a whoosh or a thunk that would come within vl.Sword.SoundGap seconds of the last is left out.
  *
- * Volumes fade with the distance from where the player is looking (AVLKing::GetListenFocus), as the troops' shuffle
+ * Volumes fade with the distance from where the player is looking (AVLKing::ListenDistance), as the troops' shuffle
  * does. Console variables: vl.Sword.SwingVolume, vl.Sword.HitVolume, vl.Sword.TroopVolume, vl.Sword.SoundGap,
  * vl.Sword.Near, vl.Sword.Range; vl.CombatLog 1 logs every swing, hit and sound.
  */

@@ -182,7 +182,7 @@ void UVLArrows::Play(int32 Kind, const FVector& At, float Volume)
 	}
 	const APlayerController* PC = World->GetFirstPlayerController();
 	const AVLKing* Player = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr;
-	const float Far = Player ? FVector::Dist2D(At, Player->GetListenFocus()) : 0.f;
+	const float Far = Player ? Player->ListenDistance(At) : 0.f;
 	const float Near = CVarArrowNear.GetValueOnGameThread();
 	const float Fade = FMath::Square(FMath::GetMappedRangeValueClamped(FVector2D(Near, FMath::Max(CVarArrowRange.GetValueOnGameThread(), Near + 1.f)), FVector2D(1.f, 0.f), Far));
 	Volume *= Fade * FMath::FRandRange(0.8f, 1.f);

@@ -3296,6 +3296,19 @@ float AVLKing::HeroPitch(float InZoom) const
 	return FMath::Lerp(Near, Far, FMath::Clamp(InZoom, 0.f, 1.f));
 }
 
+float AVLKing::ListenDistance(const FVector& At) const
+{
+	const float Flat = FVector::Dist2D(At, GetListenFocus());
+	if (bHeroMode)
+	{
+		return Flat;
+	}
+	// the camera's pull beyond the default zoom (OverviewZoom starts at 0.18), on the zoom's own curve
+	auto Pull = [this](float Z) { Z = FMath::Clamp(Z, 0.f, 1.f); return FMath::Lerp(OverviewNear, OverviewFar, Z * Z); };
+	const float Extra = FMath::Max(0.f, Pull(OverviewZoom) - Pull(0.18f));
+	return FMath::Sqrt(FMath::Square(Flat) + FMath::Square(Extra));
+}
+
 float AVLKing::OverviewDistance(float InZoom, FVector& InOutFocus) const
 {
 	const float Z = FMath::Clamp(InZoom, 0.f, 1.f);
@@ -4806,7 +4819,7 @@ void AVLKing::PlayFootstep(const FVector& At, float RunBlend)
 		if (Listener && !(Listener == this && bHeroMode))
 		{
 			const float Near = GM ? GM->ShuffleNear : 900.f, Range = GM ? GM->ShuffleRange : 4500.f;
-			Far = FVector::Dist2D(At, Listener->GetListenFocus());
+			Far = Listener->ListenDistance(At);
 			Fade = FMath::Square(FMath::GetMappedRangeValueClamped(FVector2D(Near, FMath::Max(Range, Near + 1.f)), FVector2D(1.f, 0.f), Far));
 		}
 	}

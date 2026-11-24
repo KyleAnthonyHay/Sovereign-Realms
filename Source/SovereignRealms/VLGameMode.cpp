@@ -1257,7 +1257,7 @@ void AVLGameMode::TickShuffle(float DeltaSeconds)
 			Left = Gap * FMath::FRandRange(0.75f, 1.25f);       // (at most one a frame per group)
 			const AVLKing* From = G.Members[FMath::RandRange(0, N - 1)];
 			const FVector At = From->GetFeet();
-			const float Far = Player ? FVector::Dist2D(At, Player->GetListenFocus()) : 0.f;
+			const float Far = Player ? Player->ListenDistance(At) : 0.f;
 			const float Fade = FMath::Square(FMath::GetMappedRangeValueClamped(FVector2D(ShuffleNear, FMath::Max(ShuffleRange, ShuffleNear + 1.f)), FVector2D(1.f, 0.f), Far));
 			// a few sound thinner than a company
 			const float Volume = ShuffleVolume * Fade * FMath::GetMappedRangeValueClamped(FVector2D(1.f, 6.f), FVector2D(0.7f, 1.f), float(N)) * (bRun ? ShuffleRunBoost : 1.f) * FMath::FRandRange(0.8f, 1.f);

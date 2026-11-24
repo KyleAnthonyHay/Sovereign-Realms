@@ -3740,7 +3740,7 @@ void UVLBattle::PlayAt(const TCHAR* Base, const FVector& At, float Volume, float
 	}
 	const APlayerController* PC = World->GetFirstPlayerController();
 	const AVLKing* Me = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr;
-	const float Far = Me ? FVector::Dist2D(At, Me->GetListenFocus()) : 0.f;
+	const float Far = Me ? Me->ListenDistance(At) : 0.f;
 	const float Fade = FMath::Square(FMath::GetMappedRangeValueClamped(FVector2D(Range * 0.2f, Range), FVector2D(1.f, 0.f), Far));
 	Volume *= Fade * EffectsVolume;
 	if (Volume <= 0.004f)

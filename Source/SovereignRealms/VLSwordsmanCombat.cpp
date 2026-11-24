@@ -100,7 +100,7 @@ void UVLSwordFx::Play(TArray<TObjectPtr<USoundBase>>& Set, int32& Last, double& 
 	}
 	const APlayerController* PC = World->GetFirstPlayerController();
 	const AVLKing* Player = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr;
-	const float Far = Player ? FVector::Dist2D(At, Player->GetListenFocus()) : 0.f;
+	const float Far = Player ? Player->ListenDistance(At) : 0.f;
 	const float Near = CVarNear.GetValueOnGameThread();
 	const float Fade = FMath::Square(FMath::GetMappedRangeValueClamped(FVector2D(Near, FMath::Max(CVarRange.GetValueOnGameThread(), Near + 1.f)), FVector2D(1.f, 0.f), Far));
 	Volume *= Fade * ((By && !IsPlayers(By)) ? CVarTroopVolume.GetValueOnGameThread() : 1.f) * FMath::FRandRange(0.85f, 1.f);
