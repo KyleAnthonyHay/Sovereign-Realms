@@ -303,7 +303,30 @@ void AVLHUD::DrawBuildFeedback()
 		GroundPlates(P.Cells, P.AxisX, P.AxisY, Cols);
 	}
 	// ---- sites rising and repairs: a bar over each (the main game's construction bar: red "needs a Builder" while
-	// nobody works at it)
+	// nobody works at it; "queued: Builder 1, 2nd" when it is on a Builder's queue, a Shift order)
+	TMap<const AActor*, FString> QueuedFor;
+	if (const UVLConstruction* Cons = UVLConstruction::Get(this))
+	{
+		TArray<AVLKing*> Crew;
+		Cons->GetBuilders(UVLBattle::Player, Crew);
+		for (AVLKing* Bu : Crew)
+		{
+			const UVLBuilderWork* BW = UVLBuilderWork::For(Bu, false);
+			if (!BW)
+			{
+				continue;
+			}
+			int32 Place = BW->GetJob() ? 1 : 0;
+			for (const UVLBuilderWork::FTask& T : BW->GetTasks())
+			{
+				++Place;
+				if (const AActor* On = T.Building.Get(); On && !QueuedFor.Contains(On))
+				{
+					QueuedFor.Add(On, FString::Printf(TEXT("queued: %s, #%d"), *Bu->GetDisplayName(), Place));
+				}
+			}
+		}
+	}
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
 		if (!B.IsAlive() || (!B.IsSite() && !B.bRepairing) || (B.Team != UVLBattle::Player && !B.IsSite()) || !UVLFog::InSight(B.Actor.Get()))
@@ -322,9 +345,10 @@ void AVLHUD::DrawBuildFeedback()
 		if (B.IsSite())
 		{
 			Meter(X, Y, W, H, B.Build, bEnemy ? FLinearColor(0.95f, 0.4f, 0.3f, 1.f) : GoldBright);
+			const FString* Queued = B.BuildersAt > 0 ? nullptr : QueuedFor.Find(B.Actor.Get());
 			const FString Label = B.BuildersAt > 0 ? FString::Printf(TEXT("%d%%%s"), FMath::FloorToInt(B.Build * 100.f), B.BuildersAt > 1 ? *FString::Printf(TEXT("  x%d"), B.BuildersAt) : TEXT(""))
-				: FString(TEXT("needs a Builder"));
-			Text(Label, X + W + U(6.f), Y - U(5.f), U(14.f), B.BuildersAt > 0 ? Parchment : Refuse, AlignLeft, Bold);
+				: (Queued ? *Queued : FString(TEXT("needs a Builder")));
+			Text(Label, X + W + U(6.f), Y - U(5.f), U(14.f), B.BuildersAt > 0 || Queued ? Parchment : Refuse, AlignLeft, Bold);
 		}
 		else
 		{

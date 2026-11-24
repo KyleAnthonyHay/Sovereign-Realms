@@ -1227,7 +1227,38 @@ AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<A
 			Crew.Add(U);
 		}
 	}
-	const bool bQueueCrew = bQueue && Crew.Num() > 0;      // (Shift: on the end of the given Builders' queues)
+	bool bQueueCrew = bQueue && Crew.Num() > 0;      // (Shift: on the end of the given Builders' queues)
+	if (Crew.Num() == 0 && bQueue)
+	{
+		// Shift with no Builder given (none selected): on the end of ONE Builder's queue, the one whose queue is the
+		// shortest (a free one first), the nearest of those. (It used to go to a free Builder only: with every Builder
+		// on a site of its own it waited for one, and nobody built it; the owner, 2026-11-24: "when I Shift-click,
+		// the builder should have that build on its queue".)
+		TArray<AVLKing*> All;
+		GetBuilders(Where.Team, All);
+		AVLKing* Best = nullptr;
+		float BestScore = TNumericLimits<float>::Max();
+		for (AVLKing* U : All)
+		{
+			if (InPlayersHands(U))
+			{
+				continue;
+			}
+			const UVLBuilderWork* Work = UVLBuilderWork::For(U, false);
+			const int32 Ahead = (Work && Work->GetJob() ? 1 : 0) + (Work ? Work->GetTasks().Num() : 0);
+			const float Score = Ahead * 100000.f + FVector::Dist2D(U->GetFeet(), A->GetActorLocation());
+			if (Score < BestScore)
+			{
+				BestScore = Score;
+				Best = U;
+			}
+		}
+		if (Best)
+		{
+			Crew.Add(Best);
+			bQueueCrew = true;
+		}
+	}
 	if (Crew.Num() == 0)
 	{
 		TArray<AVLKing*> All;
@@ -3000,7 +3031,7 @@ namespace
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs CmdBuild(TEXT("vl.Build"),
-		TEXT("vl.Build barracks|range|farm|mine|tower X Y [yaw] [enemy] [near] [queue]: lay a site there (paid; the nearest free Builder goes); near: the nearest good spot within 40 m; queue: on the end of every Builder's queue (Shift)"),
+		TEXT("vl.Build barracks|range|farm|mine|tower X Y [yaw] [enemy] [near] [queue]: lay a site there (paid; the nearest free Builder goes); near: the nearest good spot within 40 m; queue: as Shift + click, on the end of the selected Builders' queues (none selected: one Builder's)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVLConstruction* C = UVLConstruction::Get(World);
@@ -3018,11 +3049,16 @@ namespace
 			FVLPlacement Where;
 			const bool bOk = Args.Contains(TEXT("near")) ? C->FindPlacementNear(Kind, Team, P, 4000.f, Yaw, Where) : C->CheckPlacement(Kind, Team, P, Yaw, Where);
 			FString Why = Where.Reason;
-			// queue: on the end of the player's Builders' queues, as a Shift + click of the placing does
+			// queue: as a Shift + click of the placing: on the end of the selected Builders' queues (none selected: one
+			// Builder's, the shortest queue)
 			TArray<AVLKing*> Crew;
 			if (Args.Contains(TEXT("queue")))
 			{
-				C->GetBuilders(Team, Crew);
+				if (const UVLCommand* Cmd = UVLCommand::Get(World))
+				{
+					Cmd->GetSelection(Crew);
+				}
+				Crew.RemoveAll([Team](const AVLKing* U) { return !UVLBuilderWork::IsBuilder(U) || U->Team != Team; });
 			}
 			AActor* A = bOk ? C->PlaceBuilding(Where, Crew, &Why, true, Args.Contains(TEXT("queue"))) : nullptr;
 			UE_LOG(LogSovereignRealms, Log, TEXT("vl.Build %s at %.0f %.0f: %s (%d trees)"), VLRules::Name(Kind), Where.Location.X, Where.Location.Y, A ? *A->GetName() : *(TEXT("refused: ") + Why), Where.Trees);

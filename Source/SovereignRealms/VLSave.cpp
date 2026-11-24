@@ -382,6 +382,10 @@ void FVLSaveIO::Capture(UWorld* World, UVLSaveGame& Out)
 				ST.Point = T.Point;
 				ST.Building = BuildingRef(T.Building.Get());
 				ST.bRun = T.bRun;
+				if (UVLRocks::IsRock(T.Building.Get()))
+				{
+					ST.Rock = T.Building->GetName();      // (a queued rock: by its name)
+				}
 			}
 		}
 	}
@@ -1199,6 +1203,11 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 			Task.Point = T.Point;
 			Task.Building = BuildingAt(T.Building);
 			Task.bRun = T.bRun;
+			if (!T.Rock.IsEmpty())
+			{
+				UVLRocks* Rocks = UVLRocks::Get(Battle);
+				Task.Building = Rocks ? Rocks->FindRock(T.Rock) : nullptr;
+			}
 			if (Task.bMove || Task.Building.IsValid())
 			{
 				Work->QueueTask(Task);

@@ -123,6 +123,7 @@ struct FVLSavedTask
 	UPROPERTY() FVector Point = FVector::ZeroVector;
 	UPROPERTY() int32 Building = -1;
 	UPROPERTY() bool bRun = false;
+	UPROPERTY() FString Rock;                   // a rock to clear (VLRocks.*): its actor's name
 };
 
 /** A reference to something of the save: -1 nothing, 0.. a unit, 100000.. a building, 200000.. a ship. */

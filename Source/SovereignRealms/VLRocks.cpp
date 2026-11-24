@@ -357,6 +357,22 @@ void UVLRocks::SaveTo(TArray<FString>& OutCleared, TArray<FString>& OutWorkNames
 	}
 }
 
+AActor* UVLRocks::FindRock(const FString& Name)
+{
+	if (!bScanned)
+	{
+		Scan();
+	}
+	for (const TWeakObjectPtr<AActor>& R : Rocks)
+	{
+		if (AActor* A = R.Get(); A && IsRock(A) && A->GetName() == Name)
+		{
+			return A;
+		}
+	}
+	return nullptr;
+}
+
 void UVLRocks::RestoreFrom(const TArray<FString>& InCleared, const TArray<FString>& WorkNames, const TArray<float>& InWork, TArray<FBox2D>& OutChanged)
 {
 	if (InCleared.Num() == 0 && WorkNames.Num() == 0)

@@ -1988,7 +1988,22 @@ void AVLHUD::DrawRouteLines()
 		{
 			return A0.bMove == B0.bMove && (A0.bMove ? FVector::Dist2D(A0.At, B0.At) < 450.f : A0.Building == B0.Building);
 		};
-		for (AVLKing* Un : Units)
+		// (and every Builder of the player's with orders queued, selected or not: a Shift-placed site goes on one
+		// Builder's queue even with none selected, and its plan shows)
+		TArray<AVLKing*> BUnits = Units;
+		if (const UVLConstruction* Cons = UVLConstruction::Get(this))
+		{
+			TArray<AVLKing*> Crew;
+			Cons->GetBuilders(UVLBattle::Player, Crew);
+			for (AVLKing* B : Crew)
+			{
+				if (const UVLBuilderWork* BW = UVLBuilderWork::For(B, false); BW && BW->HasTasks())
+				{
+					BUnits.AddUnique(B);
+				}
+			}
+		}
+		for (AVLKing* Un : BUnits)
 		{
 			if (!UVLBuilderWork::IsBuilder(Un) || !Un->IsAlive())
 			{

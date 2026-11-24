@@ -44,6 +44,8 @@ public:
 	static bool IsRock(const AActor* Actor);
 	/** The rock at a world point (the pointer's hit on it, or the ground just beside it), or null. */
 	AActor* RockAt(const FVector& Point, float Slack = 60.f);
+	/** A standing rock by its actor's name (a saved game's queued "clear it"), or null. */
+	AActor* FindRock(const FString& Name);
 	/** The closest point of the rock's footprint to From, on the ground plane (and the distance to it). */
 	static float DistanceTo(const AActor* Rock, const FVector& From, FVector* OutPoint = nullptr);
 	/** The Builders among Units go and clear it (bQueue: on the end of their queues). True if any was sent. */

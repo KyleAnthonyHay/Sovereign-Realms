@@ -368,11 +368,17 @@ a little more than a level-3 castle's own 1500, so one fully raised Granary doub
   `python3 Tools/ue/gen_building_specs.py` from the jsons), an alert and the first draft's bell.
 - **The Builders' queue (Shift)**: with Builders selected, Shift + right click on the ground (or the minimap) queues a
   walk, on a site or a damaged building of yours queues work on it, on a free mine queues its claim (paid at once),
-  and Shift + click while placing lays the site at once and queues it (the ghost stays up for the next). The selected
+  on a rock queues clearing it, and Shift + click while placing lays the site at once and queues it (the ghost stays
+  up for the next). **With no Builder selected, a Shift-placed site goes on the end of one Builder's queue** (the one
+  with the shortest queue, a free one first, the nearest of those; the owner, 2026-11-24): he finishes what he is on,
+  then walks to it. (It used to wait for a free Builder, and with every Builder busy nobody built it.) Its bar reads
+  "queued: Builder 1, #2" until he is at it. The command mode's Shift + right click does the same in the hero view.
+  Queued rocks are kept in a saved game too (`FVLSavedTask::Rock`). The selected
   Builders all get the same queue and work through it together (two on a site: twice as fast); an item that has
   lapsed by its turn (the site cancelled or fallen, the building mended) is passed over. A plain order replaces the
   queue, **Esc** (after a placing or an armed click) or **Stop** clears it; a Builder with a queue is never taken for
-  an idle Builder's own work or as "the nearest free Builder". While they are selected (overview only) a dashed path
+  an idle Builder's own work or as "the nearest free Builder". While they are selected, and for every Builder with a
+  queue whether selected or not (the overview, and the hero view's command mode), a dashed path
   shows the order: from each Builder along the way he walks to what he is on now (**1**: the building he works on, or
   the walk he is on), then on to each queued order in turn (**2**, **3**, ...), walks blue and buildings gold, each
   numbered on a plate over its point; lapsed orders drop out and the numbers close up as items are done. A crew
