@@ -252,6 +252,16 @@ void FVLSaveIO::Capture(UWorld* World, UVLSaveGame& Out)
 		S.PaidFood = B.Paid.Food;
 		S.GuardLevel = B.GuardLevel;
 		S.GuardRestock = B.GuardRestock;
+		if (B.Kind == EVLBuilding::Castle && B.CornerLevel > 0)
+		{
+			for (int32 c = 0; c < 4; ++c)
+			{
+				S.CornerHealth.Add(B.CornerHealth[c]);
+				S.CornerDown.Add(B.bCornerDown[c]);
+				S.CornerRepair.Add(B.bCornerRepair[c]);
+			}
+			S.CornerLevel = B.CornerLevel;
+		}
 		S.bClaim = A->ActorHasTag(TEXT("Claim"));
 		S.bWasNeutral = A->ActorHasTag(TEXT("WasNeutral"));
 		for (const TWeakObjectPtr<AVLKing>& Y : B.Yard)
@@ -715,6 +725,19 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 		St->Paid.Food = S.PaidFood;
 		St->GuardLevel = S.GuardLevel;
 		St->GuardRestock = S.GuardRestock;
+		// a castle's corners as they stood (else, CornerLevel 0: made whole at its level on the battle's first tick)
+		St->CornerLevel = 0;
+		if (Kind == EVLBuilding::Castle && S.CornerLevel > 0 && S.CornerHealth.Num() == 4 && S.CornerDown.Num() == 4 && S.CornerRepair.Num() == 4)
+		{
+			for (int32 c = 0; c < 4; ++c)
+			{
+				St->CornerHealth[c] = FMath::Max(0.f, S.CornerHealth[c]);
+				St->bCornerDown[c] = S.CornerDown[c];
+				St->bCornerRepair[c] = S.CornerRepair[c];
+				St->CornerYaw[c] = (Battle->CornerPoint(A, c, 0.f) - A->GetActorLocation()).Rotation().Yaw;      // (facing out, as a new level sets it)
+			}
+			St->CornerLevel = S.CornerLevel;
+		}
 		St->bRepairing = false;
 		St->BuildersAt = 0;
 		St->LastHit = -100.0;
@@ -1638,6 +1661,45 @@ bool UVLSaves::Load(const FString& Slot, FString* OutWhy)
 	return true;
 }
 
+bool UVLSaves::Delete(const FString& Slot, FString* OutWhy)
+{
+	FString Why;
+	if (Slot.IsEmpty())
+	{
+		Why = TEXT("No such slot");
+	}
+	else if (!IFileManager::Get().FileExists(*SavePath(Slot)))
+	{
+		Why = FString::Printf(TEXT("%s is empty"), *SlotTitle(Slot));
+	}
+	else if (!UGameplayStatics::DeleteGameInSlot(FileName(Slot), 0) && IFileManager::Get().FileExists(*SavePath(Slot)))
+	{
+		Why = FString::Printf(TEXT("%s could not be deleted"), *SlotTitle(Slot));
+	}
+	GInfoCache.Remove(Slot);
+	if (!Why.IsEmpty())
+	{
+		UE_LOG(LogSovereignRealms, Warning, TEXT("save: %s not deleted: %s"), *Slot, *Why);
+		Say(Why, true);
+		if (OutWhy)
+		{
+			*OutWhy = Why;
+		}
+		return false;
+	}
+	UE_LOG(LogSovereignRealms, Log, TEXT("save: %s deleted (%s)"), *SlotTitle(Slot), *SavePath(Slot));
+	Say(FString::Printf(TEXT("%s deleted"), *SlotTitle(Slot)), false);
+	return true;
+}
+
+FString UVLSaves::Describe(const FVLSaveInfo& Info)
+{
+	const int32 S = FMath::Max(0, FMath::FloorToInt(Info.Clock));
+	const FString Played = S >= 3600 ? FString::Printf(TEXT("%d:%02d:%02d"), S / 3600, (S / 60) % 60, S % 60) : FString::Printf(TEXT("%d:%02d"), S / 60, S % 60);
+	return Info.MapTitle.IsEmpty() ? FString::Printf(TEXT("%s (unreadable)"), *SlotTitle(Info.Slot))
+		: FString::Printf(TEXT("%s: %s · %s, %s played"), *SlotTitle(Info.Slot), *Info.MapTitle, UVLBattle::DifficultyName(Info.Difficulty), *Played);
+}
+
 bool UVLSaves::IsLoadPending()
 {
 	return !GPending.Slot.IsEmpty();
@@ -1772,6 +1834,24 @@ namespace
 				else
 				{
 					Saves->Load(Slot, &Why);
+				}
+			}
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs CmdDelete(TEXT("vl.DeleteSave"), TEXT("vl.DeleteSave <1..5|quick|auto>: delete that slot's save"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (UVLSaves* Saves = UVLSaves::Get(World))
+			{
+				const FString Arg = Args.Num() > 0 ? Args[0] : FString();
+				const FString Slot = UVLSaves::SlotFromArg(Arg);
+				if (Slot.IsEmpty())
+				{
+					UE_LOG(LogSovereignRealms, Log, TEXT("save: no such slot '%s' (1..5, quick, auto)"), *Arg);
+				}
+				else
+				{
+					Saves->Delete(Slot);
 				}
 			}
 		}));

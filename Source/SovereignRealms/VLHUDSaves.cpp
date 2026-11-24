@@ -54,6 +54,8 @@ void AVLHUD::QuickSave(bool bLoad)
 
 void AVLHUD::DrawSavesPanel(float CentreX, bool bSave)
 {
+	// (SaveAsk: a slot's index while its overwrite / load question is up; DeleteAsk + it while its delete question is)
+	constexpr int32 DeleteAsk = 100;
 	UVLSaves* Saves = UVLSaves::Get(this);
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	if (!Saves)
@@ -84,15 +86,41 @@ void AVLHUD::DrawSavesPanel(float CentreX, bool bSave)
 	{
 		const FVLSaveInfo Info = UVLSaves::GetInfo(Slots[i]);
 		const FBox2D Box(FVector2D(X + U(40.f), RY), FVector2D(X + W - U(40.f), RY + RowH));
-		const bool bAsking = SaveAsk == i;
+		const bool bAsking = SaveAsk == i, bAskDelete = SaveAsk == DeleteAsk + i;
 		// a slot can always be saved to; only one with a save that this game reads can be loaded
 		const bool bEnabled = bSave || Info.CanLoad();
-		const FBtn B = bAsking ? FBtn() : Button(Box, VLId::Screen + 40 + i, bEnabled);
-		ButtonFrame(Box, B, bEnabled, bAsking);
+		// a filled slot's DELETE, at the row's right end (its press is taken before the row's own)
 		const float Pad = U(18.f), NameW = U(150.f);
-		const FLinearColor Name = !bEnabled ? A(Dim, 0.8f) : FMath::Lerp(Parchment, GoldBright, FMath::Max(B.Hot, bAsking ? 1.f : 0.f));
+		const FBox2D DelBox(FVector2D(Box.Max.X - Pad - U(104.f), Box.Min.Y + U(15.f)), FVector2D(Box.Max.X - Pad, Box.Max.Y - U(15.f)));
+		const bool bCanDelete = Info.bExists && !bAsking && !bAskDelete;
+		const FBtn Del = bCanDelete ? Button(DelBox, VLId::Screen + 50 + i, true) : FBtn();
+		const FBtn B = bAsking || bAskDelete ? FBtn() : Button(Box, VLId::Screen + 40 + i, bEnabled);
+		ButtonFrame(Box, B, bEnabled || bAskDelete, bAsking || bAskDelete);
+		const FLinearColor Name = !bEnabled && !bAskDelete ? A(Dim, 0.8f) : FMath::Lerp(Parchment, GoldBright, FMath::Max(B.Hot, bAsking || bAskDelete ? 1.f : 0.f));
 		TextIn(FBox2D(FVector2D(Box.Min.X + Pad, Box.Min.Y), FVector2D(Box.Min.X + Pad + NameW, Box.Max.Y)), UVLSaves::SlotTitle(Slots[i]).ToUpper(), U(17.f), Name, AlignLeft, Bold, U(1.f));
 		const float TX = Box.Min.X + Pad + NameW;
+		if (bAskDelete)
+		{
+			// "Delete Realm v3 · Normal, 4:20 played?" (the slot's name is at the row's left)
+			const FString What = UVLSaves::Describe(Info);
+			int32 Colon = INDEX_NONE;
+			What.FindChar(TEXT(':'), Colon);
+			TextIn(FBox2D(FVector2D(TX - U(10.f), Box.Min.Y), FVector2D(Box.Max.X - U(300.f), Box.Max.Y)), FString::Printf(TEXT("Delete %s?"), Info.MapTitle.IsEmpty() || Colon == INDEX_NONE ? *What : *What.Mid(Colon + 2)), U(14.f), Amber, AlignLeft);
+			const float BW = U(130.f), BG = U(10.f), BYy = Box.Min.Y + U(9.f), BHh = RowH - U(18.f);
+			const FBox2D No(FVector2D(Box.Max.X - Pad - BW, BYy), FVector2D(Box.Max.X - Pad, BYy + BHh));
+			const FBox2D Yes(FVector2D(No.Min.X - BG - BW, BYy), FVector2D(No.Min.X - BG, BYy + BHh));
+			if (MenuButton(Yes, VLId::Screen + 57, TEXT("DELETE"), true, true))
+			{
+				SaveAsk = INDEX_NONE;
+				Saves->Delete(Slots[i]);
+				UE_LOG(LogSovereignRealms, Log, TEXT("hud: %s deleted from the %s screen"), *UVLSaves::SlotTitle(Slots[i]), bSave ? TEXT("Save Game") : TEXT("Load Game"));
+			}
+			else if (MenuButton(No, VLId::Screen + 58, TEXT("CANCEL")))
+			{
+				SaveAsk = INDEX_NONE;
+			}
+			continue;
+		}
 		if (bAsking)
 		{
 			// the question, in the row's own place: written over (Save), or the match in progress left (Load)
@@ -130,7 +158,16 @@ void AVLHUD::DrawSavesPanel(float CentreX, bool bSave)
 			{
 				Text(FString::Printf(TEXT("%s played  ·  %d gold  ·  %d food  ·  %d troops"), *PlayedText(Info.Clock), Info.Gold, Info.Food, Info.Pop), TX, Box.Min.Y + U(37.f), U(14.f), Dim);
 			}
-			TextIn(FBox2D(FVector2D(Box.Max.X - U(260.f), Box.Min.Y), Box.Max - FVector2D(Pad, 0.f)), UVLSaves::DateText(Info.SavedAt), U(15.f), bEnabled ? A(Parchment, 0.9f) : Dim, AlignRight);
+			TextIn(FBox2D(FVector2D(DelBox.Min.X - U(250.f), Box.Min.Y), FVector2D(DelBox.Min.X - U(14.f), Box.Max.Y)), UVLSaves::DateText(Info.SavedAt), U(15.f), bEnabled ? A(Parchment, 0.9f) : Dim, AlignRight);
+			// DELETE (or the Delete key over the row): asked first
+			ButtonFrame(DelBox, Del, true, false);
+			TextIn(DelBox, TEXT("DELETE"), U(13.f), FMath::Lerp(A(Parchment, 0.75f), GoldBright, Del.Hot), AlignCentre, Bold, U(1.f));
+			if (Del.bClicked || ((B.bHover || Del.bHover) && PCtrl && PCtrl->WasInputKeyJustPressed(EKeys::Delete)))
+			{
+				Click();
+				SaveAsk = DeleteAsk + i;
+				continue;
+			}
 		}
 		if (!B.bClicked)
 		{
@@ -148,8 +185,8 @@ void AVLHUD::DrawSavesPanel(float CentreX, bool bSave)
 	// what the last save or load said (for a few seconds), else what the screen does
 	const bool bSaid = Now - Saves->LastMessageAt < 6.0 && !Saves->LastMessage.IsEmpty();
 	const FString Line = bSaid ? Saves->LastMessage
-		: (bSave ? FString(TEXT("F5 saves to the quicksave at any time; the game also saves by itself every few minutes."))
-			: FString(TEXT("F9 loads the quicksave. Saves are kept in the game's Saved/SaveGames folder.")));
+		: (bSave ? FString(TEXT("F5 quicksaves at any time; the game also saves itself every few minutes. DELETE (or the Delete key) removes a save."))
+			: FString(TEXT("F9 loads the quicksave. DELETE (or the Delete key) removes a save. Saves are kept in Saved/SaveGames.")));
 	Text(Line, X + W * 0.5f, RY + U(6.f), U(14.f), bSaid ? (Saves->bLastFailed ? Amber : GoldBright) : Dim, AlignCentre);
 	const float BW = U(220.f);
 	if (MenuButton(FBox2D(FVector2D(X + (W - BW) * 0.5f, Y + H - U(74.f)), FVector2D(X + (W + BW) * 0.5f, Y + H - U(24.f))), VLId::Screen + 49, TEXT("BACK")))

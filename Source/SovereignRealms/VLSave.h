@@ -37,7 +37,7 @@ class UVLBattle;
  * influence maps and event lists (rebuilt from what they see), a building mid-collapse (it is down), a ship in the
  * middle of its docking move (it lies docked).
  *
- * Console: vl.Save <slot>, vl.Load <slot>, vl.Saves, vl.SaveDump <name> (the live state as JSON, for Tools/save_test.py),
+ * Console: vl.Save <slot>, vl.Load <slot>, vl.DeleteSave <slot>, vl.Saves, vl.SaveDump <name> (the live state as JSON, for Tools/save_test.py),
  * vl.Autosave.Minutes.
  */
 
@@ -100,6 +100,12 @@ struct FVLSavedBuilding
 	UPROPERTY() int32 PaidFood = 0;
 	UPROPERTY() int32 GuardLevel = 0;
 	UPROPERTY() float GuardRestock = 0.f;
+	/** A castle's corner turrets (VLCastleCorners.cpp): their health, knocked out, repair paid for, and the level they
+	 *  were last made whole for (0: not saved, as in a save from before them: the corners are made whole). */
+	UPROPERTY() TArray<float> CornerHealth;
+	UPROPERTY() TArray<bool> CornerDown;
+	UPROPERTY() TArray<bool> CornerRepair;
+	UPROPERTY() int32 CornerLevel = 0;
 	UPROPERTY() bool bClaim = false;        // a mine being claimed (tag Claim)
 	UPROPERTY() bool bWasNeutral = false;   // ... that was a neutral one (a cancelled claim gives it back)
 	/** Who waits at each place of its yard (unit indices, -1 an empty place). */
@@ -429,6 +435,11 @@ public:
 	/** Checks the slot and opens its map with the save put back as the match starts there. False: OutWhy says why
 	 *  (nothing is changed then: the match in progress carries on). */
 	bool Load(const FString& Slot, FString* OutWhy = nullptr);
+	/** Deletes the slot's save (Saved/SaveGames/VL_<slot>.sav; any slot, the quicksave and the autosave too). False:
+	 *  OutWhy says why (there is none). Continue falls back to the next newest save by itself. */
+	bool Delete(const FString& Slot, FString* OutWhy = nullptr);
+	/** "Slot 2: Realm v3 · Normal, 4:20 played" (for the menus' questions). */
+	static FString Describe(const FVLSaveInfo& Info);
 	/** UVLBattle::StartMatch, once its fresh match stands: a save waiting for this map is put in its place. */
 	static void OnMatchStarted(UVLBattle* Battle);
 	/** This world's match came from a save. */

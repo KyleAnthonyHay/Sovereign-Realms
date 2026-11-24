@@ -172,6 +172,10 @@ void AVLHUD::DrawMainMenu()
 	const EVLScreen Opens[N] = { EVLScreen::None, EVLScreen::NewGame, EVLScreen::LoadGame, EVLScreen::Controls, EVLScreen::Settings, EVLScreen::None };
 	for (int32 i = 0; i < N; ++i)
 	{
+		if (i == 0 && !bCanContinue)
+		{
+			continue;               // (no save to go on with: no Continue)
+		}
 		const FBox2D Box(FVector2D(X, Y), FVector2D(X + BW, Y + BH));
 		const bool bOpen = i == Quit ? bConfirm : (i > 0 && Sub == Opens[i] && !bConfirm);
 		if (MenuButton(Box, VLId::Menu + i, Labels[i], i > 0 || bCanContinue, bOpen))

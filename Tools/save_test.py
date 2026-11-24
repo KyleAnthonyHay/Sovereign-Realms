@@ -24,6 +24,8 @@ What it does, and checks (PASS / FAIL lines; exit code 1 if anything failed):
   6. the quicksave and quickload (vl.Quick, as F5 / F9), the autosave (vl.Autosave.Minutes), Continue on the title
      screen (a click on its button), and how a save from another version, of a missing map, with a missing building
      and a file that is no save at all are refused or put back without a crash
+  7. deleting: a row's DELETE and its question (Saved/Screenshots/VL/save_delete.png), CANCEL, vl.DeleteSave, Continue
+     falling back to the next newest save and gone with none left. (It deletes every save in Saved/SaveGames.)
 """
 import json
 import os
@@ -393,6 +395,53 @@ def load(slot, expect=True, timeout=150):
     return l, log_tail(r"load: ", since)
 
 
+def continue_slot():
+    """The slot Continue would load (vl.Saves), or "nothing"."""
+    l = cmd("vl.Saves", r"saves: in ", 0.8)
+    m = re.search(r"Continue loads ([^;]+);", l[-1]) if l else None
+    return m.group(1).strip() if m else "?"
+
+
+def deleting():
+    path = lambda n: os.path.join(SAVES, "VL_%s.sav" % n)
+    cmd(["vl.Save 4"], wait=1.2)
+    cmd(["vl.Save 2", "vl.Quick save"], wait=1.5)
+    check("(the test's own: Slot 2, Slot 4, the quicksave and the autosave are there)", all(os.path.exists(path(n)) for n in ("Slot2", "Slot4", "Quick")))
+    cmd(["vl.Menu pause", "vl.SaveMenu load"], wait=1.0)
+    since = os.path.getsize(LOG)
+    asked = click(340 + 50 + 1)                 # (Slot 2's DELETE)
+    shot("save_delete")
+    check("Load Game: a filled slot's DELETE asks first (Delete Slot 2: ... played?), and nothing is deleted yet", asked and os.path.exists(path("Slot2")) and 340 + 57 in buttons())
+    click(340 + 57)                             # (DELETE)
+    gone = wait_log(r"save: Slot 2 deleted", since, 5)
+    check("... DELETE deletes it (the file is gone, the row says Empty)", bool(gone) and not os.path.exists(path("Slot2")), (gone or ["nothing in the log"])[-1])
+    click(340 + 50 + 5)                         # (the quicksave's DELETE, row 6)
+    click(340 + 58)                             # (CANCEL)
+    check("... CANCEL keeps it", os.path.exists(path("Quick")))
+    cmd(["vl.SaveMenu save"], wait=0.8)
+    check("Save Game has DELETE on its filled rows too", 340 + 50 + 3 in buttons() and 340 + 50 + 1 not in buttons(), sorted(k for k in buttons() if 390 <= k < 397))
+    cmd("vl.Menu 0", wait=0.5)
+    lq = cmd(["vl.DeleteSave quick", "vl.DeleteSave auto", "vl.DeleteSave 3"], r"save: ", 1.0)
+    check("vl.DeleteSave quick / auto delete the quicksave and the autosave", not os.path.exists(path("Quick")) and not os.path.exists(path("Auto")), lq[:2])
+    check("... and an empty slot is refused with the reason", any("Slot3 not deleted: Slot 3 is empty" in l for l in lq), lq[-1:])
+    # Continue: Slot 4 (saved second last) once Slot 2 (the newest) is gone... then nothing at all
+    cmd(["vl.Save 2"], wait=1.2)
+    first = continue_slot()
+    cmd(["vl.DeleteSave 2"], wait=0.6)
+    then = continue_slot()
+    check("Continue falls back to the next newest save when the newest is deleted", first == "Slot 2" and then == "Slot 4", "%s, then %s" % (first, then))
+    cmd(["vl.DeleteSave %s" % n for n in ("1", "4", "5")], wait=1.0)
+    check("... and with every save deleted there is none to continue", continue_slot() in ("nothing", "none", "-", "nothing saved"), continue_slot())
+    pie.run(["open " + MAPPATH[0]])
+    time.sleep(12.0)
+    b_ = wait_for("the title screen", lambda: (lambda x: x if 301 in x else None)(buttons()), 40, 2.0)
+    check("... and the title screen has no Continue then (New Game, Load Game...)", bool(b_) and 300 not in b_ and 301 in b_, sorted(b_ or []))
+    shot("save_title_no_continue")
+
+
+MAPPATH = [""]
+
+
 def main():
     os.makedirs(SAVES, exist_ok=True)
     print(pie.mcp("StartPIE", {"options": {"bSimulate": False, "playMode": "PlayMode_InEditorFloating", "warmupSeconds": 2.0}})[:120])
@@ -401,6 +450,7 @@ def main():
         return
     cmd(["vl.Autosave.Minutes 0", "vl.Mode overview"], wait=0.5)
     d0, _ = dump("start")
+    MAPPATH[0] = d0["mappath"]
     castle = (buildings(d0, 0, "Castle") or [None])[0]
     if not check("the player's castle stands", castle is not None):
         return
@@ -590,9 +640,14 @@ def main():
         check("... as it was saved", near(z["clock"], newest["clock"], 0.11) and len(z["units"]) == len(newest["units"]) and len(z["buildings"]) == len(newest["buildings"]),
               "clock %.1f / %.1f, %d units, %d buildings" % (z["clock"], newest["clock"], len(z["units"]), len(z["buildings"])))
     cmd(["vl.Load.Pause 0", "pause", "vl.Autosave.Minutes 3"], wait=0.6)
+
     for f in ("VL_Slot2.sav", "VL_Slot3.sav", "VL_Slot4.sav", "VL_Slot5.sav"):
         if os.path.exists(os.path.join(SAVES, f)):
             os.remove(os.path.join(SAVES, f))       # (the test's broken saves are not left in the player's slots)
+
+    # ---- 7. deleting saves: a row's DELETE and its question (Load Game), CANCEL, vl.DeleteSave (the quicksave, the
+    # autosave, an empty slot), Continue falling back to the next newest and gone when nothing is left
+    deleting()
 
 
 if __name__ == "__main__":
