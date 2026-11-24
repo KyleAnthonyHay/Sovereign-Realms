@@ -986,9 +986,10 @@ void AVLGameMode::BeginPlay()
 		}
 	}
 #endif
-	// the music: on by default; the player's own choice (Settings > Music, U in the pause menu: off included) is kept.
-	// (MusicV2: the old key may hold the 0 of the days it was off by default, which was nobody's choice)
-	float SavedMusic = 1.f;
+	// the music: at 50% by default (the owner, 2026-11-24); the player's own choice (Settings > Music, U in the pause
+	// menu: off included) is kept. (MusicV2: the old key may hold the 0 of the days it was off by default, which was
+	// nobody's choice)
+	float SavedMusic = 0.5f;
 	if (GConfig && GConfig->GetFloat(TEXT("SovereignRealms.Audio"), TEXT("MusicV2"), SavedMusic, GGameUserSettingsIni))
 	{
 		MusicSetting = FMath::Clamp(SavedMusic, 0.f, 1.f);

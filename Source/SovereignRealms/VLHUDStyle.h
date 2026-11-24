@@ -20,6 +20,9 @@ namespace VLStyle
 	const FLinearColor ParchmentFill(0.80f, 0.73f, 0.56f, 0.97f);
 	const FLinearColor Ink(0.045f, 0.030f, 0.018f, 1.f);
 	const FLinearColor Dim(0.60f, 0.61f, 0.62f, 1.f);
+	/** Patrols, everywhere they are drawn (the route lines, the minimap, a ship's course): violet, clear of the moves'
+	 *  blue and the attacks' red (the owner, 2026-11-24). */
+	const FLinearColor PatrolViolet(0.80f, 0.45f, 1.f, 0.95f);
 	const FLinearColor Refuse(1.f, 0.26f, 0.17f, 1.f);
 	const FLinearColor Amber(1.f, 0.62f, 0.16f, 1.f);
 	const FLinearColor Good(0.35f, 0.85f, 0.32f, 1.f);

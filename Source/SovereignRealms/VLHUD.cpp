@@ -1,6 +1,7 @@
 // The interface's frame, input, drawing primitives and world-space feedback: the main game's SRHUD.cpp, ported.
 
 #include "VLHUD.h"
+#include "VLLoadingScreen.h"
 #include "VLHUDStyle.h"
 #include "SovereignRealms.h"
 #include "VLKing.h"
@@ -173,7 +174,7 @@ bool AVLHUD::InFlatlands() const
 void AVLHUD::OpenMatch(const UObject* WorldContext, int32 Map, int32 Difficulty)
 {
 	UGameplayStatics::SetGamePaused(WorldContext, false);
-	UGameplayStatics::OpenLevel(WorldContext, FName(*MapPath(Map)), true, FString::Printf(TEXT("Match=1?Difficulty=%d%s"), FMath::Clamp(Difficulty, 0, 2), Map == 4 ? TEXT("?TestWorld=1") : TEXT("")));
+	VLLoadingScreen::Travel(WorldContext, MapPath(Map), FString::Printf(TEXT("Match=1?Difficulty=%d%s"), FMath::Clamp(Difficulty, 0, 2), Map == 4 ? TEXT("?TestWorld=1") : TEXT("")));     // (the loading screen, playable at once)
 }
 
 // ------------------------------------------------------------------------------------------------ screens
@@ -265,7 +266,7 @@ void AVLHUD::DoConfirmed()
 		break;
 	case EConfirm::MainMenu:
 		UGameplayStatics::SetGamePaused(this, false);
-		UGameplayStatics::OpenLevel(this, FName(*MapPath(CurrentMap())));      // (no match: the title screen comes up)
+		VLLoadingScreen::Travel(this, MapPath(CurrentMap()), FString());      // (no match: the title screen comes up)
 		break;
 	default:
 		UKismetSystemLibrary::QuitGame(this, GetOwningPlayerController(), EQuitPreference::Quit, false);
@@ -1814,10 +1815,19 @@ void AVLHUD::DrawRouteLines()
 		King->GetCommandPlanned(Planned);
 		for (AVLKing* P : Planned) { Units.AddUnique(P); }
 	}
-	// each patrol or attack-move once (a group shares one): a patrol's whole loop in orange, an attack-move's points
-	// still to reach in blue (the main game's route lines)
+	// each patrol or attack-move once (a group shares one): a patrol's whole way in violet with a diamond on each of
+	// its points (the player's: first to last and back, so no closing line), an attack-move's points still to reach
+	// in red
 	{
-		const FLinearColor Orange(1.f, 0.62f, 0.25f, 0.85f);
+		const FLinearColor Orange = VLStyle::PatrolViolet;
+		auto Diamond = [this](const FVector& At, const FLinearColor& C, float R)
+		{
+			const FVector S = Project(At + FVector(0.f, 0.f, 20.f));
+			if (S.Z <= 0.f) { return; }
+			const float T = FMath::Max(1.f, U(2.5f));
+			DrawLine(S.X - R, S.Y, S.X, S.Y - R, C, T); DrawLine(S.X, S.Y - R, S.X + R, S.Y, C, T);
+			DrawLine(S.X + R, S.Y, S.X, S.Y + R, C, T); DrawLine(S.X, S.Y + R, S.X - R, S.Y, C, T);
+		};
 		auto Ground = [this](const FVector& P) { return FVector(P.X, P.Y, GroundZ(FVector2D(P), P.Z)); };
 		TArray<int32> Drawn;
 		for (AVLKing* Un : Units)
@@ -1825,7 +1835,8 @@ void AVLHUD::DrawRouteLines()
 			TArray<FVector> Points;
 			bool bLoop = false;
 			int32 Next = 0, Id = 0;
-			if (!Command->GetRoute(Un, Points, bLoop, Next, &Id) || Points.Num() == 0 || Drawn.Contains(Id))
+			bool bPingPong = false;
+			if (!Command->GetRoute(Un, Points, bLoop, Next, &Id, &bPingPong) || Points.Num() == 0 || Drawn.Contains(Id))
 			{
 				continue;
 			}
@@ -1834,14 +1845,18 @@ void AVLHUD::DrawRouteLines()
 			{
 				for (int32 k = 0; k < Points.Num(); ++k)
 				{
-					if (Points.Num() == 2 && k == 1)
+					if ((Points.Num() == 2 && k == 1) || (bPingPong && k == Points.Num() - 1))
 					{
-						break;      // two points: one line, walked both ways
+						break;      // two points, or the player's there-and-back: no closing line
 					}
-					Dashed(Ground(Points[k]), Ground(Points[(k + 1) % Points.Num()]), Orange, true);
+					Dashed(Ground(Points[k]), Ground(Points[(k + 1) % Points.Num()]), Orange, false, 2.5f);
+				}
+				for (int32 k = 0; k < Points.Num(); ++k)
+				{
+					Diamond(Ground(Points[k]), Orange, U(k == Next ? 9.f : 7.f));
 				}
 				const FVector S = Project(Ground(Points[0]) + FVector(0.f, 0.f, 20.f));
-				if (S.Z > 0.f) { Fill(S.X - U(4.f), S.Y - U(4.f), U(8.f), U(8.f), Orange); }
+				if (S.Z > 0.f) { Fill(S.X - U(3.f), S.Y - U(3.f), U(6.f), U(6.f), Orange); }
 			}
 			else
 			{
@@ -1852,6 +1867,43 @@ void AVLHUD::DrawRouteLines()
 					From = Ground(Points[k]);
 				}
 			}
+		}
+	}
+	// a patrol being drafted (P, then left clicks): its points so far (numbered diamonds), the way through them, and a
+	// pale pulsing line from the group to the first point and from the last to where the next click would drop one
+	if (Command->IsPatrolDrafting())
+	{
+		const FLinearColor C = VLStyle::PatrolViolet;
+		const float Pulse = 0.5f + 0.5f * FMath::Sin(float(Now) * 5.f);
+		const FLinearColor Pale(C.R, C.G, C.B, 0.35f + 0.3f * Pulse);
+		auto Ground = [this](const FVector& P) { return FVector(P.X, P.Y, GroundZ(FVector2D(P), P.Z)); };
+		const TArray<FVector>& Draft = Command->GetPatrolDraft();
+		TArray<AVLKing*> Who;
+		Command->GetPatrolDraftUnits(Who);
+		FVector Mid = FVector::ZeroVector;
+		for (const AVLKing* W : Who) { Mid += W->GetFeet() / FMath::Max(1, Who.Num()); }
+		if (Draft.Num() > 0 && Who.Num() > 0)
+		{
+			Dashed(Ground(Mid), Ground(Draft[0]), Pale, false);
+		}
+		for (int32 k = 0; k < Draft.Num(); ++k)
+		{
+			if (k > 0) { Dashed(Ground(Draft[k - 1]), Ground(Draft[k]), C, false, 2.5f); }
+			const FVector S = Project(Ground(Draft[k]) + FVector(0.f, 0.f, 20.f));
+			if (S.Z > 0.f)
+			{
+				const float R = U(9.f), T = FMath::Max(1.f, U(2.5f));
+				DrawLine(S.X - R, S.Y, S.X, S.Y - R, C, T); DrawLine(S.X, S.Y - R, S.X + R, S.Y, C, T);
+				DrawLine(S.X + R, S.Y, S.X, S.Y + R, C, T); DrawLine(S.X, S.Y + R, S.X - R, S.Y, C, T);
+				TextIn(FBox2D(FVector2D(S.X - U(12.f), S.Y - R - U(20.f)), FVector2D(S.X + U(12.f), S.Y - R - U(2.f))), FString::FromInt(k + 1), U(14.f), C, AlignCentre, Bold);
+			}
+		}
+		// where the next click would drop one: the crosshair's (or the pointer's) point
+		AActor* NextHit = nullptr;
+		FVector NextAt;
+		if (Draft.Num() > 0 && PCtrl && King->HeroPick(PCtrl, NextHit, NextAt))
+		{
+			Dashed(Ground(Draft.Last()), Ground(NextAt), Pale, false);
 		}
 	}
 	// The pathways. Each walker's own, unless it walks in a big group: a platoon's members on the way, or (in no

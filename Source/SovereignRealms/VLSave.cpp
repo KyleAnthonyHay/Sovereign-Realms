@@ -11,6 +11,7 @@
 #include "VLGrid.h"
 #include "VLHUD.h"
 #include "VLKing.h"
+#include "VLLoadingScreen.h"
 #include "VLRocks.h"
 #include "VLSwordsmanCombat.h"
 #include "VLTroop.h"
@@ -415,6 +416,8 @@ void FVLSaveIO::Capture(UWorld* World, UVLSaveGame& Out)
 			S.bLoop = R.bLoop;
 			S.bRun = R.bRun;
 			S.Shape = uint8(R.Shape);
+			S.bPingPong = R.bPingPong;
+			S.Dir = R.Dir;
 			if (S.Members.Num() > 0 && S.Points.Num() > 0)
 			{
 				Out.Routes.Add(S);
@@ -1155,6 +1158,8 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 		R.bLoop = S.bLoop;
 		R.bRun = S.bRun;
 		R.Shape = EVLFormation(FMath::Min<uint8>(S.Shape, uint8(EVLFormation::Smart)));
+		R.bPingPong = S.bPingPong;
+		R.Dir = S.Dir < 0 ? -1 : 1;
 		R.Id = Command->NextRouteId++;
 		R.Settle = 1.f;
 		Command->Routes.Add(R);
@@ -1680,7 +1685,7 @@ bool UVLSaves::Load(const FString& Slot, FString* OutWhy)
 	else
 	{
 		UGameplayStatics::SetGamePaused(this, false);
-		UGameplayStatics::OpenLevel(this, FName(*Info.MapPath), true, FString::Printf(TEXT("Match=1?Difficulty=%d%s"), FMath::Clamp(Info.Difficulty, 0, 2), Info.bTestWorld ? TEXT("?TestWorld=1") : TEXT("")));
+		VLLoadingScreen::Travel(this, Info.MapPath, FString::Printf(TEXT("Match=1?Difficulty=%d%s"), FMath::Clamp(Info.Difficulty, 0, 2), Info.bTestWorld ? TEXT("?TestWorld=1") : TEXT("")));
 	}
 	return true;
 }

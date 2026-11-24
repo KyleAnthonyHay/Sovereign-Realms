@@ -9,6 +9,7 @@
 #include "VLGameMode.h"
 #include "VLBattle.h"
 #include "VLSave.h"
+#include "VLLoadingScreen.h"
 #include "Engine/Canvas.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -314,7 +315,7 @@ void AVLHUD::DrawEndScreen()
 	if (MenuButton(FBox2D(FVector2D(X + W - U(40.f) - BW, BY), FVector2D(X + W - U(40.f), BY + U(54.f))), VLId::Menu + 21, TEXT("MAIN MENU")))
 	{
 		UGameplayStatics::SetGamePaused(this, false);
-		UGameplayStatics::OpenLevel(this, FName(*MapPath(CurrentMap())));      // (no match: the title screen comes up)
+		VLLoadingScreen::Travel(this, MapPath(CurrentMap()), FString());      // (no match: the title screen comes up)
 	}
 	// this game's own: the world keeps moving behind the screen, and can be watched
 	if (MenuButton(FBox2D(FVector2D(X + U(40.f), BY + U(62.f)), FVector2D(X + W - U(40.f), BY + U(62.f) + U(48.f))), VLId::Menu + 22, TEXT("KEEP WATCHING")))
@@ -599,7 +600,7 @@ void AVLHUD::DrawSettingsPanel(float CentreX)
 #endif
 	Head(TEXT("CAMERA"));
 	Label(TEXT("Camera angle"));
-	if (Choice(VLId::Setting + 5, AVLKing::CameraAngleName(Me ? Me->GetCameraAngle() : 0), TEXT("V")) && Me) { Me->CycleCameraAngle(); }
+	if (Choice(VLId::Setting + 5, AVLKing::CameraAngleName(Me ? Me->GetCameraAngle() : 2), TEXT("V")) && Me) { Me->CycleCameraAngle(); }
 	RY += RowH;
 	Label(TEXT("Mouse sensitivity"));
 	{

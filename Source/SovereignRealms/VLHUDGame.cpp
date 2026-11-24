@@ -923,6 +923,13 @@ float AVLHUD::DrawHints(float Y)
 	case EVLArm::Guard: Hint = TEXT("Guard    LMB one of your buildings or units (a troop in a platoon: the platoon)   ·   RMB / Esc cancel"); Which = EVLIcon::Shield; Accent = Gold; break;
 	default: break;
 	}
+	if (Command->IsPatrolDrafting())
+	{
+		Hint = FString::Printf(TEXT("Patrol    LMB: drop point %d   ·   Enter: start (%d point%s)   ·   RMB / Esc cancel"), Command->GetPatrolDraft().Num() + 1, Command->GetPatrolDraft().Num(),
+			Command->GetPatrolDraft().Num() == 1 ? TEXT("") : TEXT("s"));
+		Which = EVLIcon::Patrol;
+		Accent = Amber;
+	}
 	if (const UVLConstruction* Construction = UVLConstruction::Get(this); Construction && Construction->IsPlacing())
 	{
 		Hint = FString::Printf(TEXT("Placing: %s    LMB place   ·   Shift + LMB place more   ·   T rotate   ·   RMB / Esc cancel   ·   Q / E: it turns with the view"), VLRules::Name(Construction->GetPlacing()));
@@ -1194,6 +1201,37 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 	}
 	EndRects();
 
+	// the player's patrols: violet lines through their points (and the one being drafted), as in the world
+	if (const UVLCommand* PatrolCmd = UVLCommand::Get(this))
+	{
+		auto MapLine = [&](const FVector& A0, const FVector& B0, const FLinearColor& C)
+		{
+			const FVector2D P0 = ToMap(FVector2D(A0)), P1 = ToMap(FVector2D(B0));
+			if (MapRect.IsInside(P0) && MapRect.IsInside(P1)) { DrawLine(P0.X, P0.Y, P1.X, P1.Y, C, FMath::Max(1.f, U(1.5f))); }
+		};
+		TArray<int32> Drawn;
+		for (const AVLKing* Un : Battle->AllUnits())
+		{
+			TArray<FVector> Pts;
+			bool bLoop = false, bPing = false;
+			int32 Next = 0, Id = 0;
+			if (!Un || Un->Team != UVLBattle::Player || !PatrolCmd->GetRoute(Un, Pts, bLoop, Next, &Id, &bPing) || !bLoop || Drawn.Contains(Id))
+			{
+				continue;
+			}
+			Drawn.Add(Id);
+			for (int32 k = 0; k + 1 < Pts.Num(); ++k) { MapLine(Pts[k], Pts[k + 1], PatrolViolet); }
+			if (!bPing && Pts.Num() > 2) { MapLine(Pts.Last(), Pts[0], PatrolViolet); }
+			for (const FVector& P : Pts) { Dot(FVector2D(P), FMath::Max(2.f, U(4.f)), PatrolViolet, true); }
+		}
+		const TArray<FVector>& Draft = PatrolCmd->GetPatrolDraft();
+		for (int32 k = 0; k < Draft.Num(); ++k)
+		{
+			if (k > 0) { MapLine(Draft[k - 1], Draft[k], PatrolViolet); }
+			Dot(FVector2D(Draft[k]), FMath::Max(2.f, U(4.f)), PatrolViolet, true);
+		}
+	}
+
 	// alerts with a place ping there: a ring that swells and fades, again and again while the alert lasts
 	for (const FVLAlert& Alert : Battle->GetAlerts())
 	{
@@ -1398,7 +1436,7 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 		Commands.Add({ CmdAssign, EVLIcon::RecruitFlag, nullptr, TEXT("Assign"), TEXT("Assign to a platoon   [Ctrl + 1-6]"),
 			TEXT("Pick a platoon: the selected troops join it and its members stay (an empty slot: they form it). A troop in another platoon leaves that one."), bAssignOpen });
 		Commands.Add({ CmdPatrol, EVLIcon::Patrol, TEXT("P"), TEXT("Patrol"), TEXT("Patrol   [P]"),
-			TEXT("Then click: walk between here and there, fighting what you meet, until given another order. Hold Shift and click several points: a patrol round all of them."), Armed == EVLArm::Patrol });
+			TEXT("Then left click the points (one after another), Enter starts: they go to the first, then walk to the last and back again, fighting what they meet, until given another order. Esc / right click cancels."), Armed == EVLArm::Patrol || Command->IsPatrolDrafting() });
 		if (Command->SelectionCanGuard())
 		{
 			Commands.Add({ CmdGuard, EVLIcon::Shield, TEXT("V"), TEXT("Guard"), TEXT("Guard   [V]"),
@@ -1559,7 +1597,7 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 				Construction->SetMenu(false);       // (the build menu's panel would lie under the picker)
 			}
 			break;
-		case CmdPatrol: Command->Arm(EVLArm::Patrol); break;
+		case CmdPatrol: Command->BeginPatrolDraft(Units); break;      // (then left clicks drop the points, Enter starts it)
 		case CmdGuard: Command->Arm(EVLArm::Guard); break;
 		case CmdRoam: Command->OrderRoam(Units); AVLGameMode::PlayOrderSound(this); break;
 		case CmdMarch: Command->ToggleMarchTogether(); break;
@@ -2331,9 +2369,15 @@ void AVLHUD::DrawHeroBits()
 		if (Sel.Num() == 0) { King->GetCommandArmy(Army); }
 		{
 			const FString Title = TEXT("COMMAND MODE");
-			const FString SubLine = Sel.Num() > 0
+			FString SubLine = Sel.Num() > 0
 				? FString::Printf(TEXT("%d selected  ·  Right click: attack / move  ·  Shift + right click: queue  ·  Left click on a troop: select (Shift adds)  ·  R: off"), Sel.Num())
 				: FString::Printf(TEXT("Nobody selected: right click sends all %d army troops  ·  Left click a troop to select it (Shift adds)  ·  R: off"), Army.Num());
+			if (CmdC && CmdC->IsPatrolDrafting())
+			{
+				TArray<AVLKing*> Who;
+				CmdC->GetPatrolDraftUnits(Who);
+				SubLine = FString::Printf(TEXT("PATROL for %d  ·  Left click: drop point %d at the crosshair  ·  Enter: start  ·  Right click / Esc: cancel"), Who.Num(), CmdC->GetPatrolDraft().Num() + 1);
+			}
 			const float TS = U(17.f), SS = U(13.f);
 			const float W = FMath::Max(TextSize(Title, TS, Bold).X + U(40.f), TextSize(SubLine, SS).X + U(32.f)), H = U(52.f);
 			const float Y0 = TopBarRect.bIsValid ? TopBarRect.Max.Y + U(8.f) : U(10.f);
@@ -2557,7 +2601,7 @@ void AVLHUD::DrawHeroBits()
 			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   R command mode   Tab overview   Esc menu");
 		if (King->IsCommandMode())
 		{
-			Help = TEXT("COMMAND MODE (at the crosshair)   Left click: your troop: select (Shift adds), else attack   Right click: attack / move   Shift + right click: queue   WASD move   R: off");
+			Help = TEXT("COMMAND MODE (at the crosshair)   Left click: your troop: select (Shift adds), else attack   Right click: attack / move   Shift + right click: queue   P: patrol   WASD move   R: off");
 		}
 		// between the minimap and the platoon panel (both stay up in the hero view): smaller in a narrow window
 		const float SpanL = MapRect.bIsValid ? MapRect.Max.X + U(16.f) : U(14.f), SpanR = PlatoonRect.bIsValid ? PlatoonRect.Min.X - U(10.f) : View.X - U(14.f);

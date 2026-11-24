@@ -132,6 +132,25 @@ public:
 	void OrderPatrol(const TArray<AVLKing*>& Units, const TArray<FVector>& Points, bool bRun = false, EVLFormation Shape = EVLFormation::Line);
 	/** One more point on the patrol these units are on together (a new patrol from where they stand if none). */
 	void ExtendPatrol(const TArray<AVLKing*>& Units, const FVector& Point, EVLFormation Shape = EVLFormation::Line);
+	/**
+	 * The player's patrol (the owner, 2026-11-24): the units go to the first point (where they stand is no part of it),
+	 * then walk first > ... > last and back along the same points (1 2 3 2 1 2 ...) until another order. One point:
+	 * they go there and stay. (OrderPatrol, from where they stand round a loop, is the enemy commander's.)
+	 */
+	void OrderPatrolRoute(const TArray<AVLKing*>& Units, const TArray<FVector>& Points, bool bRun = false, EVLFormation Shape = EVLFormation::Line);
+	/**
+	 * Drafting the player's patrol: P (the button) begins it for Units, each left click drops a point (the overview: at
+	 * the pointer; the hero view's command mode: at the crosshair), Enter starts it (OrderPatrolRoute), Esc or a right
+	 * click cancels. The HUD draws the points and the way between them as they are dropped.
+	 */
+	void BeginPatrolDraft(const TArray<AVLKing*>& Units);
+	bool IsPatrolDrafting() const { return bPatrolDrafting; }
+	void AddPatrolDraftPoint(const FVector& Point);
+	/** Starts the drafted patrol; false (and the draft goes) if it had no point or nobody is left to walk it. */
+	bool FinishPatrolDraft(TArray<AVLKing*>* OutUnits = nullptr);
+	void CancelPatrolDraft();
+	const TArray<FVector>& GetPatrolDraft() const { return PatrolDraft; }
+	void GetPatrolDraftUnits(TArray<AVLKing*>& Out) const;
 	/** bQueue: one more point of the attack-move these units are on together (Shift + click). */
 	void OrderAttackMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun = false, EVLFormation Shape = EVLFormation::Line, bool bQueue = false);
 	/** Returns how many took a post (Builders do not guard; nobody guards itself). bTroops: Ward may be any living unit
@@ -211,7 +230,7 @@ public:
 	void GetGuards(const AActor* Ward, TArray<AVLKing*>& Out) const;
 	bool IsRoaming(const AVLKing* Unit) const;
 	/** The route it walks with its group, if any: its points, whether it loops (a patrol), the one it heads for. */
-	bool GetRoute(const AVLKing* Unit, TArray<FVector>& OutPoints, bool& bOutLoop, int32& OutNext, int32* OutId = nullptr) const;
+	bool GetRoute(const AVLKing* Unit, TArray<FVector>& OutPoints, bool& bOutLoop, int32& OutNext, int32* OutId = nullptr, bool* bOutPingPong = nullptr) const;
 	/** "Patrolling", "Guarding the Castle", "Holding", "Roaming", "Attack-move", or empty: for the selection panel. */
 	FString DescribeOrders(const TArray<AVLKing*>& Units) const;
 	// march together: on the march everyone keeps the slowest one's pace (always in a formation; Loose: the setting)
@@ -369,7 +388,12 @@ private:
 		float Settle = 0.f;         // seconds before it next looks whether the leg is done
 		int32 Tries = 0;            // legs walked again after a fight (or a block) that left them short of the point
 		int32 Id = 0;
+		bool bPingPong = false;     // the player's patrol: there and back along the points (OrderPatrolRoute)
+		int32 Dir = 1;              // (which way it goes along them now)
 	};
+	bool bPatrolDrafting = false;
+	TArray<FVector> PatrolDraft;
+	TArray<TWeakObjectPtr<AVLKing>> PatrolDraftUnits;
 	struct FGuardPost
 	{
 		TWeakObjectPtr<AVLKing> Unit;

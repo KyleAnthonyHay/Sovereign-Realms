@@ -132,11 +132,13 @@ AVLKing::AVLKing()
 void AVLKing::BeginPlay()
 {
 	Super::BeginPlay();
-	int32 Saved = 0;
-	if (GConfig && GConfig->GetInt(TEXT("SovereignRealms.Camera"), TEXT("CameraAngle"), Saved, GGameUserSettingsIni))
+	// the camera angle: Battlefield (shallow) for a new player (the owner, 2026-11-24); the player's own is kept
+	int32 Saved = 2;
+	if (GConfig)
 	{
-		CameraAngle = FMath::Clamp(Saved, 0, 2);
+		GConfig->GetInt(TEXT("SovereignRealms.Camera"), TEXT("CameraAngle"), Saved, GGameUserSettingsIni);
 	}
+	CameraAngle = FMath::Clamp(Saved, 0, 2);
 	int32 SavedInvert = 0;
 	if (GConfig && GConfig->GetInt(TEXT("SovereignRealms.Camera"), TEXT("LookInvertV2"), SavedInvert, GGameUserSettingsIni))
 	{
@@ -1700,6 +1702,10 @@ void AVLKing::SetCommandMode(bool bOn)
 	}
 	bCommandMode = bOn;
 	bCommandChain = false;
+	if (UVLCommand* Command = UVLCommand::Get(this); Command && !bOn && Command->IsPatrolDrafting())
+	{
+		Command->CancelPatrolDraft();
+	}
 	bChainHeldByTest = false;
 	HeroLastClicked = nullptr;
 	UE_LOG(LogSovereignRealms, Log, TEXT("hero: command mode %s"), bOn ? TEXT("on") : TEXT("off"));
@@ -1929,7 +1935,56 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 		});
 	if (bCommandMode)
 	{
-		// command mode: the mouse commands (the pointer is shown), never a swing
+		// P: draft a patrol for the selection (nobody selected: the whole army): left clicks drop its points at the
+		// crosshair, Enter starts it (and lets the selection go), a right click (or Esc) cancels
+		if (PC->WasInputKeyJustPressed(EKeys::P))
+		{
+			TArray<AVLKing*> Units;
+			Command->GetSelection(Units);
+			Units.Remove(this);
+			if (Units.Num() == 0)
+			{
+				GetCommandArmy(Units);
+			}
+			Command->BeginPatrolDraft(Units);
+			if (UVLBattle* Battle = UVLBattle::Get(this))
+			{
+				Battle->Play2D(Units.Num() > 0 ? TEXT("S_UIClick") : TEXT("S_UIError"), 0.4f);
+			}
+		}
+		if (Command->IsPatrolDrafting())
+		{
+			if (!bClickSpent && PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+			{
+				HeroClickFrame = GFrameCounter;     // (a point, not a swing)
+				AActor* Hit = nullptr;
+				FVector Ground;
+				if (HeroPick(PC, Hit, Ground))
+				{
+					Command->AddPatrolDraftPoint(Ground);
+				}
+				return true;
+			}
+			if (PC->WasInputKeyJustPressed(EKeys::RightMouseButton))
+			{
+				Command->CancelPatrolDraft();
+				UE_LOG(LogSovereignRealms, Log, TEXT("patrol draft: cancelled (right click)"));
+				return bClickSpent;
+			}
+			if (PC->WasInputKeyJustPressed(EKeys::Enter))
+			{
+				TArray<AVLKing*> Units;
+				if (Command->FinishPatrolDraft(&Units))
+				{
+					AVLGameMode::PlayOrderSound(this);
+					for (AVLKing* U : Units) { CommandPlanned.AddUnique(U); }
+					Command->ClearSelection();      // given: they keep it, the next selection starts empty
+					bCommandChain = false;
+				}
+			}
+			return bClickSpent;
+		}
+		// command mode: a left click on one of his own selects it, a right click orders (at the crosshair)
 		if (bClickSpent)
 		{
 			HeroClickFrame = GFrameCounter;  // (the interface's click)
@@ -2542,6 +2597,13 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		{
 			// the interface took it: nothing in the world
 		}
+		else if (Command->IsPatrolDrafting())
+		{
+			// drafting a patrol (P): each click drops a point where it lands (Enter starts it)
+			FVector Ground = FVector::ZeroVector;
+			PickAt(PC, Mouse, &Ground, false);
+			Command->AddPatrolDraftPoint(Ground);
+		}
 		else if (bCtrl && Units.Num() > 0)
 		{
 			if (OrderAt(Mouse, false, bShift))
@@ -2594,7 +2656,12 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 	}
 	UVLBattle* Battle = UVLBattle::Get(this);
 	AActor* SelBuilding = (Selected.IsValid() && !Cast<AVLKing>(Selected.Get()) && Battle && Battle->FindBuilding(Selected.Get()) && Battle->TeamOf(Selected.Get()) == Team) ? Selected.Get() : nullptr;
-	if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && bMouse && HUD && HUD->OnMousePress(Mouse, true))
+	if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && Command->IsPatrolDrafting())
+	{
+		Command->CancelPatrolDraft();       // a right click lets a patrol being drafted go
+		UE_LOG(LogSovereignRealms, Log, TEXT("patrol draft: cancelled (right click)"));
+	}
+	else if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f && bMouse && HUD && HUD->OnMousePress(Mouse, true))
 	{
 		// a right click on the interface (the minimap: the selection goes there, or a barracks' / range's rally point;
 		// a platoon's formation button): AVLHUD answers it; nothing in the world
@@ -2700,9 +2767,14 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		AVLGameMode::PlayOrderSound(this);
 	}
 	// (H, hold ground, is gone: the stance's cycle, G, has Hold ground)
-	if (PC->WasInputKeyJustPressed(EKeys::P) && (Units.Num() > 0 || AVLTroopShip::Selected(this)))
+	if (PC->WasInputKeyJustPressed(EKeys::P) && Units.Num() > 0)
 	{
-		Command->Arm(EVLArm::Patrol);   // then a click (Shift: more points)
+		Command->BeginPatrolDraft(Units);   // then left clicks drop the points, Enter starts it (Esc / right click: cancel)
+		UIClick();
+	}
+	else if (PC->WasInputKeyJustPressed(EKeys::P) && AVLTroopShip::Selected(this))
+	{
+		Command->Arm(EVLArm::Patrol);   // a troop ship's: then a click (Shift: more points)
 		UIClick();
 	}
 	if (PC->WasInputKeyJustPressed(EKeys::V) && Command->SelectionCanGuard())
@@ -2758,7 +2830,14 @@ void AVLKing::OverviewCommands(APlayerController* PC, AVLHUD* HUD, bool bRun)
 		Command->Arm(EVLArm::None);     // a right click lets an armed click go
 	}
 	PC->CurrentMouseCursor = Command->GetArmed() != EVLArm::None ? EMouseCursor::Crosshairs : EMouseCursor::Default;     // (armed: the main game's crosshair)
-	if (PC->WasInputKeyJustPressed(EKeys::Enter))
+	if (PC->WasInputKeyJustPressed(EKeys::Enter) && Command->IsPatrolDrafting())
+	{
+		if (Command->FinishPatrolDraft())
+		{
+			AVLGameMode::PlayOrderSound(this);  // Enter: the drafted patrol starts
+		}
+	}
+	else if (PC->WasInputKeyJustPressed(EKeys::Enter))
 	{
 		if (AVLKing* Chosen = Cast<AVLKing>(Selected.Get()); Chosen && Chosen->Team == Team && Chosen->IsAlive())
 		{
@@ -2817,8 +2896,13 @@ void AVLKing::PollInput(float DeltaSeconds)
 	{
 		// (P: in the overview with units selected it is Patrol, OverviewCommands; the pause menu otherwise)
 		const UVLCommand* Cmd = UVLCommand::Get(this);
-		const bool bPatrolKey = !bHeroMode && !HUD->bMenu && Cmd && (Cmd->NumSelected() > 0 || AVLTroopShip::Selected(this));       // (a troop ship patrols too)
-		if (PC->WasInputKeyJustPressed(EKeys::Escape) || (PC->WasInputKeyJustPressed(EKeys::P) && !bPatrolKey))
+		const bool bPatrolKey = !HUD->bMenu && Cmd && ((!bHeroMode && (Cmd->NumSelected() > 0 || AVLTroopShip::Selected(this))) || IsCommandMode());      // (a troop ship patrols too; command mode: P is its patrol)
+		if (PC->WasInputKeyJustPressed(EKeys::Escape) && !HUD->bMenu && Cmd && Cmd->IsPatrolDrafting())
+		{
+			UVLCommand::Get(this)->CancelPatrolDraft();       // Esc lets a patrol being drafted go (and nothing else)
+			UE_LOG(LogSovereignRealms, Log, TEXT("patrol draft: cancelled (Esc)"));
+		}
+		else if (PC->WasInputKeyJustPressed(EKeys::Escape) || (PC->WasInputKeyJustPressed(EKeys::P) && !bPatrolKey))
 		{
 			HUD->OnEscape();
 		}

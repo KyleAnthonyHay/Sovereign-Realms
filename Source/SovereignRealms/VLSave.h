@@ -195,6 +195,8 @@ struct FVLSavedRoute
 	UPROPERTY() bool bLoop = true;
 	UPROPERTY() bool bRun = false;
 	UPROPERTY() uint8 Shape = 0;
+	UPROPERTY() bool bPingPong = false;         // the player's patrol: there and back along its points (UVLCommand::OrderPatrolRoute)
+	UPROPERTY() int32 Dir = 1;
 };
 
 USTRUCT()

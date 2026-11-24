@@ -71,7 +71,7 @@ bool AVLHUD::DrawShipPanel(float X, float Bottom, float Room)
 		TArray<FVector> Course;
 		bool bLoop = false;
 		Sel->GetCourse(Course, bLoop);
-		const FLinearColor Blue(0.55f, 0.8f, 1.f, 0.85f), Orange(1.f, 0.62f, 0.25f, 0.85f);
+		const FLinearColor Blue(0.55f, 0.8f, 1.f, 0.85f), Orange = VLStyle::PatrolViolet;     // (a patrol: violet, as the troops')
 		if (bLoop)
 		{
 			for (int32 k = 0; k < Course.Num(); ++k)

@@ -1946,6 +1946,109 @@ void UVLCommand::ExtendPatrol(const TArray<AVLKing*>& InUnits, const FVector& Po
 	UE_LOG(LogSovereignRealms, Log, TEXT("patrol: point %d at %s"), Routes[Existing].Points.Num(), *Point.ToCompactString());
 }
 
+void UVLCommand::OrderPatrolRoute(const TArray<AVLKing*>& InUnits, const TArray<FVector>& Points, bool bRun, EVLFormation Shape)
+{
+	const TArray<AVLKing*> Units = Living(InUnits);
+	if (Units.Num() == 0 || Points.Num() == 0)
+	{
+		return;
+	}
+	if (Points.Num() == 1)
+	{
+		OrderMove(Units, Points[0], bRun, Shape);      // one point: there, and they stay
+		UE_LOG(LogSovereignRealms, Log, TEXT("patrol: one point: %d unit(s) go to %s and stay"), Units.Num(), *Points[0].ToCompactString());
+		return;
+	}
+	ClearStanding(Units);
+	FRoute R;
+	for (AVLKing* U : Units)
+	{
+		R.Members.Add(U);
+	}
+	R.Points = Points;                  // the first point first (where they stand is no part of it)
+	R.Next = 0;
+	R.Dir = 1;
+	R.bLoop = true;
+	R.bPingPong = true;
+	R.bRun = bRun;
+	R.Shape = Shape;
+	R.Settle = 1.5f;
+	R.Id = NextRouteId++;
+	FRoute& Added = Routes.Add_GetRef(R);
+	IssueLeg(Added);
+	if (Units[0]->Team == UVLBattle::Player)
+	{
+		AddMarker(Points[0]);
+	}
+	UE_LOG(LogSovereignRealms, Log, TEXT("patrol: %d unit(s), %d point(s), there and back, first %s"), Units.Num(), Points.Num(), *Points[0].ToCompactString());
+}
+
+void UVLCommand::BeginPatrolDraft(const TArray<AVLKing*>& Units)
+{
+	PatrolDraft.Reset();
+	PatrolDraftUnits.Reset();
+	for (AVLKing* U : Units)
+	{
+		if (U && U->IsAlive())
+		{
+			PatrolDraftUnits.Add(U);
+		}
+	}
+	bPatrolDrafting = PatrolDraftUnits.Num() > 0;
+	if (bPatrolDrafting)
+	{
+		Arm(EVLArm::None);
+		UE_LOG(LogSovereignRealms, Log, TEXT("patrol draft: %d unit(s): left click the points, Enter starts, Esc cancels"), PatrolDraftUnits.Num());
+	}
+}
+
+void UVLCommand::AddPatrolDraftPoint(const FVector& Point)
+{
+	if (bPatrolDrafting && !Point.IsZero())
+	{
+		PatrolDraft.Add(Point);
+		AddMarker(Point);
+		UE_LOG(LogSovereignRealms, Log, TEXT("patrol draft: point %d at %s"), PatrolDraft.Num(), *Point.ToCompactString());
+	}
+}
+
+void UVLCommand::GetPatrolDraftUnits(TArray<AVLKing*>& Out) const
+{
+	Out.Reset();
+	for (const TWeakObjectPtr<AVLKing>& W : PatrolDraftUnits)
+	{
+		if (AVLKing* U = W.Get(); U && U->IsAlive())
+		{
+			Out.Add(U);
+		}
+	}
+}
+
+bool UVLCommand::FinishPatrolDraft(TArray<AVLKing*>* OutUnits)
+{
+	TArray<AVLKing*> Units;
+	GetPatrolDraftUnits(Units);
+	const TArray<FVector> Points = PatrolDraft;
+	CancelPatrolDraft();
+	if (Units.Num() == 0 || Points.Num() == 0)
+	{
+		return false;
+	}
+	OrderPatrolRoute(Units, Points, false, SelectionFormation());
+	if (OutUnits)
+	{
+		*OutUnits = Units;
+	}
+	return true;
+}
+
+void UVLCommand::CancelPatrolDraft()
+{
+	bPatrolDrafting = false;
+	PatrolDraft.Reset();
+	PatrolDraftUnits.Reset();
+}
+
 void UVLCommand::OrderAttackMove(const TArray<AVLKing*>& InUnits, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue)
 {
 	const TArray<AVLKing*> Units = Living(InUnits);
@@ -3099,7 +3202,7 @@ bool UVLCommand::SelectionCanGuard() const
 	return Units.ContainsByPredicate([](const AVLKing* U) { return U->KindId() != EVLUnitKind::Builder; });
 }
 
-bool UVLCommand::GetRoute(const AVLKing* Unit, TArray<FVector>& OutPoints, bool& bOutLoop, int32& OutNext, int32* OutId) const
+bool UVLCommand::GetRoute(const AVLKing* Unit, TArray<FVector>& OutPoints, bool& bOutLoop, int32& OutNext, int32* OutId, bool* bOutPingPong) const
 {
 	for (const FRoute& R : Routes)
 	{
@@ -3111,6 +3214,10 @@ bool UVLCommand::GetRoute(const AVLKing* Unit, TArray<FVector>& OutPoints, bool&
 			if (OutId)
 			{
 				*OutId = R.Id;
+			}
+			if (bOutPingPong)
+			{
+				*bOutPingPong = R.bPingPong;
 			}
 			return true;
 		}
@@ -3212,7 +3319,19 @@ void UVLCommand::TickOrders(float Dt)
 			Routes.RemoveAt(i);
 			continue;
 		}
-		R.Next = (R.Next + 1) % R.Points.Num();
+		if (R.bPingPong)
+		{
+			// there and back: 1 2 3 2 1 2 ...
+			if (!R.Points.IsValidIndex(R.Next + R.Dir))
+			{
+				R.Dir = -R.Dir;
+			}
+			R.Next = FMath::Clamp(R.Next + R.Dir, 0, R.Points.Num() - 1);
+		}
+		else
+		{
+			R.Next = (R.Next + 1) % R.Points.Num();
+		}
 		R.Tries = 0;
 		R.Settle = R.bLoop ? 1.5f : 0.6f;
 		IssueLeg(R);

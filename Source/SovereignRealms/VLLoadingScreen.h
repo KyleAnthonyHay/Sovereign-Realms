@@ -31,4 +31,14 @@ namespace VLLoadingScreen
 	/** The game module's StartupModule / ShutdownModule. */
 	void Startup();
 	void Shutdown();
+	/**
+	 * Opens a map (as UGameplayStatics::OpenLevel) with the loading screen up at once and playable: the runner goes on
+	 * the game's viewport (the keys arrive: the game thread is free), the world behind is paused, and the map's package
+	 * is loaded in the background (LoadPackageAsync); the old world's assets are kept in memory over the change. Then
+	 * the map is opened: the blocking part that is left (the old world torn down, the new one set up and begun) shows
+	 * the same runner through the movie player, and "PRESS ENTER TO PLAY" follows as before. Every map change of the
+	 * game goes through here (New Game, Restart, Main Menu, a saved game, vl.Map). In the editor (Play In Editor), with
+	 * -NoLoadingScreen or -VLNoPreload it is a plain OpenLevel.
+	 */
+	void Travel(const UObject* WorldContext, const FString& MapPath, const FString& Options);
 }

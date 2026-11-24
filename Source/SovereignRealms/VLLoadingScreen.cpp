@@ -9,6 +9,12 @@
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Engine/GameViewportClient.h"
+#include "Kismet/GameplayStatics.h"
+#include "UObject/GCObject.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectIterator.h"
+#include "Widgets/SWeakWidget.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "ImageUtils.h"
@@ -84,7 +90,9 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 	{
 		std::atomic<int32> Jumps{ 0 };          // presses of a jump key so far
 		std::atomic<bool> bDown{ false };       // Down held
-		std::atomic<bool> bLoaded{ false };     // the level is ready: the keys are live
+		std::atomic<bool> bLoaded{ false };     // the level is ready: Enter is live
+		std::atomic<bool> bOverlay{ false };    // on the game's viewport while the map loads in the background (Travel): the keys are live
+		double BlockedAt = 0.;                  // when the blocking LoadMap began (the movie player took the screen over)
 		std::atomic<double> LoadedAt{ 0. };     // FPlatformTime::Seconds() when it was
 		std::atomic<int32> Best{ 0 };           // the best score, to save when the screen goes
 		double StartedAt = 0.;
@@ -188,10 +196,12 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 			else
 			{
 				Now = FPlatformTime::Seconds() - Shared->StartedAt;
-				if (IsInGameThread() && !Shared->bLoaded.load())
+				if (IsInGameThread() && !Shared->bLoaded.load() && !Shared->bOverlay.load())
 				{
 					Shared->LoadedAt.store(FPlatformTime::Seconds());
 					Shared->bLoaded.store(true);
+					UE_LOG(LogSovereignRealms, Log, TEXT("loading screen: the level is ready; the blocking load took %.2f s (%.1f s since the screen came up)"),
+						Shared->LoadedAt.load() - Shared->BlockedAt, Shared->LoadedAt.load() - Shared->StartedAt);
 					// the level is ready. Only a match waits for Enter: the title screen (the game starting, Main
 					// Menu) is let go as soon as its second is up.
 					if (Shared->bWait && !MatchBehind())
@@ -318,6 +328,11 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 			{
 				const FString Word(TEXT("LOADING"));
 				Text(Word + FString::ChrN(int32(Now * 2.5) % 4, TEXT('.')), Line, Size.X * 0.5f, WordsY, 1, TextGold, TEXT("Bold"), &Word);       // (the word stays put as the dots come)
+				if (Shared->bOverlay.load() || bPlayer)
+				{
+					Text(bPlayer ? TEXT("Space / Up: jump      Down: duck") : TEXT("Space or Up: take the reins. Jump what is on the ground, duck the crows."),
+						Line * 0.62f, Size.X * 0.5f, WordsY + Line * 1.9f, 1, TextDim, TEXT("Regular"));
+				}
 			}
 			{
 				const float Right = Size.X - Size.Y * 0.045f, Top = BandTop + Size.Y * 0.022f;
@@ -390,7 +405,7 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 			if (Jumps != SeenJumps)
 			{
 				SeenJumps = Jumps;
-				if (bLoaded && !bManual)
+				if ((bLoaded || Shared->bOverlay.load()) && !bManual)
 				{
 					if (!bPlayer)
 					{
@@ -400,16 +415,18 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 					JumpAsked = JumpBuffer;
 				}
 			}
-			const bool bDown = bPlayer && Shared->bDown.load();
+			// (while the game thread is held in the blocking load no key arrives: he runs by himself meanwhile)
+			const bool bAuto = !bPlayer || !IsInGameThread();
+			const bool bDown = !bAuto && Shared->bDown.load();
 			while (Left > 0.)
 			{
 				const float Dt = float(FMath::Min(Left, double(SimStep)));
 				Left -= SimStep;
-				Step(Dt, bDown, WidthU, KingX);
+				Step(Dt, bDown, bAuto, WidthU, KingX);
 			}
 		}
 
-		void Step(float Dt, bool bDown, float WidthU, float KingX) const
+		void Step(float Dt, bool bDown, bool bAuto, float WidthU, float KingX) const
 		{
 			RunTime += Dt;
 			const float Speed = FMath::Min(BaseSpeed + SpeedGain * RunTime, TopSpeed);
@@ -438,7 +455,7 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 			// by himself (while the map loads, and until a key takes over): off the ground when the next thing on it
 			// is half a jump away, down while a crow goes over
 			bool bDuckNow = bDown;
-			if (!bPlayer)
+			if (bAuto)
 			{
 				bDuckNow = false;
 				for (const FObstacle& O : Obstacles)
@@ -577,7 +594,27 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 
 	FVLLoadingArtSet Art;
 	bool bArtLoaded = false;
-	FDelegateHandle PrepareHandle, FinishedHandle;
+	FDelegateHandle PrepareHandle, FinishedHandle, PostLoadHandle;
+
+	// ---- Travel: the screen on the game's viewport while the next map loads in the background
+	TSharedPtr<SVLLoadingScreen> Live;          // the runner, handed to the movie player for the blocking part
+	TSharedPtr<SWidget> LiveHolder;             // its place in the viewport
+	bool bTravelling = false;
+	FString TravelMap, TravelOptions;
+	TWeakObjectPtr<UWorld> TravelFrom;
+	double TravelStart = 0.;
+
+	/** What is kept loaded across the map change: the next map's package and world (loaded in the background), and
+	 *  the assets the old world had in memory (whatever the next map shares is not loaded again: all of them when it
+	 *  is the same map). Let go once the new map is up. */
+	class FVLHeld : public FGCObject
+	{
+	public:
+		TArray<TObjectPtr<UObject>> Objects;
+		virtual void AddReferencedObjects(FReferenceCollector& Collector) override { Collector.AddReferencedObjects(Objects); }
+		virtual FString GetReferencerName() const override { return TEXT("VLLoadingScreen::Held"); }
+	};
+	FVLHeld* Held = nullptr;
 	TSharedPtr<FVLLoadingShared, ESPMode::ThreadSafe> Current;
 	TSharedPtr<IInputProcessor> Keys;
 
@@ -660,17 +697,13 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 		}
 	};
 
-	/** The movie player is about to play (a map is about to load) and has nothing to show: this screen. */
-	void Prepare()
+	/** A new screen's state (its clock starts now), its keys taken ahead of the game's. */
+	void Begin()
 	{
-		IGameMoviePlayer* Player = GetMoviePlayer();
-		if (!Player || !FSlateApplication::IsInitialized())
-		{
-			return;
-		}
 		LoadArt();
 		Current = MakeShared<FVLLoadingShared, ESPMode::ThreadSafe>();
 		Current->StartedAt = FPlatformTime::Seconds();
+		Current->BlockedAt = Current->StartedAt;
 		// Nobody to press Enter in a run a tool drives (the perf and screenshot scripts pass -unattended): there the
 		// screen goes when the level is ready, as it did before.
 		Current->bWait = !FApp::IsUnattended() && !FParse::Param(FCommandLine::Get(), TEXT("VLNoEnter"));
@@ -682,6 +715,34 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 			Keys = MakeShared<FVLLoadingKeys>();
 			FSlateApplication::Get().RegisterInputPreProcessor(Keys);
 		}
+	}
+
+	/** The movie player is about to play (a map is about to load) and has nothing to show: this screen. */
+	void Prepare()
+	{
+		IGameMoviePlayer* Player = GetMoviePlayer();
+		if (!Player || !FSlateApplication::IsInitialized())
+		{
+			return;
+		}
+		// the runner already up on the viewport (Travel): the same one goes on, score, place and all
+		TSharedPtr<SVLLoadingScreen> Widget = Live;
+		if (Widget.IsValid() && Current.IsValid())
+		{
+			if (LiveHolder.IsValid() && GEngine && GEngine->GameViewport)
+			{
+				GEngine->GameViewport->RemoveViewportWidgetContent(LiveHolder.ToSharedRef());
+			}
+			LiveHolder.Reset();
+			Live.Reset();
+			Current->bOverlay = false;
+		}
+		else
+		{
+			Begin();
+			Widget = SNew(SVLLoadingScreen, Art, Current.ToSharedRef());
+		}
+		Current->BlockedAt = FPlatformTime::Seconds();
 
 		FLoadingScreenAttributes Screen;
 		// Waiting for Enter: the movie player keeps the game thread in its own loop (inside LoadMap, the world not
@@ -691,9 +752,55 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 		Screen.bMoviesAreSkippable = false;
 		Screen.bAllowEngineTick = false;
 		Screen.MinimumLoadingScreenDisplayTime = MinimumSeconds;
-		Screen.WidgetLoadingScreen = SNew(SVLLoadingScreen, Art, Current.ToSharedRef());
+		Screen.WidgetLoadingScreen = Widget;
 		Player->SetupLoadingScreen(Screen);
 		UE_LOG(LogSovereignRealms, Log, TEXT("loading screen: up (%s)"), Current->bWait ? TEXT("until Enter") : TEXT("until the level is ready"));
+	}
+
+	void Finished();
+
+	/** The new map is up (LoadMap's end): what was kept for it is let go; a screen still on the viewport (the movie
+	 *  player did not take it: -NoLoadingScreen, a failed load) is taken down. */
+	void PostLoad(UWorld* World)
+	{
+		if (Held)
+		{
+			Held->Objects.Reset();
+		}
+		bTravelling = false;
+		if (LiveHolder.IsValid())
+		{
+			if (GEngine && GEngine->GameViewport)
+			{
+				GEngine->GameViewport->RemoveViewportWidgetContent(LiveHolder.ToSharedRef());
+			}
+			LiveHolder.Reset();
+			Live.Reset();
+			Finished();
+		}
+	}
+
+	/** The next map's package is loaded (or failed to): now the map change itself. */
+	void OnPreloaded(const FName& Name, UPackage* Package, EAsyncLoadingResult::Type Result)
+	{
+		if (Package && Result == EAsyncLoadingResult::Succeeded && Held)
+		{
+			Held->Objects.Add(Package);
+			if (UWorld* World = UWorld::FindWorldInPackage(Package))
+			{
+				Held->Objects.Add(World);
+			}
+		}
+		UE_LOG(LogSovereignRealms, Log, TEXT("loading screen: %s loaded in the background in %.2f s (%s); opening it"), *Name.ToString(), FPlatformTime::Seconds() - TravelStart,
+			Result == EAsyncLoadingResult::Succeeded ? TEXT("loaded") : TEXT("failed: LoadMap loads it"));
+		if (UWorld* From = TravelFrom.Get())
+		{
+			UGameplayStatics::OpenLevel(From, FName(*TravelMap), true, TravelOptions);
+		}
+		else
+		{
+			bTravelling = false;
+		}
 	}
 
 	/** The screen has gone: the keys are the game's again, the best score is kept. */
@@ -783,6 +890,7 @@ void VLLoadingScreen::Startup()
 		// The movie player starts playing at every PreLoadMap; with nothing set up it asks for a screen first. (It
 		// forgets the screen after each load, so it asks every time.)
 		PrepareHandle = Player->OnPrepareLoadingScreen().AddStatic(&Prepare);
+		PostLoadHandle = FCoreUObjectDelegates::PostLoadMapWithWorld.AddStatic(&PostLoad);
 		FinishedHandle = Player->OnMoviePlaybackFinished().AddStatic(&Finished);
 	}
 }
@@ -799,7 +907,67 @@ void VLLoadingScreen::Shutdown()
 		}
 		PrepareHandle.Reset();
 		FinishedHandle.Reset();
+		FCoreUObjectDelegates::PostLoadMapWithWorld.Remove(PostLoadHandle);
 	}
 	Keys.Reset();
 	Current.Reset();
+}
+
+void VLLoadingScreen::Travel(const UObject* WorldContext, const FString& MapPath, const FString& Options)
+{
+	using namespace VLLoadingImpl;
+	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull) : nullptr;
+	// (no movie player: Play In Editor, -NoLoadingScreen; or no viewport: the map is opened as ever)
+	if (!World || GIsEditor || !IsMoviePlayerEnabled() || World->WorldType != EWorldType::Game || !GEngine->GameViewport || !FSlateApplication::IsInitialized()
+		|| FParse::Param(FCommandLine::Get(), TEXT("VLNoPreload")))
+	{
+		UGameplayStatics::OpenLevel(WorldContext, FName(*MapPath), true, Options);
+		return;
+	}
+	if (bTravelling)
+	{
+		return;         // (one map change at a time)
+	}
+	bTravelling = true;
+	TravelMap = MapPath;
+	TravelOptions = Options;
+	TravelFrom = World;
+	TravelStart = FPlatformTime::Seconds();
+
+	// the old world's assets stay in memory over the change (released once the new map is up)
+	if (!Held)
+	{
+		Held = new FVLHeld();
+	}
+	Held->Objects.Reset();
+	const UPackage* OldWorldPackage = World->GetOutermost();
+	for (TObjectIterator<UObject> It; It; ++It)
+	{
+		UObject* Obj = *It;
+		if (Obj->IsAsset() && !Obj->IsA<UWorld>() && Obj->GetOutermost() != OldWorldPackage && !Obj->GetOutermost()->HasAnyPackageFlags(PKG_CompiledIn))
+		{
+			Held->Objects.Add(Obj);
+		}
+	}
+
+	// the runner, on the viewport, playable from this frame on; the world behind is held
+	Begin();
+	Current->bOverlay = true;
+	Live = SNew(VLLoadingImpl::SVLLoadingScreen, Art, Current.ToSharedRef());
+	LiveHolder = SNew(SWeakWidget).PossiblyNullContent(Live);
+	GEngine->GameViewport->AddViewportWidgetContent(LiveHolder.ToSharedRef(), 10000);
+	UGameplayStatics::SetGamePaused(World, true);
+
+	// the next map in the background (the same map: it is in memory already, and is opened at once)
+	const bool bSameMap = OldWorldPackage->GetName() == MapPath;
+	UE_LOG(LogSovereignRealms, Log, TEXT("loading screen: up on the viewport, playable; %s %s (%d assets of this world kept)"), bSameMap ? TEXT("opening the same map again:") : TEXT("loading in the background:"),
+		*MapPath, Held->Objects.Num());
+	if (bSameMap)
+	{
+		UGameplayStatics::OpenLevel(World, FName(*MapPath), true, Options);
+	}
+	else
+	{
+		LoadPackageAsync(MapPath, FLoadPackageAsyncDelegate::CreateStatic(&OnPreloaded));
+	}
 }

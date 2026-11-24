@@ -24,7 +24,7 @@ public:
 	/** The player's music volume (Esc menu / U): 0..100% of MusicVolume, saved ([SovereignRealms.Audio] Music); on (100%)
 	 *  until the player turns it down. */
 	UPROPERTY(EditAnywhere, Category = "Voxel|Audio")
-	float MusicSetting = 1.f;
+	float MusicSetting = 0.5f;      // (50% for a new player, the owner's call 2026-11-24; the player's own choice is kept: MusicV2)
 
 	void CycleMusicVolume();
 	/** Settings > Music: 0..1, applied at once and saved. */
