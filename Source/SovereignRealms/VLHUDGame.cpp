@@ -2366,12 +2366,13 @@ void AVLHUD::DrawHeroBits()
 		if (CmdC) { CmdC->GetSelection(Sel); }
 		Sel.Remove(King);
 		TArray<AVLKing*> Army;
-		if (Sel.Num() == 0) { King->GetCommandArmy(Army); }
+		if (Sel.Num() == 0) { King->GetKingsGuard(Army); }
 		{
 			const FString Title = TEXT("COMMAND MODE");
 			FString SubLine = Sel.Num() > 0
 				? FString::Printf(TEXT("%d selected  ·  Right click: attack / move  ·  Shift + right click: queue  ·  Left click on a troop: select (Shift adds)  ·  R: off"), Sel.Num())
-				: FString::Printf(TEXT("Nobody selected: right click sends all %d army troops  ·  Left click a troop to select it (Shift adds)  ·  R: off"), Army.Num());
+				: (Army.Num() > 0 ? FString::Printf(TEXT("King's guard: %d  ·  Right click: attack / move  ·  Left click a troop to select it instead (Shift adds)  ·  R: off"), Army.Num())
+					: FString(TEXT("No guard: select troops (left click a troop, Shift adds)  ·  R: off")));
 			if (CmdC && CmdC->IsPatrolDrafting())
 			{
 				TArray<AVLKing*> Who;
@@ -2414,8 +2415,8 @@ void AVLHUD::DrawHeroBits()
 			}
 			else if (Battle && Battle->IsHostile(Hit, King->Team) && !Name.IsEmpty())
 			{
-				const FString Who = Sel.Num() > 0 ? FString() : FString::Printf(TEXT(" (all %d troops)"), Army.Num());
-				Hint = bShiftDown ? TEXT("Shift + right click: then attack ") + Name + Who : TEXT("Right click: attack ") + Name + Who + TEXT("  ·  Shift: queue it");
+				const FString Who = Sel.Num() > 0 ? FString() : FString::Printf(TEXT(" (king's guard: %d)"), Army.Num());
+				Hint = Sel.Num() == 0 && Army.Num() == 0 ? FString(TEXT("No guard: select troops")) : bShiftDown ? TEXT("Shift + right click: then attack ") + Name + Who : TEXT("Right click: attack ") + Name + Who + TEXT("  ·  Shift: queue it");
 				HintCol = Refuse;
 			}
 			if (!Hint.IsEmpty())
@@ -2484,7 +2485,7 @@ void AVLHUD::DrawHeroBits()
 			King->HeroCommanded(Commanded, &bFollowers);
 			Commanding = King->IsCommandMode()
 				? (Sel.Num() > 0 ? FString::Printf(TEXT("Command mode  ·  %d selected  ·  right click: attack / move (Shift: queue)  ·  R: back"), Sel.Num())
-					: FString(TEXT("Command mode  ·  nobody selected: right click commands the whole army  ·  R: back")))
+					: FString(TEXT("Command mode  ·  nobody selected: right click commands the king's guard (his platoon)  ·  R: back")))
 				: Sel.Num() > 0
 				? FString::Printf(TEXT("Commanding %d  ·  right click: attack / move  ·  R: command mode  ·  G: follow me  ·  Esc: let go"), Sel.Num())
 				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  R: command mode"), Commanded.Num())

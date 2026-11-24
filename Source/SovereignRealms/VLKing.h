@@ -652,7 +652,7 @@ public:
 	 * round and every click acts on what is under the crosshair, not the hero's blade: a left click on one of his own
 	 * selects it alone (Shift + click
 	 * adds it or takes it out; twice quickly: play it), elsewhere lets the selection go; a right click orders the
-	 * selection, or with nobody selected the whole army (GetCommandArmy) (a foe's unit or building: attack it; the ground: go there; a friend's building, King David, a
+	 * selection, or with nobody selected the king's guard (GetKingsGuard) (a foe's unit or building: attack it; the ground: go there; a friend's building, King David, a
 	 * Builder: guard it; a troop: follow it). Shift + right click queues (attack A, then B, walk, attack C). An order
 	 * lets the selection go once it is given: at once without Shift, when Shift is let go after a Shift chain, so the
 	 * next selection commands only the new units. The plan of those ordered (their routes, numbered target marks)
@@ -664,10 +664,10 @@ public:
 	void CommandSelect(APlayerController* PC, bool bShift);
 	/** Command mode's right click at the pointer: the selection takes the order (bQueue: Shift). True if given. */
 	bool CommandOrder(APlayerController* PC, bool bQueue);
-	/** Command mode's right click with nobody selected goes to them: every swordsman and archer of his side, not King
-	 *  David, the unit played, Jonathan, Builders, the Spy, a tower's own archers, nor those garrisoned (a tower's
-	 *  lookout, aboard a ship). */
-	void GetCommandArmy(TArray<AVLKing*>& Out) const;
+	/** Command mode's right click (and P's patrol) with nobody selected goes to them: the king's guard, the troops of
+	 *  the platoon King David is in (platoon 1 from the match's start), not King David, the unit played, nor those
+	 *  garrisoned. Empty: no guard (the hint says so; nothing is ordered). */
+	void GetKingsGuard(TArray<AVLKing*>& Out) const;
 	/** Those ordered from command mode who are still on it (their plan shows in command mode). */
 	void GetCommandPlanned(TArray<AVLKing*>& Out) const;
 	/** (tests) A Shift chain stays open (its selection held) until EndCommandChain, with no Shift key down. */

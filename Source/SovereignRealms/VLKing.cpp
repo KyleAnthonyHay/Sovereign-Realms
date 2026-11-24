@@ -1715,25 +1715,36 @@ void AVLKing::SetCommandMode(bool bOn)
 	}
 }
 
-void AVLKing::GetCommandArmy(TArray<AVLKing*>& Out) const
+void AVLKing::GetKingsGuard(TArray<AVLKing*>& Out) const
 {
-	// the army: every swordsman and archer of his side that can be ordered. Not King David, not the unit played, not
-	// Jonathan (a hero, played with J), not Builders or the Spy, not a watch tower's own archers, not those on a
-	// tower's lookout or aboard a ship (garrisoned), not the ambient ones.
+	// the king's guard: the troops of the platoon King David is in (platoon 1 from the start of a match), not King
+	// David himself, not the unit played, not those on a tower's lookout or aboard a ship (garrisoned)
 	Out.Reset();
 	const UVLBattle* Battle = UVLBattle::Get(this);
-	if (!Battle)
+	const UVLCommand* Command = UVLCommand::Get(this);
+	if (!Battle || !Command)
 	{
 		return;
 	}
+	const AVLKing* David = nullptr;
 	for (AVLKing* U : Battle->AllUnits())
 	{
-		if (!U || U == this || U->Team != Team || !U->IsAlive() || !U->IsTroop() || U->bAmbient || U->bTowerGuard || U->IsGarrisoned())
+		if (U && U->Team == Team && !U->IsTroop() && !U->bAmbient)
 		{
-			continue;
+			David = U;
+			break;
 		}
-		const EVLUnitKind K = U->KindId();
-		if (K == EVLUnitKind::Swordsman || K == EVLUnitKind::Archer || K == EVLUnitKind::Other)
+	}
+	const int32 P = David ? Command->PlatoonIndexOf(David) : INDEX_NONE;
+	if (P == INDEX_NONE)
+	{
+		return;
+	}
+	TArray<AVLKing*> Members;
+	Command->GetPlatoon(P, Members);
+	for (AVLKing* U : Members)
+	{
+		if (U && U != this && U != David && U->IsAlive() && U->IsTroop() && !U->bTowerGuard && !U->IsGarrisoned())
 		{
 			Out.Add(U);
 		}
@@ -1842,15 +1853,15 @@ bool AVLKing::CommandOrder(APlayerController* PC, bool bQueue)
 	bool bAll = false;
 	if (Units.Num() == 0)
 	{
-		// nobody selected: the whole army takes it (GetCommandArmy)
-		GetCommandArmy(Units);
+		// nobody selected: the king's guard takes it (GetKingsGuard: King David's platoon)
+		GetKingsGuard(Units);
 		bAll = true;
 	}
 	if (Units.Num() == 0)
 	{
 		if (Battle)
 		{
-			Battle->PushAlert(TEXT("Command mode: no troops to command (train swordsmen or archers)"));
+			Battle->PushAlert(TEXT("No guard: King David's platoon has no troops. Select troops (left click) to command them"));
 			Battle->Play2D(TEXT("S_UIError"), 0.4f);
 		}
 		return false;
@@ -1866,7 +1877,7 @@ bool AVLKing::CommandOrder(APlayerController* PC, bool bQueue)
 		Hit = this;                         // the pointer on him: they guard him (OrderOn)
 		Ground = GetFeet();
 	}
-	UE_LOG(LogSovereignRealms, Log, TEXT("hero command mode: order %d unit(s)%s, ground %s, on %s%s%s"), Units.Num(), bAll ? TEXT(" (all the army: nobody selected)") : TEXT(""),
+	UE_LOG(LogSovereignRealms, Log, TEXT("hero command mode: order %d unit(s)%s, ground %s, on %s%s%s"), Units.Num(), bAll ? TEXT(" (the king's guard: nobody selected)") : TEXT(""),
 		*Ground.ToCompactString(), *GetNameSafe(Hit), bQueue ? TEXT(" (queued)") : TEXT(""), bDouble ? TEXT(" (at a run)") : TEXT(""));
 	if (!OrderOn(Units, Hit, Ground, bDouble, bQueue))
 	{
@@ -1935,7 +1946,7 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 		});
 	if (bCommandMode)
 	{
-		// P: draft a patrol for the selection (nobody selected: the whole army): left clicks drop its points at the
+		// P: draft a patrol for the selection (nobody selected: the king's guard): left clicks drop its points at the
 		// crosshair, Enter starts it (and lets the selection go), a right click (or Esc) cancels
 		if (PC->WasInputKeyJustPressed(EKeys::P))
 		{
@@ -1944,7 +1955,7 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 			Units.Remove(this);
 			if (Units.Num() == 0)
 			{
-				GetCommandArmy(Units);
+				GetKingsGuard(Units);
 			}
 			Command->BeginPatrolDraft(Units);
 			if (UVLBattle* Battle = UVLBattle::Get(this))
