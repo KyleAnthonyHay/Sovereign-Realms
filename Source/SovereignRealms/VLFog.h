@@ -104,6 +104,7 @@ private:
 		TArray<float> R;        // per direction: how far it sees (cm, the wall included)
 		float MaxR = 0.f, MeanR = 0.f;
 		uint32 Frame = 0;
+		bool bDirty = false;    // its rays to be worked out again
 	};
 	static constexpr int32 NumDirs = 48;
 
@@ -120,7 +121,7 @@ private:
 	/** The eye's parameters for a unit / building / ship of the player's; false: not an eye. */
 	bool EyeParams(const AActor* A, FEye& E) const;
 	void ComputeRays(FEye& E) const;
-	FEye* FindOrMakeEye(const AActor* A);
+	FEye* FindOrMakeEye(const AActor* A, bool bDefer = false);
 	float HeightAt(const FVector2D& P) const;
 	bool ToCell(const FVector2D& P, int32& Out) const;
 

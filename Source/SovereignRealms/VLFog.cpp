@@ -404,8 +404,8 @@ bool UVLFog::EyeParams(const AActor* A, FEye& E) const
 
 void UVLFog::ComputeRays(FEye& E) const
 {
-	const float Tan = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(CVarFogAngle.GetValueOnGameThread(), 2.f, 89.f)));
-	const float MaxR = FMath::Max(CVarFogMax.GetValueOnGameThread(), 500.f);
+	const float Tan = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(CVarFogAngle.GetValueOnAnyThread(), 2.f, 89.f)));
+	const float MaxR = FMath::Max(CVarFogMax.GetValueOnAnyThread(), 500.f);
 	const float Step = Cell * 0.5f;
 	const float EyeZ = E.FeetZ + E.EyeH;
 	E.R.SetNum(NumDirs);
@@ -433,7 +433,7 @@ void UVLFog::ComputeRays(FEye& E) const
 	}
 }
 
-UVLFog::FEye* UVLFog::FindOrMakeEye(const AActor* A)
+UVLFog::FEye* UVLFog::FindOrMakeEye(const AActor* A, bool bDefer)
 {
 	FEye Want;
 	if (!EyeParams(A, Want))
@@ -441,13 +441,18 @@ UVLFog::FEye* UVLFog::FindOrMakeEye(const AActor* A)
 		return nullptr;
 	}
 	FEye& E = Eyes.FindOrAdd(A);
-	const bool bSame = E.R.Num() == NumDirs && FVector2D::DistSquared(E.At, Want.At) < FMath::Square(60.f) && FMath::Abs(E.FeetZ - Want.FeetZ) < 60.f
+	const bool bSame = E.R.Num() == NumDirs && FVector2D::DistSquared(E.At, Want.At) < FMath::Square(100.f) && FMath::Abs(E.FeetZ - Want.FeetZ) < 60.f
 		&& FMath::IsNearlyEqual(E.EyeH, Want.EyeH, 1.f) && FMath::IsNearlyEqual(E.Scale, Want.Scale, 0.001f) && E.Wall == Want.Wall;
 	if (!bSame)
 	{
 		Want.Actor = A;
 		E = MoveTemp(Want);
-		ComputeRays(E);
+		E.bDirty = true;
+		if (!bDefer)
+		{
+			ComputeRays(E);
+			E.bDirty = false;
+		}
 	}
 	E.Frame = EyeFrame;
 	return &E;
@@ -535,26 +540,28 @@ void UVLFog::UpdateVision()
 		FMemory::Memset(Explored.GetData(), 1, Explored.Num());
 		return;
 	}
-	TArray<FEye*, TInlineAllocator<256>> Now;
-	for (AVLKing* U : Battle->AllUnits())
-	{
-		if (FEye* E = FindOrMakeEye(U)) { Now.Add(E); }
-	}
+	// the eyes of this update (their rays worked out again only for those that moved, side by side on worker threads;
+	// the pointers taken once the map has stopped growing)
+	for (AVLKing* U : Battle->AllUnits()) { FindOrMakeEye(U, true); }
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
-		if (FEye* E = B.Actor.IsValid() ? FindOrMakeEye(B.Actor.Get()) : nullptr) { Now.Add(E); }
+		if (B.Actor.IsValid()) { FindOrMakeEye(B.Actor.Get(), true); }
 	}
 	if (const UVLFleet* Fleet = UVLFleet::Get(this))
 	{
 		for (const TWeakObjectPtr<AVLTroopShip>& S : Fleet->GetShips())
 		{
-			if (FEye* E = S.IsValid() ? FindOrMakeEye(S.Get()) : nullptr) { Now.Add(E); }
+			if (S.IsValid()) { FindOrMakeEye(S.Get(), true); }
 		}
 	}
+	TArray<FEye*, TInlineAllocator<256>> Now, Dirty;
 	for (auto It = Eyes.CreateIterator(); It; ++It)
 	{
-		if (It->Value.Frame != EyeFrame) { It.RemoveCurrent(); }
+		if (It->Value.Frame != EyeFrame) { It.RemoveCurrent(); continue; }
+		Now.Add(&It->Value);
+		if (It->Value.bDirty) { Dirty.Add(&It->Value); }
 	}
+	ParallelFor(TEXT("VLFogRays"), Dirty.Num(), 2, [this, &Dirty](int32 i) { ComputeRays(*Dirty[i]); Dirty[i]->bDirty = false; });
 	// each eye's outline filled: the cells round it nearest first, kept while within the radius of their direction
 	for (const FEye* E : Now)
 	{
@@ -695,37 +702,42 @@ void UVLFog::UploadMask(float Dt)
 	SoftA.SetNumUninitialized(Visible.Num());
 	SoftB.SetNumUninitialized(Visible.Num());
 	for (int32 i = 0; i < Visible.Num(); ++i) { SoftA[i] = Visible[i] ? 255 : 0; }
+	// (each pass a running sum along its rows or columns, the rows side by side on worker threads)
 	for (int32 Pass = 0; Pass < 4; ++Pass)
 	{
 		const bool bX = (Pass & 1) == 0;
-		for (int32 y = 0; y < Dim; ++y)
+		const int32 Stride = bX ? 1 : Dim, Line = bX ? Dim : 1;
+		const uint16* In = SoftA.GetData();
+		uint16* Out = SoftB.GetData();
+		const int32 N = Dim;
+		ParallelFor(TEXT("VLFogBlur"), Dim, 16, [In, Out, Stride, Line, N](int32 L)
 		{
-			for (int32 x = 0; x < Dim; ++x)
+			const int32 Base = L * Line;
+			auto At = [&](int32 k) { return int32(In[Base + FMath::Clamp(k, 0, N - 1) * Stride]); };
+			int32 Sum = At(-2) + At(-1) + At(0) + At(1) + At(2);
+			for (int32 k = 0; k < N; ++k)
 			{
-				int32 Sum = 0;
-				for (int32 k = -2; k <= 2; ++k)
-				{
-					Sum += bX ? SoftA[y * Dim + FMath::Clamp(x + k, 0, Dim - 1)] : SoftA[FMath::Clamp(y + k, 0, Dim - 1) * Dim + x];
-				}
-				SoftB[y * Dim + x] = uint16(Sum / 5);
+				Out[Base + k * Stride] = uint16(Sum / 5);
+				Sum += At(k + 3) - At(k - 2);
 			}
-		}
+		});
 		Swap(SoftA, SoftB);
 	}
-	for (int32 y = 0; y < Dim; ++y)
+	const uint16* Soft = SoftA.GetData();
+	ParallelFor(TEXT("VLFogMask"), Dim, 16, [this, Soft, Step](int32 y)
 	{
 		for (int32 x = 0; x < Dim; ++x)
 		{
 			const int32 i = y * Dim + x;
-			const int32 S = SoftA[i];
+			const int32 S = Soft[i];
 			const int32 TV = FMath::Min(255, S * 2 - (Visible[i] ? 0 : S)), TE = Explored[i] ? 255 : 0;
 			ShowVis[i] = uint8(TV > ShowVis[i] ? FMath::Min(TV, ShowVis[i] + Step) : FMath::Max(TV, ShowVis[i] - Step));
 			ShowExp[i] = uint8(TE > ShowExp[i] ? FMath::Min(TE, ShowExp[i] + Step) : FMath::Max(TE, ShowExp[i] - Step));
-			const float V = ShowVis[i] / 255.f, E = FMath::Max(ShowExp[i] / 255.f, V);
-			const uint8 Veil = uint8(FMath::Clamp(255.f * (0.86f * (1.f - E) + 0.45f * (E - V)), 0.f, 255.f));
-			MaskPixels[i] = FColor(ShowVis[i], ShowExp[i], 0, Veil);
+			const int32 V = ShowVis[i], E = FMath::Max(int32(ShowExp[i]), V);
+			const int32 Veil = (219 * (255 - E) + 115 * (E - V)) / 255;      // (0.86 unexplored, 0.45 explored)
+			MaskPixels[i] = FColor(ShowVis[i], ShowExp[i], 0, uint8(FMath::Clamp(Veil, 0, 255)));
 		}
-	}
+	});
 	if (MaskTex)
 	{
 		TArray<FColor>* Copy = new TArray<FColor>(MaskPixels);

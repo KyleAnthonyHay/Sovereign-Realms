@@ -68,7 +68,7 @@ def one_map(name):
     cmd(["vl.StartMatch 0"], None, 6)
     cmd(["vl.Fog.Info"], r"fog: ")
     cmd(["vl.Fog.Eyes"], r"fog eye: .*Watch Tower|fog eye: .*Castle")
-    cmd(["vl.Mode overview", "vl.Look %d %d 0.35" % P["look"]], None, 3)
+    cmd(["vl.Mode overview", "vl.Look %d %d 0.85" % P["look"]], None, 3)
     pie.main(["shot", "fog_%s_start" % name, "2.5"])
     cmd(["vl.Shot fog_%s_minimap ui" % name], None, 3)
     res = {}
@@ -88,24 +88,29 @@ def one_map(name):
     cmd(["vl.Teleport %d %d %d" % (x, y, z + 120)], None, 1.5)
     cmd(["vl.SpawnTeam Swordsman 1 %d %d" % (x + 900, y), "vl.SpawnTeam Swordsman 1 %d %d" % P["enemy_far"]], None, 1.5)
     cmd(["vl.Fog.Info"], r"fog: (on|off)")
-    cmd(["vl.Mode overview", "vl.Look %d %d 0.35" % (x, y)], None, 3)
+    cmd(["vl.Mode overview", "vl.Look %d %d 0.6" % (x, y)], None, 3)
     pie.main(["shot", "fog_%s_enemy_near" % name, "1.5"])
     return res
 
 
 def perf(name):
     P = MAPS[name]
-    cmd(["vl.Mode overview", "vl.Look %d %d 0.35" % P["look"]], None, 3)
-    for on in (0, 1):
+    cmd(["vl.Mode overview", "vl.Look %d %d 0.6" % P["look"]], None, 3)
+    for on in (0, 1, 0, 1):
         cmd(["vl.Fog %d" % on, "r.ProfileGPU.ShowUI 0"], None, 2)
         mark = os.path.getsize(pie.LOG)
         cmd(["ProfileGPU"], None, 4)
-        lines = log_since(mark, r"LogRHI: Display:.*(┃)")
-        tot = [l for l in lines if re.search(r"FRAME|Frame|Total", l)]
-        pp = [l for l in lines if re.search(r"PostProcessMaterial|M_FogOfWar|FogOfWar", l)]
-        print("  vl.Fog %d:" % on)
-        for l in (tot[:2] + pp[:4]):
-            print("    ", l.split("Display:")[-1].strip()[:150])
+        lines = log_since(mark, r"LogRHI: Display:.*┃")
+        rows = []
+        for l in lines:
+            parts = l.split("┃")
+            if len(parts) >= 4:
+                ms = re.findall(r"([\d.]+) ms", parts[2])
+                if ms:
+                    rows.append((float(ms[-1]), parts[3].strip()))
+        frame = [r for r in rows if r[1].startswith("Frame")]
+        fog = [r for r in rows if r[1].startswith("PostProcessMaterial") and "FogOfWar" in r[1]]
+        print("  vl.Fog %d: frame %s ms, fog pass %s" % (on, frame[0][0] if frame else "?", ", ".join("%.3f ms (%s)" % r for r in fog) or "none"))
     cmd(["vl.Fog 1"], None, 0.5)
 
 
