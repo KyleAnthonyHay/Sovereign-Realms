@@ -4,6 +4,7 @@
 #include "VLGrid.h"
 #include "VLKing.h"
 #include "VLTroopShip.h"
+#include "Algo/BinarySearch.h"
 #include "Async/ParallelFor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/PostProcessVolume.h"
@@ -38,7 +39,7 @@ static TAutoConsoleVariable<float> CVarFogDesat(TEXT("vl.Fog.Desaturate"), 0.45f
 static TAutoConsoleVariable<float> CVarFogInterval(TEXT("vl.Fog.Interval"), 0.1f, TEXT("s between two vision updates."));
 static TAutoConsoleVariable<float> CVarFogFade(TEXT("vl.Fog.Fade"), 0.35f, TEXT("s: how long a cell takes to clear or cloud over."));
 static TAutoConsoleVariable<float> CVarFogCell(TEXT("vl.Fog.Cell"), 200.f, TEXT("cm: the fog's cells (read when a match starts)."));
-static TAutoConsoleVariable<int32> CVarFogLog(TEXT("vl.Fog.Log"), 0, TEXT("1: log the played unit's view radius whenever it changes by over 1 m."));
+static TAutoConsoleVariable<int32> CVarFogLog(TEXT("vl.Fog.Log"), 0, TEXT("1: log the played unit's view radius whenever it changes by over 1 m; 2: and the vision update's timings."));
 
 namespace
 {
@@ -348,6 +349,10 @@ bool UVLFog::EyeParams(const AActor* A, FEye& E) const
 		const FVector Feet = K->GetFeet();
 		E.At = FVector2D(Feet);
 		E.FeetZ = Feet.Z;
+		if (const UVLGrid* Grid = UVLGrid::Get(this))
+		{
+			E.FeetZ = FMath::Max(E.FeetZ, Grid->WaterLevelAt(Feet));     // (one in the water looks from its surface)
+		}
 		E.EyeH = Eye;
 		const float Base = VLRules::Troop(EVLUnitKind::Swordsman).Sight;
 		const float Ratio = Base > 0.f ? K->KindRules().Sight / Base : 1.f;
@@ -532,6 +537,7 @@ void UVLFog::Tick(float DeltaSeconds)
 void UVLFog::UpdateVision()
 {
 	const UVLBattle* Battle = UVLBattle::Get(this);
+	const double TV0 = FPlatformTime::Seconds();
 	++EyeFrame;
 	FMemory::Memzero(Visible.GetData(), Visible.Num());
 	if (bRevealAll)
@@ -561,7 +567,9 @@ void UVLFog::UpdateVision()
 		Now.Add(&It->Value);
 		if (It->Value.bDirty) { Dirty.Add(&It->Value); }
 	}
+	const double TR = FPlatformTime::Seconds();
 	ParallelFor(TEXT("VLFogRays"), Dirty.Num(), 2, [this, &Dirty](int32 i) { ComputeRays(*Dirty[i]); Dirty[i]->bDirty = false; });
+	const double TS = FPlatformTime::Seconds();
 	// each eye's outline filled: the cells round it nearest first, kept while within the radius of their direction
 	for (const FEye* E : Now)
 	{
@@ -570,8 +578,23 @@ void UVLFog::UpdateVision()
 			BuildOffsets(E->MaxR * 1.2f);
 		}
 		const int32 CX = FMath::FloorToInt((E->At.X - Origin.X) / Cell), CY = FMath::FloorToInt((E->At.Y - Origin.Y) / Cell);
-		for (const FOffset& O : Offsets)
+		// the disc inside its shortest radius in whole rows, then only the ring beyond it cell by cell
+		float MinR = E->MaxR;
+		for (float R : E->R) { MinR = FMath::Min(MinR, R); }
+		const int32 RIn = FMath::Max(0, FMath::FloorToInt(MinR / Cell) - 1);
+		for (int32 dy = -RIn; dy <= RIn; ++dy)
 		{
+			const int32 Y = CY + dy;
+			if (Y < 0 || Y >= Dim) { continue; }
+			const int32 Half = FMath::FloorToInt(FMath::Sqrt(float(RIn * RIn - dy * dy)));
+			const int32 X0 = FMath::Max(0, CX - Half), X1 = FMath::Min(Dim - 1, CX + Half);
+			if (X1 >= X0) { FMemory::Memset(&Visible[Y * Dim + X0], 1, X1 - X0 + 1); }
+		}
+		const float InnerDist = float(RIn) * Cell;
+		int32 First = Algo::LowerBoundBy(Offsets, InnerDist, &FOffset::Dist);
+		for (int32 oi = First; oi < Offsets.Num(); ++oi)
+		{
+			const FOffset& O = Offsets[oi];
 			if (O.Dist > E->MaxR)
 			{
 				break;
@@ -590,6 +613,7 @@ void UVLFog::UpdateVision()
 		}
 	}
 	for (int32 i = 0; i < Visible.Num(); ++i) { Explored[i] |= Visible[i]; }
+	const double TB = FPlatformTime::Seconds();
 	// enemy buildings in sight (any corner or the middle of their footprint on a visible cell), and seen ever
 	InSightNow.Reset();
 	for (const FVLBuildingState& B : Battle->GetBuildings())
@@ -612,6 +636,11 @@ void UVLFog::UpdateVision()
 				break;
 			}
 		}
+	}
+	if (CVarFogLog.GetValueOnGameThread() > 1)
+	{
+		const double TE = FPlatformTime::Seconds();
+		UE_LOG(LogSovereignRealms, Log, TEXT("fog timing: eyes %.2f ms (%d, %d moved), rays %.2f, fill %.2f, buildings %.2f"), (TR - TV0) * 1000.0, Now.Num(), Dirty.Num(), (TS - TR) * 1000.0, (TB - TS) * 1000.0, (TE - TB) * 1000.0);
 	}
 }
 
@@ -695,6 +724,7 @@ void UVLFog::SetHiddenByFog(AActor* A, bool bHide)
 
 void UVLFog::UploadMask(float Dt)
 {
+	const double TM0 = FPlatformTime::Seconds();
 	// eased toward the cells' states, the visible one softened over a few cells (two box blurs of 5 cells each way:
 	// the fog's edge is a bank some 8 m deep, not a wall)
 	const int32 Step = FMath::Clamp(FMath::RoundToInt(255.f * Dt / FMath::Max(CVarFogFade.GetValueOnGameThread(), 0.01f)), 1, 255);
@@ -723,6 +753,7 @@ void UVLFog::UploadMask(float Dt)
 		});
 		Swap(SoftA, SoftB);
 	}
+	const double TM1 = FPlatformTime::Seconds();
 	const uint16* Soft = SoftA.GetData();
 	ParallelFor(TEXT("VLFogMask"), Dim, 16, [this, Soft, Step](int32 y)
 	{
@@ -738,12 +769,17 @@ void UVLFog::UploadMask(float Dt)
 			MaskPixels[i] = FColor(ShowVis[i], ShowExp[i], 0, uint8(FMath::Clamp(Veil, 0, 255)));
 		}
 	});
+	const double TM2 = FPlatformTime::Seconds();
 	if (MaskTex)
 	{
 		TArray<FColor>* Copy = new TArray<FColor>(MaskPixels);
 		FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, Dim, Dim);
 		MaskTex->UpdateTextureRegions(0, 1, Region, Dim * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(Copy->GetData()),
 			[Copy](uint8*, const FUpdateTextureRegion2D* R) { delete Copy; delete R; });
+	}
+	if (CVarFogLog.GetValueOnGameThread() > 1)
+	{
+		UE_LOG(LogSovereignRealms, Log, TEXT("fog timing: blur %.2f ms, fill %.2f, upload %.2f"), (TM1 - TM0) * 1000.0, (TM2 - TM1) * 1000.0, (FPlatformTime::Seconds() - TM2) * 1000.0);
 	}
 }
 

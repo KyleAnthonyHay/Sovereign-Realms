@@ -25,9 +25,11 @@ import pie
 # UE cm (the json's metres: x * 100, -y * 100)
 MAPS = {
     "realmv3": dict(home=(-13000, -13800, 1400), low=(0, 0, 400), edge=(-7800, -7200, 1400), tower=(-16800, -10000, 1400),
-                    enemy_far=(13000, 13800), look=(-13000, -12000)),
+                    enemy_far=(13000, 13800), look=(-13000, -12000), towers=(11000, 9000),
+                    mist=(-7800, -7200, 2300, -9, 47)),
     "realmv2": dict(home=(-17600, 12800, 0), low=(-15400, 13600, 0), edge=(2400, 1200, 1200), tower=(-22100, 8000, 0),
-                    enemy_far=(23800, -15200), look=(-17600, 11000)),
+                    enemy_far=(23800, -15200), look=(-17600, 11000), towers=(25000, -17000),
+                    mist=(-15000, 9000, 2600, -8, -31)),
 }
 
 
@@ -83,6 +85,12 @@ def one_map(name):
             cmd(["vl.View follow"], None, 1.5)
             pie.main(["shot", "fog_%s_hero_%s" % (name, where), "1.5"])
     print("  radius (mean, min, max, eye):", res)
+    # the enemy's towers' tips out of the fog: from the overview, and from a hero-height camera over the low ground
+    cmd(["vl.Mode overview", "vl.Look %d %d 0.6" % P["towers"]], None, 3)
+    pie.main(["shot", "fog_%s_towers" % name, "2.5"])
+    cmd(["vl.Mode hero", "vl.View free %d %d %d %d %d 60" % P["mist"]], None, 2)
+    pie.main(["shot", "fog_%s_hero_mist" % name, "2.5"])
+    cmd(["vl.View follow"], None, 0.5)
     # enemies: one beside the king, one far off
     x, y, z = P["low"]
     cmd(["vl.Teleport %d %d %d" % (x, y, z + 120)], None, 1.5)

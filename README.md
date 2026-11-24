@@ -928,7 +928,7 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   Troops not on an order go for any foe within their reach (`Acquire`: 40 m, archers 42 m; raised from 16.9 / 19.5 m,
   about 2.4x / 2.15x, on 2026-11-22; on a lookout the bow's reach), troops before buildings, and answer whoever strikes
   them; friends within 12 m (13 m of a building) come to help, and an idle troop with no foe in its reach goes for the
-  foe of a friend fighting within its reach (up to 10 m beyond it). Sight (the Spy's notice, fog of war) stays 16.9 /
+  foe of a friend fighting within its reach (up to 10 m beyond it). Sight (the Spy's notice; the fog of war's kind scale, see *Fog of war*) stays 16.9 /
   19.5 m. Stance per platoon or unit (G): Aggressive (40 / 42 m; lets a chase go at 1.5 times that unless struck, and
   goes no further than 50 m from where it took the fight up, `VLRules::AggressiveLeash`: then, and after letting a chase
   go, it walks back there; a fight taken up within 6 s of another keeps the first one's post, so one foe after another
@@ -958,8 +958,8 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   and sends it every 16-28 s to a look-out beside one of your buildings (the castle most often), just outside the
   distance at which it would be noticed; below 60% health it goes home and stays. Console: `vl.Spies`,
   `vl.Spyglass 0|1`, `vl.SpyCooldown [seconds] [enemy]`, `vl.TrainAt Castle`, `vl.SpawnTeam Spy 0|1 X Y`.
-  Deferred with the fog of war: lifting the fog over what it sees, hiding the enemy's Spy from the player until one
-  of the player's troops is within 45% of its sight, drawing it half seen; Its Roam order (O) is in (see *Standing orders*), choosing
+  The fog of war (see *Fog of war*) lifts over what it sees (twice a swordsman's reach) and hides the enemy's Spy
+  until one of the player's eyes is within 45 % of its reach; still deferred: drawing it half seen. Its Roam order (O) is in (see *Standing orders*), choosing
   ground it has not been to lately instead of unexplored ground.
 - **Buildings** (health, then by level): Castle 8400 (houses 8, troop ceiling 36, stores 600 each, 1 archer on its
   walls: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500, 4 archers and 21000 health; it was 12000 to 30000 until 2026-11-23), Barracks 1600, Archery Range 1400 (levels:
@@ -1165,7 +1165,7 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   base on any map: copies of its buildings, mirrored), `vl.TestWorld [0|1|2]`, `vl.Cohesion`, `vl.AIvsAI 1`, `vl.BattleLog 1`. `vl.Order`, `vl.SelectUnits`,
   `vl.Units` and the like take `enemy` for the enemy's units; the group words mean the player's own.
 - **Not ported** (the user's to design): the Medic, the Catapult,
-  the Horseman (no voxel model yet); also deferred: fog of war, saved games. (Guard, patrol, march together and the
+  the Horseman (no voxel model yet); also deferred: saved games (the fog of war is in: see *Fog of war*). (Guard, patrol, march together and the
   other orders are back: *Standing orders*, `Docs/PORT_AUDIT.md`.)
 
 ## The interface
@@ -1207,6 +1207,51 @@ cache (sharp at every size); 16 px pixel-art icons drawn point-filtered. Everyth
   enters his hero view, as Enter with him selected), the clock, the enemy ("Enemy ready in 3:12" dim, amber under a
   minute; "Enemy watching"; "Enemy attacking!" pulsing). Tooltips on each, **shown only while Option (Alt) is held**
   (every tooltip of the interface: `AVLHUD::DrawTooltip`). Top right: Controls (F1) and Pause.
+## Fog of war (`UVLFog`, `VLFog.*`; `M_FogOfWar`)
+
+The player's view of the map (the owner's call, 2026-11-23), on cells of 2 m over the map's square:
+**unexplored** (dense fog), **explored** (seen before, not now: a lighter fog, the ground greyed, buildings as they
+stood, no enemy units) and **visible** (clear). On in every battle; off on the Test World (`vl.Fog.TestWorld 1` for it
+there), on Flatlands and the title screen. The enemy commander keeps its own perception (sightings within 26 m,
+`VLEnemyAI`): it is not given a fog.
+
+- **How far an eye sees** (the owner's rule): an eye 20 m over the unit's feet looks down at 30 degrees all round;
+  where that cone meets the ground is how far it sees: 20 / tan 30 = **34.6 m on flat ground**. It is worked out per
+  direction (48): a ray at -30 degrees is marched from the eye over the terrain's heightfield (the Ground meshes and
+  the water, traced once a match on the fog's cells) until it meets the ground, so from a plateau, a ridge or a
+  lookout the ground is further below the eye and it sees further, and a rising slope or a ridge cuts it short.
+  Measured on Realm v3: the basin floor 33.8 m (29.6-35.2), the plateau's edge 44.8 m (35.2 to 56.0 over the drop),
+  a watch tower's lookout (10.5 m up) 64.7 m (46.6-88.1); Realm v2: 34.7 m on the low ground, 49.0 m on a lookout.
+  Kinds see their sight over a swordsman's (`FTroop::Sight`): archers and Jonathan x1.15, **the Spy x2**
+  (`vl.Fog.KindScale` 0..1). A tower's own archers are part of the tower; archers sent up to its lookout are eyes
+  from its floor. A unit in the water looks from its surface.
+- **Watch towers see 35 % past their reach**: on flat ground 1.35 x the shooting range from the walls, 32.4 / 36.45 /
+  40.5 m at levels 1-3 (`vl.Fog.TowerView`), combined with the height rule: the eye is put where the 30-degree cone
+  lands there (18.7 / 21.0 / 23.4 m, about the tower's own top) and the same ray then sees further from a plateau,
+  less against a slope (Realm v3's home towers: 37.8-75 m; one of Realm v2's at the foot of a rise 26.8-40.8 m). The
+  other buildings: the unit's rule from their middle, pushed out to their walls. The selected tower shows it as a
+  dashed blue outline beside its orange reach, and **the selected troops' dashed sight ring is their fog outline**.
+- **What the fog hides**: enemy units (and ships) not on a visible cell are hidden in the world, and have no bar,
+  diamond or minimap dot, and cannot be picked or hovered; the enemy's Spy shows only within 45 % (its Notice) of an
+  eye's reach. Enemy buildings raised in the match are hidden until first seen (the map's own stand), drawn on the
+  minimap only once seen, and their training, site and health bars show only while in sight.
+- **The look**: a post-process layer (`/Game/Voxel/Fog/M_FogOfWar`, made by `Tools/ue/build_fog_material.py`, on a
+  post-process volume of the fog's own, Scene Color After DOF) whose top is 17.5 m over the terrain smoothed
+  (`vl.Fog.Layer`; a watch tower is 20.6 m): the view ray is marched through it in 10 jittered steps, its density
+  from the fog texture, ramping in over its top 5 m, the top rising and falling 3.5 m in drifting wisps. The towers'
+  roofs, the castles' flags, tall trees on the ridges and Realm v2's mountain stand out of it; from the hero camera
+  it is a bank of mist. The edge of what is seen is a soft bank some 8 m deep, eased over 0.35 s.
+- **The minimap** lays the same texture on the map: unexplored dark, explored dimmed.
+- **Cost** (PIE, 1334 x 753, this PC): the post-process pass 0.05 ms of GPU on Realm v3 and Realm v2 (0 with
+  `vl.Fog 0`); the vision update every 0.1 s 0.8-1.0 ms on the game thread with 13 eyes, about 1.7 ms with 62
+  (rays only for eyes that moved 1 m, on worker threads; the inner disc filled by rows).
+- Console: `vl.Fog 0|1`, `vl.Fog.Reveal [1|0]` (the whole map seen), `vl.Fog.Info` (the state, the update's time,
+  the played unit's radius min / mean / max), `vl.Fog.Eyes`; cvars `vl.Fog.EyeHeight` (2000 cm), `.Angle` (30),
+  `.MaxRadius`, `.KindScale`, `.TowerView`, `.Layer`, `.Density`, `.ExploredDensity`, `.Wisps`, `.Bright`,
+  `.Desaturate`, `.Interval`, `.Fade`, `.Cell`, `.Log 1|2`. Checks: `python Tools/fog_test.py [realmv3] [realmv2]
+  [perf]` (screenshots `Saved/Screenshots/VL/fog_*.png`).
+- Saved games: the explored cells are `UVLFog::GetExplored` / `SetExplored` (one byte a cell); not saved yet.
+
 - **Build button and menu** (left of the selection panel, B): see *Building*. **A click off the menu** (the world, or
   another panel) **puts it away** and the Build button goes dark; the click is still the usual one, so on the ground it
   also lets the selection go. Sites show a hammer bar over them (red
@@ -1310,7 +1355,7 @@ the voxel characters, not the pixel icons.
 
 **Not ported** (their features are not in this game; their buttons are left out, not shown dead): the castle's building
 zone; the Medic, the Rider and the Catapult (recruit buttons, portraits); the command card's Build and Repair buttons
-(B and X do it, and the Build button); fog of war on the minimap; saved games (Continue, Load, Save, the save list); the title
+(B and X do it, and the Build button); saved games (Continue, Load, Save, the save list); the title
 screen's film; the recruit buttons' Q / E keys (Q / E turn the view here); the sandbox match of the first draft's New Game.
 
 ## Orders: paths, platoons, the tower
