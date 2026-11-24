@@ -29,7 +29,7 @@
 #include "Widgets/SLeafWidget.h"
 #include <atomic>
 
-namespace
+namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravity... must not reach the files after this one)
 {
 	using namespace VLLoadingArt;
 
@@ -772,6 +772,7 @@ namespace
 
 void VLLoadingScreen::Startup()
 {
+	using namespace VLLoadingImpl;
 	// (no movie player in the editor, on a server, in a commandlet: nothing to hook, and Play In Editor loads as before)
 	if (!IsMoviePlayerEnabled() || IsRunningDedicatedServer())
 	{
@@ -788,6 +789,7 @@ void VLLoadingScreen::Startup()
 
 void VLLoadingScreen::Shutdown()
 {
+	using namespace VLLoadingImpl;
 	if (PrepareHandle.IsValid() || FinishedHandle.IsValid())
 	{
 		if (IGameMoviePlayer* Player = GetMoviePlayer())
