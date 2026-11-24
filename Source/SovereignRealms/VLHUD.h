@@ -228,7 +228,7 @@ private:
 	void DrawRangeCircles();
 	void DrawFarPips();
 	void DrawPlatoonTags();
-	/** A shield over every unit the player's troops guard (the hero view's Option + click on a friend, V + click). */
+	/** A shield over every unit the player's troops guard (V + click, the platoon panel's Option + click on a row). */
 	void DrawGuardMarks();
 	/** The unit a row of the Builders' / Spy's list is hovered over: a pulsing ring at its feet and an arrow over it. */
 	void DrawUnitHighlight();

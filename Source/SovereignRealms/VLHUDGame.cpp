@@ -2294,37 +2294,20 @@ void AVLHUD::DrawHeroBits()
 				HintDrop = BH + U(bReady ? 22.f : 10.f);
 			}
 		}
-		// what a click does where it points (the hero view's commands, AVLKing::HeroCommands): gold over one of his own
-		// that a left click selects, red over a foe the selection would be sent at by a right click
-		if (const AVLKing* Aimed = King->GetHeroHover(); Aimed && !King->IsDead())
+		// what a right click does where it points, out of command mode (the right click orders the selection; in
+		// command mode the hint below says what a click there does): red over a foe the selection would be sent at
+		if (const AVLKing* Aimed = King->GetHeroHover(); Aimed && !King->IsDead() && !King->IsCommandMode())
 		{
 			const UVLCommand* HintCmd = UVLCommand::Get(this);
 			TArray<AVLKing*> Sel;
 			if (HintCmd) { HintCmd->GetSelection(Sel); }
 			Sel.Remove(King);
 			FString Hint;
-			FLinearColor HintCol = GoldBright;
-			TArray<AVLKing*> Commanded;
-			King->HeroCommanded(Commanded);
-			if (King->IsHeroHoverSelect() && King->HeroGuardsOnClick(Aimed))
+			FLinearColor HintCol = Refuse;
+			if (Battle && Battle->IsHostile(Aimed, King->Team))
 			{
-				// troops selected and this one is not among them: they guard it (its platoon, if it is in one)
-				const int32 GP = HintCmd ? HintCmd->PlatoonIndexOf(Aimed) : INDEX_NONE;
-				const bool bWhole = GP != INDEX_NONE && Sel.ContainsByPredicate([HintCmd, GP](const AVLKing* U2) { return HintCmd->PlatoonIndexOf(U2) != GP; });
-				Hint = (bWhole ? FString::Printf(VL_ALT_KEY TEXT("+click: guard platoon %d"), GP + 1) : VL_ALT_KEY TEXT("+click: guard ") + Aimed->GetDisplayName())
-					+ TEXT("   ·   R: command mode (a click there selects)");
-			}
-			else if (King->IsHeroHoverSelect())
-			{
-				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? VL_ALT_KEY TEXT("+click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift: let go)")
-					: VL_ALT_KEY TEXT("+click: select ") + Aimed->GetDisplayName());
-			}
-			else if (Commanded.Num() > 0 && Battle && Battle->IsHostile(Aimed, King->Team))
-			{
-				// (the right click orders the selection only; R: command mode, where the mouse commands)
 				Hint = Sel.Num() > 0 ? FString::Printf(TEXT("%s: send %d at %s   ·   R: command mode"), King->bRightMouseAims ? TEXT("Ctrl+click") : TEXT("Right click"), Sel.Num(), *Aimed->GetDisplayName())
 					: FString::Printf(TEXT("R: command mode, to send your troops at %s"), *Aimed->GetDisplayName());
-				HintCol = Refuse;
 			}
 			if (!Hint.IsEmpty())
 			{
@@ -2336,8 +2319,8 @@ void AVLHUD::DrawHeroBits()
 			}
 		}
 	}
-	// command mode (R): a banner at the top that says so and how the mouse commands, and by the pointer what a click
-	// there does
+	// command mode (R): a banner at the top that says so and how the mouse commands, and under the crosshair what a
+	// click there does
 	if (bHero && King->IsCommandMode() && !King->IsDead())
 	{
 		const UVLCommand* CmdC = UVLCommand::Get(this);
@@ -2359,10 +2342,11 @@ void AVLHUD::DrawHeroBits()
 			TextIn(FBox2D(B.Min, FVector2D(B.Max.X, B.Min.Y + U(28.f))), Title, TS, GoldBright, AlignCentre, Bold);
 			TextIn(FBox2D(FVector2D(B.Min.X, B.Min.Y + U(26.f)), B.Max), SubLine, SS, Parchment, AlignCentre);
 		}
-		float MX = 0.f, MY = 0.f;
+		// (at the crosshair: the mouse still looks round in command mode; the pointer with C's postcard)
+		float MX = View.X * 0.5f, MY = View.Y * King->CrosshairHeight;
 		AActor* Hit = nullptr;
 		FVector Ground;
-		if (PCtrl && PCtrl->GetMousePosition(MX, MY) && King->HeroPick(PCtrl, Hit, Ground) && Hit)
+		if (PCtrl && (King->IsMouseLooking() || PCtrl->GetMousePosition(MX, MY)) && King->HeroPick(PCtrl, Hit, Ground) && Hit)
 		{
 			const bool bShiftDown = PCtrl->IsInputKeyDown(EKeys::LeftShift) || PCtrl->IsInputKeyDown(EKeys::RightShift);
 			const AVLKing* HitUnit = Cast<AVLKing>(Hit);
@@ -2392,7 +2376,7 @@ void AVLHUD::DrawHeroBits()
 			{
 				const float HS = U(13.f);
 				const FVector2D TSz = TextSize(Hint, HS);
-				const float HX = FMath::Min(MX + U(18.f), View.X - TSz.X - U(24.f)), HY = MY + U(22.f);
+				const float HX = King->IsMouseLooking() ? MX - TSz.X * 0.5f - U(8.f) : FMath::Min(MX + U(18.f), View.X - TSz.X - U(24.f)), HY = MY + U(King->IsMouseLooking() ? 34.f : 22.f);
 				const FBox2D HB(FVector2D(HX, HY), FVector2D(HX + TSz.X + U(16.f), HY + TSz.Y + U(6.f)));
 				Panel(HB, false, 0.75f);
 				TextIn(HB, Hint, HS, HintCol, AlignCentre);
@@ -2571,7 +2555,7 @@ void AVLHUD::DrawHeroBits()
 			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   R command mode   Tab overview   Esc menu");
 		if (King->IsCommandMode())
 		{
-			Help = TEXT("COMMAND MODE   Left click: select (Shift adds)   Right click: attack / move   Shift + right click: queue   RMB drag / Q E: turn   WASD move   R: back");
+			Help = TEXT("COMMAND MODE (at the crosshair)   Left click: select (Shift adds)   Right click: attack / move   Shift + right click: queue   WASD move   R: back");
 		}
 		// between the minimap and the platoon panel (both stay up in the hero view): smaller in a narrow window
 		const float SpanL = MapRect.bIsValid ? MapRect.Max.X + U(16.f) : U(14.f), SpanR = PlatoonRect.bIsValid ? PlatoonRect.Min.X - U(10.f) : View.X - U(14.f);

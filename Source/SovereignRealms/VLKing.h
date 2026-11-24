@@ -630,33 +630,20 @@ public:
 	bool HeroPick(APlayerController* PC, AActor*& OutHit, FVector& OutGround) const;
 	/** The selection (without the unit played) takes the order under the crosshair. True if an order was given. */
 	bool HeroOrder(APlayerController* PC, bool bRun, bool bQueue);
-	/**
-	 * Alt / Option + click in the hero view (a plain click is always the unit's own blow). One of his own under the
-	 * crosshair: selected (Shift: added or taken out; twice quickly: played). A foe's unit or building: those under
-	 * his command attack it; the ground: they go there (twice quickly: at a run); Shift: on the end of their chain
-	 * (attack unit 1, then 2, then a building, then walk). Those under his command: the selection (not the unit
-	 * played), else those following him (who fall in behind him again after an attack), else his platoon. The sky,
-	 * or King David himself with the pointer shown: the selection is let go (Esc too).
-	 * With troops selected, one of his own that is NOT among them is guarded by them instead (HeroGuardsOnClick):
-	 * its platoon if it is in one (UVLCommand::OrderGuardPlatoon), else the unit itself.
-	 */
-	void HeroSelect(APlayerController* PC, bool bShift);
-	/** Would an Option + click on Aimed (one of his own) have the selection guard it, rather than select it? */
-	bool HeroGuardsOnClick(const AVLKing* Aimed) const;
-	/** Whom an Alt + click in the hero view commands (see HeroSelect); bOutFollowers: they are his followers. */
+	/** Whom the hero commands (the selection, else his followers, else his platoon: the HUD's numbered plates); bOutFollowers: they are his followers. */
 	void HeroCommanded(TArray<AVLKing*>& Out, bool* bOutFollowers = nullptr) const;
 	/** The hero view's commands (select, order, platoon keys, follow me). True: this frame's left click was one. */
 	/** bClickSpent: this frame's left click went to the interface (the pointer shown: the minimap, the platoon panel). */
 	bool HeroCommands(APlayerController* PC, bool bClickSpent = false);
 	/**
-	 * Is a left click now a command (HeroSelect), not the unit's own blow? Only with Alt / Option held (not with Ctrl /
-	 * Cmd: that is an order, the right click's): a plain left click is always the blow. OutUnit: one of the player's
-	 * own units under the crosshair, if any.
+	 * Is a left click now a command (CommandSelect), not the unit's own blow? Only in command mode (not with Ctrl /
+	 * Cmd: that is an order, the right click's). OutUnit: one of the player's own units under the crosshair, if any.
 	 */
 	bool HeroClickSelects(APlayerController* PC, AVLKing** OutUnit = nullptr) const;
 	/**
-	 * Command mode (R in the hero view, on / off; the owner's call of 2026-11-24). While it is on the pointer is shown
-	 * and the mouse commands, not the hero's blade: a left click on one of his own selects it alone (Shift + click
+	 * Command mode (R in the hero view, on / off; the owner's call of 2026-11-24). While it is on the mouse still looks
+	 * round and every click acts on what is under the crosshair, not the hero's blade: a left click on one of his own
+	 * selects it alone (Shift + click
 	 * adds it or takes it out; twice quickly: play it), elsewhere lets the selection go; a right click orders the
 	 * selection (a foe's unit or building: attack it; the ground: go there; a friend's building, King David, a
 	 * Builder: guard it; a troop: follow it). Shift + right click queues (attack A, then B, walk, attack C). An order
@@ -1036,7 +1023,6 @@ private:
 	TWeakObjectPtr<AActor> HeroLastClicked;
 	double HeroLastClickTime = 0.0;
 	double HeroLastOrderTime = -1.0;
-	double HeroLastAltOrderTime = -1.0;
 	// command mode (IsCommandMode)
 	bool bCommandMode = false;
 	bool bCommandChain = false;             // a Shift chain is being given: the selection goes when Shift is let go

@@ -1571,7 +1571,6 @@ bool AVLKing::HeroClickSelects(APlayerController* PC, AVLKing** OutUnit) const
 	{
 		return false;
 	}
-	const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
 	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::LeftCommand)
 		|| PC->IsInputKeyDown(EKeys::RightCommand);
 	if (bCtrl)
@@ -1589,7 +1588,7 @@ bool AVLKing::HeroClickSelects(APlayerController* PC, AVLKing** OutUnit) const
 	{
 		*OutUnit = Hover;
 	}
-	return bAlt || IsCommandMode();         // Alt / Option + click, or any click in command mode: a command; else the unit's own blow
+	return IsCommandMode();                 // a click in command mode selects; else it is the unit's own blow
 }
 
 bool AVLKing::HeroPick(APlayerController* PC, AActor*& OutHit, FVector& OutGround) const
@@ -1691,130 +1690,6 @@ void AVLKing::HeroCommanded(TArray<AVLKing*>& Out, bool* bOutFollowers) const
 		Command->GetPlatoon(Command->PlatoonIndexOf(this), Out);
 		Out.Remove(const_cast<AVLKing*>(this));
 	}
-}
-
-void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
-{
-	UVLCommand* Command = UVLCommand::Get(this);
-	UVLBattle* Battle = UVLBattle::Get(this);
-	if (!Command)
-	{
-		return;
-	}
-	// King David himself under the pointer (shown: the crosshair is never on him): the selection is let go
-	if (!bMouseLookActive && HeroTestAimTime <= 0.f)
-	{
-		FVector2D Cross;
-		if (HeroCrossPoint(PC, Cross) && PickAt(PC, Cross, nullptr, false) == this)
-		{
-			HeroLastClicked = nullptr;
-			Command->ClearSelection();
-			UE_LOG(LogSovereignRealms, Log, TEXT("hero select: let go (on %s)"), *GetDisplayName());
-			return;
-		}
-	}
-	AActor* Hit = nullptr;
-	FVector Ground;
-	const bool bPicked = HeroPick(PC, Hit, Ground);
-	AVLKing* HitUnit = Cast<AVLKing>(Hit);
-	if (HitUnit && HitUnit->Team == Team && HitUnit->IsAlive())
-	{
-		// one's own: selected (Shift: added or taken out); twice quickly: taken control of
-		const double Now = GetWorld()->GetRealTimeSeconds();
-		if (!bShift && HeroLastClicked.Get() == HitUnit && Now - HeroLastClickTime < 0.4)
-		{
-			HeroLastClicked = nullptr;
-			TakeControlOf(HitUnit);
-			return;
-		}
-		HeroLastClicked = HitUnit;
-		HeroLastClickTime = Now;
-		if (!bShift && HeroGuardsOnClick(HitUnit))
-		{
-			// troops selected, and this one is not among them: they guard it (its platoon, if it is in one): they keep
-			// by it and fight what comes at it
-			TArray<AVLKing*> Guards;
-			Command->GetSelection(Guards);
-			Guards.Remove(this);
-			const int32 P = Command->PlatoonIndexOf(HitUnit);
-			const bool bPlatoon = P != INDEX_NONE && Guards.ContainsByPredicate([Command, P](const AVLKing* U) { return Command->PlatoonIndexOf(U) != P; });
-			const int32 N = bPlatoon ? Command->OrderGuardPlatoon(Guards, P) : Command->OrderGuard(Guards, HitUnit, true);
-			UE_LOG(LogSovereignRealms, Log, TEXT("hero guard: %d of %d unit(s) guard %s%s"), N, Guards.Num(), *HitUnit->GetDisplayName(), bPlatoon ? *FString::Printf(TEXT(" (platoon %d)"), P + 1) : TEXT(""));
-			if (Battle)
-			{
-				if (N > 0)
-				{
-					Battle->PushAlert(bPlatoon ? FString::Printf(TEXT("%d guard platoon %d"), N, P + 1) : FString::Printf(TEXT("%d guard %s"), N, *HitUnit->GetDisplayName()));
-					AVLGameMode::PlayOrderSound(this);
-				}
-				else
-				{
-					Battle->PushAlert(TEXT("Builders do not guard"));
-					Battle->Play2D(TEXT("S_UIError"), 0.4f);
-				}
-			}
-			return;
-		}
-		if (bShift)
-		{
-			Command->Toggle(HitUnit);
-		}
-		else
-		{
-			Command->Select({ HitUnit });
-		}
-		UE_LOG(LogSovereignRealms, Log, TEXT("hero select: %s%s (%d selected)"), *HitUnit->GetDisplayName(), bShift ? TEXT(" toggled") : TEXT(""), Command->NumSelected());
-		if (Battle)
-		{
-			Battle->Play2D(TEXT("S_UIClick"), 0.4f);
-		}
-		return;
-	}
-	HeroLastClicked = nullptr;
-	if (!bPicked)
-	{
-		if (!bShift)
-		{
-			Command->ClearSelection();      // the sky: the selection is let go
-			UE_LOG(LogSovereignRealms, Log, TEXT("hero select: let go (the sky)"));
-		}
-		return;
-	}
-	// a foe, the ground, a building: an order for those under his command (Shift: on the end of their chain)
-	bool bFollowers = false;
-	TArray<AVLKing*> Units;
-	HeroCommanded(Units, &bFollowers);
-	if (Units.Num() == 0)
-	{
-		if (Battle)
-		{
-			Battle->PushAlert(TEXT("Nobody to command: R for command mode and click a troop, or G with your platoon"));
-			Battle->Play2D(TEXT("S_UIError"), 0.4f);
-		}
-		return;
-	}
-	const double Now = GetWorld()->GetRealTimeSeconds();
-	const bool bRun = !bShift && Now - HeroLastAltOrderTime < 0.35;         // twice quickly: at a run
-	HeroLastAltOrderTime = Now;
-	UE_LOG(LogSovereignRealms, Log, TEXT("hero command: %d unit(s)%s, ground %s, on %s%s%s"), Units.Num(), bFollowers ? TEXT(" (his followers)") : TEXT(""), *Ground.ToCompactString(),
-		*GetNameSafe(Hit), bShift ? TEXT(" (queued)") : TEXT(""), bRun ? TEXT(" (at a run)") : TEXT(""));
-	if (OrderOn(Units, Hit, Ground, bRun, bShift, bFollowers ? this : nullptr))
-	{
-		AVLGameMode::PlayOrderSound(this);
-	}
-}
-
-bool AVLKing::HeroGuardsOnClick(const AVLKing* Aimed) const
-{
-	const UVLCommand* Command = UVLCommand::Get(this);
-	if (!Command || !Aimed || Aimed == this || Aimed->Team != Team || !Aimed->IsAlive() || !Command->CanBeGuarded(Aimed, Team, true))
-	{
-		return false;
-	}
-	TArray<AVLKing*> Sel;
-	Command->GetSelection(Sel);
-	Sel.Remove(const_cast<AVLKing*>(this));
-	return Sel.Num() > 0 && !Sel.Contains(Aimed) && Sel.ContainsByPredicate([](const AVLKing* U) { return !UVLBuilderWork::IsBuilder(U); });
 }
 
 void AVLKing::SetCommandMode(bool bOn)
@@ -1988,7 +1863,6 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 	const bool bShift = PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift);
 	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::LeftCommand)
 		|| PC->IsInputKeyDown(EKeys::RightCommand);
-	const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
 	auto Order = [&]()
 	{
 		// twice quickly: at a run; Shift: on the end of their pathways (Builders: their queues)
@@ -2007,11 +1881,11 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 		HeroHover = HeroCrossPoint(PC, Cross) ? Cast<AVLKing>(PickAt(PC, Cross, nullptr, false, this)) : nullptr;
 		AVLKing* Own = nullptr;
 		HeroClickSelects(PC, &Own);
-		bHeroHoverSelect = Own != nullptr;  // (the hint: Option + click selects it)
+		bHeroHoverSelect = Own != nullptr;  // (the hint: in command mode a click selects it)
 	}
 	bool bTook = bClickSpent;
 	// R: command mode on / off (IsCommandMode)
-	if (PC->WasInputKeyJustPressed(EKeys::R) && !bCtrl && !bAlt)
+	if (PC->WasInputKeyJustPressed(EKeys::R) && !bCtrl)
 	{
 		SetCommandMode(!bCommandMode);
 	}
@@ -2045,8 +1919,9 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 				return true;                // (took control of another)
 			}
 		}
-		// the right click orders (let go without dragging: a right drag turns the view)
-		if (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f)
+		// the right click orders at the crosshair (the mouse still looks round; with the pointer shown, as C's postcard
+		// shows it, a click let go without dragging, as in the overview)
+		if (bMouseLookActive ? PC->WasInputKeyJustPressed(EKeys::RightMouseButton) : (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f))
 		{
 			CommandOrder(PC, bShift);
 		}
@@ -2067,21 +1942,13 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 			Order();                        // Ctrl / Cmd + click: an order (the archer's and the spy's, a trackpad's)
 			bTook = true;
 		}
-		else if (HeroClickSelects(PC))
-		{
-			// Alt / Option + click: one of his own is selected (Shift adds or takes it out, twice quickly plays it);
-			// a foe is attacked and the ground walked to by those under his command (Shift: queued); the sky lets
-			// the selection go. A plain click is always the unit's own blow.
-			HeroSelect(PC, bShift);
-			bTook = true;
-		}
 		if (bTook)
 		{
 			HeroClickFrame = GFrameCounter;  // (not a swing, a bash or a lock)
 		}
 	}
-	// (R was a command at the crosshair, a779f80; since 2026-11-24 it turns command mode on and off, above. In the hero
-	// view Home puts the camera back.)
+	// (R was a command at the crosshair, a779f80; since 2026-11-24 it turns command mode on and off, above, and the
+	// Option / Alt + click commands are gone: command mode does them. In the hero view Home puts the camera back.)
 	if (PC->GetPawn() != this)
 	{
 		return true;                        // (took control of another)
@@ -2089,7 +1956,7 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 	// out of command mode the right button orders the selection, unless the unit played uses it (the archer's bow, the
 	// spy's glass). With the pointer shown a right drag turns the view, so then the order is on a click let go without
 	// dragging, as in the overview.
-	if (!bCommandMode && !bRightMouseAims && !bAlt)
+	if (!bCommandMode && !bRightMouseAims)
 	{
 		if (bMouseLookActive ? PC->WasInputKeyJustPressed(EKeys::RightMouseButton) : (PC->WasInputKeyJustReleased(EKeys::RightMouseButton) && RightTravel < 6.f))
 		{
@@ -2100,7 +1967,7 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 	static const FKey Digits[UVLCommand::MaxPlatoons] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six };
 	for (int32 i = 0; i < UVLCommand::MaxPlatoons; ++i)
 	{
-		if (PC->WasInputKeyJustPressed(Digits[i]) && !bCtrl && !bAlt && !bShift)
+		if (PC->WasInputKeyJustPressed(Digits[i]) && !bCtrl && !bShift)
 		{
 			TArray<AVLKing*> Members;
 			Command->GetPlatoon(i, Members);
@@ -3061,7 +2928,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 		Turn += SX * MouseX * Speed;
 		LookPitch = FMath::Clamp(LookPitch + SY * MouseY * Speed * 0.8f, -40.f, 32.f);
 	}
-	else if (PC->IsInputKeyDown(EKeys::RightMouseButton) && !(bHeroMode && bRightMouseAims && !bCommandMode))      // (an archer's right button draws her bow; not in command mode)
+	else if (PC->IsInputKeyDown(EKeys::RightMouseButton) && !(bHeroMode && bRightMouseAims))      // (an archer's right button draws her bow)
 	{
 		Turn += MouseX * 0.9f;
 		RightTravel += FMath::Abs(MouseX) + FMath::Abs(MouseY);
@@ -3206,9 +3073,9 @@ void AVLKing::PollInput(float DeltaSeconds)
 			bArmed = !bArmed;
 			bAttackQueued = false;
 		}
-		// commanding from here: R turns command mode on (the pointer: a left click selects, a right click orders the
-		// selection, Shift queues); out of it Alt / Option + click still selects and orders, the right click (Ctrl /
-		// Cmd + click) orders the selection; 1..6 the platoons, G follow me (a command's click is not a swing)
+		// commanding from here: R turns command mode on (at the crosshair a left click selects, a right click orders,
+		// Shift queues); out of it the right click (Ctrl / Cmd + click) orders the selection; 1..6 the platoons, G follow
+		// me (a command's click is not a swing)
 		// (the pointer shown in the hero view, C's postcard or mouse look off: the minimap and the platoon panel take
 		// their clicks first, as in the overview)
 		bool bHudClick = false;
@@ -3499,7 +3366,7 @@ bool AVLKing::GetAimRay(APlayerController* PC, FVector& Origin, FVector& Dir) co
 
 void AVLKing::UpdateCursorMode(APlayerController* PC, const AVLHUD* HUD)
 {
-	const bool bWant = bMouseLook && bHeroMode && !bCommandMode && ViewMode == 0 && !(HUD && HUD->bMenu) && PC->GetPawn() == this;     // (command mode: the pointer)
+	const bool bWant = bMouseLook && bHeroMode && ViewMode == 0 && !(HUD && HUD->bMenu) && PC->GetPawn() == this;
 	// At launch the window can come up without the keyboard and mouse focus (the input mode is applied before the
 	// window is in front): until the game viewport really has the mouse, focus it and capture again, twice a second.
 	if (bWant && bCursorModeSet)

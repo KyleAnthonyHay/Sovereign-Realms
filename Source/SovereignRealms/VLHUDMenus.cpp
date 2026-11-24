@@ -88,7 +88,7 @@ namespace
 		{ TEXT("F"), TEXT("Draw or sheathe the sword") },
 		{ TEXT("Hold RMB"), TEXT("Archer: draw (let go: shoot). Spy: the spyglass") },
 		{ TEXT("LMB"), TEXT("Attack: your own blow (not in command mode)") },
-		{ TEXT("R"), TEXT("Command mode on / off: the pointer, the plan shown") },
+		{ TEXT("R"), TEXT("Command mode on / off: clicks at the crosshair command") },
 		{ TEXT("Cmd mode: LMB troop"), TEXT("Select it alone (Shift: add / remove; twice: play)") },
 		{ TEXT("Cmd mode: RMB"), TEXT("Foe / building: attack it; ground: go (twice: run)") },
 		{ TEXT("Cmd mode: Shift + RMB"), TEXT("Queue: building A, then B, a walk, then C") },

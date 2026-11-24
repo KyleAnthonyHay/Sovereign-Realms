@@ -135,7 +135,7 @@ public:
 	/** bQueue: one more point of the attack-move these units are on together (Shift + click). */
 	void OrderAttackMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun = false, EVLFormation Shape = EVLFormation::Line, bool bQueue = false);
 	/** Returns how many took a post (Builders do not guard; nobody guards itself). bTroops: Ward may be any living unit
-	 *  of their side (the hero view's Option + click, V + click). Platoon: the guard is of that platoon: when Ward
+	 *  of their side (V + click, the platoon panel's Option + click). Platoon: the guard is of that platoon: when Ward
 	 *  falls it passes to the platoon's leader, else its nearest member, and ends only with the platoon. */
 	int32 OrderGuard(const TArray<AVLKing*>& Units, AActor* Ward, bool bTroops = false, int32 Platoon = INDEX_NONE);
 	/** The selection-style call for a whole platoon: its leader (else the member nearest its middle) is the ward, the

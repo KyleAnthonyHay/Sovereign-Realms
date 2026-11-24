@@ -12,7 +12,8 @@ so that it does not take the enemy troops spawned here into its squads; the flan
             than a walk, the ones ahead slower) and the platoon arrives together (UVLCommand::UpdateMarchPace)
   mixed     three swordsmen and three archers attack an enemy site 60 m off: the archers run with the swordsmen
   amove     three archers on an attack-move past a foe: they stop and shoot it (they do not walk on to the end first)
-  guard     the hero view: troops selected, Option + click (vl.HeroOrder select) on a troop of a platoon: they guard
+  guard     troops selected, guard a troop of a platoon (vl.Guard selection platoon N; the hero view's Option + click
+            that did this is gone, 2026-11-24): they guard
             the platoon ("Guarding platoon N")
   ctrl      Ctrl + 5 (a real key chord through Slate) adds the selection to platoon 5, which keeps its members
   assign    the command card's Assign button opens the picker; a chip adds the selection to that platoon
@@ -233,10 +234,10 @@ def t_guard():
     select(guards)
     cmd("vl.Mode hero", wait=1.0)
     m = mark()
-    cmd("vl.HeroAim %s" % ward[0].replace(" ", "_"), "vl.HeroOrder select", wait=1.5)
+    cmd("vl.Guard selection platoon 5", wait=1.5)
     out = lines(m)
     g = [l for l in out if "guard" in l.lower()]
-    check("guard: Option + click on a platoon's troop guards the platoon", any("platoon 5" in l for l in g), g[:3])
+    check("guard: the selection guards the platoon", any("platoon 5" in l for l in g), g[:3])
     orders = [l for l in cmd("vl.Orders") if any(n in l for n in guards)]
     check("guard: the guards' order is the platoon's guard", any("guard" in l.lower() for l in orders), orders[:2])
     cmd("vl.Mode overview")

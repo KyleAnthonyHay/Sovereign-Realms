@@ -3476,7 +3476,7 @@ namespace
 			C->OrderAttackMove(Units, GroundAt(World, FCString::Atof(*Args[1]), FCString::Atof(*Args[2])), bRun, Units.Num() > 1 ? C->SelectionFormation() : EVLFormation::Line, bQueue);
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdGuard(TEXT("vl.Guard"), TEXT("vl.Guard <who> <building name | unit name | king | platoon N>: guard it (a troop or a platoon too, as the hero view's Option + click)"),
+	FAutoConsoleCommandWithWorldAndArgs CmdGuard(TEXT("vl.Guard"), TEXT("vl.Guard <who> <building name | unit name | king | platoon N>: guard it (a troop or a platoon too, as the platoon panel's Option + click on a row)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVLCommand* C = UVLCommand::Get(World);
@@ -3563,7 +3563,7 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdHeroOrder(TEXT("vl.HeroOrder"), TEXT("vl.HeroOrder [run] [queue] | select [add] | mode on|off | cselect [add] | corder [queue] | cend | click: the played unit's right click / Option + click (add: with Shift) / plain left click at the crosshair"),
+	FAutoConsoleCommandWithWorldAndArgs CmdHeroOrder(TEXT("vl.HeroOrder"), TEXT("vl.HeroOrder [run] [queue] | select [add] | mode on|off | cselect [add] | corder [queue] | cend | click: the played unit's right click / command mode's left click (add: with Shift) / plain left click at the crosshair"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			APlayerController* PC = World->GetFirstPlayerController();
@@ -3598,12 +3598,14 @@ namespace
 			}
 			if (Args.Contains(TEXT("select")))
 			{
-				Me->HeroSelect(PC, Args.Contains(TEXT("add")));
+				// (the Option + click command is gone: "select" is command mode's left click, turning it on)
+				Me->SetCommandMode(true);
+				Me->CommandSelect(PC, Args.Contains(TEXT("add")));
 				return;
 			}
 			if (Args.Contains(TEXT("click")))
 			{
-				// a plain left click: always the unit's own blow (Option + click is the command: "select")
+				// a plain left click out of command mode: always the unit's own blow
 				AVLKing* On = nullptr;
 				Me->HeroClickSelects(PC, &On);
 				UE_LOG(LogSovereignRealms, Log, TEXT("vl.HeroOrder click: on %s -> swing"), *GetNameSafe(On));
