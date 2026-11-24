@@ -1,4 +1,4 @@
-# Voxel village: how to build an asset
+# How to build a voxel asset
 
 We are rebuilding the look of the game as a **Minecraft-like voxel diorama**, matching the owner's reference pictures as
 closely as possible (ideally one-to-one). Everything is made of cubes with pixel-art textures: chunky stone blocks,

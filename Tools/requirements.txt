@@ -1,0 +1,9 @@
+# Python packages for the offline tools (texture and sound generators, layout plans, tests, compare.py, sheet.py).
+# Not for Blender's or Unreal's own Python. Install into Tools/.venv (see README.md, Getting started).
+imageio-ffmpeg==0.6.0
+mapbox_earcut==2.1.0
+numpy==2.0.2
+pillow==11.3.0
+scipy==1.13.1
+shapely==2.0.7
+soundfile==0.13.1
