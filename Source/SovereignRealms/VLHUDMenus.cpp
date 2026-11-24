@@ -87,7 +87,7 @@ namespace
 		{ TEXT("WASD, Shift, Space"), TEXT("Walk, run (or double-tap), jump") },
 		{ TEXT("F"), TEXT("Draw or sheathe the sword") },
 		{ TEXT("Hold RMB"), TEXT("Archer: draw (let go: shoot). Spy: the spyglass") },
-		{ TEXT("LMB"), TEXT("Attack: your own blow (not in command mode)") },
+		{ TEXT("LMB"), TEXT("Attack: your own blow (command mode: on a troop, select)") },
 		{ TEXT("R"), TEXT("Command mode on / off: clicks at the crosshair command") },
 		{ TEXT("Cmd mode: LMB troop"), TEXT("Select it alone (Shift: add / remove; twice: play)") },
 		{ TEXT("Cmd mode: RMB"), TEXT("Attack / go there: the selection, else all troops") },

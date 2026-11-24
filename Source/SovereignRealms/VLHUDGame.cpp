@@ -2332,8 +2332,8 @@ void AVLHUD::DrawHeroBits()
 		{
 			const FString Title = TEXT("COMMAND MODE");
 			const FString SubLine = Sel.Num() > 0
-				? FString::Printf(TEXT("%d selected  ·  Right click: attack / move  ·  Shift + right click: queue  ·  Left click: select (Shift adds)  ·  R: back to the fight"), Sel.Num())
-				: FString::Printf(TEXT("Nobody selected: right click sends all %d army troops  ·  Left click a troop to select it (Shift adds)  ·  R: back to the fight"), Army.Num());
+				? FString::Printf(TEXT("%d selected  ·  Right click: attack / move  ·  Shift + right click: queue  ·  Left click on a troop: select (Shift adds)  ·  R: off"), Sel.Num())
+				: FString::Printf(TEXT("Nobody selected: right click sends all %d army troops  ·  Left click a troop to select it (Shift adds)  ·  R: off"), Army.Num());
 			const float TS = U(17.f), SS = U(13.f);
 			const float W = FMath::Max(TextSize(Title, TS, Bold).X + U(40.f), TextSize(SubLine, SS).X + U(32.f)), H = U(52.f);
 			const float Y0 = TopBarRect.bIsValid ? TopBarRect.Max.Y + U(8.f) : U(10.f);
@@ -2557,7 +2557,7 @@ void AVLHUD::DrawHeroBits()
 			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   R command mode   Tab overview   Esc menu");
 		if (King->IsCommandMode())
 		{
-			Help = TEXT("COMMAND MODE (at the crosshair)   Left click: select (Shift adds)   Right click: attack / move   Shift + right click: queue   WASD move   R: back");
+			Help = TEXT("COMMAND MODE (at the crosshair)   Left click: your troop: select (Shift adds), else attack   Right click: attack / move   Shift + right click: queue   WASD move   R: off");
 		}
 		// between the minimap and the platoon panel (both stay up in the hero view): smaller in a narrow window
 		const float SpanL = MapRect.bIsValid ? MapRect.Max.X + U(16.f) : U(14.f), SpanR = PlatoonRect.bIsValid ? PlatoonRect.Min.X - U(10.f) : View.X - U(14.f);

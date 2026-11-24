@@ -1588,7 +1588,7 @@ bool AVLKing::HeroClickSelects(APlayerController* PC, AVLKing** OutUnit) const
 	{
 		*OutUnit = Hover;
 	}
-	return IsCommandMode();                 // a click in command mode selects; else it is the unit's own blow
+	return IsCommandMode() && bOwn;        // in command mode a click on one of his own selects it; else it is the unit's own blow
 }
 
 bool AVLKing::HeroPick(APlayerController* PC, AActor*& OutHit, FVector& OutGround) const
@@ -1934,13 +1934,16 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 		{
 			HeroClickFrame = GFrameCounter;  // (the interface's click)
 		}
-		else if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton))
+		else if (PC->WasInputKeyJustPressed(EKeys::LeftMouseButton) && (bCtrl || HeroClickSelects(PC)))
 		{
+			// a left click selects only on one of his own under the crosshair (Shift adds; twice: play it); on a foe,
+			// a building, the ground or the sky it is his own blow or shot, as out of command mode (the owner,
+			// 2026-11-24). Ctrl / Cmd + click: the right click's order (a trackpad's).
 			HeroClickFrame = GFrameCounter;
 			bTook = true;
 			if (bCtrl)
 			{
-				CommandOrder(PC, bShift);   // Ctrl / Cmd + click: the right click's (a trackpad's)
+				CommandOrder(PC, bShift);
 			}
 			else
 			{

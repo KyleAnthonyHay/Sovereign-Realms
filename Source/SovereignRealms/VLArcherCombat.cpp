@@ -532,16 +532,17 @@ void UVLArcherCombat::TickHands(AVLKing* Unit, float Dt)
 		}
 	}
 	const AVLHUD* HUD = Cast<AVLHUD>(PC->GetHUD());
-	const bool bMenu = (HUD && HUD->bMenu) || Unit->IsCommandMode();     // (command mode: the mouse commands, the bow is still)
+	const bool bMenu = HUD && HUD->bMenu;
+	const bool bCmd = Unit->IsCommandMode();       // (command mode: the right button orders, so no draw; the left click is still hers)
 	// The right button (the right trigger): held, it draws; let go, she looses. The left button (the left shoulder)
 	// while it is held LOCKS the draw: she stays drawn with the right button let go, and the next right press looses.
 	// The left button on a locked draw lets the string down; with no draw at all it is a blow with the bow.
-	const bool bRight = bTestDraw || (!bSpy && !bMenu && (PC->IsInputKeyDown(EKeys::RightMouseButton) || PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis) > 0.4f));
+	const bool bRight = bTestDraw || (!bSpy && !bMenu && !bCmd && (PC->IsInputKeyDown(EKeys::RightMouseButton) || PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis) > 0.4f));
 	const bool bRightPressed = bRight && !bWasRight;
 	bWasRight = bRight;
-	if (bMenu)
+	if (bMenu || (bCmd && bLocked))
 	{
-		LetDown();                  // the menu: the string comes down, locked or not
+		LetDown();                  // the menu (or command mode with a locked draw): the string comes down
 	}
 	else
 	{
