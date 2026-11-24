@@ -337,6 +337,63 @@ void AVLHUD::DrawChipList()
 	}
 }
 
+void AVLHUD::DrawJonathanOffer(const FBox2D& Row)
+{
+	// the hero list's row for Jonathan before he is bought: locked (greyed: "Unlocks at Castle level 3"), or unlocked
+	// with his price and a Buy button (no training: he is at the castle's door at once; UVLBattle::BuyJonathan)
+	UVLBattle* Battle = UVLBattle::Get(this);
+	const bool bUnlocked = Battle->IsJonathanUnlocked(UVLBattle::Player);
+	const FVLCost Cost = UVLBattle::JonathanCost();
+	const float RowH = Row.Max.Y - Row.Min.Y;
+	Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, RowH, bUnlocked ? FLinearColor(0.16f, 0.13f, 0.05f, 0.95f) : A(Inset, 0.7f));
+	if (bUnlocked) { Outline(Row, A(Gold, 0.7f), FMath::Max(1.f, U(1.f))); }
+	const float PS = U(36.f);
+	Portrait(EVLPortrait::Jonathan, Row.Min.X + U(6.f), Row.Min.Y + (RowH - PS) * 0.5f, PS, bUnlocked ? FLinearColor::White : FLinearColor(0.45f, 0.45f, 0.5f, 0.7f));
+	const float TX = Row.Min.X + U(6.f) + PS + U(10.f);
+	Text(TEXT("Jonathan"), TX, Row.Min.Y + U(4.f), U(15.f), bUnlocked ? Parchment : Dim, AlignLeft, Bold);
+	if (!bUnlocked)
+	{
+		Text(FString::Printf(TEXT("Locked  ·  Unlocks at Castle level %d"), VLRules::JonathanCastleLevel), TX, Row.Min.Y + U(24.f), U(13.f), Dim);
+		Icon(EVLIcon::Castle, Row.Max.X - U(34.f), Row.Min.Y + (RowH - U(24.f)) * 0.5f, U(24.f), FLinearColor(0.45f, 0.45f, 0.5f, 0.8f));
+		return;
+	}
+	Text(TEXT("Unlocked  ·  the archer prince, no training"), TX, Row.Min.Y + U(24.f), U(13.f), GoldBright);
+	// Buy: the price on the button, red where the stores fall short
+	const FString Why = Battle->JonathanBuyRefusal(UVLBattle::Player);
+	const bool bEnabled = Why.IsEmpty();
+	const float BW = U(150.f);
+	const FBox2D R(FVector2D(Row.Max.X - U(6.f) - BW, Row.Min.Y + U(5.f)), FVector2D(Row.Max.X - U(6.f), Row.Max.Y - U(5.f)));
+	FBtn B = Button(R, VLId::ChipRow + 3);
+	if (!bEnabled) { B.Hot *= 0.3f; }
+	ButtonFrame(R, B, bEnabled);
+	const float Lift = B.bHeld ? U(1.f) : 0.f;
+	const float MidY = R.Min.Y + (R.Max.Y - R.Min.Y) * 0.5f;
+	Text(TEXT("Buy"), R.Min.X + U(10.f), MidY - U(9.f) + Lift, U(14.f), bEnabled ? Parchment : Dim, AlignLeft, Bold);
+	const bool bGold = Battle->GetStock(UVLBattle::Player, EVLRes::Gold) >= Cost.Gold;
+	const bool bFood = Battle->GetStock(UVLBattle::Player, EVLRes::Food) >= Cost.Food;
+	float CX = R.Min.X + U(46.f);
+	Icon(EVLIcon::Coin, CX, MidY - U(8.f) + Lift, U(16.f));
+	Text(FString::FromInt(Cost.Gold), CX + U(18.f), MidY - U(9.f) + Lift, U(14.f), bGold ? Gold : Refuse, AlignLeft, Bold);
+	CX += U(54.f);
+	Icon(EVLIcon::Food, CX, MidY - U(8.f) + Lift, U(16.f));
+	Text(FString::FromInt(Cost.Food), CX + U(18.f), MidY - U(9.f) + Lift, U(14.f), bFood ? Parchment : Refuse, AlignLeft, Bold);
+	if (B.bHover)
+	{
+		TArray<FString> Lines;
+		Lines.Add(TEXT("The archer prince: a long, fast bow, quicker on his feet than the King. Takes no housing."));
+		Lines.Add(FString::Printf(TEXT("Cost %d gold + %d food, once. No training: he is at the castle's door at once."), Cost.Gold, Cost.Food));
+		Lines.Add(TEXT("If he falls he comes back to the castle by himself, free."));
+		if (!bEnabled) { Lines.Add(Why + TEXT(".")); }
+		SetTooltip(R, TEXT("Buy Jonathan"), Lines);
+	}
+	if (B.bClicked)
+	{
+		const bool bOk = Battle->BuyJonathan(UVLBattle::Player);      // (refused: it says why, with the error sound)
+		if (bOk) { Click(); }
+		UE_LOG(LogSovereignRealms, Log, TEXT("hud: hero list: buy Jonathan -> %s"), bOk ? TEXT("bought") : *Why);
+	}
+}
+
 void AVLHUD::DrawHeroList()
 {
 	// (DrawChipList has checked the battle, the overview and the top bar)
@@ -357,8 +414,10 @@ void AVLHUD::DrawHeroList()
 	const bool bCastle = Battle->GetCastle(UVLBattle::Player) != nullptr;
 	Rows.Add({ David, TEXT("King David"), EVLPortrait::King, David && !David->IsAlive() ? FMath::Max(0.f, VLRules::KingRespawnSeconds - David->DeadFor()) : 0.f });
 	Rows.Add({ Jonathan, TEXT("Jonathan"), EVLPortrait::Jonathan, Jonathan && Jonathan->IsAlive() ? 0.f : Battle->GetJonathanWait(UVLBattle::Player) });
+	// Jonathan not bought yet: his row is greyed and locked until the castle's level 3, then shows his price and Buy
+	const bool bJonathanOwned = Jonathan || Battle->HasJonathanCome(UVLBattle::Player) || Battle->IsJonathanBought(UVLBattle::Player);
 	const APawn* Played = PCtrl ? PCtrl->GetPawn() : nullptr;
-	const float W = U(400.f), Pad = U(8.f), HeadH = U(30.f), RowH = U(46.f), Gap = U(4.f);
+	const float W = U(440.f), Pad = U(8.f), HeadH = U(30.f), RowH = U(46.f), Gap = U(4.f);
 	const float H = HeadH + Rows.Num() * (RowH + Gap) + Pad;
 	const float X = FMath::Clamp(FMath::RoundToFloat(ChipListChip.Min.X), U(8.f), FMath::Max(U(8.f), View.X - W - U(8.f))), Y = TopBarRect.Max.Y + U(6.f);
 	const FBox2D Box(FVector2D(X, Y), FVector2D(X + W, Y + H));
@@ -372,6 +431,11 @@ void AVLHUD::DrawHeroList()
 		AVLKing* Un = R.Unit && R.Unit->IsAlive() ? R.Unit : nullptr;
 		const FBox2D Row(FVector2D(X + Pad, RY), FVector2D(Box.Max.X - Pad, RY + RowH));
 		RY += RowH + Gap;
+		if (i == 1 && !bJonathanOwned)
+		{
+			DrawJonathanOffer(Row);
+			continue;
+		}
 		const FBtn B = Button(Row, VLId::ChipRow + 1 + i);
 		const bool bSel = Un && Command->IsSelected(Un);
 		Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, RowH, bSel ? FLinearColor(0.20f, 0.155f, 0.05f, 0.95f) : FMath::Lerp(Inset, ButtonHot, (Un ? B.Hot : 0.f) * 0.7f));

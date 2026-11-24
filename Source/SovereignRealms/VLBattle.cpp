@@ -3085,6 +3085,97 @@ int32 UVLBattle::RaiseCastleForJonathan(int32 Team)
 	return B->Level;
 }
 
+bool UVLBattle::IsJonathanUnlocked(int32 Team) const
+{
+	const FVLBuildingState* B = FindBuilding(GetCastle(Team));
+	return B && B->IsAlive() && B->Level >= VLRules::JonathanCastleLevel;
+}
+
+FString UVLBattle::JonathanBuyRefusal(int32 Team) const
+{
+	if (!JonathanFor(Team))
+	{
+		return TEXT("Jonathan does not fight for this side");
+	}
+	if (bJonathanBought[Team])
+	{
+		return TEXT("Jonathan is yours already");
+	}
+	if (!FindBuilding(GetCastle(Team)))
+	{
+		return TEXT("Jonathan comes to a castle: you have none");
+	}
+	if (!IsJonathanUnlocked(Team))
+	{
+		return FString::Printf(TEXT("Unlocks at Castle level %d"), VLRules::JonathanCastleLevel);
+	}
+	const FVLCost Cost = JonathanCost();
+	const FVLKingdom& K = Kingdoms[Team];
+	if (K.Gold < Cost.Gold)
+	{
+		return FString::Printf(TEXT("Not enough gold (%d needed)"), Cost.Gold);
+	}
+	if (K.Food < Cost.Food)
+	{
+		return FString::Printf(TEXT("Not enough food (%d needed)"), Cost.Food);
+	}
+	return FString();
+}
+
+bool UVLBattle::BuyJonathan(int32 Team)
+{
+	const FString Why = (Team == Player || Team == Enemy) ? JonathanBuyRefusal(Team) : FString(TEXT("no side"));
+	if (!Why.IsEmpty())
+	{
+		if (Team == Player)
+		{
+			PushAlert(Why);
+			Play2D(TEXT("S_UIError"), 0.5f);
+		}
+		UE_LOG(LogSovereignRealms, Log, TEXT("Jonathan not bought for team %d: %s"), Team, *Why);
+		return false;
+	}
+	if (!TrySpend(Team, JonathanCost()))
+	{
+		return false;
+	}
+	bJonathanBought[Team] = true;
+	bJonathanOffered[Team] = true;
+	JonathanWait[Team] = 0.f;
+	UE_LOG(LogSovereignRealms, Log, TEXT("Jonathan bought by team %d for %d gold + %d food"), Team, VLRules::JonathanGold, VLRules::JonathanFood);
+	// no training time: he is at the castle's door now (else TickJonathan brings him as soon as it can)
+	JonathanToCastle(Team);
+	return true;
+}
+
+AVLTroop* UVLBattle::JonathanToCastle(int32 t)
+{
+	AActor* Castle = GetCastle(t);
+	const FVLBuildingState* B = FindBuilding(Castle);
+	if (!Castle || !B || !B->IsAlive())
+	{
+		return nullptr;
+	}
+	FVector Door, Rally, Front;
+	FrontOf(Castle, Door, Rally, Front);
+	const FVector Side(-Front.Y, Front.X, 0.f);
+	AVLTroop* J = SpawnJonathan(t, Door, Front.Rotation().Yaw);      // (at the door itself, as a recruit: beside it is the wall)
+	if (!J)
+	{
+		JonathanWait[t] = 30.f;         // (no character data: not every frame)
+		return nullptr;
+	}
+	J->WalkTo(FVector2D(Rally + Side * 220.f), false);      // out of the gate, beside where the recruits gather
+	if (t == Player)
+	{
+		PushAlert(bJonathanCame[t] ? TEXT("Jonathan has returned to the castle (J: play him)")
+			: TEXT("Prince Jonathan, the archer, has come to your castle (J: play him)"), EVLAlert::Good, &Door);
+		Play2D(TEXT("S_RecruitReady"), 0.5f);
+	}
+	bJonathanCame[t] = true;
+	return J;
+}
+
 void UVLBattle::TickJonathan(float Dt)
 {
 	for (int32 t = 0; t < 2; ++t)
@@ -3098,30 +3189,25 @@ void UVLBattle::TickJonathan(float Dt)
 		{
 			continue;
 		}
-		// he comes to the castle once it stands at its third level (and comes back there)
-		AActor* Castle = GetCastle(t);
-		const FVLBuildingState* B = FindBuilding(Castle);
-		if (!Castle || !B || !B->IsAlive() || B->Level < VLRules::JonathanCastleLevel)
+		// he is unlocked once the castle stands at its third level; the player's is then bought (BuyJonathan: the
+		// hero list), the enemy's (vl.Jonathan.Enemy 1) comes free as before; once in the match he comes back there
+		if (!IsJonathanUnlocked(t))
 		{
 			continue;
 		}
-		FVector Door, Rally, Front;
-		FrontOf(Castle, Door, Rally, Front);
-		const FVector Side(-Front.Y, Front.X, 0.f);
-		AVLTroop* J = SpawnJonathan(t, Door, Front.Rotation().Yaw);      // (at the door itself, as a recruit: beside it is the wall)
-		if (!J)
+		if (t == Player && !bJonathanBought[t])
 		{
-			JonathanWait[t] = 30.f;         // (no character data: not every frame)
+			if (!bJonathanOffered[t])
+			{
+				bJonathanOffered[t] = true;
+				const FVector At = GetCastle(t) ? GetCastle(t)->GetActorLocation() : FVector::ZeroVector;
+				PushAlert(FString::Printf(TEXT("Prince Jonathan is unlocked: buy him in the hero list (top bar) for %d gold + %d food"), VLRules::JonathanGold, VLRules::JonathanFood),
+					EVLAlert::Good, &At);
+				Play2D(TEXT("S_RecruitReady"), 0.4f);
+			}
 			continue;
 		}
-		J->WalkTo(FVector2D(Rally + Side * 220.f), false);      // out of the gate, beside where the recruits gather
-		if (t == Player)
-		{
-			PushAlert(bJonathanCame[t] ? TEXT("Jonathan has returned to the castle (J: play him)")
-				: TEXT("Prince Jonathan, the archer, has come to your castle (J: play him)"), EVLAlert::Good, &Door);
-			Play2D(TEXT("S_RecruitReady"), 0.5f);
-		}
-		bJonathanCame[t] = true;
+		JonathanToCastle(t);
 	}
 }
 
@@ -3201,6 +3287,8 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 	SpyCooldownLeft[0] = SpyCooldownLeft[1] = 0.f;
 	JonathanWait[0] = JonathanWait[1] = 0.f;
 	bJonathanCame[0] = bJonathanCame[1] = false;
+	bJonathanBought[0] = bJonathanBought[1] = false;
+	bJonathanOffered[0] = bJonathanOffered[1] = false;
 	ScanBuildings();
 	MatchLog.Reset();           // (a new match, a new log: vl.MatchLog)
 	// (Windows pass, batch 2) the battle's sound sets, loaded as the match starts and not each at its first use in the
@@ -3845,7 +3933,7 @@ namespace
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs CmdJonathan(TEXT("vl.Jonathan"),
-		TEXT("vl.Jonathan [spawn | play | king | castle]: log Jonathan's state and numbers; spawn: bring him in beside the unit the player plays (a sandbox with no castle); play / king: hand the controls to him / back to King David (the J key); castle: raise the player's castle to level 3 now"),
+		TEXT("vl.Jonathan [spawn | play | king | castle | buy]: log Jonathan's state and numbers; buy: buy him (the hero list's Buy: unlocked at castle level 3, his price); spawn: bring him in beside the unit the player plays (a sandbox with no castle); play / king: hand the controls to him / back to King David (the J key); castle: raise the player's castle to level 3 now"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVLBattle* Battle = UVLBattle::Get(World);
@@ -3860,6 +3948,10 @@ namespace
 			if (Verb == TEXT("castle"))
 			{
 				UE_LOG(LogSovereignRealms, Log, TEXT("vl.Jonathan castle: the castle is level %d"), Battle->RaiseCastleForJonathan(Played->Team));
+			}
+			else if (Verb == TEXT("buy"))
+			{
+				UE_LOG(LogSovereignRealms, Log, TEXT("vl.Jonathan buy: %s"), Battle->BuyJonathan(Played->Team) ? TEXT("bought") : *Battle->JonathanBuyRefusal(Played->Team));
 			}
 			else if (Verb == TEXT("spawn"))
 			{

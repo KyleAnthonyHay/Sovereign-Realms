@@ -625,10 +625,11 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 		EVLPortrait Face = EVLPortrait::King;
 		float Bar = -1.f;
 		bool bLocked = false;
-		// more than one hero (King David, and Jonathan once he has come to the castle): the hero's chip opens a list of
-		// them, as the Builders' does (DrawChipList 3)
+		// the heroes (King David, and Jonathan: locked until the castle's level 3, then for sale, then in the field):
+		// with a castle the hero's chip always opens their list, as the Builders' does (DrawChipList 3)
 		AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Player);
-		const bool bHeroes = i == 0 && (Jonathan || Battle->HasJonathanCome(UVLBattle::Player));
+		const bool bJonathanOwned = Jonathan || Battle->HasJonathanCome(UVLBattle::Player) || Battle->IsJonathanBought(UVLBattle::Player);
+		const bool bHeroes = i == 0 && (bJonathanOwned || (Battle->GetCastle(UVLBattle::Player) && UVLBattle::JonathanFor(UVLBattle::Player)));
 		if (i == 0)
 		{
 			// the hero: his health, or how long until he rises again at the castle
@@ -656,12 +657,12 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 			}
 			if (bHeroes)
 			{
-				Title = TEXT("Heroes: King David and Jonathan");
+				Title = bJonathanOwned ? TEXT("Heroes: King David and Jonathan") : TEXT("Heroes");
 				if (Jonathan && Jonathan->IsAlive())
 				{
 					Lines.Add(FString::Printf(TEXT("Jonathan: %.0f / %.0f health."), Jonathan->GetHealth(), Jonathan->MaxHealth));
 				}
-				else
+				else if (bJonathanOwned)
 				{
 					Lines.Add(FString::Printf(TEXT("Jonathan: fallen, back at the castle in %s."), *Countdown(Battle->GetJonathanWait(UVLBattle::Player))));
 				}
@@ -742,7 +743,10 @@ void AVLHUD::DrawTopChips(float X, float Y, float H)
 		{
 			// a second, smaller face over the first's corner: there is more than one hero (the list opens on a click)
 			const float JS = U(20.f);
-			Portrait(EVLPortrait::Jonathan, CX + PS - JS * 0.6f, Y + (H - PS) * 0.5f + PS - JS * 0.75f, JS, Jonathan && Jonathan->IsAlive() ? FLinearColor::White : FLinearColor(1.f, 0.55f, 0.5f, 0.85f));
+			// (not his yet: grey while locked, gold-washed when he can be bought; fallen: red)
+			const FLinearColor JT = Jonathan && Jonathan->IsAlive() ? FLinearColor::White : (bJonathanOwned ? FLinearColor(1.f, 0.55f, 0.5f, 0.85f)
+				: (Battle->IsJonathanUnlocked(UVLBattle::Player) ? FLinearColor(1.f, 0.86f, 0.45f, 0.95f) : FLinearColor(0.45f, 0.45f, 0.5f, 0.8f)));
+			Portrait(EVLPortrait::Jonathan, CX + PS - JS * 0.6f, Y + (H - PS) * 0.5f + PS - JS * 0.75f, JS, JT);
 		}
 		if ((i > 0 || bHeroes) && ChipList == ListId)
 		{

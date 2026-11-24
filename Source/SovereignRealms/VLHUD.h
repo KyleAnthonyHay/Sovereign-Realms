@@ -284,6 +284,8 @@ private:
 	/** The hero's list (ChipList 3): King David and Jonathan, each with his face, health and state (played, in the
 	 *  field, or back at the castle in so long); a click goes to him and selects him, a second within 0.35 s plays him. */
 	void DrawHeroList();
+	/** Its row for Jonathan before he is bought: locked, or his price and Buy. */
+	void DrawJonathanOffer(const FBox2D& Row);
 	int32 HeroListLast = -1;
 	double HeroListLastTime = -10.0;
 	int32 ChipList = 0;

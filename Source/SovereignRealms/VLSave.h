@@ -65,6 +65,8 @@ struct FVLSavedKingdom
 	UPROPERTY() float SpyCooldown = 0.f;
 	UPROPERTY() float JonathanWait = 0.f;
 	UPROPERTY() bool bJonathanCame = false;
+	UPROPERTY() bool bJonathanBought = false;   // (a save from before he was bought: he had come, or not)
+	UPROPERTY() bool bJonathanOffered = false;
 	UPROPERTY() int32 FarmVariant = -1;
 };
 

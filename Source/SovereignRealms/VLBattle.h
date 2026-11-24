@@ -172,12 +172,18 @@ namespace VLRules
 	constexpr float SpyTowerRange = 3800.f;
 	constexpr float SpyArrowSpeed = 5200.f;
 	// JONATHAN, the archer prince: the second hero (unit kind "Jonathan": an AVLTroop with the played archer's bow).
-	// He is not there at the start: he comes to the castle when it reaches JonathanCastleLevel (UVLBattle::TickJonathan),
-	// free and taking no housing, and comes back there JonathanRespawnSeconds after he falls (while the castle stands
-	// at that level). His own numbers, next to the archer troop's bow and King David's legs (the owner's call,
+	// He is not there at the start: he is UNLOCKED when the castle reaches JonathanCastleLevel and then BOUGHT from the
+	// hero list (UVLBattle::BuyJonathan; the owner's call, 2026-11-24): JonathanCost, no training time, he steps out
+	// of the castle's door at once, taking no housing. He comes back there JonathanRespawnSeconds after he falls,
+	// without paying again (while the castle stands at that level). The enemy's (vl.Jonathan.Enemy 1) still comes
+	// free at that level, as before. His own numbers, next to the archer troop's bow and King David's legs (the owner's call,
 	// 2026-11-23: "his bow should take longer to draw and arrows go faster. his run speed should be faster too and
 	// his jump higher"); the archers and the king keep theirs. AVLTroop::BeginPlay puts them on him.
 	constexpr int32 JonathanCastleLevel = 3;
+	// his price: more than the castle's raise to level 4 (850 gold + 300 food) and well over the raise to 3 that
+	// unlocks him (550 + 150); it fits the level-3 castle's stores (1500 each) without a treasury or a granary
+	constexpr int32 JonathanGold = 900;
+	constexpr int32 JonathanFood = 400;
 	constexpr float JonathanRespawnSeconds = KingRespawnSeconds;
 	constexpr float JonathanDrawSeconds = 0.62f;     // the draw itself (the archer: 0.34). Button down to fully drawn: 1.14 s against her 0.86 (+33%)
 	constexpr float JonathanArrowSpeed = 11000.f;    // cm/s (the archer: 6210; +77%; was 8280 until 2026-11-23). Aim and arcs are solved with the bow's own speed
@@ -464,6 +470,15 @@ public:
 	/** He has been in the field this match (the HUD's hero list keeps his row while he waits to come back). */
 	bool HasJonathanCome(int32 Team) const { return (Team == 0 || Team == 1) && bJonathanCame[Team]; }
 	int32 RaiseCastleForJonathan(int32 Team);
+	/** The player's Jonathan is bought once (the hero list's Buy): unlocked at VLRules::JonathanCastleLevel, for
+	 *  JonathanGold + JonathanFood; he is at the castle's door at once and comes back free after he falls. */
+	bool IsJonathanBought(int32 Team) const { return (Team == 0 || Team == 1) && bJonathanBought[Team]; }
+	bool IsJonathanUnlocked(int32 Team) const;
+	static FVLCost JonathanCost() { return FVLCost{ VLRules::JonathanGold, VLRules::JonathanFood }; }
+	/** Why Team cannot buy him now (locked, bought already, no castle, the price), or empty. */
+	FString JonathanBuyRefusal(int32 Team) const;
+	/** Pays and brings him to the castle's door now. False (the player: an alert says why) if refused. */
+	bool BuyJonathan(int32 Team);
 	/** Troops alive (not the king), and waiting in training queues. */
 	int32 GetPopulation(int32 Team) const;
 	int32 GetQueuedPopulation(int32 Team) const;
@@ -629,6 +644,10 @@ private:
 	TWeakObjectPtr<AVLTroop> Jonathans[2];
 	float JonathanWait[2] = { 0.f, 0.f };       // seconds until he may come (back) to the castle
 	bool bJonathanCame[2] = { false, false };   // he has been in this match before (the alert's wording)
+	bool bJonathanBought[2] = { false, false }; // the player's: paid for (BuyJonathan); he only comes once bought
+	bool bJonathanOffered[2] = { false, false };// the alert that he can be bought has been given
+	/** Jonathan at the castle's door, walking out beside the rally point, with the alert. Null: no castle / no data. */
+	AVLTroop* JonathanToCastle(int32 Team);
 	void SpawnRecruit(FVLBuildingState& B, const FString& Kind);
 	void Collapse(FVLBuildingState& B, AActor* By, int32 ByTeam, bool bDemolished = false);
 	void CheckEnd();

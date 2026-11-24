@@ -212,6 +212,8 @@ void FVLSaveIO::Capture(UWorld* World, UVLSaveGame& Out)
 		S.SpyCooldown = Battle->SpyCooldownLeft[t];
 		S.JonathanWait = Battle->JonathanWait[t];
 		S.bJonathanCame = Battle->bJonathanCame[t];
+		S.bJonathanBought = Battle->bJonathanBought[t];
+		S.bJonathanOffered = Battle->bJonathanOffered[t];
 		S.FarmVariant = Construction ? Construction->FarmVariant[t] : -1;
 	}
 
@@ -1227,6 +1229,8 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 		Battle->SpyCooldownLeft[t] = FMath::Max(0.f, S.SpyCooldown);
 		Battle->JonathanWait[t] = FMath::Max(0.f, S.JonathanWait);
 		Battle->bJonathanCame[t] = S.bJonathanCame;
+		Battle->bJonathanBought[t] = S.bJonathanBought || S.bJonathanCame;      // (older saves: he had come free)
+		Battle->bJonathanOffered[t] = S.bJonathanOffered || Battle->bJonathanBought[t];
 	}
 
 	// ---- the commanders: their clocks, posture, squads and what they had seen; the rest they work out again

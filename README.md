@@ -137,7 +137,7 @@ There are two ways to play, switched with **Tab**.
 | Ctrl / Cmd / Alt / Shift + 1..6 | **the selection joins platoon N, which keeps the members it has** (an empty slot: they form it; a troop already in another platoon leaves that one). It was: Ctrl + N re-formed the platoon of the selection alone, putting everyone else out. (A platoon keeps its own formation; they are listed in the platoon panel, bottom right) |
 | Assign (command card) | the same, by mouse: the button opens a picker of the six platoons over it (a formed one shows "5 in it", an empty one "new"); a click on one and the selection joins it. A click anywhere else, or Esc, puts the picker away |
 | 1..6 | select platoon N (twice quickly: look at it) |
-| Hero (top bar) | King David's chip: his health, or how long until he rises again. **Once Jonathan has come to the castle there are two heroes: the chip shows Jonathan's small face over the King's corner and a click opens the hero list under it**, as the Builders' does (`AVLHUD::DrawHeroList`): a row each for King David and Jonathan with the portrait, name, health and state ("Played", "Alive · Walking", "Fallen · back at the castle in 1:12"). **A click on a row selects him and takes the camera to him; a second click on it within 0.35 s plays him** (as J, or Enter with him selected). With one hero the chip works as before: a click selects him, twice is his hero view |
+| Hero (top bar) | King David's chip: his health, or how long until he rises again. **With a castle the chip shows Jonathan's small face over the King's corner (grey: locked, gold: he can be bought) and a click opens the hero list under it**; Jonathan's row is greyed "Locked · Unlocks at Castle level 3" until then, then shows his price and **Buy** (see *Jonathan*), as the Builders' does (`AVLHUD::DrawHeroList`): a row each for King David and Jonathan with the portrait, name, health and state ("Played", "Alive · Walking", "Fallen · back at the castle in 1:12"). **A click on a row selects him and takes the camera to him; a second click on it within 0.35 s plays him** (as J, or Enter with him selected). With one hero the chip works as before: a click selects him, twice is his hero view |
 | Builders / Spy (top bar) | a click on the count opens **a list of them under the bar**: a row each with its portrait, name, health and what it is doing ("Idle" in amber, "Walking", "Walking to build the Farm", "Building the Farm (42%)", "Repairing the Barracks", "Claiming the Gold Mine (10%)", "+2 queued"; the Spy: "Roaming", "Walking", "Fighting", "Idle"). **A click on a row takes the camera to it and selects it; hovering a row marks it in the world** (a pulsing gold ring at its feet and an arrow over it). "All N Builders" selects the lot. The chip again, a click elsewhere or Esc closes it |
 | Delete | disband the selected platoon (the troops stay selected) |
 | (platoon leaders) | a platoon gets a leader when it is formed (King David if he is in it, else its longest-serving troop that is not a Builder); the platoon's tag floats over the leader with a crown, the platoon panel's row and the selection panel show it ("led by ..." / "no leader"). The leader takes the front-middle slot of its ranks on every move, so the formation forms up on it. **If it falls the platoon has no leader** ("The leader of platoon N has fallen"): nobody steps up. A member becomes leader when you take control of it (the platoon's idle members then fall in behind it) or when the platoon's members are ordered to follow it. Troops added with Ctrl + N leave the leader as he is |
@@ -1647,11 +1647,20 @@ The owner's sheet: `References/StyleRefs/Jonathan_turnaround.png`. A young beard
 David's armour, fur mantle and green cape, a brown baldric, a big recurve bow in his left hand and a full quiver on
 his back.
 
-- **When he comes.** Not at the start: King David is the starting hero. Jonathan comes to your castle the moment it
-  reaches **level 3** (`VLRules::JonathanCastleLevel`; `UVLBattle::TickJonathan`), free and taking no housing, walks out
-  of the gate and stands by the rally point; an alert says so. If he falls he comes back to the castle 100 s later
-  (`JonathanRespawnSeconds`, the king's wait), as long as the castle stands at level 3. The enemy gets none
-  (`vl.Jonathan.Enemy 1` gives its castle one too: its commander fields him as an archer).
+- **Buying him** (the owner's call, 2026-11-24). Not at the start: King David is the starting hero. Jonathan is
+  always in the hero list (the top bar's hero chip opens it whenever you have a castle): **locked** and greyed
+  ("Unlocks at Castle level 3") until the castle reaches **level 3** (`VLRules::JonathanCastleLevel`), then
+  **unlocked** (an alert says so, his row lights up with his price and a **Buy** button), and once bought alive,
+  played or fallen as for King David. **He costs 900 gold + 400 food** (`VLRules::JonathanGold` / `JonathanFood`,
+  `UVLBattle::BuyJonathan`): more than the castle's raise to level 4 (850 + 300) and well over the raise to 3 that
+  unlocks him (550 + 150), a big step that still fits a level-3 castle's stores (1500 each) without a treasury or a
+  granary. **No training time**: he steps out of the castle's door at once (taking no housing), walks out of the gate
+  and stands by the rally point. If he falls he comes back to the castle 100 s later (`JonathanRespawnSeconds`, the
+  king's wait) **without paying again**, as long as the castle stands at level 3 (a hero you bought once is yours: a
+  second price for a respawn would only punish using him). The enemy gets none (`vl.Jonathan.Enemy 1` gives its castle
+  one too, free at level 3 as before: its commander fields him as an archer). Saved games keep whether he was bought
+  (`FVLSavedKingdom::bJonathanBought`; a save from before counts him bought if he had come). `vl.Jonathan buy` buys
+  him from the console.
 - **Playing him.** **J** hands the controls to Jonathan from King David (or from any unit, or the overview), and J
   again hands them back to the king; selecting him in the overview and Enter / a double click works as for any unit.
   Left alone he fights as an archer does (his stance, orders, platoons, the tower's lookout). In your hands he is the
