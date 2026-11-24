@@ -2236,19 +2236,19 @@ void AVLHUD::DrawHeroBits()
 				// troops selected and this one is not among them: they guard it (its platoon, if it is in one)
 				const int32 GP = HintCmd ? HintCmd->PlatoonIndexOf(Aimed) : INDEX_NONE;
 				const bool bWhole = GP != INDEX_NONE && Sel.ContainsByPredicate([HintCmd, GP](const AVLKing* U2) { return HintCmd->PlatoonIndexOf(U2) != GP; });
-				Hint = (bWhole ? FString::Printf(TEXT("R: guard platoon %d"), GP + 1) : TEXT("R: guard ") + Aimed->GetDisplayName())
-					+ TEXT("   ·   Shift+R: add it to the selection");
+				Hint = (bWhole ? FString::Printf(VL_ALT_KEY TEXT("+click: guard platoon %d"), GP + 1) : VL_ALT_KEY TEXT("+click: guard ") + Aimed->GetDisplayName())
+					+ TEXT("   ·   R: command mode (a click there selects)");
 			}
 			else if (King->IsHeroHoverSelect())
 			{
-				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? TEXT("R: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift+R: let go)")
-					: TEXT("R: select ") + Aimed->GetDisplayName());
+				Hint = (HintCmd && HintCmd->IsSelected(Aimed) ? VL_ALT_KEY TEXT("+click: ") + Aimed->GetDisplayName() + TEXT(" (selected; Shift: let go)")
+					: VL_ALT_KEY TEXT("+click: select ") + Aimed->GetDisplayName());
 			}
 			else if (Commanded.Num() > 0 && Battle && Battle->IsHostile(Aimed, King->Team))
 			{
-				// (the right click orders the selection only)
-				Hint = FString::Printf(TEXT("R%s: attack %s   ·   Shift: after the last"), Sel.Num() > 0 ? (King->bRightMouseAims ? TEXT(" / Ctrl+click") : TEXT(" / right click")) : TEXT(""),
-					*Aimed->GetDisplayName());
+				// (the right click orders the selection only; R: command mode, where the mouse commands)
+				Hint = Sel.Num() > 0 ? FString::Printf(TEXT("%s: send %d at %s   ·   R: command mode"), King->bRightMouseAims ? TEXT("Ctrl+click") : TEXT("Right click"), Sel.Num(), *Aimed->GetDisplayName())
+					: FString::Printf(TEXT("R: command mode, to send your troops at %s"), *Aimed->GetDisplayName());
 				HintCol = Refuse;
 			}
 			if (!Hint.IsEmpty())
@@ -2257,6 +2257,69 @@ void AVLHUD::DrawHeroBits()
 				const FVector2D TS = TextSize(Hint, HS);
 				const FBox2D HB(FVector2D(CX - TS.X * 0.5f - U(8.f), CY + U(16.f) + HintDrop), FVector2D(CX + TS.X * 0.5f + U(8.f), CY + U(20.f) + TS.Y + U(4.f) + HintDrop));
 				Panel(HB, false, 0.7f);
+				TextIn(HB, Hint, HS, HintCol, AlignCentre);
+			}
+		}
+	}
+	// command mode (R): a banner at the top that says so and how the mouse commands, and by the pointer what a click
+	// there does
+	if (bHero && King->IsCommandMode() && !King->IsDead())
+	{
+		const UVLCommand* CmdC = UVLCommand::Get(this);
+		TArray<AVLKing*> Sel;
+		if (CmdC) { CmdC->GetSelection(Sel); }
+		Sel.Remove(King);
+		{
+			const FString Title = TEXT("COMMAND MODE");
+			const FString SubLine = Sel.Num() > 0
+				? FString::Printf(TEXT("%d selected  ·  Right click: attack / move  ·  Shift + right click: queue  ·  Left click: select (Shift adds)  ·  R: back to the fight"), Sel.Num())
+				: FString(TEXT("Left click a troop to select it (Shift + click adds)  ·  then right click: attack / move  ·  R: back to the fight"));
+			const float TS = U(17.f), SS = U(13.f);
+			const float W = FMath::Max(TextSize(Title, TS, Bold).X + U(40.f), TextSize(SubLine, SS).X + U(32.f)), H = U(52.f);
+			const float Y0 = TopBarRect.bIsValid ? TopBarRect.Max.Y + U(8.f) : U(10.f);
+			const FBox2D B(FVector2D(FMath::RoundToFloat(View.X * 0.5f - W * 0.5f), Y0), FVector2D(FMath::RoundToFloat(View.X * 0.5f + W * 0.5f), Y0 + H));
+			const float Pulse = 0.5f + 0.5f * FMath::Sin(float(GetWorld()->GetRealTimeSeconds()) * 3.f);
+			Fill(B.Min.X - U(2.f), B.Min.Y - U(2.f), B.Max.X - B.Min.X + U(4.f), B.Max.Y - B.Min.Y + U(4.f), A(GoldBright, 0.55f + 0.35f * Pulse));
+			Panel(B, false, 0.92f);
+			TextIn(FBox2D(B.Min, FVector2D(B.Max.X, B.Min.Y + U(28.f))), Title, TS, GoldBright, AlignCentre, Bold);
+			TextIn(FBox2D(FVector2D(B.Min.X, B.Min.Y + U(26.f)), B.Max), SubLine, SS, Parchment, AlignCentre);
+		}
+		float MX = 0.f, MY = 0.f;
+		AActor* Hit = nullptr;
+		FVector Ground;
+		if (PCtrl && PCtrl->GetMousePosition(MX, MY) && King->HeroPick(PCtrl, Hit, Ground) && Hit)
+		{
+			const bool bShiftDown = PCtrl->IsInputKeyDown(EKeys::LeftShift) || PCtrl->IsInputKeyDown(EKeys::RightShift);
+			const AVLKing* HitUnit = Cast<AVLKing>(Hit);
+			FString Hint;
+			FLinearColor HintCol = GoldBright;
+			FString Name = HitUnit ? HitUnit->GetDisplayName() : FString();
+			if (!HitUnit && Battle)
+			{
+				if (const FVLBuildingState* St = Battle->FindBuilding(Hit))
+				{
+					Name = VLRules::Name(St->Kind);
+				}
+			}
+			if (HitUnit && HitUnit->Team == King->Team && HitUnit->IsAlive())
+			{
+				const bool bIn = CmdC && CmdC->IsSelected(HitUnit);
+				Hint = bShiftDown ? (bIn ? TEXT("Shift + click: take ") + Name + TEXT(" out") : TEXT("Shift + click: add ") + Name)
+					: (bIn ? Name + TEXT(" (selected)  ·  click twice: play it") : TEXT("Click: select ") + Name);
+			}
+			else if (Battle && Battle->IsHostile(Hit, King->Team) && !Name.IsEmpty())
+			{
+				Hint = Sel.Num() > 0 ? (bShiftDown ? TEXT("Shift + right click: then attack ") + Name : TEXT("Right click: attack ") + Name + TEXT("  ·  Shift: queue it"))
+					: Name + TEXT("  ·  select troops first");
+				HintCol = Refuse;
+			}
+			if (!Hint.IsEmpty())
+			{
+				const float HS = U(13.f);
+				const FVector2D TSz = TextSize(Hint, HS);
+				const float HX = FMath::Min(MX + U(18.f), View.X - TSz.X - U(24.f)), HY = MY + U(22.f);
+				const FBox2D HB(FVector2D(HX, HY), FVector2D(HX + TSz.X + U(16.f), HY + TSz.Y + U(6.f)));
+				Panel(HB, false, 0.75f);
 				TextIn(HB, Hint, HS, HintCol, AlignCentre);
 			}
 		}
@@ -2314,18 +2377,21 @@ void AVLHUD::DrawHeroBits()
 			bool bFollowers = false;
 			TArray<AVLKing*> Commanded;
 			King->HeroCommanded(Commanded, &bFollowers);
-			Commanding = Sel.Num() > 0
-				? FString::Printf(TEXT("Commanding %d  ·  ") TEXT("R: attack / move (Shift: queue), a friend: guard it  ·  G: follow me  ·  Esc: let go"), Sel.Num())
-				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  ") TEXT("R: attack / move (Shift: queue)"), Commanded.Num())
-				: (Commanded.Num() > 0 ? FString::Printf(TEXT("Your platoon (%d)  ·  ") TEXT("R: attack / move (Shift: queue)  ·  G: follow me"), Commanded.Num())
-				: FString(TEXT("R with a troop under the crosshair (or 1-6) to command it"))));
+			Commanding = King->IsCommandMode()
+				? (Sel.Num() > 0 ? FString::Printf(TEXT("Command mode  ·  %d selected  ·  right click: attack / move (Shift: queue)  ·  R: back"), Sel.Num())
+					: FString(TEXT("Command mode  ·  left click a troop to select it (Shift adds)  ·  R: back")))
+				: Sel.Num() > 0
+				? FString::Printf(TEXT("Commanding %d  ·  right click: attack / move  ·  R: command mode  ·  G: follow me  ·  Esc: let go"), Sel.Num())
+				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  R: command mode"), Commanded.Num())
+				: (Commanded.Num() > 0 ? FString::Printf(TEXT("Your platoon (%d)  ·  R: command mode  ·  G: follow me"), Commanded.Num())
+				: FString(TEXT("R: command mode, to select troops with the mouse and order them (or 1-6)"))));
 			if (bLeads)
 			{
 				Commanding = FString::Printf(TEXT("Leader of platoon %d  ·  "), P + 1) + Commanding;
 			}
 		}
 		const FString Name = Focus->GetDisplayName();
-		const FString More = Sel.Num() > 1 ? FString::Printf(TEXT("+%d selected"), Sel.Num() - 1) : FString();
+		const FString More = Sel.Num() > 1 ? FString::Printf(TEXT("%d selected"), Sel.Num()) : FString();
 		const float PS = U(38.f), RowY = U(34.f);
 		const float RowW = PS + U(10.f) + TextSize(Name, U(15.f), Bold).X + (More.IsEmpty() ? 0.f : U(10.f) + TextSize(More, U(13.f)).X) + U(16.f) + TextSize(TEXT("100 / 100"), U(13.f), Bold).X;
 		const float W = FMath::Max(U(300.f), FMath::Max(RowW, FMath::Max(TextSize(Info, U(14.f)).X, TextSize(Commanding, U(13.f)).X)) + U(36.f));
@@ -2334,7 +2400,7 @@ void AVLHUD::DrawHeroBits()
 		const float BY = (TopBarRect.bIsValid && U(14.f) + W > TopBarRect.Min.X - U(8.f)) ? TopBarRect.Max.Y + U(8.f) : U(10.f);
 		const FBox2D Box(FVector2D(U(14.f), BY), FVector2D(U(14.f) + W, BY + H));
 		HudPanel(Box);
-		Text(bHero ? TEXT("HERO") : TEXT("OVERVIEW"), Box.Min.X + U(16.f), Box.Min.Y + U(8.f), U(18.f), GoldBright, AlignLeft, Bold, U(3.f));
+		Text(bHero ? (King->IsCommandMode() ? TEXT("HERO  ·  COMMAND") : TEXT("HERO")) : TEXT("OVERVIEW"), Box.Min.X + U(16.f), Box.Min.Y + U(8.f), U(18.f), GoldBright, AlignLeft, Bold, U(3.f));
 		Text(bFocusSelected ? (bFocusEnemy ? TEXT("LOOKED AT") : TEXT("SELECTED")) : TEXT("PLAYED"), Box.Max.X - U(16.f), Box.Min.Y + U(12.f), U(12.f), Dim, AlignRight, Bold, U(2.f));
 		// the unit in focus: portrait, name (and how many more are selected), health
 		{
@@ -2417,7 +2483,7 @@ void AVLHUD::DrawHeroBits()
 	// the controls of the hero view along the bottom
 	if (bHero)
 	{
-		const FString Help = King->IsTroop()
+		FString Help = King->IsTroop()
 			? (King->IsJonathan()
 				? TEXT("WASD move   Shift run   Space jump   Hold right mouse: draw (a long draw), let go: shoot   Left click while drawing: lock the draw   Left click: bash with the bow   J: King David   Tab overview   Esc menu")
 				: King->IsRanged() && King->GetKind() != TEXT("Spy")
@@ -2426,8 +2492,12 @@ void AVLHUD::DrawHeroBits()
 					? TEXT("WASD move   Shift run   Space jump   Hold right mouse: look through the spyglass (far ahead)   Left click: a quick shot of its bow   Tab overview   Esc menu")
 					: (King->GetKind() == TEXT("Builder")
 						? TEXT("WASD move   Shift run   Space jump   Left click: swing the hammer   Tab overview (select the king + Enter to go back to him)   Esc menu")
-						: TEXT("WASD move   Shift run   Space jump   Left click swing   ") TEXT("R select / command   Tab overview (select the king + Enter to go back to him)   Esc menu"))))
-			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   ") TEXT("R select / command (Shift: queue)   Tab overview   Esc menu");
+						: TEXT("WASD move   Shift run   Space jump   Left click swing   R command mode   Tab overview (select the king + Enter to go back to him)   Esc menu"))))
+			: TEXT("WASD move   Shift run   Space jump   F draw / sheathe   Left click attack   R command mode   Tab overview   Esc menu");
+		if (King->IsCommandMode())
+		{
+			Help = TEXT("COMMAND MODE   Left click: select (Shift adds)   Right click: attack / move   Shift + right click: queue   RMB drag / Q E: turn   WASD move   R: back");
+		}
 		// between the minimap and the platoon panel (both stay up in the hero view): smaller in a narrow window
 		const float SpanL = MapRect.bIsValid ? MapRect.Max.X + U(16.f) : U(14.f), SpanR = PlatoonRect.bIsValid ? PlatoonRect.Min.X - U(10.f) : View.X - U(14.f);
 		float P = U(15.f);

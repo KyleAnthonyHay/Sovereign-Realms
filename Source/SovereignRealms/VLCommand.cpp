@@ -3155,13 +3155,37 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdHeroOrder(TEXT("vl.HeroOrder"), TEXT("vl.HeroOrder [run] [queue] | select [add] | click: the played unit's right click / Option + click (add: with Shift) / plain left click at the crosshair"),
+	FAutoConsoleCommandWithWorldAndArgs CmdHeroOrder(TEXT("vl.HeroOrder"), TEXT("vl.HeroOrder [run] [queue] | select [add] | mode on|off | cselect [add] | corder [queue] | cend | click: the played unit's right click / Option + click (add: with Shift) / plain left click at the crosshair"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			APlayerController* PC = World->GetFirstPlayerController();
 			AVLKing* Me = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr;
 			if (!Me)
 			{
+				return;
+			}
+			// command mode (R): "mode on|off", "cselect [add]" (its left click; add: Shift), "corder [queue]" (its right
+			// click; queue: Shift, the chain held open until "cend", as if Shift were let go then)
+			if (Args.Contains(TEXT("mode")))
+			{
+				Me->SetCommandMode(!Args.Contains(TEXT("off")));
+				return;
+			}
+			if (Args.Contains(TEXT("cselect")))
+			{
+				Me->CommandSelect(PC, Args.Contains(TEXT("add")));
+				return;
+			}
+			if (Args.Contains(TEXT("corder")))
+			{
+				const bool bQueue = Args.Contains(TEXT("queue"));
+				Me->HoldCommandChain(bQueue);
+				UE_LOG(LogSovereignRealms, Log, TEXT("vl.HeroOrder corder: %d"), Me->CommandOrder(PC, bQueue) ? 1 : 0);
+				return;
+			}
+			if (Args.Contains(TEXT("cend")))
+			{
+				Me->EndCommandChain();
 				return;
 			}
 			if (Args.Contains(TEXT("select")))

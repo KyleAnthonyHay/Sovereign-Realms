@@ -649,6 +649,27 @@ public:
 	 * own units under the crosshair, if any.
 	 */
 	bool HeroClickSelects(APlayerController* PC, AVLKing** OutUnit = nullptr) const;
+	/**
+	 * Command mode (R in the hero view, on / off; the owner's call of 2026-11-24). While it is on the pointer is shown
+	 * and the mouse commands, not the hero's blade: a left click on one of his own selects it alone (Shift + click
+	 * adds it or takes it out; twice quickly: play it), elsewhere lets the selection go; a right click orders the
+	 * selection (a foe's unit or building: attack it; the ground: go there; a friend's building, King David, a
+	 * Builder: guard it; a troop: follow it). Shift + right click queues (attack A, then B, walk, attack C). An order
+	 * lets the selection go once it is given: at once without Shift, when Shift is let go after a Shift chain, so the
+	 * next selection commands only the new units. The plan of those ordered (their routes, numbered target marks)
+	 * shows while it is on (AVLHUD::DrawRouteLines, DrawOrderChains).
+	 */
+	bool IsCommandMode() const { return bCommandMode && bHeroMode; }
+	void SetCommandMode(bool bOn);
+	/** Command mode's left click at the pointer (vl.HeroOrder cselect). */
+	void CommandSelect(APlayerController* PC, bool bShift);
+	/** Command mode's right click at the pointer: the selection takes the order (bQueue: Shift). True if given. */
+	bool CommandOrder(APlayerController* PC, bool bQueue);
+	/** Those ordered from command mode who are still on it (their plan shows in command mode). */
+	void GetCommandPlanned(TArray<AVLKing*>& Out) const;
+	/** (tests) A Shift chain stays open (its selection held) until EndCommandChain, with no Shift key down. */
+	void HoldCommandChain(bool bHold) { bChainHeldByTest = bHold; }
+	void EndCommandChain();
 	/** This frame's left click was taken as a command (selection or order): the bow / blow components leave it. */
 	bool HeroClickTaken() const { return HeroClickFrame == GFrameCounter; }
 	/** What the crosshair is on in the hero view (a unit, updated each frame there), for the HUD's hint. */
@@ -1011,6 +1032,12 @@ private:
 	double HeroLastClickTime = 0.0;
 	double HeroLastOrderTime = -1.0;
 	double HeroLastAltOrderTime = -1.0;
+	// command mode (IsCommandMode)
+	bool bCommandMode = false;
+	bool bCommandChain = false;             // a Shift chain is being given: the selection goes when Shift is let go
+	bool bChainHeldByTest = false;
+	TArray<TWeakObjectPtr<AVLKing>> CommandPlanned;     // ordered from command mode (their plan shows)
+	TArray<TWeakObjectPtr<AVLKing>> CommandLastOrdered; // the last order's units (a second right click quickly: at a run)
 	uint64 HeroClickFrame = 0;
 	TWeakObjectPtr<AVLKing> HeroHover;
 	bool bHeroHoverSelect = false;

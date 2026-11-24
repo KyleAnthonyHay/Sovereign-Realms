@@ -178,7 +178,7 @@ void UVLSpy::TickGlass(AVLKing* Unit, float Dt)
 	{
 		Unit->bRightMouseAims = true;           // the right button holds the spyglass up: it does not turn the camera
 		const AVLHUD* HUD = Cast<AVLHUD>(PC->GetHUD());
-		const bool bMenu = HUD && HUD->bMenu;
+		const bool bMenu = (HUD && HUD->bMenu) || Unit->IsCommandMode();     // (command mode: the right button orders)
 		bWant |= !bMenu && (PC->IsInputKeyDown(EKeys::RightMouseButton) || PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis) > 0.4f);
 	}
 	else if (Unit->IsAlive())

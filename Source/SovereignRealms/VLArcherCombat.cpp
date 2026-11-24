@@ -532,7 +532,7 @@ void UVLArcherCombat::TickHands(AVLKing* Unit, float Dt)
 		}
 	}
 	const AVLHUD* HUD = Cast<AVLHUD>(PC->GetHUD());
-	const bool bMenu = HUD && HUD->bMenu;
+	const bool bMenu = (HUD && HUD->bMenu) || Unit->IsCommandMode();     // (command mode: the mouse commands, the bow is still)
 	// The right button (the right trigger): held, it draws; let go, she looses. The left button (the left shoulder)
 	// while it is held LOCKS the draw: she stays drawn with the right button let go, and the next right press looses.
 	// The left button on a locked draw lets the string down; with no draw at all it is a blow with the bow.

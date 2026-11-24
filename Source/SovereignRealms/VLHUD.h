@@ -215,6 +215,12 @@ private:
 	 *  he commands: numbered plates over each queued foe and point, in the overview also a dashed line through them
 	 *  (red attacks, blue walks). */
 	void DrawOrderChains();
+	/** Command mode (AVLKing::IsCommandMode): the way from A to B along the ground as the troops will walk it (the path
+	 *  grid's route; kept for a while, by where its ends are), B last. */
+	void PlanRoute(const FVector& A, const FVector& B, TArray<FVector>& Out);
+	TMap<uint32, TArray<FVector>> PlanRoutes;
+	/** Command mode: a target mark on an attack's target (a reticle round it on the ground and a crosshair at Over). */
+	void DrawTargetMark(const FVector& On, const FVector& Over, float Radius, const FLinearColor& Col, bool bNow);
 	/** Who the mode box (top left) showed last frame, for vl.HUD. */
 	FString ModeBoxUnit;
 	/** The hero chip was double-clicked: his hero view, once this frame's drawing is done. */

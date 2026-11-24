@@ -1776,11 +1776,12 @@ void AVLHUD::DrawRouteLines()
 	{
 		return;
 	}
-	if (King->IsHeroMode())
+	const bool bPlan = King->IsCommandMode();
+	if (King->IsHeroMode() && !bPlan)
 	{
 		// the hero view: no pathways, follow, patrol or queue lines (troops following the hero, as their platoon's
 		// leader or the unit they were sent after, would trail lines across the view); the order markers still show
-		// where an order from the crosshair went. Back in the overview.
+		// where an order from the crosshair went. Back in the overview, or in command mode (R): the plan shows then.
 		LineStats.bHidden = true;
 		return;
 	}
@@ -1805,6 +1806,14 @@ void AVLHUD::DrawRouteLines()
 	const FLinearColor Blue(0.55f, 0.8f, 1.f, 0.85f);
 	TArray<AVLKing*> Units;
 	Command->GetSelection(Units);
+	if (bPlan)
+	{
+		// command mode: the selection's ways and those of the troops ordered from it (let go once ordered)
+		Units.Remove(King);
+		TArray<AVLKing*> Planned;
+		King->GetCommandPlanned(Planned);
+		for (AVLKing* P : Planned) { Units.AddUnique(P); }
+	}
 	// each patrol or attack-move once (a group shares one): a patrol's whole loop in orange, an attack-move's points
 	// still to reach in blue (the main game's route lines)
 	{
@@ -1918,7 +1927,19 @@ void AVLHUD::DrawRouteLines()
 			FVector From = W.Unit->GetFeet();
 			for (const FVector& P : W.Route) { Dashed(From, P, Blue, false, Width); From = P; }
 			Dashed(From, W.Legs[0], Blue, true, Width);
-			for (int32 k = 1; k < W.Legs.Num(); ++k) { Dashed(W.Legs[k - 1], W.Legs[k], Blue, true, Width); }
+			for (int32 k = 1; k < W.Legs.Num(); ++k)
+			{
+				if (bPlan)
+				{
+					// command mode: the queued legs along the ground as they will be walked
+					TArray<FVector> Way;
+					PlanRoute(W.Legs[k - 1], W.Legs[k], Way);
+					FVector A0 = W.Legs[k - 1];
+					for (int32 j = 0; j < Way.Num(); ++j) { Dashed(A0, Way[j], Blue, j == Way.Num() - 1, Width); A0 = Way[j]; }
+					continue;
+				}
+				Dashed(W.Legs[k - 1], W.Legs[k], Blue, true, Width);
+			}
 			++LineStats.Pathways;
 		};
 		const int32 GroupOver = FMath::Max(CVarRouteGroup.GetValueOnGameThread(), 1);
@@ -2097,13 +2118,17 @@ void AVLHUD::DrawOrderChains()
 	{
 		return;
 	}
-	const bool bHero = King->IsHeroMode();
+	// (command mode, R in the hero view: the whole plan, as in the overview, with routes and target marks)
+	const bool bPlan = King->IsCommandMode();
+	const bool bHero = King->IsHeroMode() && !bPlan;
 	TSet<const AVLKing*> Shown;
 	Command->GetSelectionSet(Shown);
-	if (bHero)
+	if (King->IsHeroMode())
 	{
 		TArray<AVLKing*> Commanded;
 		King->HeroCommanded(Commanded);
+		Shown.Append(Commanded);
+		King->GetCommandPlanned(Commanded);
 		Shown.Append(Commanded);
 	}
 	const FLinearColor AttackCol(1.f, 0.42f, 0.32f, 0.95f), WalkCol(0.55f, 0.8f, 1.f, 0.95f);
@@ -2131,6 +2156,13 @@ void AVLHUD::DrawOrderChains()
 		FVector From = FVector::ZeroVector;
 		for (const AVLKing* M : C.Members) { From += M->GetFeet(); }
 		From = Ground(From / C.Members.Num());
+		if (bPlan && !C.bStarted)
+		{
+			// waiting for what they are on: the chain goes on from the end of their pathway (DrawRouteLines draws it)
+			TArray<FVector> Route, Legs;
+			C.Members[0]->GetPathway(Route, Legs);
+			if (Legs.Num() > 0) { From = Ground(Legs.Last()); }
+		}
 		int32 N = 0;
 		for (const UVLCommand::FChainItem& It : C.Items)
 		{
@@ -2161,7 +2193,28 @@ void AVLHUD::DrawOrderChains()
 			}
 			++N;
 			const FLinearColor Col = It.bAttack ? AttackCol : WalkCol;
-			if (!bHero)
+			const bool bNow = N == 1 && C.bStarted;
+			if (bPlan)
+			{
+				// command mode: each leg along the ground as they will walk it (the walk under way is their pathway,
+				// drawn by DrawRouteLines; an attack under way, a line to the foe they are on); a target mark on a foe
+				if (!(bNow && !It.bAttack))
+				{
+					TArray<FVector> Way;
+					if (bNow) { Way.Add(Ground(On)); } else { PlanRoute(From, Ground(On), Way); }
+					FVector A0 = From;
+					for (const FVector& P : Way) { Dashed(A0, P, Col); A0 = P; }
+				}
+				From = Ground(On);
+				if (It.bAttack)
+				{
+					const AActor* T = It.Target.Get();
+					FVector Origin, Extent;
+					T->GetActorBounds(true, Origin, Extent);
+					DrawTargetMark(Ground(On), Over, Cast<AVLKing>(T) ? 90.f : FMath::Clamp(FMath::Max(Extent.X, Extent.Y) * 0.8f, 150.f, 1400.f), Col, bNow);
+				}
+			}
+			else if (!bHero)
 			{
 				Dashed(From, Ground(On), Col);      // (the hero view keeps no lines across it: only the numbers)
 				From = Ground(On);
@@ -2177,7 +2230,6 @@ void AVLHUD::DrawOrderChains()
 			const float R = U(bHero ? 8.f : 10.f), E = FMath::Max(1.f, U(2.f));
 			const float BW = FMath::Max(2.f * R, TextSize(Num, U(bHero ? 12.f : 14.f), Bold).X + U(8.f));
 			const float BX = FMath::RoundToFloat(S.X - BW * 0.5f), BY = FMath::RoundToFloat(S.Y - 2.f * R - U(bHero ? 6.f : 18.f));
-			const bool bNow = N == 1 && C.bStarted;
 			const FLinearColor Edge = bNow ? FMath::Lerp(Col, FLinearColor::White, 0.35f + 0.35f * FMath::Sin(float(Now) * 6.f)) : Col;
 			if (!bHero)
 			{
@@ -2187,6 +2239,75 @@ void AVLHUD::DrawOrderChains()
 			Fill(BX, BY, BW, 2.f * R, FLinearColor(0.02f, 0.03f, 0.06f, 0.92f));
 			TextIn(FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + 2.f * R)), Num, U(bHero ? 12.f : 14.f), Col, AlignCentre, Bold);
 			++LineStats.OrderBadges;
+		}
+	}
+}
+
+void AVLHUD::PlanRoute(const FVector& A, const FVector& B, TArray<FVector>& Out)
+{
+	// kept by where its ends are (to 2 m): a target that walks on, or troops who step on, ask again
+	auto Q = [](double V) { return int32(FMath::FloorToDouble(V / 200.0)); };
+	const uint32 Key = HashCombine(HashCombine(GetTypeHash(Q(A.X)), GetTypeHash(Q(A.Y))), HashCombine(GetTypeHash(Q(B.X)), GetTypeHash(Q(B.Y))));
+	if (const TArray<FVector>* Have = PlanRoutes.Find(Key))
+	{
+		Out = *Have;
+		return;
+	}
+	if (PlanRoutes.Num() > 96)
+	{
+		PlanRoutes.Reset();
+	}
+	Out.Reset();
+	UVLGrid* Grid = UVLGrid::Get(this);
+	if (!Grid || !Grid->IsBuilt() || !Grid->FindPath(A, B, Out) || Out.Num() == 0)
+	{
+		Out.Reset();
+	}
+	for (FVector& P : Out)
+	{
+		P.Z = GroundZ(FVector2D(P), P.Z);
+	}
+	if (Out.Num() == 0 || FVector::Dist2D(Out.Last(), B) > 50.f)
+	{
+		Out.Add(B);         // (to the target itself: a building's middle is past where the way ends)
+	}
+	PlanRoutes.Add(Key, Out);
+}
+
+void AVLHUD::DrawTargetMark(const FVector& On, const FVector& Over, float Radius, const FLinearColor& Col, bool bNow)
+{
+	// a reticle on the ground round the target (a ring with four ticks pointing in), and a crosshair at its middle;
+	// the one under way pulses
+	const float Pulse = bNow ? 0.5f + 0.5f * FMath::Sin(float(Now) * 6.f) : 0.f;
+	const FLinearColor C = FMath::Lerp(Col, FLinearColor::White, 0.3f * Pulse);
+	const FVector Mid = On + FVector(0.f, 0.f, 12.f);
+	const float R = Radius * (1.f + 0.06f * Pulse);
+	Ring(Mid, R, C, FMath::Max(1.f, U(2.5f)), 40);
+	for (int32 k = 0; k < 4; ++k)
+	{
+		const FVector D = FRotator(0.f, 45.f + 90.f * k, 0.f).Vector();
+		const FVector S0 = Project(Mid + D * R), S1 = Project(Mid + D * R * 0.72f);
+		if (S0.Z > 0.f && S1.Z > 0.f) { DrawLine(S0.X, S0.Y, S1.X, S1.Y, C, FMath::Max(1.f, U(3.f))); }
+	}
+	const FVector S = Project(Over);
+	if (S.Z <= 0.f)
+	{
+		return;
+	}
+	const float L = U(9.f), G = U(5.f), T = FMath::Max(1.f, U(2.5f));
+	Fill(S.X - G - L, S.Y - T * 0.5f, L, T, C);
+	Fill(S.X + G, S.Y - T * 0.5f, L, T, C);
+	Fill(S.X - T * 0.5f, S.Y - G - L, T, L, C);
+	Fill(S.X - T * 0.5f, S.Y + G, T, L, C);
+	// the corners of a box round it
+	const float B = U(16.f), BL = U(6.f);
+	for (int32 sx = -1; sx <= 1; sx += 2)
+	{
+		for (int32 sy = -1; sy <= 1; sy += 2)
+		{
+			const float X = S.X + sx * B, Y = S.Y + sy * B;
+			DrawLine(X, Y, X - sx * BL, Y, C, T);
+			DrawLine(X, Y, X, Y - sy * BL, C, T);
 		}
 	}
 }
