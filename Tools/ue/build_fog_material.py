@@ -6,7 +6,7 @@ UVLFog (VLFog.cpp) makes a dynamic instance of it on a post-process volume of it
   Mask      the fog texture: R visible now, G explored (eased, one texel per fog cell)
   Heights   the terrain smoothed (R16F, cm): the fog's floor; its top is Layer over it
   Grid      (origin X, origin Y, 1 / size, 0): world XY to the textures' UV
-  Layer, Density, ExploredDensity, Wisps, Bright, Desaturate, On
+  Layer, Density, ExploredDensity, Wisps, Bright, Desaturate, On, Steep, TopFeather, UnexploredDim (vl.Fog.* cvars)
 The view ray is marched (10 steps, jittered per pixel) through the part of the layer in front of the pixel: the fog's
 density there is Density where unexplored, ExploredDensity where explored, none where visible, ramping in over the top
 5 m; the top rises and falls by Wisps in drifting noise. What stands above the layer (a watch tower's roof, the
@@ -71,6 +71,11 @@ if (D.z < -0.01) { t0 = max(t0, L - (topRef - WP.z) / (-D.z)); }
 if (D.z < 0.0 && WP.z > topRef) { t0 = L; }
 float tau = 0.0;
 float lit = 0.0;
+float ex = 0.0;
+// the path through the layer already makes a grazing look denser than a look straight down; on top of that the
+// density falls to Steep of itself from a look GrazeSin (sine of the angle below the horizontal) to one SteepSin:
+// the hero's low look keeps the full bank, the overview's look down sees dim shapes through it. Wisps vary it.
+float steepK = lerp(1.0, Steep, smoothstep(GrazeSin, SteepSin, abs(D.z))) * (0.6 + 0.8 * n);
 if (t0 < L)
 {
     const int N = 10;
@@ -84,17 +89,22 @@ if (t0 < L)
         float4 m = Mask.SampleLevel(MaskSampler, uv, 0);
         float h = Heights.SampleLevel(HeightsSampler, uv, 0).r;
         float inside = h + Layer + wob - X.z;
-        float dens = lerp(Density, ExploredDensity, m.g) * (1.0 - m.r) * saturate(inside / 500.0);
+        float dens = lerp(Density, ExploredDensity, m.g) * (1.0 - m.r) * smoothstep(0.0, 1.0, inside / TopFeather) * steepK;
         tau += dens * dt;
         lit += dens * dt * saturate(1.0 - inside / max(Layer, 1.0));
+        ex += dens * dt * m.g;
     }
 }
 float T = exp(-tau);
 float litF = tau > 1e-5 ? lit / tau : 0.0;
-float3 fogC = FogCol * Bright * (0.70 + 0.30 * litF) * (0.88 + 0.24 * n);
-float g = saturate(mP.g - mP.r) * Desaturate;
+float exF = tau > 1e-5 ? ex / tau : 0.0;
+// unexplored fog a deeper blue-grey, explored a lighter one; lit toward its top, shaded with the wisps
+float3 fogC = lerp(DeepCol, FogCol, exF) * Bright * (0.62 + 0.38 * litF) * (0.84 + 0.32 * n);
+// the ground under it: greyed where explored, greyed and dimmed where unexplored
+float u = saturate(1.0 - max(mP.g, mP.r));
+float g = saturate(max(saturate(mP.g - mP.r) * Desaturate, u * 0.7));
 float lum = dot(col, float3(0.3, 0.59, 0.11));
-col = lerp(col, lum * float3(0.86, 0.91, 1.0), g);
+col = lerp(col, lum * float3(0.86, 0.91, 1.0), g) * lerp(1.0, UnexploredDim, u);
 return col * T + fogC * (1.0 - T);
 """
 
@@ -127,7 +137,8 @@ custom = mel.create_material_expression(m, unreal.MaterialExpressionCustom, -400
 custom.set_editor_property("code", CODE)
 custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
 custom.set_editor_property("description", "FogOfWar")
-names = ["Scene", "WP", "Cam", "Mask", "Heights", "Grid", "Layer", "Density", "ExploredDensity", "Wisps", "Bright", "Desaturate", "On", "Time", "FogCol"]
+names = ["Scene", "WP", "Cam", "Mask", "Heights", "Grid", "Layer", "Density", "ExploredDensity", "Wisps", "Bright", "Desaturate", "On", "Steep", "TopFeather",
+         "UnexploredDim", "GrazeSin", "SteepSin", "Time", "FogCol", "DeepCol"]
 ins = []
 for nm in names:
     ci = unreal.CustomInput()
@@ -142,7 +153,8 @@ white = unreal.load_asset("/Engine/EngineResources/WhiteSquareTexture")
 mask = node(unreal.MaterialExpressionTextureObjectParameter, -300, parameter_name="Mask", texture=white)
 heights = node(unreal.MaterialExpressionTextureObjectParameter, -150, parameter_name="Heights", texture=white)
 grid = node(unreal.MaterialExpressionVectorParameter, 0, parameter_name="Grid", default_value=unreal.LinearColor(-32000.0, -32000.0, 1.0 / 64000.0, 0.0))
-fogcol = node(unreal.MaterialExpressionVectorParameter, 700, parameter_name="FogColor", default_value=unreal.LinearColor(0.60, 0.64, 0.70, 1.0))
+fogcol = node(unreal.MaterialExpressionVectorParameter, 700, parameter_name="FogColor", default_value=unreal.LinearColor(0.66, 0.70, 0.76, 1.0))
+deepcol = node(unreal.MaterialExpressionVectorParameter, 900, parameter_name="DeepColor", default_value=unreal.LinearColor(0.40, 0.45, 0.54, 1.0))
 tm = node(unreal.MaterialExpressionTime, 800)
 mel.connect_material_expressions(scene, "Color", custom, "Scene")
 mel.connect_material_expressions(lwc_free(wp, -500), "", custom, "WP")
@@ -151,19 +163,21 @@ mel.connect_material_expressions(mask, "", custom, "Mask")
 mel.connect_material_expressions(heights, "", custom, "Heights")
 mel.connect_material_expressions(grid, "", custom, "Grid")
 y = 100
-for nm, v in (("Layer", 1750.0), ("Density", 0.0018), ("ExploredDensity", 0.00035), ("Wisps", 350.0), ("Bright", 1.0), ("Desaturate", 0.45), ("On", 1.0)):
+for nm, v in (("Layer", 1750.0), ("Density", 0.0016), ("ExploredDensity", 0.00035), ("Wisps", 350.0), ("Bright", 0.72), ("Desaturate", 0.45), ("On", 1.0),
+              ("Steep", 0.12), ("TopFeather", 800.0), ("UnexploredDim", 0.6), ("GrazeSin", 0.1), ("SteepSin", 0.55)):
     mel.connect_material_expressions(scalar(nm, v, y), "", custom, nm)
     y += 80
 mel.connect_material_expressions(tm, "", custom, "Time")
 # the fog's colour made independent of the exposure where the engine has the node for it
 ea = getattr(unreal, "MaterialExpressionEyeAdaptationInverse", None)
-if ea is not None:
-    inv = mel.create_material_expression(m, ea, -1100, 700)
-    mel.connect_material_expressions(fogcol, "", inv, "LightValue")
-    mel.connect_material_expressions(inv, "", custom, "FogCol")
-    print("fog colour through EyeAdaptationInverse")
-else:
-    mel.connect_material_expressions(fogcol, "", custom, "FogCol")
+for src, pin, yy in ((fogcol, "FogCol", 700), (deepcol, "DeepCol", 900)):
+    if ea is not None:
+        inv = mel.create_material_expression(m, ea, -1100, yy)
+        mel.connect_material_expressions(src, "", inv, "LightValue")
+        mel.connect_material_expressions(inv, "", custom, pin)
+    else:
+        mel.connect_material_expressions(src, "", custom, pin)
+print("fog colours through EyeAdaptationInverse" if ea is not None else "fog colours as they are")
 mel.connect_material_property(custom, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 mel.recompile_material(m)
 eal.save_loaded_asset(m, False)

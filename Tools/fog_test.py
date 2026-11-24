@@ -2,6 +2,7 @@
 """The fog of war (UVLFog, VLFog.*) in Play-In-Editor: PIE running (python Tools/pie.py start), any map.
 
     Tools/.venv/Scripts/python Tools/fog_test.py [realmv3] [realmv2] [perf]
+    Tools/.venv/Scripts/python Tools/fog_test.py views <suffix> [realmv3] [realmv2]
 
 For each map: opens it (vl.Map), starts a match, and
   - logs the fog's state at the start (vl.Fog.Info: visible / explored share) and every eye (vl.Fog.Eyes: the towers'
@@ -101,6 +102,30 @@ def one_map(name):
     return res
 
 
+def views(name, suffix):
+    """The same views before and after a change of the look: the default overview zoom over home (with a patch of
+    explored ground beside it) and over the enemy's towers, the furthest overview, and the hero camera's height."""
+    P = MAPS[name]
+    print("== %s views (%s)" % (name, suffix))
+    cmd(["vl.Map " + name], None, 45)
+    cmd(["vl.StartMatch 0"], None, 6)
+    x, y, z = P["low"]
+    cmd(["vl.Mode hero", "vl.Teleport %d %d %d" % (x, y, z + 120)], None, 1.5)      # (explored ground out there)
+    hx, hy, hz = P["home"]
+    cmd(["vl.Teleport %d %d %d" % (hx, hy, hz + 120)], None, 1.5)
+    shots = [
+        ("overview", ["vl.Mode overview", "vl.Look %d %d 0.18" % P["look"]]),
+        ("overview_towers", ["vl.Mode overview", "vl.Look %d %d 0.18" % P["towers"]]),
+        ("overview_far", ["vl.Mode overview", "vl.Look %d %d 1.0" % P["look"]]),
+        ("hero", ["vl.Mode hero", "vl.View follow"]),
+        ("hero_mist", ["vl.Mode hero", "vl.View free %d %d %d %d %d 60" % P["mist"]]),
+    ]
+    for tag, c in shots:
+        cmd(c, None, 3)
+        pie.main(["shot", "fog_%s_%s_%s" % (name, tag, suffix), "1.5"])
+    cmd(["vl.View follow"], None, 0.5)
+
+
 def perf(name):
     P = MAPS[name]
     cmd(["vl.Mode overview", "vl.Look %d %d 0.6" % P["look"]], None, 3)
@@ -124,6 +149,10 @@ def perf(name):
 
 if __name__ == "__main__":
     which = sys.argv[1:] or ["realmv3", "realmv2"]
+    if which[0] == "views":
+        for m in which[2:] or ["realmv3", "realmv2"]:
+            views(m, which[1])
+        sys.exit(0)
     for w in which:
         if w == "perf":
             continue

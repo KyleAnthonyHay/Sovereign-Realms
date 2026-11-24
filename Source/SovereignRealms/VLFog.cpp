@@ -31,10 +31,16 @@ static TAutoConsoleVariable<float> CVarFogMax(TEXT("vl.Fog.MaxRadius"), 9000.f, 
 static TAutoConsoleVariable<float> CVarFogKind(TEXT("vl.Fog.KindScale"), 1.f, TEXT("0: every kind sees alike; 1: each kind's radius times its sight over a swordsman's (archer 1.15, Spy 2.0)."));
 static TAutoConsoleVariable<float> CVarFogTower(TEXT("vl.Fog.TowerView"), 1.35f, TEXT("a watch tower sees this many times its shooting range (from its walls, on flat ground; the height rule on top)."));
 static TAutoConsoleVariable<float> CVarFogLayer(TEXT("vl.Fog.Layer"), 1750.f, TEXT("cm: the fog's top over the smoothed terrain (a watch tower's tip is at 2060)."));
-static TAutoConsoleVariable<float> CVarFogDensity(TEXT("vl.Fog.Density"), 0.0018f, TEXT("1/cm: the unexplored fog's density."));
+static TAutoConsoleVariable<float> CVarFogDensity(TEXT("vl.Fog.Density"), 0.0016f, TEXT("1/cm: the unexplored fog's density (the optical depth is this x the path through the layer: dense at a grazing look, thin looking down)."));
 static TAutoConsoleVariable<float> CVarFogExplored(TEXT("vl.Fog.ExploredDensity"), 0.00035f, TEXT("1/cm: the explored (not visible) fog's density."));
+static TAutoConsoleVariable<float> CVarFogSteep(TEXT("vl.Fog.Steep"), 0.12f, TEXT("the density's share for a steep look (the overview), on top of the shorter path through the layer; 1: the path alone."));
+static TAutoConsoleVariable<float> CVarFogGraze(TEXT("vl.Fog.GrazeDeg"), 6.f, TEXT("degrees below the horizontal: a look this low or lower sees the full density (the hero's view)."));
+static TAutoConsoleVariable<float> CVarFogSteepDeg(TEXT("vl.Fog.SteepDeg"), 33.f, TEXT("degrees below the horizontal: from this steep on the density is vl.Fog.Steep of itself (smooth between)."));
+static TAutoConsoleVariable<float> CVarFogTopFeather(TEXT("vl.Fog.TopFeather"), 800.f, TEXT("cm: the fog's density ramps in over this much below its top."));
+static TAutoConsoleVariable<int32> CVarFogFeather(TEXT("vl.Fog.Feather"), 3, TEXT("cells (2 m): the half-width of the box blurs (two each way) that soften the edge of what is seen: 3 gives a bank some 12 m deep."));
+static TAutoConsoleVariable<float> CVarFogDim(TEXT("vl.Fog.UnexploredDim"), 0.6f, TEXT("unexplored ground under the fog is darkened to this (and greyed)."));
 static TAutoConsoleVariable<float> CVarFogWisps(TEXT("vl.Fog.Wisps"), 350.f, TEXT("cm: how far the fog's top rises and falls in drifting wisps."));
-static TAutoConsoleVariable<float> CVarFogBright(TEXT("vl.Fog.Bright"), 0.85f, TEXT("the fog's brightness (x its colour)."));
+static TAutoConsoleVariable<float> CVarFogBright(TEXT("vl.Fog.Bright"), 0.72f, TEXT("the fog's brightness (x its colour)."));
 static TAutoConsoleVariable<float> CVarFogDesat(TEXT("vl.Fog.Desaturate"), 0.45f, TEXT("explored ground out of sight is greyed this much."));
 static TAutoConsoleVariable<float> CVarFogInterval(TEXT("vl.Fog.Interval"), 0.1f, TEXT("s between two vision updates."));
 static TAutoConsoleVariable<float> CVarFogFade(TEXT("vl.Fog.Fade"), 0.35f, TEXT("s: how long a cell takes to clear or cloud over."));
@@ -743,7 +749,7 @@ void UVLFog::SetHiddenByFog(AActor* A, bool bHide)
 void UVLFog::UploadMask(float Dt)
 {
 	const double TM0 = FPlatformTime::Seconds();
-	// eased toward the cells' states, the visible one softened over a few cells (two box blurs of 5 cells each way:
+	// eased toward the cells' states, the visible one softened over a few cells (two box blurs of 2 x Feather + 1 cells each way:
 	// the fog's edge is a bank some 8 m deep, not a wall)
 	const int32 Step = FMath::Clamp(FMath::RoundToInt(255.f * Dt / FMath::Max(CVarFogFade.GetValueOnGameThread(), 0.01f)), 1, 255);
 	TArray<uint16> SoftA, SoftB;
@@ -758,15 +764,17 @@ void UVLFog::UploadMask(float Dt)
 		const uint16* In = SoftA.GetData();
 		uint16* Out = SoftB.GetData();
 		const int32 N = Dim;
-		ParallelFor(TEXT("VLFogBlur"), Dim, 16, [In, Out, Stride, Line, N](int32 L)
+		const int32 K = FMath::Clamp(CVarFogFeather.GetValueOnGameThread(), 0, 12), W = 2 * K + 1;
+		ParallelFor(TEXT("VLFogBlur"), Dim, 16, [In, Out, Stride, Line, N, K, W](int32 L)
 		{
 			const int32 Base = L * Line;
 			auto At = [&](int32 k) { return int32(In[Base + FMath::Clamp(k, 0, N - 1) * Stride]); };
-			int32 Sum = At(-2) + At(-1) + At(0) + At(1) + At(2);
+			int32 Sum = 0;
+			for (int32 k = -K; k <= K; ++k) { Sum += At(k); }
 			for (int32 k = 0; k < N; ++k)
 			{
-				Out[Base + k * Stride] = uint16(Sum / 5);
-				Sum += At(k + 3) - At(k - 2);
+				Out[Base + k * Stride] = uint16(Sum / W);
+				Sum += At(k + K + 1) - At(k - K);
 			}
 		});
 		Swap(SoftA, SoftB);
@@ -847,6 +855,12 @@ void UVLFog::ApplyVisualParams()
 	FogMID->SetScalarParameterValue(TEXT("Bright"), CVarFogBright.GetValueOnGameThread());
 	FogMID->SetScalarParameterValue(TEXT("Desaturate"), CVarFogDesat.GetValueOnGameThread());
 	FogMID->SetScalarParameterValue(TEXT("On"), bRevealAll ? 0.f : 1.f);
+	FogMID->SetScalarParameterValue(TEXT("Steep"), CVarFogSteep.GetValueOnGameThread());
+	FogMID->SetScalarParameterValue(TEXT("TopFeather"), FMath::Max(50.f, CVarFogTopFeather.GetValueOnGameThread()));
+	FogMID->SetScalarParameterValue(TEXT("UnexploredDim"), CVarFogDim.GetValueOnGameThread());
+	const float Graze = FMath::Clamp(CVarFogGraze.GetValueOnGameThread(), 0.f, 89.f), SteepDeg = FMath::Clamp(CVarFogSteepDeg.GetValueOnGameThread(), Graze + 1.f, 90.f);
+	FogMID->SetScalarParameterValue(TEXT("GrazeSin"), FMath::Sin(FMath::DegreesToRadians(Graze)));
+	FogMID->SetScalarParameterValue(TEXT("SteepSin"), FMath::Sin(FMath::DegreesToRadians(SteepDeg)));
 }
 
 // ------------------------------------------------------------------------------------------------ queries, the log

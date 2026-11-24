@@ -1199,17 +1199,28 @@ there), on Flatlands and the title screen. The enemy commander keeps its own per
 - **The look**: a post-process layer (`/Game/Voxel/Fog/M_FogOfWar`, made by `Tools/ue/build_fog_material.py`, on a
   post-process volume of the fog's own, Scene Color After DOF) whose top is 17.5 m over the terrain smoothed
   (`vl.Fog.Layer`; a watch tower is 20.6 m): the view ray is marched through it in 10 jittered steps, its density
-  from the fog texture, ramping in over its top 5 m, the top rising and falling 3.5 m in drifting wisps. The towers'
-  roofs, the castles' flags, tall trees on the ridges and Realm v2's mountain stand out of it; from the hero camera
-  it is a bank of mist. The edge of what is seen is a soft bank some 8 m deep, eased over 0.35 s.
+  from the fog texture, feathered in over its top 8 m (`vl.Fog.TopFeather` 800), the top rising and falling 3.5 m in
+  drifting wisps that also vary its thickness. **How opaque it is depends on how you look through it** (the
+  owner's call, 2026-11-23: "the shallower you look through the fog the more opaque; looking straight down, lower
+  opacity"): besides the path through the layer, which is long at a grazing look and short looking down, the
+  density falls from all of it at a look 6 degrees below the horizontal or lower (`vl.Fog.GrazeDeg`; the hero
+  camera: a dense bank of mist) to 12 % of it from 33 degrees down (`vl.Fog.SteepDeg`, `vl.Fog.Steep` 0.12; the
+  overview: the ground, roads, buildings and the forest's canopy show through as dim grey shapes). Unexplored:
+  density 0.0016 / cm (`vl.Fog.Density`), a deeper blue-grey, the ground under it greyed and darkened to 60 %
+  (`vl.Fog.UnexploredDim`); explored: 0.00035 / cm (`vl.Fog.ExploredDensity`), a lighter grey, the ground greyed
+  (`vl.Fog.Desaturate` 0.45); brightness `vl.Fog.Bright` 0.72. The towers' roofs, the castles' flags, tall trees on
+  the ridges and Realm v2's mountain stand out of it. The edge of what is seen is a soft bank some 12 m deep (two
+  box blurs of 7 cells, `vl.Fog.Feather` 3), eased over 0.35 s. Before / after the change, at the same views:
+  `Saved/Screenshots/VL/fog_<map>_<view>_before.png` / `_after.png` (`Tools/fog_test.py views <suffix>`).
 - **The minimap** lays the same texture on the map: unexplored dark, explored dimmed.
 - **Cost** (PIE, 1334 x 753, this PC): the post-process pass 0.05 ms of GPU on Realm v3 and Realm v2 (0 with
   `vl.Fog 0`); the vision update every 0.1 s 0.8-1.0 ms on the game thread with 13 eyes, about 1.7 ms with 62
   (rays only for eyes that moved 1 m, on worker threads; the inner disc filled by rows).
 - Console: `vl.Fog 0|1`, `vl.Fog.Reveal [1|0]` (the whole map seen), `vl.Fog.Info` (the state, the update's time,
   the played unit's radius min / mean / max), `vl.Fog.Eyes`; cvars `vl.Fog.EyeHeight` (2000 cm), `.Angle` (30),
-  `.MaxRadius`, `.KindScale`, `.TowerView`, `.Layer`, `.Density`, `.ExploredDensity`, `.Wisps`, `.Bright`,
-  `.Desaturate`, `.Interval`, `.Fade`, `.Cell`, `.Log 1|2`. Checks: `python Tools/fog_test.py [realmv3] [realmv2]
+  `.MaxRadius`, `.KindScale`, `.TowerView`, `.Layer`, `.Density`, `.ExploredDensity`, `.Steep`, `.GrazeDeg`,
+  `.SteepDeg`, `.TopFeather`, `.Feather`, `.UnexploredDim`, `.Wisps`, `.Bright`, `.Desaturate`, `.Interval`, `.Fade`,
+  `.Cell`, `.Log 1|2`. Checks: `python Tools/fog_test.py [realmv3] [realmv2]
   [perf]` (screenshots `Saved/Screenshots/VL/fog_*.png`).
 - Saved games: the explored cells are `UVLFog::GetExplored` / `SetExplored` (one byte a cell); not saved yet.
 
