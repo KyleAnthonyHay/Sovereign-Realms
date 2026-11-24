@@ -88,6 +88,7 @@ namespace VLId
 		Menu = 300,       // + entry
 		Screen = 340,     // + control on a sub-screen
 		Setting = 400,    // + row
-		Ship = 500        // the troop ship's Unload (VLTroopShipHUD.cpp)
+		Ship = 500,       // the troop ship's Unload (VLTroopShipHUD.cpp)
+		CornerRepair = 510 // the castle panel's Repair of its corners (VLHUDGame.cpp); + 1, 2: the hero box's other heroes
 	};
 }

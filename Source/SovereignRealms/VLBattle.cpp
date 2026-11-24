@@ -1056,8 +1056,13 @@ FVector UVLBattle::AimPoint(const AActor* Target, const FVector& From) const
 	{
 		return U->GetActorLocation() + FVector(0.f, 0.f, 10.f);         // the chest
 	}
-	if (FindBuilding(Target))
+	if (const FVLBuildingState* B = FindBuilding(Target))
 	{
+		// a castle: its nearest standing corner first (its archer is the one shooting back; VLCastleCorners.cpp)
+		if (const int32 Corner = B->Kind == EVLBuilding::Castle ? NearestUpCorner(*B, From) : INDEX_NONE; Corner != INDEX_NONE)
+		{
+			return CornerPoint(Target, Corner, 420.f);
+		}
 		FVector P;
 		DistanceTo(Target, From, &P);
 		FVector Origin, Extent;
@@ -1192,11 +1197,51 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 	{
 		Amount *= VLRules::Troop(EVLUnitKind::Archer).BuildingScale;         // a tower's arrows
 	}
-	if (ByTeam == 0 || ByTeam == 1)
+	// THE CASTLE'S CORNERS (VLCastleCorners.cpp): what lands in a manned, standing corner turret hurts that corner, not
+	// the castle. Where it landed: an arrow's point (DamageAt); else where the one striking stands (a blade at its walls)
+	int32 Corner = INDEX_NONE;
+	if (B->Kind == EVLBuilding::Castle)
 	{
-		Kingdoms[ByTeam].BuildingDamageBy[StrikerClass(By)] += FMath::Min(Amount, B->Health);
+		Corner = bHitAt ? CornerAlong(*B, HitAt, HitDir, 700.f) : (By ? CornerNear(*B, By->GetActorLocation(), 450.f) : INDEX_NONE);
 	}
-	B->Health = FMath::Max(0.f, B->Health - Amount);
+	if (Corner != INDEX_NONE)
+	{
+		if (ByTeam == 0 || ByTeam == 1)
+		{
+			Kingdoms[ByTeam].BuildingDamageBy[StrikerClass(By)] += FMath::Min(Amount, B->CornerHealth[Corner]);
+		}
+		B->CornerHealth[Corner] = FMath::Max(0.f, B->CornerHealth[Corner] - Amount);
+		B->CornerHit[Corner] = Now;
+		if (BattleLog())
+		{
+			UE_LOG(LogSovereignRealms, Log, TEXT("hit: corner %d of %s (team %d) takes %.0f from %s (%.0f left)"), Corner, *B->Name, B->Team, Amount, By ? *By->GetName() : TEXT("-"), B->CornerHealth[Corner]);
+		}
+		if (B->CornerHealth[Corner] <= 0.f)
+		{
+			// its archer is gone, until a Builder has mended the corner whole (paid for in gold)
+			B->bCornerDown[Corner] = true;
+			ShowCornerFigure(*B, Corner, false);
+			const FVector CornerAtPoint = CornerPoint(Target, Corner);
+			UE_LOG(LogSovereignRealms, Log, TEXT("CORNERS %s of team %d: corner %d knocked out: its archer is lost (by %s)"), *B->Name, B->Team, Corner, By ? *By->GetName() : TEXT("-"));
+			PlayAt(TEXT("S_BuildingHit"), CornerAtPoint, 0.7f, 5000.f, 0.1f);
+			if (B->Team == Player)
+			{
+				PushAlert(FString::Printf(TEXT("A corner of your castle has fallen: its archer is lost (repair: %d gold)"), CornerRepairCost(*B)), EVLAlert::Lost, &CornerAtPoint);
+			}
+			else if (B->Team == Enemy)
+			{
+				PushAlert(TEXT("An enemy castle corner has fallen: its archer is silenced"), EVLAlert::Good, &CornerAtPoint);
+			}
+		}
+	}
+	else
+	{
+		if (ByTeam == 0 || ByTeam == 1)
+		{
+			Kingdoms[ByTeam].BuildingDamageBy[StrikerClass(By)] += FMath::Min(Amount, B->Health);
+		}
+		B->Health = FMath::Max(0.f, B->Health - Amount);
+	}
 	B->LastHit = Now;
 	FVector Wall = Target->GetActorLocation();
 	if (By)
@@ -1207,7 +1252,8 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 	PlayAt(TEXT("S_BuildingHit"), Wall, 0.45f, 4000.f, 0.25f);
 	if (BattleLog())
 	{
-		UE_LOG(LogSovereignRealms, Log, TEXT("hit: %s of team %d takes %.0f from %s (%.0f of %.0f left)"), *B->Name, B->Team, Amount, By ? *By->GetName() : TEXT("-"), B->Health, B->MaxHealth);
+		UE_LOG(LogSovereignRealms, Log, TEXT("hit: %s of team %d takes %.0f from %s (%.0f of %.0f left%s)"), *B->Name, B->Team, Amount, By ? *By->GetName() : TEXT("-"), B->Health, B->MaxHealth,
+			Corner != INDEX_NONE ? *FString::Printf(TEXT("; taken by corner %d"), Corner) : TEXT(""));
 	}
 	if (B->Team == Player && State == EVLMatch::Playing && Now - B->LastAlert > 10.0)
 	{
@@ -2083,7 +2129,7 @@ FString UVLBattle::Describe(const FVLBuildingState& B) const
 	switch (B.Kind)
 	{
 	case EVLBuilding::Castle:
-		return FString::Printf(TEXT("Houses %d, troop ceiling %d, stores %d each; %d archer(s) on the walls (%.0f a shot)"), L.Housing, L.Ceiling, L.Storage, L.Archers, L.Damage);
+		return FString::Printf(TEXT("Houses %d, troop ceiling %d, stores %d each; %d archer(s) on its corners (%.0f a shot)"), L.Housing, L.Ceiling, L.Storage, VLRules::CastleCorners(B.Level), L.Damage);
 	case EVLBuilding::Farm:
 		return FString::Printf(TEXT("+%d food every %.0f s, houses %d troops"), L.Yield, VLRules::PayoutInterval, L.Housing);
 	case EVLBuilding::Mine:
@@ -2160,6 +2206,11 @@ void UVLBattle::TickDefence(float Dt)
 		}
 		InReach.Sort([](const TPair<float, AVLKing*>& X, const TPair<float, AVLKing*>& Y) { return X.Key < Y.Key; });
 		B.Defence = L.Interval * FMath::FRandRange(0.9f, 1.1f);
+		if (B.Kind == EVLBuilding::Castle)
+		{
+			ShootFromCorners(B, InReach);   // (its archers stand on its corners: one shot from each that stands; VLCastleCorners.cpp)
+			continue;
+		}
 		FVector Origin, Extent;
 		A->GetActorBounds(true, Origin, Extent);
 		for (int32 k = 0; k < L.Archers; ++k)
@@ -3524,6 +3575,7 @@ void UVLBattle::Tick(float DeltaSeconds)
 	TickTraining(DeltaSeconds);
 	TickUpgrades(DeltaSeconds);
 	TickTowerGuards(DeltaSeconds);
+	TickCastleCorners(DeltaSeconds);
 	for (int32 t = 0; t < 2; ++t)
 	{
 		if (FVLCommander* C = Commanders[t].Get(); C && C->bActive)

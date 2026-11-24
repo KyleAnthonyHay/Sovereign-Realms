@@ -940,6 +940,29 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   click on a foe's unit or building attacks it. Swordsmen run a moving foe down (a fresh route every 0.6 s, given up
   after a dozen that get no closer) and go for a building's walls; archers lead a moving foe and walk into range
   again when it leaves it. Arrows strike the bodies of foes they pass (never friends). The dead topple and are gone.
+- **The castle's corners** (the owner's call, 2026-11-23; `VLCastleCorners.cpp`). The castle's archers (its level's
+  count, 1, 2, 2, 3, 3, 4, 4 over levels 1-7: `VLRules::CastleCorners`) stand **one to a corner turret**, the front two
+  first, then the back two: four at most. Each is drawn there (the archer troop's figure, turned to what it shoots at)
+  and shoots from its turret at the foe nearest it (36-48 every 1.4 s, to 10 m from the walls plus the turret). **Each
+  manned corner has its own hit box** (its turret of `SM_Castle`: 2.25 m square, 6.25 m high, footprints' middles at
+  x -4.375 / +4.875 m, y +2.5 m (the front) / -4.5 m in the castle's space, grown by 0.8 m for an arrow, by 3 m round
+  where a swordsman stands) **and its own health: 12% of the castle's** (`CornerHealthShare`: 1008 at level 1, 1512 at
+  level 3, 2520 at level 7). **What lands on a standing corner hurts the corner, not the castle** (arrows where they
+  land, blades where the striker stands; the usual scaling: arrows x0.5 against stone). At 0 the corner's **archer is
+  lost** (its figure gone, no more shots from it; an alert) until a Builder has mended it whole. **Repairs cost gold,
+  in proportion**: 0.1 gold a point of health a corner lacks (`CornerRepairGoldPerHp`; at least 10), **paid up front**
+  for every damaged corner at once: the castle panel's **Repair** button (it sends the selected Builders, else the
+  nearest free one), or Builders ordered onto the castle (a right click; that pays too). Builders at the castle then
+  mend the paid corners one after the other at 28 a second each (`VLBuild::RepairPerSecond`; a knocked-out level-3
+  corner: 155 gold and 54 s with one Builder, 27 s with two); its archer is back once it is whole. A new castle level
+  makes every manned corner whole (and mans the next). The castle panel shows "Corners 3/3" and four small bars
+  (grey: no archer at this level yet; red: knocked out; amber: being mended), the Repair button with its price, or
+  "Mending · 2 Builders"; small bars float over the turrets with the castle's own, when a corner is hit, knocked out
+  or being mended. **Arrows aimed at a castle go for its nearest standing corner first** (`UVLBattle::AimPoint`), both
+  sides'. **The enemy's commander** pays for its own repairs once nothing has hit its castle for 10 s and it has the
+  gold with 100 over; its Builders then go to work there of their own accord. Console: `vl.Corners` (each castle's
+  corners, their health and where they are), `vl.Corners hit <0-3> <amount> [enemy]`, `vl.Corners repair [enemy]`.
+  Saved games keep `FVLBuildingState::CornerHealth[4]`, `bCornerDown[4]`, `bCornerRepair[4]` and `CornerLevel`.
 - **The Spy** (the first draft's Scout, `ESRUnitType::Scout`; `VLRules::Troop("Spy")`, `UVLSpy`): 90 health, **a weak bow**
   (the owner's call, 2026-11-23; it had a blow of 8): the archer's bow and code (`UVLArcherCombat`, as Jonathan's), set
   up in `AVLTroop::BeginPlay` from `VLRules::Spy*`: **18 an arrow** (the archer's 40: 45%; x0.2 against buildings)
@@ -973,7 +996,8 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   until one of the player's eyes is within 45 % of its reach; still deferred: drawing it half seen. Its Roam order (O) is in (see *Standing orders*), choosing
   ground it has not been to lately instead of unexplored ground.
 - **Buildings** (health, then by level): Castle 8400 (houses 8, troop ceiling 36, stores 600 each, 1 archer on its
-  walls: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500, 4 archers and 21000 health; it was 12000 to 30000 until 2026-11-23), Barracks 1600, Archery Range 1400 (levels:
+  corners: 36 every 1.4 s to 10 m; 7 levels to 64 / 120 / 5500, 4 archers and 21000 health; it was 12000 to 30000 until
+  2026-11-23; **its archers stand on its corner turrets, which have health of their own**: see *The castle's corners*), Barracks 1600, Archery Range 1400 (levels:
   training x1.35 / x1.8), Farm 1000 (14 food every 6 s, houses 4; levels 20 / 27, 6 / 8), Gold Mine 1250 (10 gold
   every 6 s; levels 16 / 23), Watch Tower 1800 (shoots 35 every 1.2 s to 24 m; levels 60 / 85, 0.95 / 0.8 s, 27 / 30 m; it was 50 / 85 / 120
   until the balance runs of 2026-11-22;

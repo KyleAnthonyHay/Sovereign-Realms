@@ -331,6 +331,124 @@ void AVLHUD::DrawChipList()
 	}
 }
 
+// ---------------------------------------------------------------------------- the castle's corners
+
+void AVLHUD::DrawCornerRow(float X, float Y, float Right, AActor* Castle)
+{
+	UVLBattle* Battle = UVLBattle::Get(this);
+	const FVLBuildingState* St = Battle ? Battle->FindBuilding(Castle) : nullptr;
+	if (!St || St->Kind != EVLBuilding::Castle)
+	{
+		return;
+	}
+	const VLRules::FLevel& Lv = VLRules::Level(EVLBuilding::Castle, St->Level);
+	const int32 Manned = VLRules::CastleCorners(St->Level);
+	const float Max = Battle->CornerMaxHealth(*St);
+	int32 Up = 0;
+	for (int32 i = 0; i < Manned; ++i)
+	{
+		Up += Battle->IsCornerUp(*St, i) ? 1 : 0;
+	}
+	float CX = X + Text(FString::Printf(TEXT("Corners %d/%d"), Up, Manned), X, Y, U(14.f), Up < Manned ? Refuse : Parchment, AlignLeft, Bold) + U(10.f);
+	// a bar a corner, in the order 0 front left, 1 front right, 2 back left, 3 back right
+	const float BW = U(30.f), BH = U(7.f), BY = Y + U(6.f);
+	TArray<FString> Lines;
+	static const TCHAR* Names[4] = { TEXT("Front left"), TEXT("Front right"), TEXT("Back left"), TEXT("Back right") };
+	for (int32 i = 0; i < VLRules::MaxCorners; ++i, CX += BW + U(6.f))
+	{
+		if (i >= Manned)
+		{
+			Fill(CX, BY, BW, BH, FLinearColor(0.10f, 0.10f, 0.11f, 0.6f));
+			Lines.Add(FString::Printf(TEXT("%s: no archer yet (the castle's level %d)"), Names[i], i < 2 ? 2 : (i == 2 ? 4 : 6)));
+			continue;
+		}
+		const float Frac = St->CornerHealth[i] / FMath::Max(Max, 1.f);
+		if (St->bCornerDown[i] && !St->bCornerRepair[i])
+		{
+			Fill(CX, BY, BW, BH, A(Refuse, 0.55f));
+		}
+		else
+		{
+			Meter(CX, BY, BW, BH, Frac, St->bCornerDown[i] ? Amber : Health(Frac));
+		}
+		Lines.Add(FString::Printf(TEXT("%s: %.0f / %.0f%s"), Names[i], St->CornerHealth[i], Max,
+			St->bCornerRepair[i] ? TEXT(" (being mended)") : (St->bCornerDown[i] ? TEXT(" (knocked out: no archer)") : TEXT(""))));
+	}
+	const FBox2D Bars(FVector2D(X, Y), FVector2D(CX, Y + U(18.f)));
+	if (Bars.IsInside(Mouse) && bMouse)
+	{
+		Lines.Insert(FString::Printf(TEXT("Its archers stand on its corner turrets (4 at most). Each manned corner: %.0f health, an archer shooting %.0f every %.1f s to %.0f m."), Max, Lv.Damage, Lv.Interval, Lv.Range / 100.f), 0);
+		Lines.Add(TEXT("Blows and arrows that land on a manned corner hurt the corner, not the castle. At 0 its archer is lost."));
+		Lines.Add(FString::Printf(TEXT("Repairs cost %.0f gold a point of health a corner lacks (at least %d); Builders at the castle mend them."), VLRules::CornerRepairGoldPerHp, VLRules::CornerRepairMinGold));
+		SetTooltip(Bars, TEXT("The castle's corners"), Lines);
+	}
+	if (St->Team != UVLBattle::Player)
+	{
+		return;
+	}
+	// Repair: pays for every damaged corner and sends the selected Builders (none selected: the nearest free one)
+	const int32 Cost = Battle->CornerRepairCost(*St);
+	const bool bMending = St->NeedsCornerWork();
+	// (on the line under the bars)
+	CX = X;
+	Y += U(21.f);
+	if (Cost <= 0)
+	{
+		if (bMending)
+		{
+			Text(St->BuildersAt > 0 ? FString::Printf(TEXT("Mending  ·  %d Builder%s"), St->BuildersAt, St->BuildersAt == 1 ? TEXT("") : TEXT("s")) : FString(TEXT("Paid: send a Builder")),
+				CX, Y, U(13.f), St->BuildersAt > 0 ? GoldBright : Amber);
+		}
+		return;
+	}
+	const float RW = FMath::Max(U(60.f), FMath::Min(U(150.f), Right - CX));
+	const FBox2D R(FVector2D(CX, Y - U(3.f)), FVector2D(CX + RW, Y + U(19.f)));
+	const bool bGold = Battle->GetStock(UVLBattle::Player, EVLRes::Gold) >= Cost;
+	FBtn B = Button(R, VLId::CornerRepair);
+	ButtonFrame(R, B, bGold);
+	Icon(EVLIcon::Coin, R.Min.X + U(5.f), R.Min.Y + U(3.f), U(15.f));
+	TextIn(FBox2D(R.Min + FVector2D(U(23.f), 0.f), R.Max), FString::Printf(TEXT("Repair  %d"), Cost), U(13.f), bGold ? Gold : Refuse, AlignLeft, Bold);
+	if (B.bHover)
+	{
+		SetTooltip(R, TEXT("Repair the corners"), { FString::Printf(TEXT("Pay %d gold now; Builders at the castle mend the damaged corners (%.0f a second each)."), Cost, VLBuild::RepairPerSecond),
+			TEXT("Sends the selected Builders, or the nearest free one. A knocked-out corner's archer is back once it is whole."),
+			TEXT("Or: select Builders and right-click the castle (that pays too).") });
+	}
+	if (B.bClicked)
+	{
+		UVLConstruction* C = UVLConstruction::Get(this);
+		UVLCommand* Command = UVLCommand::Get(this);
+		TArray<AVLKing*> Sel, Builders;
+		if (Command) { Command->GetSelection(Sel); }
+		Builders = Sel.FilterByPredicate([](const AVLKing* U2) { return UVLBuilderWork::IsBuilder(U2) && U2->IsAlive() && U2->Team == UVLBattle::Player; });
+		if (Builders.Num() == 0 && C)
+		{
+			// the nearest Builder that is not at work
+			TArray<AVLKing*> All;
+			C->GetBuilders(UVLBattle::Player, All);
+			AVLKing* Best = nullptr;
+			float BestD = TNumericLimits<float>::Max();
+			for (AVLKing* U2 : All)
+			{
+				const float D = Battle->DistanceTo(Castle, U2->GetFeet()) + (UVLBuilderWork::IsAtWork(U2) ? 1e6f : 0.f);
+				if (D < BestD) { BestD = D; Best = U2; }
+			}
+			if (Best) { Builders.Add(Best); }
+		}
+		const bool bPaid = Battle->PayCornerRepair(Castle);
+		Click(!bPaid);
+		if (bPaid && C && Builders.Num() > 0)
+		{
+			C->OrderWork(Builders, Castle, true);
+		}
+		else if (bPaid)
+		{
+			Battle->PushAlert(TEXT("Paid: train a Builder at the castle to mend the corners"));
+		}
+		UE_LOG(LogSovereignRealms, Log, TEXT("hud: castle corners: repair %d gold %s, %d Builder(s) sent"), Cost, bPaid ? TEXT("paid") : TEXT("refused"), bPaid ? Builders.Num() : 0);
+	}
+}
+
 // ---------------------------------------------------------------------------- the Assign picker
 
 void AVLHUD::DrawAssignPicker(const TArray<AVLKing*>& Units, const FBox2D& Anchor, float Bottom)
@@ -1547,9 +1665,9 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 		return;
 	}
 	case EVLBuilding::Castle:
-		Text(bPlayer ? TEXT("The seat of your kingdom. If it falls, you lose.") : TEXT("The enemy's seat. Bring it down to win."), X, LY, U(15.f), Parchment);
-		Text(FString::Printf(TEXT("%d archer%s on its walls: %.0f every %.1f s, to %.0f m"), Lv.Archers, Lv.Archers == 1 ? TEXT("") : TEXT("s"), Lv.Damage, Lv.Interval, Lv.Range / 100.f),
-			X, LY + U(22.f), U(14.f), Dim);
+		// (the player's: its corners first, their repair under them; the enemy's: what it is, then its corners)
+		if (!bPlayer) { Text(TEXT("The enemy's seat. Bring it down to win."), X, LY, U(15.f), Parchment); }
+		DrawCornerRow(X, bPlayer ? LY - U(2.f) : LY + U(20.f), bRecruits ? RightSlot(2).Min.X - U(10.f) : RightSlot(0).Min.X - U(10.f), Building);
 		if (!bRecruits)
 		{
 			if (bUpgradable) { DrawUpgradeButton(RightSlot(0), Building); }

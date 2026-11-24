@@ -174,7 +174,7 @@ namespace
 	/** Does the building need a Builder (a site, or below its full health)? */
 	bool NeedsWork(const FVLBuildingState& S)
 	{
-		return S.IsAlive() && (S.IsSite() || S.Health < S.MaxHealth - 0.5f);
+		return S.IsAlive() && (S.IsSite() || S.Health < S.MaxHealth - 0.5f || S.NeedsCornerWork());     // (a castle's corners, paid to be mended)
 	}
 
 	void ApplyTeamLook(UStaticMeshComponent* C, int32 Team)
@@ -2007,6 +2007,12 @@ bool UVLConstruction::OrderWork(const TArray<AVLKing*>& Units, AActor* Building,
 {
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const FVLBuildingState* St = Battle ? Battle->FindBuilding(Building) : nullptr;
+	// Builders ordered onto the castle with corners to mend: the repair is paid for now (VLCastleCorners.cpp)
+	if (St && bOrdered && St->Kind == EVLBuilding::Castle && Battle->CornerRepairCost(*St) > 0
+		&& Units.ContainsByPredicate([St](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U) && U->IsAlive() && U->Team == St->Team; }))
+	{
+		UVLBattle::Get(this)->PayCornerRepair(Building, St->Team != UVLBattle::Player);
+	}
 	if (!St || !NeedsWork(*St))
 	{
 		return false;
@@ -2161,7 +2167,7 @@ AActor* UVLConstruction::FindJob(const AVLKing* Builder) const
 		const bool bSite = S.IsSite();
 		// a damaged building is only worth it once it is properly hurt; and nobody starts mending one of their own
 		// accord while it is being hit (a building under repair is out of action)
-		if (!bSite && ((S.Health / FMath::Max(S.MaxHealth, 1.f) > 0.9f && !bCommanded) || Now - S.LastHit < 10.0))
+		if (!bSite && ((S.Health / FMath::Max(S.MaxHealth, 1.f) > 0.9f && !bCommanded && !S.NeedsCornerWork()) || Now - S.LastHit < 10.0))
 		{
 			continue;
 		}

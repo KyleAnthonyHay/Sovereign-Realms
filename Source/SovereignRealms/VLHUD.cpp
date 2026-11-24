@@ -1323,6 +1323,25 @@ void AVLHUD::DrawHealthBars()
 		const int32 Rows = OverheadRows(Bs);
 		Bar(LabelPoint(Bs.Actor.Get()), U(110.f), U(8.f), Frac, Bs.Team == UVLBattle::Enemy, Rows > 0 ? Rows * U(26.f) - U(4.f) : 0.f);
 	}
+	// the castle's corners (VLCastleCorners.cpp): a small bar over each manned turret, while the castle's shows, or one
+	// was hit lately, or it is knocked out (red, empty) or being mended
+	for (const FVLBuildingState& Bs : Battle->GetBuildings())
+	{
+		if (Bs.Kind != EVLBuilding::Castle || !Bs.IsAlive() || Bs.Team == UVLBattle::Neutral)
+		{
+			continue;
+		}
+		const bool bCastleBar = (Bs.Health < Bs.MaxHealth && (WorldNow - Bs.LastHit) < HealthBarLinger) || Bs.Actor.Get() == Sel;
+		const float CMax = FMath::Max(Battle->CornerMaxHealth(Bs), 1.f);
+		for (int32 i = 0; i < VLRules::CastleCorners(Bs.Level); ++i)
+		{
+			const float CF = Bs.CornerHealth[i] / CMax;
+			if (bCastleBar || (WorldNow - Bs.CornerHit[i]) < HealthBarLinger || Bs.bCornerDown[i] || Bs.bCornerRepair[i] || (CF < 1.f && Bs.Actor.Get() == Sel))
+			{
+				Bar(Battle->CornerPoint(Bs.Actor.Get(), i, 760.f), U(44.f), U(5.f), CF, Bs.Team == UVLBattle::Enemy);
+			}
+		}
+	}
 }
 
 void AVLHUD::DrawPlatoonTags()

@@ -487,7 +487,7 @@ void UVLArrows::Land(int32 Index, const FHitResult& Hit)
 			}
 			if (Target)
 			{
-				Battle->Damage(Target, A.Damage, A.Source.Get(), A.Team);     // a foe's building (never a friend's; dummies have no health)
+				Battle->DamageAt(Target, A.Damage, A.Source.Get(), A.Team, Hit.ImpactPoint, Way);     // a foe's building (a castle: its corner, if it lands in one) (never a friend's; dummies have no health)
 			}
 		}
 	}
@@ -640,7 +640,7 @@ void UVLArrows::Tick(float DeltaSeconds)
 					}
 					// into the box short of anything solid (by its walls, under its eaves): struck, the arrow is spent
 					// (S_BuildingHit is the battle's)
-					Battle->Damage(Wall, A.Damage, A.Source.Get(), A.Team);
+					Battle->DamageAt(Wall, A.Damage, A.Source.Get(), A.Team, From + (To - From) * FMath::Clamp(BT, 0.f, 1.f), To - From);
 					if (CVarArcherLog.GetValueOnGameThread() != 0)
 					{
 						UE_LOG(LogSovereignRealms, Log, TEXT("arrow strikes building %s after %.2f s (damage %.0f)"), *Wall->GetName(), A.Age, A.Damage);

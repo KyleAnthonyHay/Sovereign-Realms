@@ -270,6 +270,9 @@ private:
 	/** The list under the Builders' chip (1) or the Spy's (2): a row per unit with what it is doing; a click goes to it
 	 *  and selects it, hovering marks it in the world (HoverUnit). 0: closed. */
 	void DrawChipList();
+	/** The castle panel's row of its corners (VLCastleCorners.cpp): a small bar for each of the four (grey: no archer
+	 *  at this level, red: knocked out), and for the player's, Repair (its price in gold) or how the repair stands. */
+	void DrawCornerRow(float X, float Y, float Right, AActor* Castle);
 	int32 ChipList = 0;
 	FBox2D ChipListChip = FBox2D(ForceInit);
 	/** The command card's Assign picker (six platoon chips over the Assign button); drawn by DrawTroopSelection. */

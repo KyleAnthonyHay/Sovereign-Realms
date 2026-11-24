@@ -258,6 +258,14 @@ namespace
 	}
 }
 
+void AVLKing::ApplyPartLook(UStaticMeshComponent* Mesh, int32 InTeam)
+{
+	if (Mesh)
+	{
+		VLTeamLook(Mesh, InTeam, false, false, true);
+	}
+}
+
 void AVLKing::RefreshSilhouette()
 {
 	for (UStaticMeshComponent* PartMesh : Meshes)

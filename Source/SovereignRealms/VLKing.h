@@ -173,6 +173,9 @@ public:
 	 *  M_Silhouette; 2 the enemy's, never shown) and the enemy's red cloth (the "_Enemy" materials). Call after
 	 *  changing Team on a unit that is already built. */
 	void RefreshSilhouette();
+	/** A part of a figure that is not a unit (the castle corners' archers) in a side's look: the enemy's red cloth, never
+	 *  outlined through walls. */
+	static void ApplyPartLook(UStaticMeshComponent* Mesh, int32 InTeam);
 	UPROPERTY(EditAnywhere, Category = "Voxel|Battle")
 	EVLStance Stance = EVLStance::Aggressive;
 	/** On a move it fights what it meets (the commander's orders); a plain move ignores foes. */

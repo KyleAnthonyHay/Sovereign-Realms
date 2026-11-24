@@ -182,6 +182,19 @@ namespace VLRules
 	constexpr float JonathanWalkSpeed = 520.f;       // cm/s (King David: 420; +24%)
 	constexpr float JonathanRunSpeed = 1000.f;       // cm/s (King David: 760; +32%)
 	constexpr float JonathanJumpZ = 700.f;           // cm/s off the ground (King David and every troop: 540; +30%, a jump 1.68 times as high)
+	// THE CASTLE'S CORNERS (the owner's call, 2026-11-23; VLCastleCorners.cpp). The castle's archers (its level's Archers:
+	// 1, 2, 2, 3, 3, 4, 4) stand one to a corner turret, the front two first, then the back two: four at most. Each
+	// manned corner has a hit box round its turret and health of its own (CornerHealthShare of the castle's at its
+	// level); a blow or an arrow that lands in a manned, standing corner hurts that corner and not the castle. A corner
+	// brought to 0 loses its archer (no more shots from it) until a Builder has mended it whole, which is paid for in
+	// gold, up front: CornerRepairGoldPerHp a point of health it lacks (at least CornerRepairMinGold). Builders at the
+	// castle then mend the paid corners at VLBuild::RepairPerSecond each, a second.
+	constexpr int32 MaxCorners = 4;
+	constexpr float CornerHealthShare = 0.12f;      // 1008 at level 1, 1512 at level 3, 2520 at level 7
+	constexpr float CornerRepairGoldPerHp = 0.1f;   // a corner knocked out at level 3: 155 gold
+	constexpr int32 CornerRepairMinGold = 10;
+	/** The castle's manned corners at a level (its archers, at most four). */
+	int32 CastleCorners(int32 Level);
 }
 
 /** A building of the game, as the battle keeps it. */
@@ -222,6 +235,18 @@ struct FVLBuildingState
 	TArray<TWeakObjectPtr<AVLKing>> Guards;
 	int32 GuardLevel = 0;               // the level they were last filled up for (0: never)
 	float GuardRestock = 0.f;           // seconds until a fallen one is replaced
+	// the castle's corner turrets (VLRules::MaxCorners; VLCastleCorners.cpp): 0 front left, 1 front right, 2 back left,
+	// 3 back right. Only the first VLRules::CastleCorners(level) are manned. (Saved games: CornerHealth, bCornerDown,
+	// bCornerRepair, CornerLevel.)
+	float CornerHealth[4] = { 0.f, 0.f, 0.f, 0.f };
+	bool bCornerDown[4] = { false, false, false, false };       // brought to 0: no archer until it is mended whole
+	bool bCornerRepair[4] = { false, false, false, false };     // its repair is paid for: Builders at the castle mend it
+	int32 CornerLevel = 0;              // the level the corners were last made whole for (0: never)
+	double CornerHit[4] = { -100.0, -100.0, -100.0, -100.0 };
+	float CornerYaw[4] = { 0.f, 0.f, 0.f, 0.f };               // where each corner's archer faces (world yaw)
+	TWeakObjectPtr<USceneComponent> CornerFigure[4];            // the archer standing on it (the archer troop's parts, at rest)
+	/** A paid corner repair is waiting for Builders (UVLConstruction counts it as work: NeedsWork). */
+	bool NeedsCornerWork() const { return bCornerRepair[0] || bCornerRepair[1] || bCornerRepair[2] || bCornerRepair[3]; }
 
 	bool IsAlive() const { return !bDestroyed && Actor.IsValid(); }
 	bool IsSite() const { return Build < 1.f; }
@@ -392,6 +417,27 @@ public:
 	// ---- health and damage
 	/** Amount from By (a unit, a building, or null) of team ByTeam. Returns the damage done. */
 	float Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam);
+	/** The same, landing at a point (an arrow's, flying Dir): a castle's corner it lands in, or would fly on into within
+	 *  7 m, takes it instead (VLCastleCorners.cpp). */
+	float DamageAt(AActor* Target, float Amount, AActor* By, int32 ByTeam, const FVector& At, const FVector& Dir = FVector::ZeroVector);
+	// ---- the castle's corners (VLRules::MaxCorners; VLCastleCorners.cpp)
+	/** A corner turret's point in the world: the middle of its footprint, Z cm above the ground (its lookout floor: 550). */
+	FVector CornerPoint(const AActor* Castle, int32 Corner, float Z = 550.f) const;
+	/** Manned, and not knocked out: its archer shoots, and it takes the hits that land on it. */
+	bool IsCornerUp(const FVLBuildingState& B, int32 Corner) const;
+	float CornerMaxHealth(const FVLBuildingState& B) const;
+	/** The standing corner whose hit box (its turret, grown by Pad cm) holds P, or INDEX_NONE. */
+	int32 CornerAt(const FVLBuildingState& B, const FVector& P, float Pad) const;
+	/** The standing corner a blow lands on: the striker stands within Reach cm of its turret's footprint (on the ground). */
+	int32 CornerNear(const FVLBuildingState& B, const FVector& P, float Reach) const;
+	/** The standing corner an arrow at At flying Dir is in, or would fly on into within Ahead cm. */
+	int32 CornerAlong(const FVLBuildingState& B, const FVector& At, const FVector& Dir, float Ahead) const;
+	/** Gold to mend every damaged manned corner of the castle (not those already paid for); 0: none needs it. */
+	int32 CornerRepairCost(const FVLBuildingState& B) const;
+	/** Pays for it (refused, the player's: the gold counter flashes) and marks those corners for the Builders. */
+	bool PayCornerRepair(AActor* Castle, bool bQuiet = false);
+	/** The castle's standing corner nearest From (arrows at a castle go for its corners first), or INDEX_NONE. */
+	int32 NearestUpCorner(const FVLBuildingState& B, const FVector& From) const;
 	/** A unit's health reached 0 (AVLKing::ReceiveDamage). */
 	void OnUnitKilled(AVLKing* Unit, AActor* By);
 
@@ -548,6 +594,16 @@ private:
 	/** A tower's own archers go (it fell, was pulled down or changed hands). */
 	void DismissTowerGuards(FVLBuildingState& B);
 	void TickCollapse(float Dt);
+	/** The castle's corners: made whole with each level, mended by Builders, their archers' figures shown or taken
+	 *  away; the enemy's commander pays for its repairs (VLCastleCorners.cpp). */
+	void TickCastleCorners(float Dt);
+	/** The castle's volley: each standing corner's archer at the foe nearest it (TickDefence). */
+	void ShootFromCorners(FVLBuildingState& B, const TArray<TPair<float, AVLKing*>, TInlineAllocator<32>>& InReach);
+	void ShowCornerFigure(FVLBuildingState& B, int32 Corner, bool bShow);
+	/** Where the damage being dealt landed (DamageAt), for the castle's corners. */
+	FVector HitAt = FVector::ZeroVector;
+	FVector HitDir = FVector::ZeroVector;
+	bool bHitAt = false;
 	void TickAutoCombat(float Dt);
 	/** Platoons keep together: see VLRules::CohesionLeash. */
 	void TickCohesion(float Dt);
