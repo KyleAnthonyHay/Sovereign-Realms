@@ -57,7 +57,7 @@ namespace
 #else
 		{ TEXT("Mouse wheel"), TEXT("Zoom") },
 #endif
-		{ TEXT("Q / E, RMB drag"), TEXT("Turn the view right / left (R: back)") },
+		{ TEXT("Q / E, RMB drag"), TEXT("Turn the view right / left (R: back; hero view: Home)") },
 		{ TEXT("V / C"), TEXT("Camera angle (no troops chosen) / postcard") },
 #if PLATFORM_MAC
 		{ TEXT("Trackpad"), TEXT("Two fingers pan, twist turns, Ctrl+click = RMB") },       // (the Mac trackpad's gestures)
@@ -88,13 +88,13 @@ namespace
 		{ TEXT("F"), TEXT("Draw or sheathe the sword") },
 		{ TEXT("Hold RMB"), TEXT("Archer: draw (let go: shoot). Spy: the spyglass") },
 		{ TEXT("LMB"), TEXT("Attack: always your own blow, never a selection") },
-		{ VL_ALT_KEY TEXT(" + LMB troop"), TEXT("Select it (Shift: add / remove; twice: play it)") },
+		{ TEXT("R on a troop"), TEXT("Select it (Shift: add / remove; twice: play it)") },
 		{ TEXT("... with troops selected"), TEXT("They guard it (in a platoon: the whole platoon)") },
-		{ VL_ALT_KEY TEXT(" + LMB foe"), TEXT("Attack: the selection, else followers, else platoon") },
-		{ VL_ALT_KEY TEXT(" + LMB ground"), TEXT("They go there (twice quickly: at a run)") },
-		{ TEXT("Shift + ") VL_ALT_KEY TEXT(" + LMB"), TEXT("Queue: foe 1, then foe 2, a building, a walk") },
+		{ TEXT("R on a foe"), TEXT("Attack: the selection, else followers, else platoon") },
+		{ TEXT("R on the ground"), TEXT("They go there (twice quickly: at a run)") },
+		{ TEXT("Shift + R"), TEXT("Queue: foe 1, then foe 2, a building, a walk") },
 		{ TEXT("RMB / Ctrl + LMB"), TEXT("Selection: move / attack at the crosshair") },
-		{ TEXT("Esc / ") VL_ALT_KEY TEXT(" + LMB sky"), TEXT("Let the selection go (Esc again: the menu)") },
+		{ TEXT("Esc / R at the sky"), TEXT("Let the selection go (Esc again: the menu)") },
 		{ TEXT("G"), TEXT("Follow me: the selection falls in behind you") },
 		{ nullptr, TEXT("GAME") },
 		{ TEXT("Esc / P"), TEXT("Cancel, then pause (P: nobody selected)") },

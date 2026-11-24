@@ -1757,7 +1757,7 @@ void AVLKing::HeroSelect(APlayerController* PC, bool bShift)
 	{
 		if (Battle)
 		{
-			Battle->PushAlert(TEXT("Nobody to command: ") VL_ALT_KEY TEXT("+click a troop to select it, or G with your platoon"));
+			Battle->PushAlert(TEXT("Nobody to command: R with a troop under the crosshair selects it, or G with your platoon"));
 			Battle->Play2D(TEXT("S_UIError"), 0.4f);
 		}
 		return;
@@ -1842,6 +1842,16 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 			HeroClickFrame = GFrameCounter;  // (not a swing, a bash or a lock)
 		}
 	}
+	// R: the same as Alt / Option + click, at the crosshair (the owner's call, 2026-11-23: "instead of Option-click for
+	// controlling troops as the platoon leader, have it be the R key"). A troop of his own under it: selected (Shift: added
+	// or taken out; R twice quickly: played; troops selected: they guard it); a foe or the ground: those under his
+	// command go for it (Shift: queued; twice quickly: at a run); the sky: the selection is let go. (In the hero view R
+	// no longer puts the camera back: Home does.)
+	if (!bClickSpent && PC->WasInputKeyJustPressed(EKeys::R) && !bCtrl && !bAlt)
+	{
+		UE_LOG(LogSovereignRealms, Log, TEXT("hero R: command at the crosshair (%s)"), HeroHover.IsValid() ? *HeroHover->GetDisplayName() : TEXT("no unit under it"));
+		HeroSelect(PC, bShift);
+	}
 	if (PC->GetPawn() != this)
 	{
 		return true;                        // (took control of another)
@@ -1891,7 +1901,7 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 		}
 		else if (UVLBattle* Battle = UVLBattle::Get(this))
 		{
-			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or ") VL_ALT_KEY TEXT(" + click)"));
+			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or R on one)"));
 			Battle->Play2D(TEXT("S_UIError"), 0.4f);
 		}
 	}
@@ -2834,7 +2844,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 		Step += ZoomStep;
 	}
 	Step += -StickY * 0.43f * DeltaSeconds;
-	const bool bReset = PC->WasInputKeyJustPressed(EKeys::R);
+	const bool bReset = PC->WasInputKeyJustPressed(bHeroMode ? EKeys::Home : EKeys::R);     // (the hero view's R commands: HeroCommands)
 
 	// the trackpad: pinch zooms and the two-finger twist turns the view in both modes; a two-finger scroll pans the
 	// overview (the ground follows the fingers) and, in hero mode, turns the view (sideways) and zooms (up and down)
