@@ -13,7 +13,7 @@ open: the next one round), and a fifth entry there, the **Test World** (Realm v2
 
 - `L_RealmV2`: **Realm v2**, the third and biggest battle map, an island 640 m square: a mountain 184 m high with the
   sea's arms round it, five gold mines, the ruins plateau, a port for each side (see *Realm v2*).
-- `L_RealmV3`: **Realm v3**, the fourth battle map, a compact island 416 m square: each castle on a plateau with
+- `L_RealmV3`: **Realm v3**, the fourth battle map, a compact island 512 m square: each castle on a plateau with
   cliffs all round, one ramp down to one pass, the basin between the ridges with two neutral mines, a port for each
   side, and forest everywhere else (see *Realm v3*).
 - `L_Highlands`: the second battle map, 540 m square: a bluff to build on behind each castle, the river's gorge, and
@@ -848,7 +848,7 @@ seeded). It carries the realm's contract (the tags, `TeamStart:0/1`, `Rally:0/1`
 
 ## Realm v3 (`L_RealmV3`): the fourth battle map, the compact island
 
-An island 416 m square, after `References/RealmV3/`: `concept_plan.png` and `concept_threequarter.png` (the owner's
+An island 512 m square, after `References/RealmV3/`: `concept_plan.png` and `concept_threequarter.png` (the owner's
 concept), `PLAN.md` (the design: sizes, elevations, every coordinate, how it answers the brief) and `PROGRESS.md`
 (the state, the checks and their numbers). Made by Realm v2's pipeline, copied: `Tools/blender/realmv3_layout.py`
 (the plan; `--debug` draws `Saved/realmv3_plan.png`, `--balance` prints the routes), `realmv3_cam.py`,
@@ -858,12 +858,13 @@ concept), `PLAN.md` (the design: sizes, elevations, every coordinate, how it ans
 "Realm v3" (map 5 of `AVLHUD`; `vl.Map realmv3`).
 
 - **The map.** Point-symmetric about its middle: the player's plateau in the north-west, the enemy's in the
-  south-east (14 m, 120 x 108 m, cliffs all round), each with its castle, two home mines in crags, two towers, one
-  base ramp and a stone stair down the sea cliff to its own port. The ridges run from the north-east corner to the
-  south-west corner, coast to coast; a pass 12 m wide through each side of them leads into the basin (4 m, 132 x
+  south-east (14 m, 164 x 148 m, 19,350 m² of level top, 16,981 m² of it free to build on; cliffs all round), each
+  with its castle, two home mines in crags, two towers, one base ramp and a stone stair down the sea cliff to its own
+  port. The ridges run from the north-east corner to the south-west corner, coast to coast, low enough to see over
+  (crests 14 to 22.5 m over the basin, the highest point 29 m; broken rock in columns, not terraces); a pass 12 m wide through each side of them leads into the basin (4 m, 132 x
   60 m), where the two neutral mines and the shared ground to build on are, with the lane straight across.
   Everything else is forest to the sea cliffs, and nobody walks in it.
-- **Only 28,500 m² of its 127,400 m² can be walked on.** The hidden walls (`SM_RealmV3Barrier`) stand round the
+- **Only 48,700 m² of its 183,400 m² can be walked on.** The hidden walls (`SM_RealmV3Barrier`) stand round the
   plateaus' rims, along the ramps, the passes, the stairs and the quays, and round the basin. The same mesh carries
   a **lid**: a sheet at chest height over the ground behind the walls. The path grid takes the largest connected
   piece of standable ground for the map, and without the lid that is the forest's floor.
@@ -871,8 +872,9 @@ concept), `PLAN.md` (the design: sizes, elevations, every coordinate, how it ans
   its shoulders are covered by a sheet on the true slope (`SM_RealmV3Ramps`, tagged Ground: the mesher's own top
   faces, lifted), the voxels just under it. A ramp is a spur of the hillside 18 m wide and 73 m long (1 in 7.3).
 - **Checked in PIE** (`Tools/realmv3_test.py routes around times build stuck`): every route between the sides by
-  both ramps and both passes, no ground for the grid anywhere else, the two sides' routes to the middle 199.3 m
-  and 199.9 m, the hero's run between the middle and each ramp 16.9 s both ways. The numbers: `PROGRESS.md`.
+  both ramps and both passes, no ground for the grid anywhere else, the two sides' routes to the middle 224.0 m
+  and 225.7 m, the hero's run between the middle and each ramp 16.5 s both ways; the troop ship docks at both
+  ports (`Tools/troopship_dock_test.py realmv3`). The numbers: `PROGRESS.md`.
 
 ## The battle: teams, combat, economy, the enemy, the menus
 

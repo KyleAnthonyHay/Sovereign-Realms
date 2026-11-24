@@ -1,15 +1,29 @@
 # Realm v3: progress (kept by the map designer for a successor)
 
 ## Design numbers (PLAN.md has the tables)
-- 416 m square (HALF 208), 0.25 m cells; the sea at -6, the forest's floor 1 to 4.5 m, the basin / passes / ramps'
-  feet 4 m, the plateaus 14 m, the quays -5 m, the summit 66 m.
-- Point-symmetric about (0, 0). Plateau A centre (-112, 114), 120 x 108 m; castle (-112, 130); home mines (-153, 128)
-  and (-71, 128); towers (-142, 84) and (-80, 104); base ramp (-78, 76, 14 m) to (-67.4, 3.7, 4 m), 18 m wide; pass to
-  (-47.9, -15.7), 12 m wide; port: quay x -189..-176, y 86..126, stair (-132, 107, 14 m) to (-178, 107, -5 m).
+- 512 m square (HALF 256), 0.25 m cells; the sea at -6, the forest's floor 1 to 4.5 m, the basin / passes / ramps'
+  feet 4 m, the plateaus 14 m, the quays -5 m; ridge crests 14 to 22.5 m over the basin, the summit 29 m.
+- Point-symmetric about (0, 0). Plateau A centre (-130, 130), 164 x 148 m; castle (-130, 148); home mines (-187, 150)
+  and (-73, 150); towers (-168, 100) and (-84, 100); base ramp (-78, 72, 14 m) to (-67.4, 3.7, 4 m), 18 m wide; pass to
+  (-47.9, -15.7), 12 m wide; port: quay x -229..-216, y 102..142, stair (-172, 123, 14 m) to (-218, 123, -5 m).
   Everything of B: the negative. Neutral mines (31.5, 48.5) and (-31.5, -48.5); the lane from pass to pass.
-- Land 127,425 m²: forest 70,595, ridges 24,604, ground a unit can reach 28,487. Plateau top 9,090 m² (7,185 free to
-  build on), basin floor 6,612 m² (5,133). Trees 4,024 (3,994 forest: 566 per hectare of it; LOD 2 total 4.31 M faces,
-  Realm v2's 3.84 M).
+- Land 183,394 m²: forest 99,840, ridges 30,550, ground a unit can reach 48,704. Plateau top 19,350 m² (16,981 free
+  to build on), basin floor 6,612 m² (5,133). Trees 5,722 in the level (5,678 forest: 569 per hectare of it).
+  Ground 6.70 / 2.63 / 2.32 M triangles at LOD 0 / 1 / 2 (220 tiles).
+
+## The owner's second round (2026-11-23 evening): lower walls, plateaus twice the size
+- Ridges (`ridges()` in the layout): crest height `hc = 5 + 8 peak + 4 corner` (was 15 + 33 + 22), a saddle down to
+  0.42 of it within 10 to 48 m of each pass, smaller teeth and noise, `SHOULDER` 6 (10), `foot` over 4.5 m (7). The
+  terraces are gone: the rock is pushed up and down in 2 m and 4.5 m columns (`shash` 796 / 797) and cut in steps of
+  0.5 / 1 / 2 m whose start moves in every 3 m block (`shash` 795), heights kept to half metres. Crags: at most 9 m
+  over the plateau (15). Measured on the npz: crests 14 to 22.5 m over the basin, 8 to 12 m by the passes, the summit
+  29 m (a corner spine), the crags 23 m.
+- Plateaus: `PA = (-130, 130, 82, 74)`, superellipse power `PP = 3` (2.5); the castle, mines, towers, plaza, roads,
+  spawn, rally and port moved with it (`PORT_X = PA[0] - PA[2] - 4`); the coast 219 m (182), `HALF` 256, the sea
+  `FAR` 520, the postcard camera `DIST` 900 (740); the shots', tests' and dock test's coordinates moved to match.
+- `Tools/realmv3_shots.py walls <tag>`: the game's own two cameras (the overview as it opens, turned both ways and
+  pulled right in; the hero's follow camera and a low look along the ground) over the plateaus, ramps, passes and
+  the basin.
 
 ## Files
 - Tools/blender/realmv3_layout.py (the plan; `--debug` -> Saved/realmv3_plan.png, `--balance` the routes),
@@ -36,7 +50,23 @@
 3. **A pass begins square at the ramp's foot** (`ramp_fields`, `act`): its floor's round end once cut a 1.25 m step
    across the ramp's last metres, which the plan's route got round along the edges and the game's did not.
 
-## Checks (2026-11-23, PIE on L_RealmV3, Windows; `Tools/realmv3_test.py`, the log in Saved/realmv3_test.log)
+## Checks after the second round (2026-11-23 evening, PIE on L_RealmV3, Windows)
+- `Tools/realmv3_test.py routes around times build stuck`: all pass (Saved/realmv3_test.log; `build stuck` again on a
+  fresh match, Saved/realmv3_test_build.log: 0 failed). The new `build` spot in plateau A's south-east corner asks for
+  a range: a third farm there was refused by the game's farm limit (3), not by the ground.
+- Routes (path grid): castle -> the middle of the basin 224.0 m (player) and 225.7 m (enemy), 0.8 % apart; the plan
+  237.2 / 236.7 m. Castle to castle 448.8 m. Own quay 99.9 m. With either pass shut (the plan): no route.
+- No way round: 38 probes (forest, a coast ring 212 m out, ridges, beside the ramps, the sea cliffs by the ports):
+  ground at 0; 24 routes from all over plateau A (and its quay) to plateau B: all by both ramps and both passes.
+- Travel time: door to the middle 29.1 s (26.0 before: the plateau is deeper); the middle to four fifths up each
+  ramp 16.5 s and 16.5 s (0.0 % apart).
+- Building: barracks, farms, ranges and a tower at nine places on plateau A (its far corners too), barracks either
+  side of the lane, a barracks and a range on plateau B by the enemy's Builder: none refused. Stuck: none.
+- `Tools/troopship_dock_test.py realmv3`: 0 failures (docks in 1.41 s at the player's berth, gangplank out, ten
+  soldiers aboard and ashore; the minimap order, a course, a patrol; and at the enemy's quay in 1.17 s).
+- Symmetry: 0 cells differ from their twin; hard edges on open ground: 0.
+
+## Checks of the first build (2026-11-23, PIE on L_RealmV3, Windows; `Tools/realmv3_test.py`)
 - 121 checks passed. One failed in the full run: a barracks for the enemy's Builder behind its castle, refused as
   "too uneven" (the enemy's commander had built on the place asked for, and the nearest spot left was on the rim).
   The test now asks at up to three places on the enemy's plateau; `build stuck` run again on a fresh match: 11 of 11.
@@ -57,11 +87,14 @@
 - **Symmetry**: cells whose height differs from their twin's: 0. Hard edges on open ground: 0 cells.
 
 ## Frame time (PIE GPU ms, this PC, VSync on so every frame is 16.67 ms; `realmv3_perf.ps1` / `realmv2_perf.ps1`)
-| View | Realm v3 | Realm v2 (the same PC, the same day) |
-|---|---|---|
-| base (the hero at the player's castle) | 4.06 | 4.36 |
-| pass (v3) / mountain (v2): not the same view; each map's own | 7.96 | 5.26 |
-| overview (the postcard: the whole map) | 6.73 | 6.94 |
+| View | Realm v3 now (two runs) | Realm v3 before the second round | Realm v2 (the same PC, the same day) |
+|---|---|---|---|
+| base (the hero at the player's castle) | 4.08 / 4.12 | 4.06 | 4.36 |
+| pass (v3) / mountain (v2): not the same view; each map's own | 8.76 / 8.70 | 7.96 | 5.26 |
+| overview (the postcard: the whole map) | 7.58 / 7.52 | 6.73 | 6.94 |
+- After the second round the island is bigger (5,722 trees, was 4,024, at the same density), which is what the
+  overview and the pass view pay for: about 0.8 ms each. The pass view's camera is the same point as before, which
+  now stands over the bigger plateau's south rim. The lower ridges added nothing (the base view is unchanged).
 - Realm v2's figures in its PROGRESS.md (18.3 / 21.1 / 25.0) are the Mac's; they are not comparable with these.
 - The pass view looks over the forest at 30 to 150 m, where the trees are at LOD 0 and 1: it is a millisecond dearer
   than the dearest of Realm v2's three views (6.94). With a tree every 3.75 m (4,562 trees) it was 8.17 and the
@@ -70,6 +103,8 @@
 - No thermal trip: OVERHEAT.flag never appeared.
 
 ## Screenshots (Saved/Screenshots/VL/, `python Tools/realmv3_shots.py`)
+Second round: `realmv3_walls_before_*` and `realmv3_walls_after_*` (`realmv3_shots.py walls before|after`: over_*,
+near_*, hero_*, herolow_*, and _postcard), `realmv3_plateau_before_a/_b` and `realmv3_plateau_after_a/_b/_overview`.
 realmv3_overview, _plan, _threequarter, _plateau_a, _plateau_b, _ramp_a, _ramp_b, _ramp_a_low, _ramp_b_low,
 _ramp_a_down, _pass, _pass_floor, _basin, _basin_mine, _dock_a, _dock_b, _dock_a_stair, _forest, _forest_canopy,
 _coast, _base. The first build's ramps and plateaus, for comparison: Saved/Screenshots/VL/before/
@@ -88,5 +123,11 @@ _coast, _base. The first build's ramps and plateaus, for comparison: Saved/Scree
 - The ramps' sheet is the one piece of ground on any map that is not voxel shelves. If the owner wants the same on
   other maps' ramps, `build_sheet` is the recipe.
 - The Test World still opens Realm v2.
-- Rebuilding: a change of ground needs `realmv3_rebuild.ps1` (about 35 minutes: Blender 10, import 20, level 3);
+- The island had to grow to 512 m for the bigger plateaus; the forest fills the rest at the same density, which
+  costs about 0.8 ms in the overview. Thinning the forest or coarser tree LODs would win it back; neither was done
+  (the owner's rules: dense forest, no coarse LODs at play distances).
+- The hero's low camera at the basin's edge still sees the ridge's face fill the top of the frame (14 m and more of
+  rock 20 to 30 m away); from the overview and the postcard the basin and both plateaus are now clear.
+- Rebuilding: a change of ground needs `realmv3_rebuild.ps1` (about 60 minutes now: Blender 10, import 30, LODs 12,
+  level 3);
   things moved only: `realmv3_rebuild.ps1 layout`.

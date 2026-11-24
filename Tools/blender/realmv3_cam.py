@@ -1,4 +1,4 @@
-"""The Realm v3 postcard camera: Realm v2's view, nearer for the 384 m map.
+"""The Realm v3 postcard camera: Realm v2's view, nearer for the 512 m map.
 
 World: metres, +X east, +Y north, +Z up (Blender axes). Picture: 1672 x 941 pixels, origin top-left.
 The camera looks at the ground point TARGET, which sits at the middle of the picture. Same conventions as village_cam.py.
@@ -9,7 +9,7 @@ W, H = 1672, 941
 AZ = -30.0           # camera position, degrees clockwise from south seen from above: taken from the south-west, so
                      # every building shows its front (-Y) and its left (west) side, as in the picture
 EL = 38.0            # elevation above the ground
-DIST = 740.0         # metres from the target
+DIST = 900.0         # metres from the target
 FOCAL_PX = 2150.0    # focal length in pixels at 1672 wide (the whole map)
 TARGET = (0.0, 0.0, 0.0)
 

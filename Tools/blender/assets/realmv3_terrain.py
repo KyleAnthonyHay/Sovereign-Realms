@@ -9,7 +9,7 @@ Reads the plan from realmv3_layout.py (heights, surfaces and the hazard map on t
                           Flat faces are joined two by two where nothing tells them apart; _L1 / _L2: the same ground
                           for far away (Tools/ue/realmv3_lods.py)
   SM_RealmV3Ramps         the two base ramps' smooth ground: a sheet on the true slope over the voxels' shelves (build_sheet)
-  SM_RealmV3Sea           the sea round the island, one sheet of 2 m voxels 840 m square with holes under the land,
+  SM_RealmV3Sea           the sea round the island, one sheet of 2 m voxels 1040 m square with holes under the land,
                           its flat faces joined (merge_far). Nothing lies beyond it: no backdrop
   SM_RealmV3Barrier       walls nobody sees, half a metre thick, along the edge of the plan's hazard map: round the
                           plateaus' rims, along the ramps and the passes, round the basin (everything else, the forest
@@ -30,7 +30,7 @@ from voxlib import Vox, IDS
 
 TILE = 32.0
 BLOCK = 64.0         # the ground is meshed in blocks of this size (2 x 2 tiles)
-FAR = 420.0          # the sea reaches this far from the middle
+FAR = 520.0          # the sea reaches this far from the middle
 BV = 2.0             # the sea's voxel
 WALL_TOP = 48.0      # the hidden walls' top (the plateaus are at 14 m, their crags reach 29 m)
 SNOW = "#f2f6fb"

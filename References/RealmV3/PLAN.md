@@ -40,13 +40,30 @@ A new battlefield, **Realm v3** (level `L_RealmV3`). `L_Realm` and `L_RealmV2` s
    off the cliffs.
 To make room the world grew from 384 m to 416 m square; the island is still a third of Realm v2's land.
 
+## The owner's second round (2026-11-23, the evening), and what changed
+1. **"Make the rock walls less tall, they are blocking my view."** The ridges' crests were 25 to 50 m over the basin
+   and the spines 66 m at the corners; now the crests stand **14 to 22.5 m** over the basin's floor (18 to 26.5 m
+   over the plan's zero), dipping to a saddle of 8 to 12 m by each pass, and the highest point of the island is
+   **29 m** (it was 66). The home mines' crags were up to 15 m over the plateau and are now up to 9 m (23 m). Still
+   impassable: the faces stand straight from the basin's edge and the forest (a wall of 3 m and more), and the hidden
+   walls and lid are unchanged. The rock no longer reads as terraces: it was cut into shelves of 1 to 6 m at the same
+   levels all along a face (contour lines); now it stands in columns 2 and 4.5 m across, each pushed up or down a
+   metre or so, cut into steps of 0.5 to 2 m that begin at a different height in every 3 m block. The same voxels,
+   no new meshes or materials; the ground is 6.70 M triangles at LOD 0 (2.63 / 2.32 M at LODs 1 and 2).
+2. **"Make the platform area twice as big."** Each plateau is now **164 x 148 m** (it was 120 x 108), squarer in the
+   corners: **19,350 m² of level top** (9,090) and **16,981 m² free to build on** (7,185), 132 m deep from the ramp's
+   top to the back rim. The castle, its two home mines in their crags, the towers, the plaza, the rally point and the
+   port moved out with it (the table below). The ramp, the pass and the basin are where they were. To make room the
+   world grew from 416 m to **512 m square** (the coast about 219 m from the middle, was 182): the island only as big
+   as the two plateaus need, the forest filling the rest as before.
+
 ## The design in one paragraph
 The island is **point-symmetric about its middle**: every place (x, y) of the player's side is (-x, -y) of the
 enemy's, turned half round. That is true of the plan's shapes, of every noise the ground is made from (the plan's
 `noise2`, `shash` and `warp` are symmetric by construction; the plan counts the cells that differ from their twin: 0),
 and of every tree, rock and bush. The balance rule is therefore kept by construction, and measured as well. Only
-**28,500 m² of the island's 127,400 m² can be walked on**: the two plateaus with their ports, the two ramps, the two
-passes and the basin. Everything else is forest (70,600 m²), ridge (24,600 m²) and cliff, behind hidden walls: the
+**48,700 m² of the island's 183,400 m² can be walked on**: the two plateaus with their ports, the two ramps, the two
+passes and the basin. Everything else is forest (99,800 m²), ridge (30,600 m²) and cliff, behind hidden walls: the
 forest is scenery, thick, and no way round anything.
 
 ## Scale (from the real sizes)
@@ -56,14 +73,14 @@ is 8 m high with a crown 4.4 to 5 m across.
 
 | | Realm v2 | Realm v3 |
 |---|---|---|
-| The world | 640 m square | **416 m square** |
-| The land | about 340,000 m² | **127,400 m²** (three eighths) |
-| Ground a unit can reach | most of it | **28,500 m²** |
-| Trees | 3,621 (about 110 per hectare of land) | **4,024**, 3,994 of them forest: **566 per hectare of forest** |
-| Summit | 184 m | 66 m |
+| The world | 640 m square | **512 m square** |
+| The land | about 340,000 m² | **183,400 m²** (a little over half) |
+| Ground a unit can reach | most of it | **48,700 m²** |
+| Trees | 3,621 (about 110 per hectare of land) | **5,722**, 5,678 of them forest: **569 per hectare of forest** |
+| Summit | 184 m | 29 m |
 
-- **A plateau**: a rounded table 120 x 108 m, 9,090 m² of level top, 7,185 m² of it free to build on once the castle,
-  the two mines in their crags, the two towers, the stair and the roads are counted. A full base: a barracks yard,
+- **A plateau**: a rounded table 164 x 148 m, 19,350 m² of level top, 16,981 m² of it free to build on once the
+  castle, the two mines in their crags, the two towers, the stair and the roads are counted. A full base: a barracks yard,
   an archery hall, three farmsteads, a granary, a treasury and four or five more, with 4 m lanes between them,
   take about 5,500 m².
 - **The basin**: a lens 132 x 60 m, 6,600 m² of floor, 5,130 m² of it free to build on: an expansion either side of
@@ -78,27 +95,27 @@ is 8 m high with a crown 4.4 to 5 m across.
 | The forest's floor | 1 to 4.5, a slow roll in half-block shelves; sea cliffs of 7 to 10 m round the coast |
 | The basin, the passes, the ramps' feet | 4 |
 | The plateaus | 14 (cliffs of 10 m and more over the forest, 19 m over the quay) |
-| The home mines' crags | up to 29 (15 m over the plateau) |
-| The ridges | walls of 3 m and more straight from the basin's edge and the forest; crests 25 to 50 m along the basin, in peaks and saddles; the spines up to 66 m towards the corners |
+| The home mines' crags | up to 23 (9 m over the plateau) |
+| The ridges | walls of 3 m and more straight from the basin's edge and the forest; crests 14 to 22.5 m over the basin (18 to 26.5) in peaks and saddles, 8 to 12 m over it by the passes; the highest point 29 m |
 
 ## Layout (metres; +X east, +Y north; the enemy's twin of every player's place is its negative)
 The island's own frame is diagonal: **u** runs north-east, **v** north-west (`u = (x + y) / √2`, `v = (y - x) / √2`).
 
 | What | Player (A, north-west) | Enemy (B, south-east) |
 |---|---|---|
-| Plateau (centre; 60 x 54 m half sizes) | (-112, 114) | (112, -114) |
-| Castle | (-112, 130), facing south | (112, -130), facing north |
-| Plaza and banner | (-112, 116) | (112, -116) |
-| Home 1 mine, in the west crag (A) | (-153, 128), facing east | (153, -128), facing west |
-| Home 2 mine, in the east crag (A) | (-71, 128), facing west | (71, -128), facing east |
-| Watch towers | (-142, 84) over the port's stair, (-80, 104) over the ramp's head | (142, -84), (80, -104) |
-| The base ramp: head (14 m) to foot (4 m) | (-78, 76) to (-67.4, 3.7) | (78, -76) to (67.4, -3.7) |
+| Plateau (centre; 82 x 74 m half sizes) | (-130, 130) | (130, -130) |
+| Castle | (-130, 148), facing south | (130, -148), facing north |
+| Plaza and banner | (-130, 134) | (130, -134) |
+| Home 1 mine, in the west crag (A) | (-187, 150), facing east | (187, -150), facing west |
+| Home 2 mine, in the east crag (A) | (-73, 150), facing west | (73, -150), facing east |
+| Watch towers | (-168, 100) over the port's stair, (-84, 100) over the ramp's head | (168, -100), (84, -100) |
+| The base ramp: head (14 m) to foot (4 m) | (-78, 72) to (-67.4, 3.7) | (78, -72) to (67.4, -3.7) |
 | The pass: mouth to the basin | (-67.4, 3.7) to (-47.9, -15.7) | (67.4, -3.7) to (47.9, 15.7) |
-| The port: the quay (13 x 40 m) | x -189 to -176, y 86 to 126 (the west coast) | x 176 to 189, y -126 to -86 (the east coast) |
-| The port's stair: head (14 m) to quay (-5 m) | (-132, 107) to (-178, 107) | (132, -107) to (178, -107) |
-| The pier (the ship moored off its head) | from (-189, 117), running west | from (189, -117), running east |
-| The hero and the Builder start | (-112, 120) | (112, -120) |
-| Rally point | (-98, 98) | (98, -98) |
+| The port: the quay (13 x 40 m) | x -229 to -216, y 102 to 142 (the west coast) | x 216 to 229, y -142 to -102 (the east coast) |
+| The port's stair: head (14 m) to quay (-5 m) | (-172, 123) to (-218, 123) | (172, -123) to (218, -123) |
+| The pier (the ship moored off its head) | from (-229, 133), running west | from (229, -133), running east |
+| The hero and the Builder start | (-130, 138) | (130, -138) |
+| Rally point | (-108, 108) | (108, -108) |
 
 | Neutral | Where |
 |---|---|
@@ -108,7 +125,7 @@ The island's own frame is diagonal: **u** runs north-east, **v** north-west (`u 
 | Neutral 2 (south-west side) | (-31.5, -48.5), facing north |
 | Ground to build on | north of the lane about (-2, 25), south of it about (2, -25) |
 | The ridges | rock 22 m wide along either side of the basin; beyond its ends the two join into one spine 44 m wide that runs on to the sea cliffs of the north-east and the south-west corner |
-| The coast | a rounded square about 182 m from the middle, wobbling; straight at the two ports; six islets off it |
+| The coast | a rounded square about 219 m from the middle, wobbling; straight at the two ports; six islets off it |
 
 Each side is 61 m nearer one neutral mine than the other (the player Neutral 2, the enemy Neutral 1), and the other
 side's nearer mine is the one it must cross the lane for: a natural first expansion each, and a contested second.
@@ -125,13 +142,13 @@ side's nearer mine is the one it must cross the lane for: a natural first expans
 - **Central contention.** The basin is the only ground between the bases; both neutral mines and all the shared
   ground to build on are in it; the lane crosses its middle and is kept clear (a road; nothing stands on it).
 - **Protected home mines.** Both are on the plateau, which has cliffs all round, one ramp and one stair to its own port.
-- **Balance.** Point symmetry. Measured (the plan, without trees): castle door to the middle of the basin 211.8 m
-  for the player and 211.3 m for the enemy; to the other castle 423.0 m both ways; plateau tops 9,090 and 9,092 m².
-- **Forest.** 3,994 trees on 7.1 hectares of forest floor: a tree in every 4 m, crowns 4.4 to 5 m across, so
+- **Balance.** Point symmetry. Measured (the plan, without trees): castle door to the middle of the basin 237.2 m
+  for the player and 236.7 m for the enemy; to the other castle 474.0 m both ways; plateau tops 19,350 m² each.
+- **Forest.** 5,678 trees on 10 hectares of forest floor: a tree in every 4 m, crowns 4.4 to 5 m across, so
   the canopy is closed from the plateaus' cliffs and the ridges' feet to the sea cliffs. On Realm v2 the trees
   stood about 110 to the hectare.
-- **Tighter.** Three eighths of Realm v2's land, a twelfth of it walkable; the walk from a castle to the middle is
-  212 m (on Realm v2 the ruins were 415 m from the player's castle).
+- **Tighter.** A little over half of Realm v2's land, a seventh of it walkable; the walk from a castle to the middle
+  is 237 m (on Realm v2 the ruins were 415 m from the player's castle).
 
 ## What each side starts with
 As on Realm v2: the castle, its home mines (two here), the watch towers, its port (scenery, as on Realm v2: the

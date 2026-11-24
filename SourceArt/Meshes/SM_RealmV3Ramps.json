@@ -1,16 +1,16 @@
 {
  "name": "SM_RealmV3Ramps",
- "faces": 92890,
+ "faces": 88904,
  "collision": "complex",
  "bounds": [
   [
    -97.75,
-   -88.0,
+   -84.0,
    2.47
   ],
   [
    97.75,
-   88.0,
+   84.0,
    14.03
   ]
  ],

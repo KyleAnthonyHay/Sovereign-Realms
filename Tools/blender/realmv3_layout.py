@@ -1,4 +1,4 @@
-"""Realm v3: the fourth battle map (L_RealmV3), an island 416 m square, after References/RealmV3/ (PLAN.md the design;
+"""Realm v3: the fourth battle map (L_RealmV3), an island 512 m square, after References/RealmV3/ (PLAN.md the design;
 concept_plan.png the layout, concept_threequarter.png the look). Pure numpy (+ scipy for the balance report, when it
 is there); writes SourceArt/realmv3.json and SourceArt/realmv3_terrain.npz (heights, surfaces, the hazard map).
 
@@ -11,7 +11,7 @@ realmv3_cam.py, looks from the south-west). The level is fixed: this script is t
 everything in it is seeded.
 
 The owner's verdict on Realm v2 was "not enough forest and too much space": this map is the gameplay and nothing else.
-  the plateaus  two raised tables (14 m, cliffs all round; 120 x 108 m), A in the north-west (the player's) and B in the
+  the plateaus  two raised tables (14 m, cliffs all round; 164 x 148 m), A in the north-west (the player's) and B in the
                 south-east (the enemy's): the castle, a home mine in a crag at either side of it, two towers. Two ways
                 off: the base ramp, a broad smooth spur of the hillside down to the pass; and a stone stair down a
                 cleft in the sea cliff to the side's own port (Realm v2's set: quay, warehouse, crane, arch, harbour
@@ -54,7 +54,7 @@ MESHES = T.MESHES
 NAME = "realmv3"
 
 CELL = 0.25
-HALF = 208.0                      # the world is 416 m square
+HALF = 256.0                      # the world is 512 m square
 N = int(2 * HALF / CELL)
 ZMIN = -10.0
 TOP = 120.0
@@ -152,11 +152,13 @@ def _oval(x, y, rx, ry, n=44, p=2.5):
     return out
 
 
-# ---- the plateaus: a rounded table 120 x 108 m each, 92 m deep from the ramp's top to its back rim (the castle
-# 14 x 11 m, a mine 16 x 11, a barracks yard 19 x 18, an archery hall 20 x 14, a farmstead 23 x 19: room for the castle,
-# the two mines, the two towers and a full base of twelve to fourteen buildings with lanes between them)
-PA = (-112.0, 114.0, 60.0, 54.0)
-PLATEAU0 = _oval(*PA)
+# ---- the plateaus: a rounded table 164 x 148 m each (owner, 2026-11-23: "make the platform area twice as big"; it was
+# 120 x 108 m, and 112 x 80 before that), squarer in the corners (PP), 132 m deep from the ramp's top to its back rim.
+# The castle is 14 x 11 m, a mine 16 x 11, a barracks yard 19 x 18, an archery hall 20 x 14, a farmstead 23 x 19: room
+# for the castle, the two mines, the two towers and some thirty buildings with lanes between them.
+PA = (-130.0, 130.0, 82.0, 74.0)
+PP = 3.0
+PLATEAU0 = _oval(*PA, p=PP)
 PLATEAU1 = [mir(p) for p in PLATEAU0]
 MESAS = [
     dict(name="plateau0", poly=PLATEAU0, z=PLATEAU_Z, top="build", team=0),
@@ -177,12 +179,12 @@ def lens_v(u):
 # wide that runs on to the corner's sea cliffs; the two crests (u, v): 13 m outside the basin's edge, then down the
 # middle of the spine
 RIDGE_W = 22.0
-SHOULDER = 10.0
+SHOULDER = 6.0
 
 
 def _crest():
     pts = []
-    for u in (-245.0, -200.0, -160.0, -125.0, -100.0, -84.0, -72.0, -60.0, -48.0, -32.0, -16.0, 0.0, 16.0, 32.0, 48.0, 60.0, 72.0, 84.0, 100.0, 125.0, 160.0, 200.0, 245.0):
+    for u in (-330.0, -245.0, -200.0, -160.0, -125.0, -100.0, -84.0, -72.0, -60.0, -48.0, -32.0, -16.0, 0.0, 16.0, 32.0, 48.0, 60.0, 72.0, 84.0, 100.0, 125.0, 160.0, 200.0, 245.0, 330.0):
         k = BU - 6.0
         v = lens_v(u) + 13.0 if abs(u) <= k else 2.0 + (lens_v(k) + 11.0) * max(0.0, 1.0 - (abs(u) - k) / 34.0)
         pts.append((u, round(v, 2)))
@@ -208,11 +210,11 @@ PASS_HW = 6.0
 PASS_U = -45.0                    # where the pass crosses the north-west ridge, along it (u)
 _IN = tuple(round(c, 1) for c in xy(PASS_U, lens_v(PASS_U) - 1.5))
 _FOOT = tuple(round(c, 1) for c in xy(PASS_U, lens_v(PASS_U) + RIDGE_W + 4.0))
-_HEAD = (PA[0] + 34.0, PA[1] - 38.0)
+_HEAD = (PA[0] + 52.0, PA[1] - 58.0)
 # ---- the ports: one per side, on the far side of its plateau from the middle of the map (the player's on the west
 # coast, the enemy's on the east), Realm v2's set. The coast is straight there (PORT_X); the quay lies at its foot;
 # a stone stair comes down to it from the plateau through a cleft in the sea cliff. It joins nothing but the plateau.
-PORT_X = -176.0
+PORT_X = PA[0] - PA[2] - 4.0
 PORT_Y = PA[1] - 8.0
 _STAIR = ((PORT_X + 44.0, PORT_Y + 1.0, PLATEAU_Z), (PORT_X - 2.0, PORT_Y + 1.0, DOCK_Z))
 RAMPS = [
@@ -230,7 +232,7 @@ PORTS.append(dict(team=1, quay=(-PORTS[0]["quay"][2], -PORTS[0]["quay"][3], -POR
 SHIP = "SM_Boat"
 
 # ---- the home mines' crags: (x, y, radius, seed, +1 the player's / -1 its twin turned half round)
-TORS = dict(mine0=(PA[0] - 52.0, PA[1] + 14.0, 14.0, 5, 1.0), mine0b=(PA[0] + 52.0, PA[1] + 14.0, 14.0, 9, 1.0))
+TORS = dict(mine0=(PA[0] - 68.0, PA[1] + 20.0, 14.0, 5, 1.0), mine0b=(PA[0] + 68.0, PA[1] + 20.0, 14.0, 9, 1.0))
 TORS.update({k.replace("0", "1"): (-v[0], -v[1], v[2], v[3], -1.0) for k, v in list(TORS.items())})
 
 
@@ -240,19 +242,19 @@ def _coast():
     for k in range(120):
         a = 2 * math.pi * k / 120
         c, sn = math.cos(a), math.sin(a)
-        r = 182.0 / (abs(c) ** 8 + abs(sn) ** 8) ** 0.125
+        r = 219.0 / (abs(c) ** 8 + abs(sn) ** 8) ** 0.125
         r *= 0.985 + 0.02 * math.sin(2 * a + 1.0) + 0.016 * math.sin(6 * a + 0.4) + 0.012 * math.sin(10 * a + 2.0) + 0.008 * math.sin(16 * a + 0.9)
-        x, y = max(-192.0, min(192.0, r * c)), max(-192.0, min(192.0, r * sn))
-        if x < -150.0 and abs(y - PORT_Y) < 37.0:
+        x, y = max(-230.0, min(230.0, r * c)), max(-230.0, min(230.0, r * sn))
+        if x < -185.0 and abs(y - PORT_Y) < 37.0:
             x = PORT_X
-        if x > 150.0 and abs(y + PORT_Y) < 37.0:
+        if x > 185.0 and abs(y + PORT_Y) < 37.0:
             x = -PORT_X
         pts.append((round(x, 1), round(y, 1)))
     return pts
 
 
 COAST = _coast()
-ISLETS = [(-58.0, -198.0, 4.5), (199.0, -30.0, 4.0), (-199.0, -96.0, 3.5)]
+ISLETS = [(-70.0, -238.0, 4.5), (240.0, -36.0, 4.0), (-240.0, -116.0, 3.5)]
 ISLETS += [mir(p) for p in ISLETS]
 
 # ---- buildings: name -> (mesh, x, y, z, yaw, team). Fronts face -Y at yaw 0, -X (west) at yaw -90, +X (east) at yaw 90.
@@ -261,11 +263,11 @@ KIND = {"SM_Dock": "Dock", "SM_Castle": "Castle", "SM_MineCliff": "Gold Mine", "
 # beside each of them (Realm v2's rule, "a tower beside its home mine", for two home mines; both stand on the level
 # ground, either side of the road to the ramp, so the ramp's head lies between them). No farm, no cottages.
 _B0 = dict(
-    castle0=("SM_Castle", PA[0], PA[1] + 16.0, PLATEAU_Z, 0.0, 0),
-    mine0=("SM_MineCliff", PA[0] - 41.0, PA[1] + 14.0, PLATEAU_Z, 90.0, 0),          # Home 1: in the west crag, facing east
-    mine0b=("SM_MineCliff", PA[0] + 41.0, PA[1] + 14.0, PLATEAU_Z, -90.0, 0),         # Home 2: in the east crag, facing west
-    tower0=("SM_WatchTower", PA[0] - 30.0, PA[1] - 30.0, PLATEAU_Z, 0.0, 0),         # (over the port's stair)
-    tower0b=("SM_WatchTower", PA[0] + 32.0, PA[1] - 10.0, PLATEAU_Z, 0.0, 0),        # (over the ramp's head)
+    castle0=("SM_Castle", PA[0], PA[1] + 18.0, PLATEAU_Z, 0.0, 0),
+    mine0=("SM_MineCliff", PA[0] - 57.0, PA[1] + 20.0, PLATEAU_Z, 90.0, 0),          # Home 1: in the west crag, facing east
+    mine0b=("SM_MineCliff", PA[0] + 57.0, PA[1] + 20.0, PLATEAU_Z, -90.0, 0),         # Home 2: in the east crag, facing west
+    tower0=("SM_WatchTower", PA[0] - 38.0, PA[1] - 30.0, PLATEAU_Z, 0.0, 0),         # (over the port's stair)
+    tower0b=("SM_WatchTower", PA[0] + 46.0, PA[1] - 30.0, PLATEAU_Z, 0.0, 0),        # (over the ramp's head)
 )
 
 
@@ -330,12 +332,12 @@ for _k in BUILD:
     GATE[_k] = front(_k, 1.5 if _k.startswith("mine") else (0.2 if _k.startswith("castle") else 0.3))
 G_ = GATE
 
-PLAZA0 = (PA[0], PA[1] + 2.0)
+PLAZA0 = (PA[0], PA[1] + 4.0)
 PLAZA1 = mir(PLAZA0)
 PLAZA = (PLAZA0, PLAZA1)
-SPAWN = (PA[0], PA[1] + 6.0, -90.0)     # x, y, facing (degrees from +X): in front of the player's castle, facing the ramp
-START1 = (-PA[0], -PA[1] - 6.0, 90.0)
-RALLY0 = (PA[0] + 14.0, PA[1] - 16.0)            # where each side's troops gather: by the road to the ramp
+SPAWN = (PA[0], PA[1] + 8.0, -90.0)     # x, y, facing (degrees from +X): in front of the player's castle, facing the ramp
+START1 = (-PA[0], -PA[1] - 8.0, 90.0)
+RALLY0 = (PA[0] + 22.0, PA[1] - 22.0)            # where each side's troops gather: by the road to the ramp
 RALLY1 = mir(RALLY0)
 # the contested ground: tagged points of the level (terrain only: nothing captures them)
 ZONES = dict(Basin=(0.0, 0.0), PassNW=((_FOOT[0] + _IN[0]) / 2.0, (_FOOT[1] + _IN[1]) / 2.0), PassSE=(-(_FOOT[0] + _IN[0]) / 2.0, -(_FOOT[1] + _IN[1]) / 2.0))
@@ -352,10 +354,10 @@ def _roads():
         ([G_["castle0"], P0], 1.8, COBBLE),
         ([P0, G_["mine0"]], 1.4, COBBLE),
         ([P0, G_["mine0b"]], 1.4, COBBLE),
-        ([P0, (PA[0] + 16.0, PA[1] - 18.0), (_HEAD[0] - 1.0, _HEAD[1] + 6.0)], 2.0, COBBLE),         # to the ramp's head
-        ([P0, (PA[0] - 16.0, PA[1] - 5.0), _STAIR[0][:2]], 1.4, COBBLE),                             # to the port's stair
-        ([(PA[0] - 16.0, PA[1] - 5.0), (PA[0] - 24.0, PA[1] - 24.0), (PA[0] - 30.0, PA[1] - 38.5), G_["tower0"]], 1.2, COBBLE),
-        ([(PA[0] + 16.0, PA[1] - 18.0), (PA[0] + 26.0, PA[1] - 19.5), G_["tower0b"]], 1.2, COBBLE),
+        ([P0, (PA[0] + 26.0, PA[1] - 28.0), (_HEAD[0] - 1.0, _HEAD[1] + 6.0)], 2.0, COBBLE),         # to the ramp's head
+        ([P0, (PA[0] - 20.0, PA[1] - 2.0), _STAIR[0][:2]], 1.4, COBBLE),                             # to the port's stair
+        ([(PA[0] - 20.0, PA[1] - 2.0), (PA[0] - 30.0, PA[1] - 24.0), (PA[0] - 38.0, PA[1] - 39.5), G_["tower0"]], 1.2, COBBLE),
+        ([(PA[0] + 26.0, PA[1] - 28.0), (PA[0] + 38.0, PA[1] - 40.0), G_["tower0b"]], 1.2, COBBLE),
         ([_FOOT, _IN, (0.0, 0.0)], 1.6, DIRT),
         ([(_IN[0] * 0.3, _IN[1] * 0.3), (-23.0, -24.0), G_["mine_n2"]], 1.2, DIRT),
     ]
@@ -439,24 +441,38 @@ def ridges(X, Y, U, V, eb):
     a = np.clip(np.abs(uw) / BU, 0.0, 1.0)
     wb = RIDGE_W + BV * (1.0 - a ** BP) ** (1.0 / BP)
     d_in = np.minimum(wb - np.abs(vw), (eb - 1.0) * 40.0)
-    foot = np.clip(d_in / 7.0, 0.0, 1.0) ** 0.7
+    foot = np.clip(d_in / 4.5, 0.0, 1.0) ** 0.7
     # (the crest's height along its line: peaks and saddles every 30 to 60 m, higher towards the corners)
     peak = np.clip((noise2(X, Y, 30.0, 731, 2) - 0.22) / 0.56, 0.0, 1.0) ** 1.25
-    hc = 15.0 + 33.0 * peak + 22.0 * np.clip((np.abs(U) - 70.0) / 100.0, 0.0, 1.0)
+    # (owner, 2026-11-23: "make the rock walls less tall, they are blocking my view": they were 25 to 50 m over the
+    # basin, 66 m at the corners; now 14 to 22 m and under 30)
+    hc = 5.0 + 8.0 * peak + 4.0 * np.clip((np.abs(U) - 70.0) / 100.0, 0.0, 1.0)
     dcr = np.full(X.shape, 1e9)
     for crest in CRESTS:
         dcr = np.minimum(dcr, dist_polyline(uw, vw, crest))
     env = hc * np.clip(1.0 - dcr / 24.0, 0.0, 1.0) ** 1.05               # (a tent: a knife's edge along the crest)
     rd = ridged(uw / 1.8, vw, 34.0, 740)
     rd2 = ridged(X, Y, 13.0, 750, 3)
-    h = SHOULDER * foot + env * (0.62 + 0.5 * rd) * foot + (6.0 * (rd2 - 0.35) + 4.0 * fbm(X, Y, 24.0, 760, 3)) * foot
-    h = h + 7.0 * (rd2 - 0.3) * np.clip(1.0 - dcr / 10.0, 0.0, 1.0) * foot      # teeth on the crest
-    crag = noise2(X, Y, 30.0, 790, octaves=2) + 0.3 * np.clip((h - 25.0) / 40.0, 0.0, 1.0)
-    q = np.where(crag > 0.7, 6.0, np.where(crag > 0.56, 4.0, np.where(crag > 0.42, 2.0, 1.0)))
-    q = np.where(dcr < 5.0, np.minimum(q, 2.0), q)                         # (no broad flat tops on the crest itself)
-    h = np.floor(h / q + 0.5 * shash(X, Y, 3.0, 795)) * q
+    # (lower still by each pass, a saddle: the overview pulled right in stands 10 m up and 22 m back from what it looks
+    # at, and in the pass that was inside the rock)
+    dp = np.full(X.shape, 1e9)
+    for (name, a, b, _hw, _sf, _k) in RAMPS:
+        if name.startswith("pass"):
+            dp = np.minimum(dp, seg_dist(X, Y, a, b)[0])
+    sad = np.clip((dp - 10.0) / 38.0, 0.0, 1.0)
+    sad = 0.42 + 0.58 * sad * sad * (3.0 - 2.0 * sad)
+    h = (SHOULDER * foot + env * (0.62 + 0.5 * rd) * foot) * sad + (3.0 * (rd2 - 0.35) + 2.0 * fbm(X, Y, 24.0, 760, 3)) * foot
+    h = h + 3.5 * (rd2 - 0.3) * np.clip(1.0 - dcr / 10.0, 0.0, 1.0) * foot      # teeth on the crest
+    # Broken rock, not banded rock. The faces were cut into shelves of one to six metres at the same levels all along
+    # (contour lines: they read as terraces). Now the rock stands in columns: blocks 2 m and 4.5 m across, each pushed
+    # up or down by a metre or so, and cut into steps of half a metre to two metres that start at a different height
+    # in every 3 m block, so no ledge runs on along a face.
+    h = h + ((shash(X, Y, 2.0, 796) - 0.5) * 2.4 + (shash(X, Y, 4.5, 797, shear=0.37) - 0.5) * 3.0) * foot
+    crag = noise2(X, Y, 30.0, 790, octaves=2)
+    q = np.where(crag > 0.66, 2.0, np.where(crag > 0.45, 1.0, 0.5))
+    h = np.floor(h / q + shash(X, Y, 3.0, 795)) * q
     h = np.where(d_in > 0, np.maximum(h, 3.0), 0.0)
-    return np.where(h >= 1.5, BASIN_Z + np.round(h), 0.0)
+    return np.where(h >= 1.5, BASIN_Z + np.round(h * 2.0) / 2.0, 0.0)
 
 
 def mesa_field(X, Y, m, n1, n2, calm):
@@ -596,7 +612,7 @@ def heights():
         # (shelves of one, two and three metres, by the block: a crag, not a stair)
         tq = 1.0 + np.floor(shash(x, y, 2.5, 430 + seed) * 2.6)
         th = up / 1.5 + np.clip(up - 8.0, 0.0, None) * 0.9
-        hh = np.where(m, np.maximum(h[s], base + np.clip(np.ceil(th / tq) * tq, 1.0, 15.0)), h[s])
+        hh = np.where(m, np.maximum(h[s], base + np.clip(np.ceil(th / tq) * tq, 1.0, 9.0)), h[s])
         crest, reach, hseed = HILLS[key]
         mh = minehill.hill(x, y, BUILD[key][1], BUILD[key][2], BUILD[key][4], crest, reach, hseed, noise2(x, y, 7.0, 400 + hseed))
         hh = np.where(mh > 0, np.maximum(hh, base + mh), hh)
@@ -709,9 +725,9 @@ def surface(G):
     s[forest & (noise2(X, Y, 5.0, 41) > 0.7)] = DIRT
     s[forest & (noise2(X, Y, 3.0, 61) > 0.78)] = MOSSY
     # the ridges: rock; grass only on the low ledges' inner ground
-    ledge = mtn & (drop < 1.0) & (h < BASIN_Z + 13.0 + (noise2(X, Y, 22.0, 97) - 0.5) * 14.0) & (noise2(X, Y, 9.0, 98) > 0.35)
+    ledge = mtn & (drop < 0.75) & (h < BASIN_Z + 8.0 + (noise2(X, Y, 22.0, 97) - 0.5) * 8.0) & (noise2(X, Y, 9.0, 98) > 0.35)
     rock = mtn & ~ledge
-    high = np.clip((h - BASIN_Z - 8.0) / 30.0, 0.0, 1.0)
+    high = np.clip((h - BASIN_Z - 5.0) / 14.0, 0.0, 1.0)
     s[rock] = np.where(hs[rock] > 0.55 - 0.3 * high[rock], STONE, MOSSY)
     # the plateaus' cliffs, the crags, the ramps' banks where they are cut into rock
     cliff = (R["flank"] | R["tor"]) & wild
@@ -1020,15 +1036,15 @@ def things(G, s):
             got += 1
 
     def rim0(x, y):                                     # the plateau's outer ring
-        e = (abs(x - PA[0]) / PA[2]) ** 2.5 + (abs(y - PA[1]) / PA[3]) ** 2.5
-        return 0.62 < e < 0.9
+        e = (abs(x - PA[0]) / PA[2]) ** PP + (abs(y - PA[1]) / PA[3]) ** PP
+        return 0.66 < e < 0.9
 
     def walls(x, y):                                    # the basin's edge
         u, v = uv(x, y)
         e = ((abs(u) / BU) ** BP + (abs(v) / BV) ** BP) ** (1.0 / BP)
         return 0.78 < e < 0.95
 
-    lone(9, rim0, ["D", "D", "D", "C"])
+    lone(16, rim0, ["D", "D", "D", "C"])
     lone(6, walls, ["D", "D", "C"])
     sc.cleared = 0
 
@@ -1276,15 +1292,15 @@ def _sky():
     the corner massifs, banks beyond the edges, flocks over the basin, the bases and the corners. The same sky at
     (x, y) and (-x, -y)."""
     clouds = []
-    for k, (u, v, z) in enumerate(((46.0, 44.0, 78.0), (88.0, 20.0, 86.0), (150.0, 20.0, 104.0), (120.0, -30.0, 92.0), (30.0, 96.0, 70.0))):
+    for k, (u, v, z) in enumerate(((46.0, 44.0, 62.0), (100.0, 14.0, 66.0), (170.0, 16.0, 74.0), (140.0, -24.0, 68.0), (30.0, 110.0, 60.0))):
         x, y = xy(u, v)
         sz = (9.0 + 3.0 * (k % 3), 7.0 + 2.0 * (k % 2), 4.5)
         clouds += [(round(x, 1), round(y, 1), z) + sz, (round(-x, 1), round(-y, 1), z) + sz]
     for k in range(10):                                                     # banks beyond the edges
         a = 2 * math.pi * (k + 0.5) / 10
-        r = 262.0 + 30.0 * (k % 5) / 4.0
+        r = 330.0 + 30.0 * (k % 5) / 4.0
         clouds.append((round(r * math.cos(a), 1), round(r * math.sin(a), 1), 56.0 + 7.0 * (k % 5), 26.0, 18.0, 8.0))
-    flocks = [(0.0, 0.0, 74.0, 70.0), (-98.0, 106.0, 62.0, 60.0), (98.0, -106.0, 62.0, 60.0), (118.0, 118.0, 112.0, 70.0), (-118.0, -118.0, 112.0, 70.0)]
+    flocks = [(0.0, 0.0, 60.0, 70.0), (-130.0, 130.0, 58.0, 70.0), (130.0, -130.0, 58.0, 70.0), (140.0, 140.0, 80.0, 70.0), (-140.0, -140.0, 80.0, 70.0)]
     return dict(clouds=clouds, flocks=flocks, birds_per_flock=6)
 
 

@@ -36,7 +36,7 @@ fails = []
 SEA = -600.0
 # (cm) near: open water about 25 m off the first dock; quay2: the other dock's quay; a, b: two points of open water
 PLAN = dict(
-    realmv3=dict(near=(-23000, -11700), far=(-23300, -5000), quay1=(-19800, -11800), quay2=(19600, 11700), a=(-23200, -9000), b=(-23200, -14500), spawn=(-19600, -11900)),
+    realmv3=dict(near=(-27000, -13300), far=(-27300, -6600), quay1=(-23800, -13400), quay2=(23600, 13300), a=(-27200, -10600), b=(-27200, -16100), spawn=(-23600, -13500)),
     realmv2=dict(near=(32900, -14300), far=(34000, -9000), quay1=(30300, -14500), quay2=None, a=(33600, -11000), b=(33900, -8500), spawn=(30100, -14600)),
 )[MAP]
 

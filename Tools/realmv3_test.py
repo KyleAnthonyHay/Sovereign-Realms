@@ -148,22 +148,22 @@ def around():
     for k in range(24):
         a = 2 * math.pi * k / 24
         probes.append(("the coast %3d deg" % round(math.degrees(a)), 150.0 * math.cos(a) / max(abs(math.cos(a)), abs(math.sin(a))), 150.0 * math.sin(a) / max(abs(math.cos(a)), abs(math.sin(a)))))
-    # (a ring 176 m out, just inside the sea cliffs; not where a plateau comes within 14 m of the coast: its west / east side)
-    probes = [(n, x * 176.0 / 150.0, y * 176.0 / 150.0) for (n, x, y) in probes]
+    # (a ring 212 m out, just inside the sea cliffs; not where a plateau comes within 18 m of the coast)
+    probes = [(n, x * 212.0 / 150.0, y * 212.0 / 150.0) for (n, x, y) in probes]
     def near_plateau(x, y):
         for key in ("plateau0", "plateau1"):
             c = J["places"][key]
-            if (abs(x - c[0]) / 78.0) ** 2.5 + (abs(y - c[1]) / 72.0) ** 2.5 < 1.0:
+            if (abs(x - c[0]) / 100.0) ** 3.0 + (abs(y - c[1]) / 92.0) ** 3.0 < 1.0:
                 return True
         return False
     probes = [(n, x, y) for (n, x, y) in probes if not near_plateau(x, y)]
-    probes += [("the north-east spine", 100.0, 100.0), ("the south-west spine", -100.0, -100.0), ("the north-east corner", 140.0, 140.0), ("the south-west corner", -140.0, -140.0),
-               ("the forest west of the basin", -110.0, -20.0), ("the forest east of the basin", 110.0, 20.0), ("the forest north of the basin", 20.0, 120.0),
-               ("the forest south of the basin", -20.0, -120.0), ("the north-west crest", -32.0, 32.0), ("the south-east crest", 32.0, -32.0),
-               ("the forest under plateau A's east cliff", -30.0, 110.0), ("the forest under plateau B's west cliff", 30.0, -110.0),
-               ("the wood beside ramp A, 24 m off its middle", -49.0, 42.0), ("the wood beside ramp B", 49.0, -42.0),
-               ("the sea cliff north of port A", -172.0, 160.0), ("the sea cliff south of port A", -172.0, 52.0),
-               ("the sea cliff south of port B", 172.0, -160.0), ("the sea cliff north of port B", 172.0, -52.0)]
+    probes += [("the north-east spine", 100.0, 100.0), ("the south-west spine", -100.0, -100.0), ("the north-east corner", 170.0, 170.0), ("the south-west corner", -170.0, -170.0),
+               ("the forest west of the basin", -140.0, -30.0), ("the forest east of the basin", 140.0, 30.0), ("the forest north of the basin", 30.0, 150.0),
+               ("the forest south of the basin", -30.0, -150.0), ("the north-west crest", -32.0, 32.0), ("the south-east crest", 32.0, -32.0),
+               ("the forest under plateau A's east cliff", -28.0, 130.0), ("the forest under plateau B's west cliff", 28.0, -130.0),
+               ("the wood beside ramp A, 24 m off its middle", -48.0, 38.0), ("the wood beside ramp B", 48.0, -38.0),
+               ("the sea cliff north of port A", -214.0, 216.0), ("the sea cliff south of port A", -214.0, 38.0),
+               ("the sea cliff south of port B", 214.0, -216.0), ("the sea cliff north of port B", 214.0, -38.0)]
     bad = 0
     for name, x, y in probes:
         lines = run(["vl.Path %.0f %.0f %.0f %.0f" % (c[0] * 100, -c[1] * 100, x * 100, -y * 100)], r"path:", 0.5)
@@ -178,7 +178,7 @@ def around():
     check(bad == 0, "%d places in the forest, on the coast and on the ridges: the path grid has ground at %d of them" % (len(probes), bad))
     # ---- from all over plateau A to all over plateau B: every route by both ramps and both passes
     p0 = J["places"]["plateau0"]
-    starts = [(p0[0] + dx, p0[1] + dy) for (dx, dy) in ((-30, 34), (0, 36), (30, 34), (-22, -8), (22, -18), (-12, -34), (12, -34))]
+    starts = [(p0[0] + dx, p0[1] + dy) for (dx, dy) in ((-40, 50), (0, 52), (40, 50), (-50, -8), (40, -18), (-30, -50), (20, -50))]
     starts.append(tuple(PORTS[0]["quay_mid"]))                              # (from the port too)
     n = miss = 0
     for a in starts:
@@ -236,7 +236,9 @@ def build():
     p0, p1 = J["places"]["plateau0"], J["places"]["plateau1"]
     spots = [("plateau A, behind the castle to the west", "barracks", p0[0] - 24, p0[1] + 38, ""), ("plateau A, behind the castle to the east", "farm", p0[0] + 22, p0[1] + 36, ""),
              ("plateau A, east of the plaza", "range", p0[0] + 26, p0[1] + 2, ""), ("plateau A, the south", "farm", p0[0] - 4, p0[1] - 34, ""),
-             ("plateau A, the south-west", "barracks", p0[0] - 30, p0[1] - 12, ""), ("plateau A, by the ramp's head", "tower", p0[0] + 14, p0[1] - 34, ""),
+             ("plateau A, the south-west", "barracks", p0[0] - 30, p0[1] - 12, ""), ("plateau A, by the ramp's head", "tower", p0[0] + 24, p0[1] - 46, ""),
+             ("plateau A, the far north-west corner", "farm", p0[0] - 50, p0[1] + 52, ""), ("plateau A, the north-east corner", "barracks", p0[0] + 50, p0[1] + 50, ""),
+             ("plateau A, the south-east corner", "range", p0[0] + 20, p0[1] - 50, ""),
              ("the basin's north ground", "barracks", J["buildable"][2]["centre"][0], J["buildable"][2]["centre"][1], ""),
              ("the basin's south ground", "barracks", J["buildable"][3]["centre"][0], J["buildable"][3]["centre"][1], ""),
              ("plateau B, behind the castle to the west (the enemy's Builder)", "barracks", p1[0] - 24, p1[1] - 38, " enemy"),
