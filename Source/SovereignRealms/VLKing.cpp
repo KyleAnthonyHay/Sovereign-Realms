@@ -2005,15 +2005,15 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 			// a left click selects only on one of his own under the crosshair (Shift adds; twice: play it); on a foe,
 			// a building, the ground or the sky it is his own blow or shot, as out of command mode (the owner,
 			// 2026-11-24). Ctrl / Cmd + click: the right click's order (a trackpad's).
-			HeroClickFrame = GFrameCounter;
-			bTook = true;
 			if (bCtrl)
 			{
+				HeroClickFrame = GFrameCounter;
+				bTook = true;
 				CommandOrder(PC, bShift);
 			}
 			else
 			{
-				CommandSelect(PC, bShift);
+				CommandSelect(PC, bShift);  // (and still his blow: a left click never stops the hero's attack in command mode, the owner 2026-11-24)
 			}
 			if (PC->GetPawn() != this)
 			{
