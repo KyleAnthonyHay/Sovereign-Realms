@@ -134,7 +134,8 @@ void UVLCommand::Toggle(AVLKing* Unit)
 
 // ------------------------------------------------------------------------------------------------ formations
 
-void VLFormation::ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots, EVLFormation Shape, const AVLKing* Leader)
+void VLFormation::ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots, EVLFormation Shape, const AVLKing* Leader,
+	const FVector2D& Facing)
 {
 	const int32 Num = Units.Num();
 	OutSlots.Init(Destination, Num);
@@ -149,9 +150,9 @@ void VLFormation::ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& D
 		AvgFacing += FVector2D(U->GetActorForwardVector());
 	}
 	Centroid /= Num;
-	// face the direction of travel; for tiny shuffles keep the facing the group already has
-	FVector2D Fwd = Destination - Centroid;
-	if (Fwd.SizeSquared() < FMath::Square(150.f))
+	// face the direction of travel (or the one asked for); for tiny shuffles keep the facing the group already has
+	FVector2D Fwd = Facing.IsNearlyZero() ? Destination - Centroid : Facing;
+	if (Fwd.SizeSquared() < FMath::Square(150.f) && Facing.IsNearlyZero())
 	{
 		Fwd = AvgFacing;
 	}
@@ -176,6 +177,145 @@ void VLFormation::ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& D
 		for (int32 i = 0; i < Num; ++i)
 		{
 			OutSlots[i] = Destination + (Pos(i) - Centroid) * Squeeze;
+		}
+		return;
+	}
+
+	if (Shape == EVLFormation::Smart)
+	{
+		// By kind, front to back (the owner's call, 2026-11-24):
+		//
+		//              K  J              the heroes (King David, Jonathan): the front centre, side by side
+		//          S  S  S  S  S         swordsmen (and other melee): the front ranks
+		//          S  S  S  S
+		//          A  A  A  A  A         archers behind them
+		//       y  A  A  A  A  y         the Spy (Builders too) on the flanks of the rear rank; more: a rank behind
+		//
+		// Ranks are a little looser than Line's (room to march), every block as wide as the troops' column count, and
+		// within a rank left stays left, so nobody crosses another to his place.
+		const float Wide = Spacing * 1.1f, Deep = Spacing * 1.2f;
+		TArray<int32> Heroes, Melee, Ranged, Rear;
+		for (int32 i = 0; i < Num; ++i)
+		{
+			const EVLUnitKind K = Units[i]->KindId();
+			if (K == EVLUnitKind::King || K == EVLUnitKind::Jonathan)
+			{
+				Heroes.Add(i);
+			}
+			else if (K == EVLUnitKind::Spy || K == EVLUnitKind::Builder)
+			{
+				Rear.Add(i);
+			}
+			else
+			{
+				(Units[i]->IsRanged() ? Ranged : Melee).Add(i);
+			}
+		}
+		const int32 Troops = Melee.Num() + Ranged.Num();
+		const int32 Cols = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt(float(FMath::Max(Troops, 1)) * 2.2f)), 2, 10);
+		auto ByRight = [&](int32 A, int32 B) { return FVector2D::DotProduct(Pos(A), Right) < FVector2D::DotProduct(Pos(B), Right); };
+		struct FRank
+		{
+			TArray<int32> Who;
+			float Depth;
+		};
+		TArray<FRank> Ranks;
+		float Depth = 0.f;          // (0: the front; further back is more negative)
+		if (Heroes.Num() > 0)
+		{
+			Heroes.Sort(ByRight);
+			Ranks.Add({ Heroes, Depth });
+			Depth -= Deep * 1.25f;  // (a step ahead of the men they lead)
+		}
+		auto Block = [&](TArray<int32>& Group)
+		{
+			if (Group.Num() == 0)
+			{
+				return;
+			}
+			Group.Sort([&](int32 A, int32 B) { return FVector2D::DotProduct(Pos(A), Fwd) > FVector2D::DotProduct(Pos(B), Fwd); });
+			const int32 RankCount = FMath::DivideAndRoundUp(Group.Num(), Cols);
+			int32 Cursor = 0;
+			for (int32 r = 0; r < RankCount; ++r)
+			{
+				const int32 Count = Group.Num() / RankCount + (r < Group.Num() % RankCount ? 1 : 0);
+				FRank& Rank = Ranks.AddDefaulted_GetRef();
+				Rank.Depth = Depth;
+				for (int32 k = 0; k < Count; ++k)
+				{
+					Rank.Who.Add(Group[Cursor++]);
+				}
+				Rank.Who.Sort(ByRight);
+				Depth -= Deep;
+			}
+		};
+		Block(Melee);
+		if (Melee.Num() > 0 && Ranged.Num() > 0)
+		{
+			Depth -= Deep * 0.2f;   // (a little air between the blades and the bows)
+		}
+		Block(Ranged);
+		for (int32 r = 0; r < Ranks.Num(); ++r)
+		{
+			for (int32 k = 0; k < Ranks[r].Who.Num(); ++k)
+			{
+				OutSlots[Ranks[r].Who[k]] = FVector2D(Ranks[r].Depth, (k - (Ranks[r].Who.Num() - 1) * 0.5f) * Wide);   // (along, side: placed below)
+			}
+		}
+		if (Rear.Num() > 0)
+		{
+			Rear.Sort(ByRight);
+			if (Ranks.Num() == 0 || Rear.Num() > 2)
+			{
+				// a rank of their own at the back
+				for (int32 k = 0; k < Rear.Num(); ++k)
+				{
+					OutSlots[Rear[k]] = FVector2D(Depth, (k - (Rear.Num() - 1) * 0.5f) * Wide);
+				}
+				Depth -= Deep;
+			}
+			else
+			{
+				// one or two: just outside the rear rank's ends (one alone: on the side it stands)
+				const FRank& Last = Ranks.Last();
+				const float Half = (FMath::Max(Cols, Last.Who.Num()) - 1) * 0.5f * Wide + Wide * 1.2f;
+				const bool bLeftFirst = Rear.Num() == 2 || FVector2D::DotProduct(Pos(Rear[0]) - Centroid, Right) < 0.f;
+				for (int32 k = 0; k < Rear.Num(); ++k)
+				{
+					OutSlots[Rear[k]] = FVector2D(Last.Depth, ((k == 0) == bLeftFirst ? -Half : Half));
+				}
+			}
+		}
+		// the middle of the formation (front rank to rear rank) on Destination
+		float Back = 0.f;
+		for (const FVector2D& AS : OutSlots)
+		{
+			Back = FMath::Min(Back, float(AS.X));
+		}
+		const float Mid = 0.5f * Back;
+		for (int32 i = 0; i < Num; ++i)
+		{
+			const FVector2D AS = OutSlots[i];
+			OutSlots[i] = Destination + Fwd * (AS.X - Mid) + Right * AS.Y;
+		}
+		// no hero: a troop leading the platoon takes the front-middle slot of its own block
+		const int32 L = Leader ? Units.IndexOfByKey(Leader) : INDEX_NONE;
+		if (L != INDEX_NONE && Heroes.Num() == 0 && !Rear.Contains(L))
+		{
+			TArray<int32>& Own = Units[L]->IsRanged() ? Ranged : Melee;
+			int32 Best = L;
+			float BestScore = -TNumericLimits<float>::Max();
+			for (int32 i : Own)
+			{
+				const FVector2D Off = OutSlots[i] - Destination;
+				const float Score = FVector2D::DotProduct(Off, Fwd) * 4.f - FMath::Abs(FVector2D::DotProduct(Off, Right));
+				if (Score > BestScore + 1.f)
+				{
+					BestScore = Score;
+					Best = i;
+				}
+			}
+			Swap(OutSlots[L], OutSlots[Best]);
 		}
 		return;
 	}
@@ -280,7 +420,18 @@ const TCHAR* UVLCommand::FormationName(EVLFormation Shape)
 	case EVLFormation::Wedge: return TEXT("Wedge");
 	case EVLFormation::Square: return TEXT("Square");
 	case EVLFormation::Loose: return TEXT("Loose");
+	case EVLFormation::Smart: return TEXT("Smart");
 	default: return TEXT("Line");
+	}
+}
+
+EVLFormation UVLCommand::NextFormation(EVLFormation Shape)
+{
+	switch (Shape)
+	{
+	case EVLFormation::Smart: return EVLFormation::Line;
+	case EVLFormation::Loose: return EVLFormation::Smart;
+	default: return EVLFormation(FMath::Min(int32(Shape) + 1, int32(EVLFormation::Loose)));
 	}
 }
 
@@ -298,12 +449,16 @@ void UVLCommand::CycleFormation()
 	GetSelection(Units);
 	const int32 P = PlatoonOf(Units);
 	EVLFormation& F = P != INDEX_NONE ? Platoons[P].Formation : LooseFormation;
-	F = EVLFormation((int32(F) + 1) % 5);
+	F = NextFormation(F);
+	// The fix of 2026-11-24 ("the formation button for the platoons is not working"): the new shape only went into
+	// the platoon's setting, for its next move order, so pressing Form made nobody move. Now they form up in it.
+	FormUpNow(Units, F);
+	UE_LOG(LogSovereignRealms, Log, TEXT("formation: %s %s"), P != INDEX_NONE ? *FString::Printf(TEXT("platoon %d"), P + 1) : TEXT("selection"), FormationName(F));
 }
 
 bool UVLCommand::SetFormationByName(const FString& Name)
 {
-	for (int32 i = 0; i < 5; ++i)
+	for (int32 i = 0; i < NumFormations; ++i)
 	{
 		if (Name.Equals(FormationName(EVLFormation(i)), ESearchCase::IgnoreCase))
 		{
@@ -311,6 +466,7 @@ bool UVLCommand::SetFormationByName(const FString& Name)
 			GetSelection(Units);
 			const int32 P = PlatoonOf(Units);
 			(P != INDEX_NONE ? Platoons[P].Formation : LooseFormation) = EVLFormation(i);
+			FormUpNow(Units, EVLFormation(i));
 			return true;
 		}
 	}
@@ -421,10 +577,52 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 		UE_LOG(LogSovereignRealms, Log, TEXT("move: ground %s lead %s (node %d region %d, main %d) dest node %d region %d at %s"), *Ground.ToCompactString(), *Units[0]->GetFeet().ToCompactString(),
 			Lead, Grid->RegionOf(Lead), Grid->MainRegion(), DestNode, Grid->RegionOf(DestNode), *Dest.ToCompactString());
 	}
+	// Marching in formation (2026-11-24, "it must hold while marching"). Every walker used to take its own route to
+	// the goal and only spread to its slot at the end, so a formation set out as a file and was a shape only on
+	// arrival. Now a group that sets out together (in a formation, not too spread, going further than a shuffle)
+	// gets one route for its middle, and each walker walks that route at its own place in the shape: its offset
+	// turned with the route at every corner, so the ranks wheel round a corner and face the way they go. Where its
+	// place on a corner is not open ground (a gate, the bridge) it takes the route's own corner there and files
+	// through; a walker that cannot be fitted at all keeps its own route, as before. The formation at the goal faces
+	// the way the route comes in.
+	FVector2D Centroid2D = FVector2D::ZeroVector;
+	for (const AVLKing* U : Units)
+	{
+		Centroid2D += FVector2D(U->GetFeet());
+	}
+	Centroid2D /= Units.Num();
+	TArray<FVector> Centre;     // the middle's route: where it stands, the corners, the goal
+	FVector2D MarchFwd = FVector2D::ZeroVector;
+	if (Shape != EVLFormation::Loose && Units.Num() > 1 && !bQueue && FVector2D::Distance(Centroid2D, FVector2D(Dest)) > 1000.f)
+	{
+		float Spread = 0.f;
+		const AVLKing* Nearest = Units[0];
+		for (const AVLKing* U : Units)
+		{
+			const float D = FVector2D::Distance(FVector2D(U->GetFeet()), Centroid2D);
+			Spread = FMath::Max(Spread, D);
+			if (D < FVector2D::Distance(FVector2D(Nearest->GetFeet()), Centroid2D))
+			{
+				Nearest = U;
+			}
+		}
+		const FVector Start(Centroid2D.X, Centroid2D.Y, Nearest->GetFeet().Z);
+		TArray<FVector> Corners;
+		if (Spread < Spacing * (2.5f * FMath::Sqrt(float(Units.Num())) + 6.f) && Grid->CanWalkStraight(Nearest->GetFeet(), Start, false)
+			&& Grid->FindPath(Start, Dest, Corners) && Corners.Num() > 0 && FVector::DistSquared2D(Corners.Last(), Dest) < FMath::Square(Grid->GetCellSize() * 1.5f))
+		{
+			Centre.Add(Start);
+			Centre.Append(Corners);
+			const int32 K = Centre.Num();
+			const FVector2D Last = FVector2D(Centre[K - 1] - Centre[K - 2]);
+			MarchFwd = (Last.Size() > 200.f ? Last : FVector2D(Dest) - Centroid2D).GetSafeNormal();
+		}
+	}
+
 	TArray<FVector2D> Slots2D;
 	// (a platoon's leader among them: the formation forms up on it)
 	const AVLKing* const* Leader = Units.FindByPredicate([this](const AVLKing* U) { return IsPlatoonLeader(U); });
-	VLFormation::ComputeSlots(Units, FVector2D(Dest), Slots2D, Shape, Leader ? *Leader : nullptr);
+	VLFormation::ComputeSlots(Units, FVector2D(Dest), Slots2D, Shape, Leader ? *Leader : nullptr, MarchFwd);
 	TArray<FVector> Slots;
 	Grid->FitSlots(Dest, Slots2D, Slots);       // no slot over a cliff's edge, in the water or inside a wall
 
@@ -436,6 +634,93 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 	TArray<TArray<FVector>> Paths;
 	TArray<FVector> Ends;
 	Grid->FindGroupPaths(Starts, Dest, Paths, &Ends);
+	int32 InStep = 0;
+	if (Centre.Num() >= 2)
+	{
+		const int32 K = Centre.Num();
+		TArray<FVector2D> Dirs;     // the way the route goes at each of its points (at a corner: between its two legs)
+		for (int32 k = 0; k < K - 1; ++k)
+		{
+			const FVector2D Out = FVector2D(Centre[k + 1] - Centre[k]).GetSafeNormal();
+			const FVector2D In = k > 0 ? FVector2D(Centre[k] - Centre[k - 1]).GetSafeNormal() : Out;
+			const FVector2D D = (In + Out).GetSafeNormal();
+			Dirs.Add(D.IsNearlyZero() ? Out : D);
+		}
+		const FVector2D MarchRight(-MarchFwd.Y, MarchFwd.X);
+		for (int32 i = 0; i < Units.Num(); ++i)
+		{
+			if (!Slots.IsValidIndex(i) || !Ends.IsValidIndex(i) || FVector::DistSquared2D(Ends[i], Dest) > FMath::Square(Grid->GetCellSize()))
+			{
+				continue;           // (cut off from the goal: its own way, below)
+			}
+			const FVector2D Off = Slots2D[i] - FVector2D(Dest);
+			const float Along = FVector2D::DotProduct(Off, MarchFwd), Side = FVector2D::DotProduct(Off, MarchRight);
+			TArray<FVector> Way;
+			FVector Prev = Units[i]->GetFeet();
+			// (to a point of the route itself: straight if it can, else round what is in the way)
+			auto Reach = [&](const FVector& To)
+			{
+				if (!Grid->CanWalkStraight(Prev, To, false))
+				{
+					TArray<FVector> Sub;
+					if (!Grid->FindPath(Prev, To, Sub) || Sub.Num() == 0 || FVector::DistSquared2D(Sub.Last(), To) > FMath::Square(Grid->GetCellSize()))
+					{
+						return false;
+					}
+					Sub.Pop();
+					Way.Append(Sub);
+				}
+				Way.Add(To);
+				Prev = To;
+				return true;
+			};
+			bool bOk = true;
+			int32 Placed = 0;
+			for (int32 k = 0; k < K - 1 && bOk; ++k)
+			{
+				const FVector2D D = Dirs[k], R(-D.Y, D.X);
+				const FVector2D P = FVector2D(Centre[k]) + D * Along + R * Side;
+				FVector At;
+				if (Grid->CanWalkStraight(Prev, FVector(P.X, P.Y, Centre[k].Z), true, &At))
+				{
+					Way.Add(At);
+					Prev = At;
+					++Placed;
+				}
+				else if (k == 0 && K > 1)
+				{
+					// (no room at the start, among the buildings it set out from: it takes its place a little way on)
+					const float On = FMath::Min(800.f, 0.4f * float(FVector::Dist2D(Centre[0], Centre[1])));
+					const FVector2D Q = P + D * On;
+					if (Grid->CanWalkStraight(Prev, FVector(Q.X, Q.Y, Centre[0].Z), true, &At))
+					{
+						Way.Add(At);
+						Prev = At;
+						++Placed;
+					}
+					else
+					{
+						bOk = Reach(Centre[0]);
+					}
+				}
+				else
+				{
+					bOk = Reach(Centre[k]);     // (no room for its place here: it files through the route's corner)
+				}
+			}
+			bOk = bOk && Placed > 0 && Reach(Slots[i]);
+			if (bOk)
+			{
+				Way.Pop();              // (its slot is added below, as for everyone)
+				Paths[i] = MoveTemp(Way);
+				++InStep;
+			}
+		}
+	}
+	if (Units[0]->Team == UVLBattle::Player && !bQuietMove && Centre.Num() >= 2)
+	{
+		UE_LOG(LogSovereignRealms, Log, TEXT("move: %s, %d of %d march in formation (%d points of the route)"), FormationName(Shape), InStep, Units.Num(), Centre.Num());
+	}
 	for (int32 i = 0; i < Units.Num(); ++i)
 	{
 		TArray<FVector> Path = Paths.IsValidIndex(i) ? Paths[i] : TArray<FVector>();
@@ -897,7 +1182,11 @@ void UVLCommand::CyclePlatoonFormation(int32 Index)
 {
 	if (Index >= 0 && Index < MaxPlatoons)
 	{
-		Platoons[Index].Formation = EVLFormation((int32(Platoons[Index].Formation) + 1) % 5);
+		Platoons[Index].Formation = NextFormation(Platoons[Index].Formation);
+		TArray<AVLKing*> Members;
+		GetPlatoon(Index, Members);
+		FormUpNow(Members, Platoons[Index].Formation);      // (they form up in it now: see CycleFormation)
+		UE_LOG(LogSovereignRealms, Log, TEXT("formation: platoon %d %s"), Index + 1, FormationName(Platoons[Index].Formation));
 	}
 }
 
@@ -2044,6 +2333,125 @@ int32 UVLCommand::Dismiss(const TArray<AVLKing*>& InUnits)
 		++N;
 	}
 	return N;
+}
+
+void UVLCommand::FormUpNow(const TArray<AVLKing*>& InUnits, EVLFormation Shape)
+{
+	const TArray<AVLKing*> All = Living(InUnits);
+	if (All.Num() < 2 || All[0]->Team != UVLBattle::Player)
+	{
+		return;
+	}
+	// the hero the player plays stays where his hands put him: the rest form up on him
+	AVLKing* Hand = nullptr;
+	TArray<AVLKing*> Units;
+	for (AVLKing* U : All)
+	{
+		if (PlayedByHand(U))
+		{
+			Hand = U;
+			continue;
+		}
+		TArray<FVector> Route;
+		bool bLoop = false;
+		int32 Next = 0;
+		if (U->IsGarrisoned() || IsFightingNow(U) || IsInOrderedFight(U) || HasChain(U) || FollowedBy(U) || GuardWardOf(U) || IsRoaming(U)
+			|| GetRoute(U, Route, bLoop, Next) || (U->IsOnOrder() && !U->HasOrder()))
+		{
+			continue;               // a standing order of its own (or legs queued): the shape is its from its next order
+		}
+		Units.Add(U);
+	}
+	if (Units.Num() == 0 || (Units.Num() < 2 && !Hand))
+	{
+		return;
+	}
+	TGuardValue<bool> Quiet(bQuietMove, true);
+	// on a plain move: re-sent to the goal they are walking to, in the new shape (their slots lie round it)
+	TArray<AVLKing*> Walking = Units.FilterByPredicate([](const AVLKing* U) { return U->HasOrder() && U->GetWaypoints().Num() > 0; });
+	FVector Goal = FVector::ZeroVector;
+	bool bRun = false;
+	if (Walking.Num() > 0)
+	{
+		for (const AVLKing* U : Walking)
+		{
+			Goal += U->GetWaypoints().Last();
+			bRun |= U->IsAutoRunning();
+		}
+		Goal /= Walking.Num();
+	}
+	if (Walking.Num() > 0 && !Hand && FVector::Dist2D(Goal, Centroid(Units)) > 1000.f)
+	{
+		UE_LOG(LogSovereignRealms, Log, TEXT("form up: %d in %s, on the march to %s"), Units.Num(), FormationName(Shape), *Goal.ToCompactString());
+		OrderMove(Units, Goal, bRun, Shape);
+		return;
+	}
+	// standing: they form up where they are, on their anchor (the hero played, else the platoon's leader, else a
+	// hero among them; the anchor keeps its place) or round their middle, facing as the anchor (else most) face
+	TArray<AVLKing*> Group = Units;
+	AVLKing* Anchor = Hand;
+	if (!Anchor)
+	{
+		AVLKing* const* L = Units.FindByPredicate([this](const AVLKing* U) { return IsPlatoonLeader(U); });
+		if (!L)
+		{
+			L = Units.FindByPredicate([](const AVLKing* U) { return U->KindId() == EVLUnitKind::King || U->KindId() == EVLUnitKind::Jonathan; });
+		}
+		Anchor = L ? *L : nullptr;
+	}
+	if (Hand)
+	{
+		Group.Add(Hand);
+	}
+	FVector2D Facing = FVector2D::ZeroVector;
+	if (Anchor)
+	{
+		Facing = FVector2D(Anchor->GetActorForwardVector());
+	}
+	else
+	{
+		for (const AVLKing* U : Group)
+		{
+			Facing += FVector2D(U->GetActorForwardVector());
+		}
+	}
+	if (Facing.IsNearlyZero())
+	{
+		Facing = FVector2D(1.f, 0.f);
+	}
+	const FVector Middle = Centroid(Group);
+	TArray<FVector2D> Slots2D;
+	VLFormation::ComputeSlots(Group, FVector2D(Middle), Slots2D, Shape, Anchor, Facing.GetSafeNormal());
+	if (Anchor)
+	{
+		const FVector2D Shift = FVector2D(Anchor->GetFeet()) - Slots2D[Group.IndexOfByKey(Anchor)];
+		for (FVector2D& S : Slots2D)
+		{
+			S += Shift;
+		}
+	}
+	FVector Ground = Anchor ? Anchor->GetFeet() : Middle;
+	TArray<FVector> Slots;
+	if (UVLGrid* Grid = UVLGrid::Get(this); Grid && Grid->EnsureBuilt())
+	{
+		Grid->FitSlots(Ground, Slots2D, Slots);
+	}
+	else
+	{
+		for (const FVector2D& S : Slots2D)
+		{
+			Slots.Add(FVector(S.X, S.Y, Ground.Z));
+		}
+	}
+	for (int32 i = 0; i < Group.Num(); ++i)
+	{
+		if (Group[i] != Hand && (Group[i] != Anchor || FVector::Dist2D(Group[i]->GetFeet(), Slots[i]) > 60.f))
+		{
+			OrderMove({ Group[i] }, Slots[i], false, EVLFormation::Line);
+		}
+	}
+	AddMarker(Ground);
+	UE_LOG(LogSovereignRealms, Log, TEXT("form up: %d in %s where they stand, on %s"), Units.Num(), FormationName(Shape), Anchor ? *Anchor->GetDisplayName() : TEXT("their middle"));
 }
 
 int32 UVLCommand::OrderFollow(const TArray<AVLKing*>& InUnits, AVLKing* Leader, bool bMarker)

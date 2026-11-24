@@ -942,13 +942,13 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 		{
 			P.Members.Add(U);
 		}
-		P.Formation = EVLFormation(FMath::Min<uint8>(S.Formation, uint8(EVLFormation::Loose)));
+		P.Formation = EVLFormation(FMath::Min<uint8>(S.Formation, uint8(EVLFormation::Smart)));
 		P.Stance = EVLStance(FMath::Min<uint8>(S.Stance, uint8(EVLStance::Hold)));
 		P.bMarchTogether = S.bMarchTogether;
 		P.Leader = P.Members.Contains(UnitAt(S.Leader)) ? UnitAt(S.Leader) : nullptr;
 	}
 	Command->RallyPlatoon = In.RallyPlatoon >= 0 && In.RallyPlatoon < UVLCommand::MaxPlatoons ? In.RallyPlatoon : INDEX_NONE;
-	Command->LooseFormation = EVLFormation(FMath::Min<uint8>(In.LooseFormation, uint8(EVLFormation::Loose)));
+	Command->LooseFormation = EVLFormation(FMath::Min<uint8>(In.LooseFormation, uint8(EVLFormation::Smart)));
 	Command->bLooseMarchTogether = In.bLooseMarchTogether;
 
 	// ---- on the lookouts and aboard the ships
@@ -1150,7 +1150,7 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 		R.Next = FMath::Clamp(S.Next, 0, S.Points.Num() - 1);
 		R.bLoop = S.bLoop;
 		R.bRun = S.bRun;
-		R.Shape = EVLFormation(FMath::Min<uint8>(S.Shape, uint8(EVLFormation::Loose)));
+		R.Shape = EVLFormation(FMath::Min<uint8>(S.Shape, uint8(EVLFormation::Smart)));
 		R.Id = Command->NextRouteId++;
 		R.Settle = 1.f;
 		Command->Routes.Add(R);

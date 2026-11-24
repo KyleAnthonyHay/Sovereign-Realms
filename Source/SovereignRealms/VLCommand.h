@@ -13,7 +13,10 @@ enum class EVLFormation : uint8
 	Column,     // two or three abreast
 	Wedge,      // 1, 3, 5, ... from the point back
 	Square,
-	Loose       // no formation: each keeps its place in the group
+	Loose,      // no formation: each keeps its place in the group
+	Smart       // by kind (the default): the heroes lead at the front centre (two: side by side), swordsmen in the
+	            // front ranks, archers behind them, the Spy (and Builders) on the rear flanks. (Last, so the numbers
+	            // in saved games keep their meaning; the cycle starts with it: UVLCommand::NextFormation.)
 };
 
 /** What the next left click in the overview does (a key or a command-card button arms it). */
@@ -82,7 +85,16 @@ public:
 	void OrderMove(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue = false);
 	/** The selection's formation: its platoon's if it is exactly one platoon, else the one loose selections use. */
 	EVLFormation SelectionFormation() const;
+	/** F, the Form buttons: the next formation, and the selection (its platoon) forms up in it at once, where it
+	 *  stands or, on a march, at the goal it is walking to (a new shape used to wait, unseen, for the next order). */
 	void CycleFormation();
+	/** The cycle: Smart > Line > Column > Wedge > Square > Loose > Smart. */
+	static EVLFormation NextFormation(EVLFormation Shape);
+	static constexpr int32 NumFormations = 6;
+	/** These units form up in Shape now: idle ones where they stand (facing as their leader, else most of them,
+	 *  does); on a plain move, at its goal. Those on a standing order (a patrol, a guard, a follow, an attack), in a
+	 *  fight or played by hand are left be: the shape is theirs from their next order. */
+	void FormUpNow(const TArray<AVLKing*>& Units, EVLFormation Shape);
 	static const TCHAR* FormationName(EVLFormation Shape);
 	bool SetFormationByName(const FString& Name);
 
@@ -328,7 +340,7 @@ private:
 	struct FPlatoon
 	{
 		TArray<TWeakObjectPtr<AVLKing>> Members;
-		EVLFormation Formation = EVLFormation::Line;
+		EVLFormation Formation = EVLFormation::Smart;
 		EVLStance Stance = EVLStance::Aggressive;
 		bool bMarchTogether = true;
 		TWeakObjectPtr<AVLKing> Leader;     // (none: no leader; see GetPlatoonLeader)
@@ -426,7 +438,7 @@ private:
 	TArray<TWeakObjectPtr<AVLKing>> Selection;
 	FPlatoon Platoons[MaxPlatoons];
 	int32 RallyPlatoon = INDEX_NONE;
-	EVLFormation LooseFormation = EVLFormation::Line;
+	EVLFormation LooseFormation = EVLFormation::Smart;
 	TArray<FTower> Towers;
 	TArray<FMarker> Markers;
 };
@@ -435,6 +447,8 @@ namespace VLFormation
 {
 	/** The main game's SRFormation::ComputeSlots: a destination slot for every unit, in the same order as Units.
 	 *  Leader (one of Units, or null): it takes the front-middle slot of its ranks (melee or archers), the formation's
-	 *  anchor (not for Loose). */
-	void ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots, EVLFormation Shape, const AVLKing* Leader = nullptr);
+	 *  anchor (not for Loose; in Smart the heroes lead instead). Facing (when not zero): the way the formation faces;
+	 *  else the way from the group to Destination (on a short shuffle, the way the group faces). */
+	void ComputeSlots(const TArray<AVLKing*>& Units, const FVector2D& Destination, TArray<FVector2D>& OutSlots, EVLFormation Shape, const AVLKing* Leader = nullptr,
+		const FVector2D& Facing = FVector2D::ZeroVector);
 }

@@ -454,7 +454,7 @@ namespace
 			UE_LOG(LogSovereignRealms, Log, TEXT("selected %d unit(s)"), Command->NumSelected());
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdFormation(TEXT("vl.Formation"), TEXT("vl.Formation line|column|wedge|square|loose: the formation of the selection (of its platoon, if it is one)"),
+	FAutoConsoleCommandWithWorldAndArgs CmdFormation(TEXT("vl.Formation"), TEXT("vl.Formation smart|line|column|wedge|square|loose: the formation of the selection (of its platoon, if it is one); they form up in it at once"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			if (UVLCommand* Command = UVLCommand::Get(World))

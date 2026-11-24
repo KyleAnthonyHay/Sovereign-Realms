@@ -1411,7 +1411,7 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 		}
 		Commands.Add({ CmdStance, StanceIcon(Stance), TEXT("G"), TEXT("Stance"), FString::Printf(TEXT("Stance: %s   [G]"), UVLCommand::StanceName(Stance)), TEXT("Aggressive > Defensive > Hold ground."), false });
 		Commands.Add({ CmdForm, FormationIcon(Shape), TEXT("F"), Shape == EVLFormation::Loose ? TEXT("Loose") : TEXT("Form"), FString::Printf(TEXT("Formation: %s   [F]"), UVLCommand::FormationName(Shape)),
-			TEXT("Click (or F): the next shape, Line > Column > Wedge > Square > Loose (no formation)."), Shape != EVLFormation::Loose });
+			TEXT("Click (or F): the next shape, and they form up in it now. Smart (heroes lead, swordsmen in front, archers behind, the Spy on the flanks) > Line > Column > Wedge > Square > Loose (no formation)."), Shape != EVLFormation::Loose });
 		if (Total > 1)
 		{
 			const bool bTogether = Command->SelectionMarchTogether();
@@ -1541,6 +1541,10 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 		const FCommand& C = Commands[i];
 		const FBox2D CommandBox(FVector2D(BX, BY), FVector2D(BX + BS, BY + BS));
 		const FBtn B = IconButton(CommandBox, VLId::Command + i, C.Which, C.Kind == CmdControl ? nullptr : C.Key, true, C.bActive);
+		if (C.Kind == CmdForm && Shape == EVLFormation::Smart)
+		{
+			Icon(EVLIcon::Crown, BX + BS * 0.5f - U(9.f), BY + U(2.f), U(18.f));     // (Smart: the line icon, the heroes' crown at its front)
+		}
 		Text(C.Label, BX + BS * 0.5f, BY + BS + U(4.f), BS < U(50.f) ? U(12.f) : U(13.f), B.bHover ? Parchment : Dim, AlignCentre);
 		if (B.bHover) { SetTooltip(CommandBox, C.Title, { C.Line }); }
 		if (B.bRightClicked && C.Kind == CmdForm) { Click(); Command->CycleFormation(); continue; }
@@ -2177,6 +2181,10 @@ void AVLHUD::DrawPlatoonPanel()
 		const EVLStance Stance = Command->PlatoonStance(i);
 		ButtonFrame(Small[0], SmallB[0], true);
 		Icon(FormationIcon(Shape), Small[0].Min.X + U(5.f), Small[0].Min.Y + U(5.f), SB - U(10.f), FLinearColor(1.f, 1.f, 1.f, Shape != EVLFormation::Loose ? 1.f : 0.55f));
+		if (Shape == EVLFormation::Smart)
+		{
+			Icon(EVLIcon::Crown, Small[0].Min.X + SB * 0.5f - U(6.f), Small[0].Min.Y + U(1.f), U(12.f));
+		}
 		ButtonFrame(Small[1], SmallB[1], true);
 		Icon(StanceIcon(Stance), Small[1].Min.X + U(5.f), Small[1].Min.Y + U(5.f), SB - U(10.f));
 		// the recruits' flag: new troops from every barracks and range join this platoon (one platoon at a time)
@@ -2196,7 +2204,7 @@ void AVLHUD::DrawPlatoonPanel()
 		Icon(EVLIcon::Disband, Small[3].Min.X + U(5.f), Small[3].Min.Y + U(5.f), SB - U(10.f));
 		if (SmallB[3].bHover) { SetTooltip(Small[3], TEXT("Disband"), { TEXT("Break up the platoon (the troops stay)."), TEXT("A platoon whose troops all fall disbands itself.") }); }
 		if (SmallB[3].bClicked) { Click(); Command->DisbandPlatoon(i); continue; }
-		if (SmallB[0].bHover) { SetTooltip(Small[0], FString::Printf(TEXT("Formation: %s"), UVLCommand::FormationName(Shape)), { TEXT("Click (or F with it selected): the next shape.") }); }
+		if (SmallB[0].bHover) { SetTooltip(Small[0], FString::Printf(TEXT("Formation: %s"), UVLCommand::FormationName(Shape)), { TEXT("Click (or F with it selected): the next shape, and the platoon forms up in it now."), TEXT("Smart: King David / Jonathan lead at the front, swordsmen, then archers, the Spy on the flanks.") }); }
 		if (SmallB[1].bHover) { SetTooltip(Small[1], FString::Printf(TEXT("Stance: %s"), UVLCommand::StanceName(Stance)), { TEXT("Click (or G) to change.") }); }
 		if (SmallB[0].bClicked || SmallB[0].bRightClicked) { Click(); Command->CyclePlatoonFormation(i); }
 		if (SmallB[1].bClicked) { Click(); Command->CyclePlatoonStance(i); }

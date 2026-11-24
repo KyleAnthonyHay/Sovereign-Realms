@@ -1616,6 +1616,29 @@ bool UVLGrid::FindPath(const FVector& From, const FVector& Goal, TArray<FVector>
 	return bOk;
 }
 
+bool UVLGrid::CanWalkStraight(const FVector& From, const FVector& To, bool bOffWalls, FVector* Out) const
+{
+	if (!IsBuilt())
+	{
+		return false;
+	}
+	int32 A = NodeAt(From, 200.f);
+	if (A == INDEX_NONE)
+	{
+		A = NearestNode(From, 2);
+	}
+	const int32 B = NodeAt(To, 200.f);
+	if (A == INDEX_NONE || B == INDEX_NONE || Nodes[A].Region != Nodes[B].Region)
+	{
+		return false;
+	}
+	if (Out)
+	{
+		*Out = FVector(To.X, To.Y, Nodes[B].Z);
+	}
+	return WalkLine(A, FVector2D(From), FVector2D(To), B, bOffWalls ? ELineRule::Clear : ELineRule::Any);
+}
+
 void UVLGrid::FitSlots(const FVector& Goal, const TArray<FVector2D>& Slots, TArray<FVector>& Out) const
 {
 	Out.Reset();

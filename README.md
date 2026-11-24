@@ -122,7 +122,7 @@ There are two ways to play, switched with **Tab**.
 | Right click on the Troop Ship | the selection walks to the foot of its gangplank and goes aboard, one after another (24 soldiers; King David and Jonathan besides, on the stern castle); those it has no room for stay ashore. Only while its gangplank is out (it lies at a quay or a shore). See *The troop ship* |
 | Select the Troop Ship (click it) | its panel: who is aboard, **Unload** (everyone down the gangplank, forming up on the shore). **Right click the water (or the minimap): it sails there**, round the land; **Shift + right click: one more point of its course**, sailed in order (blue dashed lines, as the troops' pathway). Right click a shore, a quay or a pier (also as the last Shift point): it sails there and **docks**. **P, then a click on the water: it patrols** between where it lies and there (Shift + click: one more point of the loop; orange lines), until its next order. Within 30 m of a berth a **DOCK button** shows over the berth and in the panel: a click and it swings its side to the land and slides in (1 to 1.5 s), and the gangplank drops. Troops aboard can also be selected and sent somewhere: they step ashore first; at sea they stay aboard |
 | Select the Watch Tower | its panel (the selection panel, bottom middle) shows who mans it; its **Lookout** button brings them down. An archer on the lookout can also be selected and sent somewhere: it comes down first |
-| F | the next formation: Line, Column, Wedge, Square, Loose (melee in front, archers behind) |
+| F | the next formation, **and the selection (its platoon) forms up in it at once** (where it stands, on its leader; on a march, at its goal): Smart (the default), Line, Column, Wedge, Square, Loose. The platoon panel's formation button does the same for its platoon. See *Formations* below |
 | A (a tap), then left click | attack-move: the selection marches there fighting what it meets, and marches on after each fight (Shift + click: one more point of the way; a click on a foe attacks it). **No attack-ground for archers any more** (the owner's call, 2026-11-22: no key, no button; `vl.ArmGround` and `UVLCommand::OrderAttackGround` are kept for tests) |
 | S (a tap) | stop (drop every order). With units selected a tap of A or S is the order and a hold (over 0.17 s) pans, as in the first draft; with nobody selected they pan at once. **H (hold ground) is gone**: the stance cycle (G) has Hold ground. Neither A nor S has a button on the command card now |
 | Option (Alt), held | **the cards over buttons** (the tooltip of whatever the pointer is on: "Upgrade the Castle [U]" with what it brings and costs, a build card, a command) **show only while Option is held**; without it hovering shows nothing |
@@ -1486,6 +1486,38 @@ fight, a chase or the player's hands is at its own speed and counts for nobody's
 marches together (a move, the legs of a patrol or an attack-move, a Shift pathway, followers sent after their leader;
 the enemy's squads too). `vl.Orders` shows each unit's speed and pace.
 
+**Formations** (`VLFormation::ComputeSlots`, `UVLCommand::CycleFormation / FormUpNow`). **Smart** is every platoon's
+and loose selection's formation to begin with, and the first of the cycle (Smart > Line > Column > Wedge > Square >
+Loose), by kind, front to back:
+
+```
+              K  J              the heroes (King David, Jonathan): the front centre; two side by side
+          S  S  S  S  S         swordsmen (and other melee): the front ranks
+          S  S  S  S
+          A  A  A  A  A         archers behind them
+       y  A  A  A  A  y         the Spy (and Builders) on the flanks of the rear rank; more than two: a rank behind
+```
+
+1.375 m between files, 1.5 m between ranks (the other shapes: 1.25 m), the heroes a step ahead of the men they lead,
+every block as wide as the troops' column count, and in each rank left stays left (nobody crosses another to his
+place). It faces the way the march comes in at the goal. Without a hero a troop leading the platoon takes the
+front-middle of its block, as in the other shapes. Until 2026-11-24 the formation button (the platoon panel's, the
+command card's Form, F) only changed the setting for the next move order, so pressing it made nobody move ("the
+formation button is not working"): now they form up at once. Idle ones form where they stand, on their anchor (the
+hero the player plays, else the platoon's leader, else a hero among them), who keeps his place, facing as he faces;
+on a plain move they are sent on to the goal in the new shape; those on a patrol, a guard, a follow or a fight keep it
+(the shape is theirs from their next order).
+
+**Marching in formation** (`UVLCommand::OrderMove`). Before, each walker took its own route to the goal and spread
+to its slot only on arrival: a formation set out as a file. Now a group in a formation (not Loose) that sets out
+together (all within 1.25 m x (2.5 sqrt(N) + 6) of its middle) on a move longer than 10 m gets one route for its middle
+(`UVLGrid::FindPath`), and each walker walks it at its own place in the shape: its offset turned with the route at
+every corner (on the bisector of the two legs), so the ranks wheel round a corner. Where its place on a corner is not
+open ground (`UVLGrid::CanWalkStraight`, off the walls), it takes the route's own corner there and files through (a
+gate, the bridge); a walker that cannot be fitted keeps its own route, as before. Marching together's pacing keeps
+the ranks level, since parallel routes leave each the same way to go. The log line `move: <shape>, n of N march in
+formation` counts them.
+
 **Attacking together.** Fighters sent at a foe (an attack order, or a fight they pick up) go at a run when they have
 more than 7 m to go (`UVLSwordsmanCombat::ChargeBeyond`): the swordsmen's first walk and every fresh route of their
 chase, and the archers' walk into range. So archers and swordsmen sent at the same foe travel together; the archers
@@ -1751,7 +1783,7 @@ Console commands for testing (in the game's console, or `Tools/pie.py run "<cmd>
 | `vl.HitTune Pause [Flash [Strength]]` | set the pause and the flash (seconds, seconds, 0..1) |
 | `vl.CamLag 0\|1` | the follow camera keeps him dead centre / trails him as usual |
 | `vl.Order <who> X Y [Z] [run]` | an order to a world point (cm). who: `selection`, `all`, `troops`, `king`, `archers`, `swordsmen`, or a name (`Swordsman_2`) |
-| `vl.SelectUnits <who> [add]`, `vl.Formation line\|column\|wedge\|square\|loose`, `vl.Platoon assign\|add\|select N` | the selection, its formation, the platoons |
+| `vl.SelectUnits <who> [add]`, `vl.Formation smart\|line\|column\|wedge\|square\|loose` (they form up in it at once), `vl.Platoon assign\|add\|select N` | the selection, its formation, the platoons |
 | `vl.Dummies`, `vl.AttackDummy <who> [N] [run]` | log the training dummies (number, place, where each shows in the view: for `vl.Click`) / order units to attack dummy N (default: the nearest), as a left click on it does. `vl.CombatLog 1` logs every swing, blow and sword sound |
 | `vl.Garrison <who> [building]`, `vl.EmptyTower [building]` | onto the watch tower / everyone down |
 | `vl.Click U V [shift]`, `vl.Box U0 V0 U1 V1 [shift]`, `vl.RightClick U V [run]` | the overview's mouse at a point of the view (fractions 0..1); `vl.Screen <who \| X Y Z>` logs where things show |

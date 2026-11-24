@@ -107,6 +107,9 @@ public:
 	void PrewarmRoutes(TConstArrayView<TPair<FVector, FVector>> Pairs);
 	/** Formation slots made standable: kept if they can be walked to from the goal nearby, else moved to such ground. */
 	void FitSlots(const FVector& Goal, const TArray<FVector2D>& Slots, TArray<FVector>& Out) const;
+	/** Can a unit walk straight from From to To, over joined floors (bOffWalls: not brushing a wall on the way)? To is
+	 *  the floor nearest its height; Out (if given): that floor's point (To with its Z). */
+	bool CanWalkStraight(const FVector& From, const FVector& To, bool bOffWalls = true, FVector* Out = nullptr) const;
 	/** The water's surface over this point of the map (far below everything where there is none, or no grid). */
 	float WaterLevelAt(const FVector& Point) const;
 	/** Is this point under water (a unit that fell in is put back on land)? */
