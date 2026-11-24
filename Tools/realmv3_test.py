@@ -39,10 +39,15 @@ H = Z["h"]
 HALF, CELL = J["terrain"]["half"], J["terrain"]["cell"]
 G = J["gates"]
 RAMPS = J["places"]["ramps"]
-PORTS = {}
+# Which plateau is the player's: 0 (A, the north-west) or 1 (B, the south-east; the owner swapped the sides, 2026-11-24).
+# The plan's names (castle0, mine0b, base1, ...) are the plateaus', not the teams'.
+P = 1 if J["teams"]["0"]["castle"]["key"].endswith("1") else 0
+PORTS = {}                                                                  # by plateau: 0 the west port, 1 the east
 for _p in J["places"]["ports"]:
-    _q, _sg = _p["quay"], (-1.0 if _p["team"] == 0 else 1.0)
-    PORTS[_p["team"]] = dict(quay_mid=[(_q[0] + _q[2]) / 2.0 + _sg * 0.5, (_q[1] + _q[3]) / 2.0 - _sg * 8.0], pier=[_p["dock"][0] + _sg * 2.0, _p["dock"][1]])
+    _q = _p["quay"]
+    _k = 0 if _q[0] < 0 else 1
+    _sg = -1.0 if _k == 0 else 1.0
+    PORTS[_k] = dict(quay_mid=[(_q[0] + _q[2]) / 2.0 + _sg * 0.5, (_q[1] + _q[3]) / 2.0 - _sg * 8.0], pier=[_p["dock"][0] + _sg * 2.0, _p["dock"][1]])
 fails = []
 
 
@@ -106,7 +111,7 @@ def routes():
     b = J["balance"] or {}
     centre = {}
     print("%-52s %9s %9s" % ("route (path grid, in the game)", "grid m", "plan m"))
-    for t, side in ((0, "player"), (1, "enemy")):
+    for t, side in ((P, "player"), (1 - P, "enemy")):                       # (t: the plateau)
         S = b.get(side, {})
         s, o = str(t), str(1 - t)
         c = G["castle" + s]
@@ -142,7 +147,7 @@ def routes():
 
 
 def around():
-    c = G["castle0"]
+    c = G["castle%d" % P]
     # ---- the forest, the coast and the ridges: no ground of the path grid's main region within 10 m of these
     probes = []
     for k in range(24):
@@ -218,10 +223,10 @@ def times():
         return arrived[1] if arrived and arrived[0] == "arrived" else None
 
     run(["vl.BattleLog 1"], None, 0.3)
-    g = G["castle0"]
+    g = G["castle%d" % P]
     leg("the player castle's door -> the middle of the basin", (g[0], g[1] - 3.0), (0.0, 0.0))
     out = []
-    for t, side in ((0, "player"), (1, "enemy")):
+    for t, side in ((P, "player"), (1 - P, "enemy")):
         r = RAMPS["base%d" % t]
         up = (r["head"][0] + 0.2 * (r["foot"][0] - r["head"][0]), r["head"][1] + 0.2 * (r["foot"][1] - r["head"][1]))
         out.append(leg("the middle of the basin -> four fifths up the %s's ramp" % side, (0.0, 0.0), up))
@@ -233,19 +238,20 @@ def times():
 
 def build():
     run(["vl.Give gold 100000", "vl.Give food 100000"], None, 0.5)
-    p0, p1 = J["places"]["plateau0"], J["places"]["plateau1"]
-    spots = [("plateau A, behind the castle to the west", "barracks", p0[0] - 24, p0[1] + 38, ""), ("plateau A, behind the castle to the east", "farm", p0[0] + 22, p0[1] + 36, ""),
-             ("plateau A, east of the plaza", "range", p0[0] + 26, p0[1] + 2, ""), ("plateau A, the south", "farm", p0[0] - 4, p0[1] - 34, ""),
-             ("plateau A, the south-west", "barracks", p0[0] - 30, p0[1] - 12, ""), ("plateau A, by the ramp's head", "tower", p0[0] + 24, p0[1] - 46, ""),
-             ("plateau A, the far north-west corner", "farm", p0[0] - 50, p0[1] + 52, ""), ("plateau A, the north-east corner", "barracks", p0[0] + 50, p0[1] + 50, ""),
-             ("plateau A, the south-east corner", "range", p0[0] + 20, p0[1] - 50, ""),
+    p0, p1 = J["places"]["plateau%d" % P], J["places"]["plateau%d" % (1 - P)]      # the player's plateau, the enemy's
+    sg = 1.0 if P == 0 else -1.0                                            # (the places below are named as on plateau A; on B they are turned half round)
+    spots = [("the player's plateau, behind the castle to the west", "barracks", p0[0] - sg * 24, p0[1] + sg * 38, ""), ("the player's plateau, behind the castle to the east", "farm", p0[0] + sg * 22, p0[1] + sg * 36, ""),
+             ("the player's plateau, east of the plaza", "range", p0[0] + sg * 26, p0[1] + sg * 2, ""), ("the player's plateau, the south", "farm", p0[0] - sg * 4, p0[1] - sg * 34, ""),
+             ("the player's plateau, the south-west", "barracks", p0[0] - sg * 30, p0[1] - sg * 12, ""), ("the player's plateau, by the ramp's head", "tower", p0[0] + sg * 24, p0[1] - sg * 46, ""),
+             ("the player's plateau, the far north-west corner", "farm", p0[0] - sg * 50, p0[1] + sg * 52, ""), ("the player's plateau, the north-east corner", "barracks", p0[0] + sg * 50, p0[1] + sg * 50, ""),
+             ("the player's plateau, the south-east corner", "range", p0[0] + sg * 20, p0[1] - sg * 50, ""),
              ("the basin's north ground", "barracks", J["buildable"][2]["centre"][0], J["buildable"][2]["centre"][1], ""),
              ("the basin's south ground", "barracks", J["buildable"][3]["centre"][0], J["buildable"][3]["centre"][1], ""),
-             ("plateau B, behind the castle to the west (the enemy's Builder)", "barracks", p1[0] - 24, p1[1] - 38, " enemy"),
-             ("plateau B, the north (the enemy's Builder)", "range", p1[0] + 4, p1[1] + 34, " enemy")]
+             ("the enemy's plateau, behind the castle to the west (the enemy's Builder)", "barracks", p1[0] - sg * 24, p1[1] - sg * 38, " enemy"),
+             ("the enemy's plateau, the north (the enemy's Builder)", "range", p1[0] + sg * 4, p1[1] + sg * 34, " enemy")]
     for name, what, x, y, who in spots:
         # (the enemy's commander builds on its plateau as the match goes: its side is asked at up to three places)
-        for (ax, ay) in ([(x, y)] if not who else [(x, y), (p1[0] + 34, p1[1] - 34), (p1[0] - 24, p1[1] + 22)]):
+        for (ax, ay) in ([(x, y)] if not who else [(x, y), (p1[0] + sg * 34, p1[1] - sg * 34), (p1[0] - sg * 24, p1[1] + sg * 22)]):
             lines = run(["vl.Give gold 1000" + who, "vl.Build %s %.0f %.0f 0%s near" % (what, ax * 100, -ay * 100, who)], r"vl\.Build", 0.9)
             ok = bool(lines) and "refused" not in lines[-1]
             if ok:

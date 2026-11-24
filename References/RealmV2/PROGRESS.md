@@ -28,6 +28,19 @@
   `lap` (an eight-point course on a ring 350 m out, all the way round in 324 s, afloat throughout).
   `Tools/realmv2_test.py routes stuck`: pass (`stuck` now skips a tower's archers on its platform).
 
+## 2026-11-24: the troop ships at the piers, the west port reachable, the arches, the mines
+- Each pier has its side's troop ship (`SM_TroopShip` tagged `TroopShip:<team>`, `BERTHS` in the layout: where
+  UVLFleet found the berths) and no grain ship. The level's mesh has no collision; the game hides it.
+- The west port's stair was cut off from the land by `knoll_w`'s flank (1 m terraces over the stair's head), so the
+  player's ship lay at the south beach 278 m away. The knoll moved south (`_oval(-264, -206, 13, 16)`); the stair's
+  head is level with the ground north of it, and the player's ship lies at its own pier (the harbour tower's foot is
+  free too).
+- The arches stand 1 m out from the cliff (0.5 m: the cliff's face flickered in the plane of their dark backs).
+- The mines' tunnels were full of ground (2 to 19 m over their floors; `minehill.embed` now cuts it). Shots:
+  Saved/Screenshots/VL/mine_realmv2_<mine0|mine1|mine_nw|mine_se|mine_c>.png, mine_realmv2_mine_c_above.png,
+  port_arch_realmv2_west.png / _east.png.
+- 16 ground tiles changed (with their LODs), and the barrier.
+
 ## Files
 - Tools/blender/realmv2_layout.py (plan; `--debug` -> Saved/realmv2_plan.png + balance table), realmv2_cam.py,
   assets/realmv2_terrain.py, assets/ruins.py, Tools/ue/build_realmv2.py, Tools/realmv2_rebuild.sh,
@@ -90,6 +103,7 @@ Plan for the island (how to do it in the existing scripts):
   (`sh Tools/editor.sh quit; rmdir Saved/editor.lock`). No package (the coordinator builds).
 - The ship: `realmv2_layout.SHIP` picks SM_GrainBoat if SourceArt/Meshes/SM_GrainBoat.gltf exists when the plan runs,
   else SM_Boat; moorings: the instances tagged `Moored` (west pier about (-311, -163), east pier about (311, 164)).
+  (Since 2026-11-24 the piers have the troop ships instead: see above.)
 
 ## State (2026-11-22, end of the map designer's session)
 - Built and saved: L_RealmV2 (the island: 387 tiles with LODs, sea, ports, sky) and L_Realm (towers on level ground).

@@ -57,6 +57,27 @@ To make room the world grew from 384 m to 416 m square; the island is still a th
    world grew from 416 m to **512 m square** (the coast about 219 m from the middle, was 182): the island only as big
    as the two plateaus need, the forest filling the rest as before.
 
+## The owner's third request (2026-11-23, night): room for the ship
+"Increase the circumference of the map area so the ship has more room to travel." The island is unchanged; the map
+round it is now **620 m square** (it was the ground's 502 m), so there are 80 m of open sea between the coast and the
+map's edge, and 65 m beyond the islets. The overview, the minimap and the ship's chart all reach that edge, and the sea
+mesh runs on to 1,400 m from the middle.
+
+## The owner's fourth round (2026-11-24): sides swapped, the troop ships at the docks, the port's cave, the mines
+1. **"Swap the starting sides."** The player starts on plateau **B in the south-east**, the enemy on A in the north-west.
+   The map is point-symmetric, so nothing moved: the castles, home mines, towers, ports, banners, ships, the
+   `TeamStart` / `Rally` markers, the PlayerStart (now at (130, -138), facing north up the ramp) and the plan's balance
+   report changed hands (`A_TEAM = 1` in the layout; the plan's names stay the plateaus': `castle0` is A's). The
+   default camera looks the way the hero faces, so the minimap's up is now north for the player (it was south).
+2. **"The boat should replace the old boat on the dock."** Each pier has its side's troop ship (`SM_TroopShip`, tagged
+   `TroopShip:<team>`, at the berth the game found beside the grain ship); the grain ship is gone.
+3. **The little cave at the dock**: the arch (`SM_Port_Arch`) stood half a metre into the cliff, whose face lay in the
+   plane of the arch's dark back and flickered through it. It stands 1 m out from the face now (all of it in front of
+   the ground), at both ports.
+4. **"No proper hole in the mines at the home base."** The crags round the home mines covered the mines' footprints, so
+   the ground stood 5 m over the tunnel's floor and its face closed the tunnel's mouth. `minehill.embed` now takes the
+   ground in the tunnel down under its floor on every map; the mine's own rock is the roof.
+
 ## The design in one paragraph
 The island is **point-symmetric about its middle**: every place (x, y) of the player's side is (-x, -y) of the
 enemy's, turned half round. That is true of the plan's shapes, of every noise the ground is made from (the plan's
@@ -101,7 +122,7 @@ is 8 m high with a crown 4.4 to 5 m across.
 ## Layout (metres; +X east, +Y north; the enemy's twin of every player's place is its negative)
 The island's own frame is diagonal: **u** runs north-east, **v** north-west (`u = (x + y) / √2`, `v = (y - x) / √2`).
 
-| What | Player (A, north-west) | Enemy (B, south-east) |
+| What | A, north-west (the enemy's since 2026-11-24) | B, south-east (the player's) |
 |---|---|---|
 | Plateau (centre; 82 x 74 m half sizes) | (-130, 130) | (130, -130) |
 | Castle | (-130, 148), facing south | (130, -148), facing north |

@@ -128,6 +128,7 @@ ISLAND_WALK = 11.0                # (the island's narrow waist: this far north a
 ISLAND_FLAT = (-42.0, 70.0)
 DOCK = (-171.0, -112.0)           # its land end; it runs out west (yaw -90), deck 1 m above the sea
 DOCK_Z = SEA + 1.0
+TROOPSHIP = (-187.825, -110.875, 90.0)    # the player's troop ship's berth by the dock: x, y, yaw (bow +X)
 SPAWN = (-104.0, -66.0, -120.0)   # x, y, facing (degrees from +X): in front of the player's castle, facing the viewer
 START1 = (107.0, 98.0, 180.0)    # where the enemy's units gather: in front of its castle
 RALLY0, RALLY1 = (-66.0, -49.35), (84.65, 40.0)      # each side's first troops stand here (open ground by its road to the bridge)
@@ -653,9 +654,11 @@ def things(G, s):
     sc.add("SM_PlazaBanner", PLAZA0[0], PLAZA0[1], z=0.0, r=1.3, team=0)
     sc.add("SM_PlazaBanner", PLAZA1[0], PLAZA1[1], z=1.0, r=1.3, team=1)
     sc.building("SM_Dock", DOCK[0], DOCK[1], DOCK_Z, -90.0, 0)
-    moor = meta("SM_Dock").get("moor", [2.9, -5.9, -1.0, 90.0])
-    mx, my = rot(moor[0], moor[1], -90.0)
-    sc.add("SM_Boat", DOCK[0] + mx, DOCK[1] + my, moor[3] - 90.0, z=SEA + 0.02, group="props")
+    # the player's troop ship at the dock (owner, 2026-11-24: "the boat should replace the old boat on the dock"; a rowing
+    # boat, SM_Boat, lay there before): SM_TroopShip tagged TroopShip:0, where the game puts the player's AVLTroopShip
+    # when play begins (and hides this one, there to be seen in the editor): the berth UVLFleet finds alongside the
+    # dock's head. The enemy has no port on this map.
+    sc.add("SM_TroopShip", TROOPSHIP[0], TROOPSHIP[1], TROOPSHIP[2], z=SEA + 0.02, group="props", tags=["TroopShip:0"])
 
     def crops(x0, y0, x1, y1, z, mesh="SM_Wheat", step=1.0, scale=(0.92, 1.1), jitter=0.06):
         nx, ny = max(1, int(round((x1 - x0) / step))), max(1, int(round((y1 - y0) / step)))

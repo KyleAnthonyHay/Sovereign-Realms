@@ -60,6 +60,30 @@
 - `Tools/troopship_dock_test.py realmv3`: 0 failures, the new `lap` included (ring 270 m out, 360 degrees, 254 s).
   `realmv3_test.py around routes`: pass. Shot: Saved/Screenshots/VL/troopship_lap.png (the overview all the way out).
 
+## The fourth round (2026-11-24): sides swapped, troop ships at the piers, the arch, the mines
+- **Sides**: `A_TEAM = 1` in the layout. Plateau A (north-west, the plan's "0" names) is the enemy's, B (south-east,
+  the "1" names) the player's: the buildings' `Team:` tags, the banners, the ports and their ships, `TeamStart` /
+  `Rally` (TeamStart:0 at (130, -138), yaw 90), the PlayerStart (`spawn` = `PLAYER_START`), `teams` in realmv3.json
+  (`teams["0"]` is B's castle1 ...) and the balance report (`player` = side(A_TEAM), the routes from castle1). The
+  ground, trees and everything else are untouched (point symmetry). In PIE: the hero starts at B's castle; the minimap
+  is captured with up = yaw -90 (north; it was south) and the player's castle shows at its lower right; the AI reads
+  the swapped markers from the json. `realmv3_test.py` and `troopship_dock_test.py` read which plateau is the
+  player's. Saves: a building's team comes from the save, so an old save loads with its own sides.
+- **Troop ships**: `SM_TroopShip` tagged `TroopShip:<team>` at each pier (`BERTH`: 16.5 m out from the pier's land
+  end, beside its head, where UVLFleet had put the ship next to the grain ship), no `Moored` grain ship. The level's
+  mesh has no collision (the builder) and the game hides it. PIE: "2 troop ship(s) (2 placed by the level)", both
+  landed.
+- **The arch** (`SM_Port_Arch`): 1 m out from the cliff (was 0.5 m): the cliff's face lay exactly in the plane of the
+  arch's dark back (x = -216.0) and flickered through it. Shots: Saved/Screenshots/VL/port_arch_realmv3_west.png,
+  _east.png (before: realmv3_dock_a_stair.png).
+- **Mines**: the crags round the home mines covered the mines' footprints, the ground 5 m over the tunnel's floor.
+  `minehill.embed` cuts the tunnel's footprint down under its floor (all maps). Shots:
+  Saved/Screenshots/VL/mine_realmv3_<mine0|mine0b|mine1|mine1b|mine_n1|mine_n2>.png, mine_realmv3_mine0b_above.png.
+- Only the four ground tiles round the home mines changed (with their LODs), and the barrier.
+- Checks: `troopship_dock_test.py realmv3`: 0 failures (the player's ship now docks, boards and unloads at the east
+  port, sails the lap, and docks at the west port). `realmv3_test.py routes`: 0 failed (the player's castle is
+  castle1; to the middle 225.7 m and 224.0 m).
+
 ## Checks after the second round (2026-11-23 evening, PIE on L_RealmV3, Windows)
 - `Tools/realmv3_test.py routes around times build stuck`: all pass (Saved/realmv3_test.log; `build stuck` again on a
   fresh match, Saved/realmv3_test_build.log: 0 failed). The new `build` spot in plateau A's south-east corner asks for
@@ -126,8 +150,8 @@ _coast, _base. The first build's ramps and plateaus, for comparison: Saved/Scree
   `SM_RealmV3Sea` with the `water` slot, as Realm v2's. The seabed is the flat slab at -8 m; the coast's rocks reach
   3 m out and the six islets (4 to 5 m rocks) stand 16 to 20 m off the cliffs: a ship's route round the island must
   keep 25 m off, or the islets go (`ISLETS` in the plan).
-- The ports are scenery, as Realm v2's (quay, warehouse, crane, arch, harbour tower, `SM_Dock` with the ship
-  `Moored`); units walk the stair, the quay and the pier.
+- The ports are scenery, as Realm v2's (quay, warehouse, crane, arch, harbour tower, `SM_Dock` with the side's troop
+  ship at it); units walk the stair, the quay and the pier.
 - The forest is not walkable anywhere (a decision: it keeps the map to its gameplay and makes "no way round"
   certain). If the owner wants glades or a walkable verge, they are `region` in the plan.
 - The ramps' sheet is the one piece of ground on any map that is not voxel shelves. If the owner wants the same on

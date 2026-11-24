@@ -1002,8 +1002,12 @@ def tree_blocked(x, y, kind, scale=1.0, margin=BUILD_MARGIN):
     return None
 
 
-# the ship at each pier (SM_Boat: the grain ship since 2026-11-22; it was a rowing boat)
-SHIP = "SM_Boat"
+# The ship at each pier is the side's troop ship (owner, 2026-11-24: "the boat should replace the old boat on the dock";
+# the grain ship, SM_Boat, lay there before and UVLFleet put the troop ship at a berth beside it): SM_TroopShip, tagged
+# TroopShip:<team>, where the game puts that side's AVLTroopShip when play begins (and hides this one, there to be seen
+# in the editor). BERTHS: team -> (x, y, yaw (bow +X)), where UVLFleet found each berth alongside its pier's head.
+SHIP = "SM_TroopShip"
+BERTHS = {0: (-321.525, -166.375, -90.0), 1: (321.575, 161.125, 90.0)}
 # coves with a beach: (x, y, radius)
 BEACHES = [(-60.0, -300.0, 26.0), (300.0, -110.0, 24.0), (-300.0, 250.0, 24.0), (180.0, 304.0, 22.0), (150.0, -300.0, 22.0)]
 
@@ -1061,11 +1065,10 @@ def things(G, s):
     for pt in PORTS:                                                      # the ports: the pier and its boat, what stands on the quay
         (dx, dy), dyaw = pt["dock"]
         sc.building("SM_Dock", dx, dy, DOCK_Z, dyaw, pt["team"])
-        moor = meta("SM_Dock").get("moor", [2.9, -5.9, -1.0, 90.0])
-        mx, my = rot(moor[0], moor[1], dyaw)
-        # (the ship: SM_Boat is the grain ship now, 13.5 m, its pivot on the waterline; it lies across the pier's head, at
-        # the dock's own mooring. cloth: whose colours its sail and banners take, without making it anyone's building)
-        ship = sc.add(SHIP, dx + mx, dy + my, moor[3] + dyaw, z=SEA, group="props", tags=["Moored"])
+        # (the troop ship, its pivot on the waterline; cloth: whose colours its sail and banners take, without making it
+        # anyone's building)
+        bx, by, byaw = BERTHS[pt["team"]]
+        ship = sc.add(SHIP, bx, by, byaw, z=SEA, group="props", tags=["TroopShip:%d" % pt["team"]])
         ship["cloth"] = pt["team"]
         for (mesh, x, y, z, yaw) in pt["things"]:
             sc.add(mesh, x, y, yaw, z=z, group="port", r=3.0, team=pt["team"])

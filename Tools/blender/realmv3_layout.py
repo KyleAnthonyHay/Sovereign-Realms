@@ -11,11 +11,11 @@ realmv3_cam.py, looks from the south-west). The level is fixed: this script is t
 everything in it is seeded.
 
 The owner's verdict on Realm v2 was "not enough forest and too much space": this map is the gameplay and nothing else.
-  the plateaus  two raised tables (14 m, cliffs all round; 164 x 148 m), A in the north-west (the player's) and B in the
-                south-east (the enemy's): the castle, a home mine in a crag at either side of it, two towers. Two ways
+  the plateaus  two raised tables (14 m, cliffs all round; 164 x 148 m), A in the north-west (the enemy's) and B in the
+                south-east (the player's; the sides were swapped on 2026-11-24, A_TEAM): the castle, a home mine in a crag at either side of it, two towers. Two ways
                 off: the base ramp, a broad smooth spur of the hillside down to the pass; and a stone stair down a
                 cleft in the sea cliff to the side's own port (Realm v2's set: quay, warehouse, crane, arch, harbour
-                tower, pier, ship), which joins nothing else
+                tower, pier, the side's troop ship), which joins nothing else
   the ridges    rock from the north-east corner to the south-west corner, coast to coast (sea cliffs at both ends): two
                 long sharp crests either side of the basin, joined beyond its ends into one spine that runs on to each
                 corner. Nobody climbs them. ONE way through each: a pass 12 m wide, cut where a base ramp comes down
@@ -157,12 +157,17 @@ def _oval(x, y, rx, ry, n=44, p=2.5):
 # The castle is 14 x 11 m, a mine 16 x 11, a barracks yard 19 x 18, an archery hall 20 x 14, a farmstead 23 x 19: room
 # for the castle, the two mines, the two towers and some thirty buildings with lanes between them.
 PA = (-130.0, 130.0, 82.0, 74.0)
+# Whose plateau is whose (owner, 2026-11-24: "swap the starting sides"): the player starts on B in the south-east, the
+# enemy on A in the north-west. The plan is drawn from A (the "0" names: castle0, mine0b, PLAZA0, SPAWN, port0, ...) and
+# B is A turned half round (the "1" names), so the ground is the same and only the teams change: A_TEAM holds A.
+A_TEAM = 1
+B_TEAM = 1 - A_TEAM
 PP = 3.0
 PLATEAU0 = _oval(*PA, p=PP)
 PLATEAU1 = [mir(p) for p in PLATEAU0]
 MESAS = [
-    dict(name="plateau0", poly=PLATEAU0, z=PLATEAU_Z, top="build", team=0),
-    dict(name="plateau1", poly=PLATEAU1, z=PLATEAU_Z, top="build", team=1),
+    dict(name="plateau0", poly=PLATEAU0, z=PLATEAU_Z, top="build", team=A_TEAM),
+    dict(name="plateau1", poly=PLATEAU1, z=PLATEAU_Z, top="build", team=B_TEAM),
 ]
 
 # ---- the basin: a lens in the diagonal frame, BU along the ridges (north-east), BV across them
@@ -223,13 +228,22 @@ RAMPS = [
     ("port0", _STAIR[0], _STAIR[1], 2.25, STONE, 3.0),
 ]
 RAMPS += [(n[:-1] + "1", mir(a), mir(b), hw, sf, k) for (n, a, b, hw, sf, k) in RAMPS]
-PORTS = [dict(team=0, quay=(PORT_X - 13.0, PORT_Y - 20.0, PORT_X, PORT_Y + 20.0), sign=-1.0, dock=((PORT_X - 13.0, PORT_Y + 11.0), -90.0),
+# (SM_Port_Arch, the tunnel's mouth: 1.75 m deep, its dark back 0.5 m in front of its own back. It stands 1 m out from
+# the cliff's face at PORT_X, so all of it is in front of the ground: half a metre further in, the cliff's face lay in
+# the plane of that dark back and the two flickered through each other in the opening; owner, 2026-11-24)
+PORTS = [dict(team=A_TEAM, quay=(PORT_X - 13.0, PORT_Y - 20.0, PORT_X, PORT_Y + 20.0), sign=-1.0, dock=((PORT_X - 13.0, PORT_Y + 11.0), -90.0),
               things=[("SM_Port_Warehouse", PORT_X - 6.5, PORT_Y - 12.0, DOCK_Z, -90.0), ("SM_Port_Crane", PORT_X - 9.5, PORT_Y + 17.5, DOCK_Z, -90.0),
-                      ("SM_Port_Arch", PORT_X - 0.5, PORT_Y - 5.0, DOCK_Z, -90.0), ("SM_Port_Tower", PORT_X + 16.0, PORT_Y - 25.0, PLATEAU_Z, -90.0)])]
-PORTS.append(dict(team=1, quay=(-PORTS[0]["quay"][2], -PORTS[0]["quay"][3], -PORTS[0]["quay"][0], -PORTS[0]["quay"][1]), sign=1.0,
+                      ("SM_Port_Arch", PORT_X - 1.0, PORT_Y - 5.0, DOCK_Z, -90.0), ("SM_Port_Tower", PORT_X + 16.0, PORT_Y - 25.0, PLATEAU_Z, -90.0)])]
+PORTS.append(dict(team=B_TEAM, quay=(-PORTS[0]["quay"][2], -PORTS[0]["quay"][3], -PORTS[0]["quay"][0], -PORTS[0]["quay"][1]), sign=1.0,
                   dock=((-PORTS[0]["dock"][0][0], -PORTS[0]["dock"][0][1]), 90.0),
                   things=[(m, -x, -y, z, yaw + 180.0) for (m, x, y, z, yaw) in PORTS[0]["things"]]))
-SHIP = "SM_Boat"
+# The ship at each port is the side's troop ship (owner, 2026-11-24: "the boat should replace the old boat on the
+# dock"; the grain ship, SM_Boat, lay there before and UVLFleet put the troop ship at a berth beside it): SM_TroopShip,
+# tagged TroopShip:<team>, where the game puts that side's AVLTroopShip when play begins (and hides this one, which is
+# there to be seen in the editor). BERTH: its place from the pier's land end at port A and its yaw (bow +X), where
+# UVLFleet found the berth alongside the pier's head (the shortest gangplank); port B's is the same turned half round.
+SHIP = "SM_TroopShip"
+BERTH = (-16.525, 0.625, 90.0)
 
 # ---- the home mines' crags: (x, y, radius, seed, +1 the player's / -1 its twin turned half round)
 TORS = dict(mine0=(PA[0] - 68.0, PA[1] + 20.0, 14.0, 5, 1.0), mine0b=(PA[0] + 68.0, PA[1] + 20.0, 14.0, 9, 1.0))
@@ -263,11 +277,11 @@ KIND = {"SM_Dock": "Dock", "SM_Castle": "Castle", "SM_MineCliff": "Gold Mine", "
 # beside each of them (Realm v2's rule, "a tower beside its home mine", for two home mines; both stand on the level
 # ground, either side of the road to the ramp, so the ramp's head lies between them). No farm, no cottages.
 _B0 = dict(
-    castle0=("SM_Castle", PA[0], PA[1] + 18.0, PLATEAU_Z, 0.0, 0),
-    mine0=("SM_MineCliff", PA[0] - 57.0, PA[1] + 20.0, PLATEAU_Z, 90.0, 0),          # Home 1: in the west crag, facing east
-    mine0b=("SM_MineCliff", PA[0] + 57.0, PA[1] + 20.0, PLATEAU_Z, -90.0, 0),         # Home 2: in the east crag, facing west
-    tower0=("SM_WatchTower", PA[0] - 38.0, PA[1] - 30.0, PLATEAU_Z, 0.0, 0),         # (over the port's stair)
-    tower0b=("SM_WatchTower", PA[0] + 46.0, PA[1] - 30.0, PLATEAU_Z, 0.0, 0),        # (over the ramp's head)
+    castle0=("SM_Castle", PA[0], PA[1] + 18.0, PLATEAU_Z, 0.0, A_TEAM),
+    mine0=("SM_MineCliff", PA[0] - 57.0, PA[1] + 20.0, PLATEAU_Z, 90.0, A_TEAM),          # Home 1: in the west crag, facing east
+    mine0b=("SM_MineCliff", PA[0] + 57.0, PA[1] + 20.0, PLATEAU_Z, -90.0, A_TEAM),         # Home 2: in the east crag, facing west
+    tower0=("SM_WatchTower", PA[0] - 38.0, PA[1] - 30.0, PLATEAU_Z, 0.0, A_TEAM),         # (over the port's stair)
+    tower0b=("SM_WatchTower", PA[0] + 46.0, PA[1] - 30.0, PLATEAU_Z, 0.0, A_TEAM),        # (over the ramp's head)
 )
 
 
@@ -286,7 +300,7 @@ _NE = _north_end()
 _N1 = (round(_NE[0] * 2.0) / 2.0, round((_NE[1] - 5.0) * 2.0) / 2.0)
 BUILD = dict(_B0)
 for _k, (_m, _x, _y, _z, _yaw, _t) in _B0.items():
-    BUILD[_k.replace("0", "1")] = (_m, -_x, -_y, _z, ((_yaw + 360.0) % 360.0) - 180.0, 1)
+    BUILD[_k.replace("0", "1")] = (_m, -_x, -_y, _z, ((_yaw + 360.0) % 360.0) - 180.0, B_TEAM)
 BUILD["mine_n1"] = ("SM_MineCliff", _N1[0], _N1[1], BASIN_Z, 0.0, "Neutral")         # Neutral 1: the basin's north-east end
 BUILD["mine_n2"] = ("SM_MineCliff", -_N1[0], -_N1[1], BASIN_Z, 180.0, "Neutral")     # Neutral 2: its south-west end
 HILLS = dict(mine0=(6.0, (5.0, 8.0), 5), mine0b=(6.0, (5.0, 8.0), 9))
@@ -335,8 +349,9 @@ G_ = GATE
 PLAZA0 = (PA[0], PA[1] + 4.0)
 PLAZA1 = mir(PLAZA0)
 PLAZA = (PLAZA0, PLAZA1)
-SPAWN = (PA[0], PA[1] + 8.0, -90.0)     # x, y, facing (degrees from +X): in front of the player's castle, facing the ramp
-START1 = (-PA[0], -PA[1] - 8.0, 90.0)
+SPAWN = (PA[0], PA[1] + 8.0, -90.0)     # x, y, facing (degrees from +X): in front of castle A, facing the ramp
+START1 = (-PA[0], -PA[1] - 8.0, 90.0)    # (castle B's)
+PLAYER_START = SPAWN if A_TEAM == 0 else START1       # the hero's start, where the level's PlayerStart stands
 RALLY0 = (PA[0] + 22.0, PA[1] - 22.0)            # where each side's troops gather: by the road to the ramp
 RALLY1 = mir(RALLY0)
 # the contested ground: tagged points of the level (terrain only: nothing captures them)
@@ -918,14 +933,14 @@ def things(G, s):
     for pt in PORTS:                                                      # the ports: the pier and its ship, what stands on the quay
         (dx, dy), dyaw = pt["dock"]
         sc.building("SM_Dock", dx, dy, DOCK_Z, dyaw, pt["team"])
-        moor = meta("SM_Dock").get("moor", [2.9, -5.9, -1.0, 90.0])
-        mx, my = rot(moor[0], moor[1], dyaw)
-        ship = sc.add(SHIP, dx + mx, dy + my, moor[3] + dyaw, z=SEA, group="props", tags=["Moored"])
+        k = -pt["sign"]                                                   # (1 at port A, -1 at port B)
+        ship = sc.add(SHIP, dx + k * BERTH[0], dy + k * BERTH[1], BERTH[2] if k > 0 else BERTH[2] - 180.0, z=SEA, group="props",
+                      tags=["TroopShip:%d" % pt["team"]])
         ship["cloth"] = pt["team"]
         for (mesh, x, y, z, yaw) in pt["things"]:
             sc.add(mesh, x, y, yaw, z=z, group="port", r=3.0, team=pt["team"])
-    sc.add("SM_PlazaBanner", PLAZA0[0], PLAZA0[1], z=PLATEAU_Z, r=1.3, team=0)
-    sc.add("SM_PlazaBanner", PLAZA1[0], PLAZA1[1], yaw=180.0, z=PLATEAU_Z, r=1.3, team=1)
+    sc.add("SM_PlazaBanner", PLAZA0[0], PLAZA0[1], z=PLATEAU_Z, r=1.3, team=A_TEAM)
+    sc.add("SM_PlazaBanner", PLAZA1[0], PLAZA1[1], yaw=180.0, z=PLATEAU_Z, r=1.3, team=B_TEAM)
     # old pillars where each pass comes out into the basin, a pair of them
     for (mesh, x, y, yaw) in (("SM_Ruin_Pillar_B", _IN[0] - 1.0, _IN[1] + 11.0, 0.0), ("SM_Ruin_Pillar_C", _IN[0] + 10.0, _IN[1] - 7.0, 90.0)):
         sc.both(mesh, x, y, yaw, z=BASIN_Z, group="ruins", r=1.2)
@@ -1179,7 +1194,7 @@ def balance(G, verbose=False, trees=()):
                     neutral_1=d(t, "mine_n1"), neutral_2=d(t, "mine_n2"), basin_north=d(t, "basin_north"), basin_south=d(t, "basin_south"),
                     enemy_ramp_head=d(t, "ramp_head" + o), enemy_castle=d(t, "castle" + o))
 
-    rep = dict(player=side(0), enemy=side(1),
+    rep = dict(player=side(A_TEAM), enemy=side(1 - A_TEAM),                      # (side(t): from plateau t's castle; A_TEAM 1: the player holds B)
                heights=dict(plateau=PLATEAU_Z, basin=BASIN_Z, sea=SEA, summit=float(G["h"].max())),
                note="metres walked from the castle's door by the shortest route over the ground (50 cm cells, steps of at most 50 cm, "
                     "no hazard, no building; trees not counted)")
@@ -1268,7 +1283,7 @@ def teams(G):
         return dict(pos=q, pos_ue=ue(q))
 
     out = {}
-    for team, plaza, start, rally in ((0, PLAZA0, SPAWN, RALLY0), (1, PLAZA1, START1, RALLY1)):
+    for team, plaza, start, rally in ((A_TEAM, PLAZA0, SPAWN, RALLY0), (B_TEAM, PLAZA1, START1, RALLY1)):
         b = [entry(k) for k in BUILD if BUILD[k][5] == team]
         out[str(team)] = dict(name="player" if team == 0 else "enemy", castle=next(e for e in b if e["kind"] == "Castle"),
                               buildings=b, start=dict(point(start), yaw=start[2], yaw_ue=-start[2]), rally=point(rally), plaza=point(plaza))
@@ -1330,7 +1345,7 @@ def build(write=True, verbose=False):
         terrain=dict(cell=CELL, half=HALF, zmin=ZMIN, top=TOP, sea=SEA, seabed=SEABED, water=WAT, surfaces=SURF, hard_edge_cells=edges,
                      asymmetric_cells=G["R"]["asym_cells"], land_m2=round(land_m2), forest_m2=round(wood_m2),
                      ridge_m2=round(float(G["R"]["mountain"].sum()) * CELL * CELL), region_m2=round(float(G["region"].sum()) * CELL * CELL)),
-        spawn=dict(pos=[SPAWN[0], SPAWN[1], ground(h, SPAWN[0], SPAWN[1])], yaw=SPAWN[2]),
+        spawn=dict(pos=[PLAYER_START[0], PLAYER_START[1], ground(h, PLAYER_START[0], PLAYER_START[1])], yaw=PLAYER_START[2]),
         places=dict(plaza=PLAZA0, plaza1=PLAZA1, glade=(0.0, 0.0), basin=(0.0, 0.0), plateau0=PA[:2], plateau1=mir(PA[:2]),
                     ports=[dict(team=pt["team"], quay=pt["quay"], dock=pt["dock"][0], yaw=pt["dock"][1]) for pt in PORTS],
                     ramps={r[0]: dict(foot=r[2] if r[1][2] > r[2][2] else r[1], head=r[1] if r[1][2] > r[2][2] else r[2], half_width=r[3]) for r in RAMPS},

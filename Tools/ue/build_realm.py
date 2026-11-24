@@ -210,6 +210,10 @@ def main():
                 s = it.get("scale", 1.0)
                 tags.append(unreal.Name("Lookout:%.3f;%.3f;%.3f;%.3f;%.3f" % ((lk["floor_z"] * s,) + tuple(v * s for v in lk["free"]))))
             a.tags = tags
+            if any(str(t).startswith("TroopShip") for t in tags):     # the troop ship's place at its dock (UVLFleet puts the ship there
+                c = a.static_mesh_component                              # and hides this one): nothing hits it, nor the ship's chart
+                c.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+                c.set_editor_property("can_ever_affect_navigation", False)
             nlamps += lamps(it["mesh"], x, y, z, it.get("yaw", 0.0), sc, "Lamps")
     for m in layout.get("markers", []):
         marker(m["tag"], m["pos"], m.get("yaw", 0.0))

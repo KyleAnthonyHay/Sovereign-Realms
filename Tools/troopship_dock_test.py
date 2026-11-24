@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """The troop ship's docking, its course and its patrol, in Play-In-Editor (the editor open, no play session):
 
-    python Tools/troopship_dock_test.py realmv3|realmv2 [shots] [keep]
+    python Tools/troopship_dock_test.py realmv3|realmv2|realm [shots] [keep]
 
 What is checked (PASS / FAIL lines; exit code 1 if anything failed):
   dock      sailed to open water within 30 m of a berth, the dock button shows (over the berth and in the panel); a
             click on it and the ship swings its side to the land and slides in, in 1 to 1.5 s, and is landed; troops
             board and unload there and stand on the ground. A right click on the other dock's quay sails there and
-            docks the same way (Realm v3: both docks; Realm v2: the east port, the only quay units can walk to)
+            docks the same way (Realm v3 and v2: both ports; The Realm has one dock, the player's)
   minimap   with the ship selected a right click on the minimap sails it to that point of the map
   course    three points (the second and third queued, as Shift + right click queues them), the last on a quay: it
             sails them in order and docks at the end
@@ -18,7 +18,8 @@ What is checked (PASS / FAIL lines; exit code 1 if anything failed):
             coast and that edge, back to where it began, is sailed all the way round, afloat throughout
 shots: Saved/Screenshots/VL/troopship_dock_icon.png, troopship_docking_*.png (the move, every sixth of a second),
 troopship_gangplank_walk.png, troopship_course.png, troopship_patrol.png, troopship_minimap.png, troopship_lap.png
-(the overview all the way out, the minimap with it) (with <map>_ before the name on Realm v2).
+(the overview all the way out, the minimap with it) (with <map>_ before the name on Realm v2 and The Realm). No lap on
+The Realm (its sea is a strip along the west and the south, not round an island).
 """
 import glob
 import os
@@ -32,19 +33,22 @@ import pie
 
 LOG = pie.LOG
 ARGS = sys.argv[1:]
-MAP = ARGS[0] if ARGS and ARGS[0] in ("realmv2", "realmv3") else "realmv3"
+MAP = ARGS[0] if ARGS and ARGS[0] in ("realmv2", "realmv3", "realm") else "realmv3"
 SHOTS = "shots" in ARGS
-PRE = "" if MAP == "realmv3" else "realmv2_"
+PRE = "" if MAP == "realmv3" else MAP + "_"
 fails = []
-SEA = -600.0
+SEA = -623.0 if MAP == "realm" else -600.0          # (the troop ship's waterline: The Realm's sea lies at -6.25 m)
 # (cm) near: open water about 25 m off the first dock; quay2: the other dock's quay; a, b: two points of open water
+# (the player's dock first: Realm v3's is the east port since the owner swapped the sides, 2026-11-24; Realm v2's the
+# west port, which units can walk to since its stair was freed, 2026-11-24)
 PLAN = dict(
-    realmv3=dict(near=(-27000, -13300), far=(-27300, -6600), quay1=(-23800, -13400), quay2=(23600, 13300), a=(-27200, -10600), b=(-27200, -16100), spawn=(-23600, -13500)),
-    realmv2=dict(near=(32900, -14300), far=(34000, -9000), quay1=(30300, -14500), quay2=None, a=(33600, -11000), b=(33900, -8500), spawn=(30100, -14600)),
+    realmv3=dict(near=(27000, 13300), far=(27300, 6600), quay1=(23800, 13400), quay2=(-23600, -13300), a=(27200, 10600), b=(27200, 16100), spawn=(23600, 13500)),
+    realmv2=dict(near=(-32900, 18400), far=(-34000, 23700), quay1=(-30300, 18200), quay2=(30300, -14500), a=(-33600, 21700), b=(-33900, 24200), spawn=(-30100, 18100)),
+    realm=dict(near=(-19600, 13600), far=(-19500, 17000), quay1=(-17200, 11200), quay2=None, a=(-19500, 15000), b=(-18500, 17500), spawn=(-16600, 11200)),
 )[MAP]
 # (m) the map's extent (MAP_EDGE in Tools/ue/build_<map>.py) and the ring the lap is sailed on: between the coast (Realm
 # v3 230 m from the middle at most, Realm v2 309 m) and that edge
-EDGE, RING = dict(realmv3=(310.0, 270.0), realmv2=(390.0, 350.0))[MAP]
+EDGE, RING = dict(realmv3=(310.0, 270.0), realmv2=(390.0, 350.0), realm=(None, None))[MAP]
 
 
 def log_tail(pattern, since):
@@ -123,16 +127,18 @@ def hud_button(ident):
 
 
 def look(s, zoom=0.36, yaw=-60):
-    """A free camera on that point of the sea (the middle of the view is the point itself), from the south-west."""
+    """A free camera on that point of the sea (the middle of the view is the point itself), from the land's side: from
+    the south-west at a west coast's dock, from the north-east at an east coast's (Realm v3's player docks in the east
+    since the sides were swapped; from the south-west there its dock button lay under the minimap)."""
     k = zoom / 0.36
-    cmd(["vl.View free %.0f %.0f %.0f -42.4 -34.4 60" % (s["x"] - 3800 * k, s["y"] + 2600 * k, SEA + 4200 * k)], wait=0.8)
+    e = -1.0 if s["x"] > 0 else 1.0
+    cmd(["vl.View free %.0f %.0f %.0f -42.4 %.1f 60" % (s["x"] - e * 3800 * k, s["y"] + e * 2600 * k, SEA + 4200 * k, -34.4 if e > 0 else 145.6)], wait=0.8)
 
 
 def main():
     print(pie.mcp("StartPIE", {"options": {"bSimulate": False, "playMode": "PlayMode_InEditorFloating", "warmupSeconds": 2.0}})[:60])
     time.sleep(8)
-    if MAP == "realmv3":
-        cmd(["vl.Map realmv3"], wait=40)
+    cmd(["vl.Map " + MAP], wait=40)
     cmd(["vl.StartMatch 0"], wait=7)
     cmd(["vl.Mode overview"], wait=0.5)
     s = wait_for("the ship", ship, 20)
@@ -267,49 +273,50 @@ def main():
     s = wait_for("the dock", lambda: (lambda x: x if x["landed"] else None)(ship()), 20) or ship()
     check("another order ends the patrol, and it docks", s["landed"] and "patrol" not in s["state"].lower(), "%s; %.2f s" % (s["state"], s["took"]))
 
-    # ---- the lap: the map's extent, then a course of eight points round the island on the open sea
-    info = cmd("vl.HUD", r"hud: minimap at", 0.6)
-    m = re.search(r"world (-?[\d.]+) (-?[\d.]+) \.\. (-?[\d.]+) (-?[\d.]+)", info[-1]) if info else None
-    if m:
-        wx0, wy0, wx1, wy1 = [float(g) / 100.0 for g in m.groups()]
-        check("the map (the minimap's world) reaches %.0f m from the middle every way" % EDGE, min(-wx0, -wy0, wx1, wy1) >= EDGE - 2.0, "world %.0f %.0f .. %.0f %.0f m" % (wx0, wy0, wx1, wy1))
-    else:
-        check("the minimap's world box is reported", False)
-    import math
-    ring = []
-    for k in range(8):
-        a = math.radians(180.0 - 45.0 * k)          # (from the west, round by the north: clockwise seen from above)
-        c, sn = math.cos(a), math.sin(a)
-        f = RING / max(abs(c), abs(sn))             # (a square ring: the corners as far out as the sides)
-        ring.append((f * c * 100.0, -f * sn * 100.0))
-    ring.append(ring[0])
-    since = os.path.getsize(LOG)
-    cmd(["vl.Select Troop Ship", "vl.Ship sail %d %d" % ring[0]], wait=0.5)
-    s = wait_for("the lap's start", lambda: (lambda x: x if still(x) else None)(ship()), 400, 2.0)
-    since = os.path.getsize(LOG)
-    cmd(["vl.Ship sail %d %d" % ring[1]] + ["vl.Ship sail %d %d queue" % p for p in ring[2:]], wait=1.0)
-    t0, track, turned, last = time.time(), [], 0.0, None
-    while time.time() - t0 < 1200:
-        s = ship()
-        if s:
-            track.append(s)
-            ang = math.atan2(-s["y"], s["x"])
-            if last is not None:
-                d = ang - last
-                turned += (d + math.pi) % (2 * math.pi) - math.pi
-            last = ang
-            if still(s) and time.time() - t0 > 10:
-                break
-        time.sleep(2.0)
-    legs = log_tail(r"ship: \S+: the next point of its course", since)
-    far = max(max(abs(x["x"]), abs(x["y"])) for x in track) / 100.0 if track else 0.0
-    check("a lap round the island: eight points sailed in order, back where it began (%.0f s)" % (time.time() - t0),
-          bool(s) and len(legs) >= 7 and ((s["x"] - ring[-1][0]) ** 2 + (s["y"] - ring[-1][1]) ** 2) ** 0.5 < 3000, "%d legs; lies at %.0f %.0f" % (len(legs), s["x"] if s else 0, s["y"] if s else 0))
-    check("all the way round (%.0f degrees about the middle), out to %.0f m from it" % (abs(math.degrees(turned)), far), abs(math.degrees(turned)) > 330.0 and far > RING - 15.0)
-    check("on the lap it keeps to the water and never lands", all(abs(x["z"] - SEA) < 1 and not x["landed"] for x in track), "%d looks" % len(track))
-    if SHOTS:
-        cmd(["vl.Mode overview", "vl.Look 0 0 1 -62"], wait=3.0)
-        shot("troopship_lap", 2.0)
+    if EDGE is not None:
+        # ---- the lap: the map's extent, then a course of eight points round the island on the open sea
+        info = cmd("vl.HUD", r"hud: minimap at", 0.6)
+        m = re.search(r"world (-?[\d.]+) (-?[\d.]+) \.\. (-?[\d.]+) (-?[\d.]+)", info[-1]) if info else None
+        if m:
+            wx0, wy0, wx1, wy1 = [float(g) / 100.0 for g in m.groups()]
+            check("the map (the minimap's world) reaches %.0f m from the middle every way" % EDGE, min(-wx0, -wy0, wx1, wy1) >= EDGE - 2.0, "world %.0f %.0f .. %.0f %.0f m" % (wx0, wy0, wx1, wy1))
+        else:
+            check("the minimap's world box is reported", False)
+        import math
+        ring = []
+        for k in range(8):
+            a = math.radians(180.0 - 45.0 * k)          # (from the west, round by the north: clockwise seen from above)
+            c, sn = math.cos(a), math.sin(a)
+            f = RING / max(abs(c), abs(sn))             # (a square ring: the corners as far out as the sides)
+            ring.append((f * c * 100.0, -f * sn * 100.0))
+        ring.append(ring[0])
+        since = os.path.getsize(LOG)
+        cmd(["vl.Select Troop Ship", "vl.Ship sail %d %d" % ring[0]], wait=0.5)
+        s = wait_for("the lap's start", lambda: (lambda x: x if still(x) else None)(ship()), 400, 2.0)
+        since = os.path.getsize(LOG)
+        cmd(["vl.Ship sail %d %d" % ring[1]] + ["vl.Ship sail %d %d queue" % p for p in ring[2:]], wait=1.0)
+        t0, track, turned, last = time.time(), [], 0.0, None
+        while time.time() - t0 < 1200:
+            s = ship()
+            if s:
+                track.append(s)
+                ang = math.atan2(-s["y"], s["x"])
+                if last is not None:
+                    d = ang - last
+                    turned += (d + math.pi) % (2 * math.pi) - math.pi
+                last = ang
+                if still(s) and time.time() - t0 > 10:
+                    break
+            time.sleep(2.0)
+        legs = log_tail(r"ship: \S+: the next point of its course", since)
+        far = max(max(abs(x["x"]), abs(x["y"])) for x in track) / 100.0 if track else 0.0
+        check("a lap round the island: eight points sailed in order, back where it began (%.0f s)" % (time.time() - t0),
+              bool(s) and len(legs) >= 7 and ((s["x"] - ring[-1][0]) ** 2 + (s["y"] - ring[-1][1]) ** 2) ** 0.5 < 3000, "%d legs; lies at %.0f %.0f" % (len(legs), s["x"] if s else 0, s["y"] if s else 0))
+        check("all the way round (%.0f degrees about the middle), out to %.0f m from it" % (abs(math.degrees(turned)), far), abs(math.degrees(turned)) > 330.0 and far > RING - 15.0)
+        check("on the lap it keeps to the water and never lands", all(abs(x["z"] - SEA) < 1 and not x["landed"] for x in track), "%d looks" % len(track))
+        if SHOTS:
+            cmd(["vl.Mode overview", "vl.Look 0 0 1 -62"], wait=3.0)
+            shot("troopship_lap", 2.0)
 
     # ---- the other dock: a right click on its quay sails there and docks
     if PLAN["quay2"]:
