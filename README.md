@@ -997,8 +997,7 @@ seeded). It carries the realm's contract (the tags, `TeamStart:0/1`, `Rally:0/1`
 An island 512 m square in a map 620 m square (80 m of open sea all round it for the troop ship; `MAP_EDGE` in
 `Tools/ue/build_realmv3.py`, a hidden `MapEdge` slab tagged Ground that the path grid's bounds, the overview, the
 minimap and the ship's chart all follow), after `References/RealmV3/`: `concept_plan.png` and `concept_threequarter.png` (the owner's
-concept), `PLAN.md` (the design: sizes, elevations, every coordinate, how it answers the brief) and `PROGRESS.md`
-(the state, the checks and their numbers). Made by Realm v2's pipeline, copied: `Tools/blender/realmv3_layout.py`
+concept), and `PLAN.md` (the design: sizes, elevations, every coordinate, how it answers the brief). Made by Realm v2's pipeline, copied: `Tools/blender/realmv3_layout.py`
 (the plan; `--debug` draws `Saved/realmv3_plan.png`, `--balance` prints the routes), `realmv3_cam.py`,
 `assets/realmv3_terrain.py`, `Tools/ue/build_realmv3.py`, `Tools/ue/realmv3_lods.py`,
 `Tools/windows/realmv3_rebuild.ps1` / `Tools/mac/realmv3_rebuild.sh`, `Tools/realmv3_test.py`,
@@ -1023,7 +1022,7 @@ concept), `PLAN.md` (the design: sizes, elevations, every coordinate, how it ans
 - **Checked in PIE** (`Tools/realmv3_test.py routes around times build stuck`): every route between the sides by
   both ramps and both passes, no ground for the grid anywhere else, the two sides' routes to the middle 224.0 m
   and 225.7 m, the hero's run between the middle and each ramp 16.5 s both ways; the troop ship docks at both
-  ports (`Tools/troopship_dock_test.py realmv3`). The numbers: `PROGRESS.md`.
+  ports (`Tools/troopship_dock_test.py realmv3`).
 
 ## The battle: teams, combat, economy, the enemy, the menus
 
