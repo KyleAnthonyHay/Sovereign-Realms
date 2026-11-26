@@ -1,4 +1,5 @@
 #include "VLCommand.h"
+#include "VLNet.h"
 #include "SovereignRealms.h"
 #include "VLGrid.h"
 #include "VLKing.h"
@@ -109,7 +110,7 @@ void UVLCommand::Select(const TArray<AVLKing*>& Units, bool bAdd)
 	}
 	for (AVLKing* U : Units)
 	{
-		if (U && U->IsAlive() && U->Team == UVLBattle::Player && !U->bTowerGuard)        // the player commands only their own (not a tower's own archers)
+		if (U && U->IsAlive() && U->Team == UVLBattle::Mine() && !U->bTowerGuard)        // the player commands only their own (not a tower's own archers)
 		{
 			Selection.AddUnique(U);
 		}
@@ -118,7 +119,7 @@ void UVLCommand::Select(const TArray<AVLKing*>& Units, bool bAdd)
 
 void UVLCommand::Toggle(AVLKing* Unit)
 {
-	if (!Unit || Unit->IsDead() || Unit->Team != UVLBattle::Player || Unit->bTowerGuard)
+	if (!Unit || Unit->IsDead() || Unit->Team != UVLBattle::Mine() || Unit->bTowerGuard)
 	{
 		return;
 	}
@@ -484,6 +485,11 @@ void UVLCommand::AddMarker(const FVector& At)
 
 void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::Move, InUnits, nullptr, Ground, bRun, bQueue, uint8(Shape)))
+	{
+		AddMarker(Ground);
+		return;
+	}
 	TArray<AVLKing*> Units;
 	for (AVLKing* U : InUnits)
 	{
@@ -543,7 +549,7 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 				U->FollowPath({ P }, bRun);       // no grid in this level: straight there
 			}
 		}
-		if (Units[0]->Team == UVLBattle::Player && !bQuietMove)
+		if (Units[0]->Team == UVLBattle::Mine() && !bQuietMove)
 		{
 			AddMarker(Ground);
 		}
@@ -572,7 +578,7 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 		Dest.Y = Ground.Y;
 	}
 
-	if (Units[0]->Team == UVLBattle::Player && !bQuietMove)
+	if (Units[0]->Team == UVLBattle::Mine() && !bQuietMove)
 	{
 		UE_LOG(LogSovereignRealms, Log, TEXT("move: ground %s lead %s (node %d region %d, main %d) dest node %d region %d at %s"), *Ground.ToCompactString(), *Units[0]->GetFeet().ToCompactString(),
 			Lead, Grid->RegionOf(Lead), Grid->MainRegion(), DestNode, Grid->RegionOf(DestNode), *Dest.ToCompactString());
@@ -717,7 +723,7 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 			}
 		}
 	}
-	if (Units[0]->Team == UVLBattle::Player && !bQuietMove && Centre.Num() >= 2)
+	if (Units[0]->Team == UVLBattle::Mine() && !bQuietMove && Centre.Num() >= 2)
 	{
 		UE_LOG(LogSovereignRealms, Log, TEXT("move: %s, %d of %d march in formation (%d points of the route)"), FormationName(Shape), InStep, Units.Num(), Centre.Num());
 	}
@@ -738,7 +744,7 @@ void UVLCommand::OrderMove(const TArray<AVLKing*>& InUnits, const FVector& Groun
 		Path.Add(Slot);
 		Units[i]->FollowPath(Path, bRun);
 	}
-	if (Units[0]->Team == UVLBattle::Player && !bQuietMove)
+	if (Units[0]->Team == UVLBattle::Mine() && !bQuietMove)
 	{
 		AddMarker(Dest);
 	}
@@ -820,6 +826,14 @@ int32 UVLCommand::OrderAttack(const TArray<AVLKing*>& InUnits, AActor* Target, b
 	{
 		return 0;
 	}
+	if (VLNet::SendOrder(this, EVLNetOrder::Attack, InUnits, Target, FVector::ZeroVector, bRun))
+	{
+		if (bMarker)
+		{
+			AddMarker(Target->GetActorLocation());
+		}
+		return InUnits.Num();
+	}
 	// never at a friend: only those of Units for whom the target is a foe (a dummy is anybody's)
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const bool bDummy = Target->ActorHasTag(TEXT("Dummy"));
@@ -841,7 +855,7 @@ int32 UVLCommand::OrderAttack(const TArray<AVLKing*>& InUnits, AActor* Target, b
 	int32 Ordered = 0;
 	Ordered += UVLSwordsmanCombat::OrderAttack(Units, Target, bRun);        // the swordsmen among them
 	Ordered += UVLArcherCombat::OrderAttack(Units, Target, bRun);           // the archers (those on the tower shoot from it)
-	if (Ordered > 0 && bMarker && Units[0]->Team == UVLBattle::Player)
+	if (Ordered > 0 && bMarker && Units[0]->Team == UVLBattle::Mine())
 	{
 		AddMarker(Target->GetActorLocation());
 	}
@@ -859,7 +873,7 @@ void UVLCommand::OnUnitDied(AVLKing* Unit)
 	{
 		FPlatoon& P = Platoons[i];
 		const bool bWas = P.Members.Contains(Unit);
-		if (bWas && Unit->KindId() == EVLUnitKind::King && Unit->Team == UVLBattle::Player)
+		if (bWas && Unit->KindId() == EVLUnitKind::King && Unit->Team == UVLBattle::Mine())
 		{
 			KingPlatoon = i;                // (he goes back into it when he rises at the castle: OnKingRevived)
 		}
@@ -867,7 +881,7 @@ void UVLCommand::OnUnitDied(AVLKing* Unit)
 		{
 			// the leader is gone: the platoon has none now (no one steps up; it carries on as a plain group)
 			P.Leader = nullptr;
-			if (Unit->Team == UVLBattle::Player && Unit->GetHealth() <= 0.f && P.Members.Num() > 1)
+			if (Unit->Team == UVLBattle::Mine() && Unit->GetHealth() <= 0.f && P.Members.Num() > 1)
 			{
 				if (UVLBattle* Battle = UVLBattle::Get(this))
 				{
@@ -882,7 +896,7 @@ void UVLCommand::OnUnitDied(AVLKing* Unit)
 		{
 			RallyPlatoon = INDEX_NONE;      // (its last troop is gone: the recruits' flag with it)
 		}
-		if (bWas && P.Members.Num() == 0 && Unit->Team == UVLBattle::Player && Unit->GetHealth() <= 0.f)
+		if (bWas && P.Members.Num() == 0 && Unit->Team == UVLBattle::Mine() && Unit->GetHealth() <= 0.f)
 		{
 			if (UVLBattle* Battle = UVLBattle::Get(this))
 			{
@@ -926,6 +940,7 @@ void UVLCommand::CycleStance()
 	{
 		Platoons[P].Stance = Next;
 	}
+	VLNet::SendOrder(this, EVLNetOrder::Stance, Units, nullptr, FVector::ZeroVector, false, false, 0, nullptr, int32(Next));       // (the joining game: the host's copies take it too)
 	for (AVLKing* U : Units)
 	{
 		U->Stance = Next;
@@ -970,6 +985,11 @@ bool UVLCommand::IsAttackGroundArmed() const
 
 int32 UVLCommand::OrderAttackGround(const TArray<AVLKing*>& Units, const FVector& Ground, bool bRun)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::AttackGround, Units, nullptr, Ground, bRun))
+	{
+		AddMarker(Ground);
+		return Units.Num();
+	}
 	for (AVLKing* U : Units)
 	{
 		if (UVLArcherCombat::CanFight(U))
@@ -1062,7 +1082,7 @@ void UVLCommand::AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 	TArray<AVLKing*> Joined;
 	for (AVLKing* U : Units)
 	{
-		if (!U || U->IsDead() || U->Team != UVLBattle::Player)
+		if (!U || U->IsDead() || U->Team != UVLBattle::Mine())
 		{
 			continue;
 		}
@@ -1212,6 +1232,11 @@ void UVLCommand::CyclePlatoonStance(int32 Index)
 	}
 	FPlatoon& P = Platoons[Index];
 	P.Stance = EVLStance((int32(P.Stance) + 1) % 3);
+	{
+		TArray<AVLKing*> Mine;
+		GetPlatoon(Index, Mine);
+		VLNet::SendOrder(this, EVLNetOrder::Stance, Mine, nullptr, FVector::ZeroVector, false, false, 0, nullptr, int32(P.Stance));      // (the joining game: the host's copies take it too)
+	}
 	for (const TWeakObjectPtr<AVLKing>& U : P.Members)
 	{
 		if (U.IsValid() && U->IsAlive())
@@ -1548,6 +1573,11 @@ void UVLCommand::OrderGarrison(const TArray<AVLKing*>& InUnits, AActor* Tower, b
 	{
 		return;
 	}
+	if (VLNet::SendOrder(this, EVLNetOrder::Garrison, InUnits, Tower, FVector::ZeroVector, bRun))
+	{
+		AddMarker(DoorPoint(Tower));
+		return;
+	}
 	FTower& T = TowerFor(Tower);
 	TArray<AVLKing*> Going, Others;
 	for (AVLKing* U : InUnits)
@@ -1701,6 +1731,10 @@ void UVLCommand::Detach(AVLKing* Unit)
 
 void UVLCommand::EmptyTower(AActor* Tower)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::EmptyTower, TArray<AVLKing*>(), Tower))
+	{
+		return;
+	}
 	TArray<AVLKing*> In;
 	GetGarrison(Tower, In);
 	In.RemoveAll([](const AVLKing* U) { return U->bTowerGuard; });     // (the tower's own stay at their posts)
@@ -1834,6 +1868,10 @@ void UVLCommand::ClearStanding(const TArray<AVLKing*>& Units)
 
 void UVLCommand::OrderStop(const TArray<AVLKing*>& InUnits)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::Stop, InUnits))
+	{
+		return;
+	}
 	const TArray<AVLKing*> Units = Living(InUnits);
 	ClearStanding(Units);
 	for (AVLKing* U : Units)
@@ -1858,6 +1896,10 @@ void UVLCommand::OrderStop(const TArray<AVLKing*>& InUnits)
 
 void UVLCommand::OrderHold(const TArray<AVLKing*>& InUnits)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::Hold, InUnits))
+	{
+		return;
+	}
 	const TArray<AVLKing*> Units = Living(InUnits);
 	OrderStop(Units);
 	for (AVLKing* U : Units)
@@ -1919,6 +1961,14 @@ void UVLCommand::IssueLeg(FRoute& R)
 
 void UVLCommand::OrderPatrol(const TArray<AVLKing*>& InUnits, const TArray<FVector>& Points, bool bRun, EVLFormation Shape)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::PatrolLoop, InUnits, nullptr, FVector::ZeroVector, bRun, false, uint8(Shape), nullptr, 0, false, &Points))
+	{
+		if (Points.Num() > 0)
+		{
+			AddMarker(Points[0]);
+		}
+		return;
+	}
 	const TArray<AVLKing*> Units = Living(InUnits);
 	if (Units.Num() == 0 || Points.Num() == 0)
 	{
@@ -1940,7 +1990,7 @@ void UVLCommand::OrderPatrol(const TArray<AVLKing*>& InUnits, const TArray<FVect
 	R.Id = NextRouteId++;
 	FRoute& Added = Routes.Add_GetRef(R);
 	IssueLeg(Added);
-	if (Units[0]->Team == UVLBattle::Player)
+	if (Units[0]->Team == UVLBattle::Mine())
 	{
 		AddMarker(Points[0]);
 	}
@@ -1949,6 +1999,11 @@ void UVLCommand::OrderPatrol(const TArray<AVLKing*>& InUnits, const TArray<FVect
 
 void UVLCommand::ExtendPatrol(const TArray<AVLKing*>& InUnits, const FVector& Point, EVLFormation Shape)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::PatrolExtend, InUnits, nullptr, Point, false, false, uint8(Shape)))
+	{
+		AddMarker(Point);
+		return;
+	}
 	const TArray<AVLKing*> Units = Living(InUnits);
 	const int32 Existing = FindRoute(Units, true);
 	if (Existing == INDEX_NONE)
@@ -1957,7 +2012,7 @@ void UVLCommand::ExtendPatrol(const TArray<AVLKing*>& InUnits, const FVector& Po
 		return;
 	}
 	Routes[Existing].Points.Add(Point);     // they carry on where they are; the loop now runs through it too
-	if (Units.Num() > 0 && Units[0]->Team == UVLBattle::Player)
+	if (Units.Num() > 0 && Units[0]->Team == UVLBattle::Mine())
 	{
 		AddMarker(Point);
 	}
@@ -1966,6 +2021,14 @@ void UVLCommand::ExtendPatrol(const TArray<AVLKing*>& InUnits, const FVector& Po
 
 void UVLCommand::OrderPatrolRoute(const TArray<AVLKing*>& InUnits, const TArray<FVector>& Points, bool bRun, EVLFormation Shape)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::PatrolRoute, InUnits, nullptr, FVector::ZeroVector, bRun, false, uint8(Shape), nullptr, 0, false, &Points))
+	{
+		if (Points.Num() > 0)
+		{
+			AddMarker(Points[0]);
+		}
+		return;
+	}
 	const TArray<AVLKing*> Units = Living(InUnits);
 	if (Units.Num() == 0 || Points.Num() == 0)
 	{
@@ -1994,7 +2057,7 @@ void UVLCommand::OrderPatrolRoute(const TArray<AVLKing*>& InUnits, const TArray<
 	R.Id = NextRouteId++;
 	FRoute& Added = Routes.Add_GetRef(R);
 	IssueLeg(Added);
-	if (Units[0]->Team == UVLBattle::Player)
+	if (Units[0]->Team == UVLBattle::Mine())
 	{
 		AddMarker(Points[0]);
 	}
@@ -2069,6 +2132,11 @@ void UVLCommand::CancelPatrolDraft()
 
 void UVLCommand::OrderAttackMove(const TArray<AVLKing*>& InUnits, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::AttackMove, InUnits, nullptr, Ground, bRun, bQueue, uint8(Shape)))
+	{
+		AddMarker(Ground);
+		return;
+	}
 	const TArray<AVLKing*> Units = Living(InUnits);
 	if (Units.Num() == 0)
 	{
@@ -2080,7 +2148,7 @@ void UVLCommand::OrderAttackMove(const TArray<AVLKing*>& InUnits, const FVector&
 		if (Existing != INDEX_NONE)
 		{
 			Routes[Existing].Points.Add(Ground);
-			if (Units[0]->Team == UVLBattle::Player)
+			if (Units[0]->Team == UVLBattle::Mine())
 			{
 				AddMarker(Ground);
 			}
@@ -2102,7 +2170,7 @@ void UVLCommand::OrderAttackMove(const TArray<AVLKing*>& InUnits, const FVector&
 	R.Id = NextRouteId++;
 	FRoute& Added = Routes.Add_GetRef(R);
 	IssueLeg(Added);
-	if (Units[0]->Team == UVLBattle::Player)
+	if (Units[0]->Team == UVLBattle::Mine())
 	{
 		AddMarker(Ground);
 	}
@@ -2194,7 +2262,7 @@ void UVLCommand::GetGuardedUnits(TArray<AVLKing*>& Out) const
 	for (const FGuardPost& G : GuardPosts)
 	{
 		AVLKing* W = Cast<AVLKing>(G.Ward.Get());
-		if (W && W->IsAlive() && G.Unit.IsValid() && G.Unit->IsAlive() && G.Unit->Team == UVLBattle::Player)
+		if (W && W->IsAlive() && G.Unit.IsValid() && G.Unit->IsAlive() && G.Unit->Team == UVLBattle::Mine())
 		{
 			Out.AddUnique(W);
 		}
@@ -2203,6 +2271,11 @@ void UVLCommand::GetGuardedUnits(TArray<AVLKing*>& Out) const
 
 int32 UVLCommand::OrderGuard(const TArray<AVLKing*>& InUnits, AActor* Ward, bool bTroops, int32 Platoon)
 {
+	if (Ward && VLNet::SendOrder(this, EVLNetOrder::Guard, InUnits, Ward, FVector::ZeroVector, false, false, 0, nullptr, 0, bTroops))
+	{
+		AddMarker(Ward->GetActorLocation());
+		return InUnits.Num();
+	}
 	TArray<AVLKing*> Guards;
 	for (AVLKing* U : Living(InUnits))
 	{
@@ -2281,7 +2354,7 @@ int32 UVLCommand::OrderGuard(const TArray<AVLKing*>& InUnits, AActor* Ward, bool
 		G.bSent = true;
 		G.SentFor = C2;
 	}
-	if (Guards[0]->Team == UVLBattle::Player)
+	if (Guards[0]->Team == UVLBattle::Mine())
 	{
 		AddMarker(Centre);
 	}
@@ -2323,6 +2396,10 @@ void UVLCommand::GetGuards(const AActor* Ward, TArray<AVLKing*>& Out) const
 
 int32 UVLCommand::OrderRoam(const TArray<AVLKing*>& InUnits)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::Roam, InUnits))
+	{
+		return InUnits.FilterByPredicate([](const AVLKing* U) { return U && U->KindId() == EVLUnitKind::Spy; }).Num();
+	}
 	TArray<AVLKing*> Spies = Living(InUnits).FilterByPredicate([](const AVLKing* U) { return U->KindId() == EVLUnitKind::Spy; });
 	if (Spies.Num() == 0)
 	{
@@ -2431,15 +2508,19 @@ void UVLCommand::OnStruck(AVLKing* Victim, AActor* By)
 		OrderMove({ Victim }, Rally, true, EVLFormation::Line);
 	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("roam: %s struck, runs home"), *Victim->GetDisplayName());
-	if (Victim->Team == UVLBattle::Player)
+	if (Battle->IsHuman(Victim->Team))
 	{
 		const FVector At = Victim->GetActorLocation();
-		Battle->PushAlert(FString::Printf(TEXT("Your %s was attacked: running home"), *Victim->GetDisplayName()), EVLAlert::Attack, &At);
+		Battle->PushAlertTo(Victim->Team, FString::Printf(TEXT("Your %s was attacked: running home"), *Victim->GetDisplayName()), EVLAlert::Attack, &At);
 	}
 }
 
 int32 UVLCommand::Dismiss(const TArray<AVLKing*>& InUnits)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::Dismiss, InUnits))
+	{
+		return InUnits.FilterByPredicate([](const AVLKing* U) { return U && U->IsTroop(); }).Num();
+	}
 	int32 N = 0;
 	for (AVLKing* U : Living(InUnits))
 	{
@@ -2458,8 +2539,13 @@ int32 UVLCommand::Dismiss(const TArray<AVLKing*>& InUnits)
 
 void UVLCommand::FormUpNow(const TArray<AVLKing*>& InUnits, EVLFormation Shape)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::FormUp, InUnits, nullptr, FVector::ZeroVector, false, false, uint8(Shape)))
+	{
+		return;
+	}
 	const TArray<AVLKing*> All = Living(InUnits);
-	if (All.Num() < 2 || All[0]->Team != UVLBattle::Player)
+	const UVLBattle* FormBattle = UVLBattle::Get(this);
+	if (All.Num() < 2 || !(FormBattle ? FormBattle->IsHuman(All[0]->Team) : All[0]->Team == UVLBattle::Mine()))
 	{
 		return;
 	}
@@ -2581,6 +2667,14 @@ int32 UVLCommand::OrderFollow(const TArray<AVLKing*>& InUnits, AVLKing* Leader, 
 	{
 		return 0;
 	}
+	if (VLNet::SendOrder(this, EVLNetOrder::Follow, InUnits, nullptr, FVector::ZeroVector, false, false, 0, Leader))
+	{
+		if (bMarker)
+		{
+			AddMarker(Leader->GetFeet());
+		}
+		return FMath::Max(0, InUnits.Num() - (InUnits.Contains(Leader) ? 1 : 0));
+	}
 	TArray<AVLKing*> Units = Living(InUnits);
 	Units.Remove(Leader);
 	Units.RemoveAll([Leader](const AVLKing* U) { return U->Team != Leader->Team || U->IsGarrisoned(); });
@@ -2602,7 +2696,7 @@ int32 UVLCommand::OrderFollow(const TArray<AVLKing*>& InUnits, AVLKing* Leader, 
 	{
 		MakeLeader(Leader);
 	}
-	if (Leader->Team == UVLBattle::Player && !bQuietMove && bMarker)
+	if (Leader->Team == UVLBattle::Mine() && !bQuietMove && bMarker)
 	{
 		AddMarker(Leader->GetFeet());
 	}
@@ -2633,6 +2727,11 @@ void UVLCommand::GetFollowers(const AVLKing* Leader, TArray<AVLKing*>& Out) cons
 
 bool UVLCommand::OrderChain(const TArray<AVLKing*>& InUnits, AActor* Target, const FVector& Ground, bool bRun, EVLFormation Shape, bool bQueue, AVLKing* Rejoin)
 {
+	if (VLNet::SendOrder(this, EVLNetOrder::Chain, InUnits, Target, Ground, bRun, bQueue, uint8(Shape), Rejoin))
+	{
+		AddMarker(Target ? Target->GetActorLocation() : Ground);
+		return InUnits.Num() > 0;
+	}
 	TArray<AVLKing*> Units = Living(InUnits);
 	Units.RemoveAll([](const AVLKing* U) { return U->bTowerGuard || PlayedByHand(U); });
 	AVLTroopShip::HoldAboard(Units);
@@ -2651,7 +2750,7 @@ bool UVLCommand::OrderChain(const TArray<AVLKing*>& InUnits, AActor* Target, con
 	{
 		return false;
 	}
-	const bool bPlayer = Units[0]->Team == UVLBattle::Player;
+	const bool bPlayer = Units[0]->Team == UVLBattle::Mine();
 	if (bQueue)
 	{
 		// on the end of the chain they are on (the first's: the rest of them join it), else a new one that waits for
@@ -2979,7 +3078,7 @@ AVLKing* UVLCommand::KingIn(int32 Index) const
 	}
 	for (const TWeakObjectPtr<AVLKing>& M : Platoons[Index].Members)
 	{
-		if (AVLKing* U = M.Get(); U && U->IsAlive() && U->KindId() == EVLUnitKind::King && U->Team == UVLBattle::Player)
+		if (AVLKing* U = M.Get(); U && U->IsAlive() && U->KindId() == EVLUnitKind::King && U->Team == UVLBattle::Mine())
 		{
 			return U;
 		}
@@ -3034,7 +3133,7 @@ void UVLCommand::TickPlatoonLeads()
 
 void UVLCommand::OnKingRevived(AVLKing* King)
 {
-	if (!King || King->Team != UVLBattle::Player || King->KindId() != EVLUnitKind::King)
+	if (!King || King->Team != UVLBattle::Mine() || King->KindId() != EVLUnitKind::King)
 	{
 		return;
 	}
@@ -3580,12 +3679,12 @@ namespace
 			{
 				continue;
 			}
-			if (It->GetDisplayName().Equals(Name, ESearchCase::IgnoreCase) || (bEnemy && It->Team != UVLBattle::Player))
+			if (It->GetDisplayName().Equals(Name, ESearchCase::IgnoreCase) || (bEnemy && It->Team != UVLBattle::Mine()))
 			{
 				Out.Add(*It);
 				continue;
 			}
-			if (It->Team != UVLBattle::Player || It->bTowerGuard)
+			if (It->Team != UVLBattle::Mine() || It->bTowerGuard)
 			{
 				continue;           // (a tower's own archers only by name)
 			}
@@ -3913,7 +4012,7 @@ namespace
 				for (int32 i = Battle->GetBuildings().Num() - 1; i >= 0; --i)
 				{
 					const FVLBuildingState& B = Battle->GetBuildings()[i];
-					if (B.IsAlive() && B.Team == UVLBattle::Player && B.Name.Equals(Name, ESearchCase::IgnoreCase))
+					if (B.IsAlive() && B.Team == UVLBattle::Mine() && B.Name.Equals(Name, ESearchCase::IgnoreCase))
 					{
 						UE_LOG(LogSovereignRealms, Log, TEXT("vl.Queue work %s: %d"), *Name, K->OrderWork(Units, B.Actor.Get(), true, true) ? 1 : 0);
 						break;

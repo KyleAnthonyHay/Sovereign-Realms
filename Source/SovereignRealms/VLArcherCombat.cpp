@@ -912,6 +912,10 @@ void UVLArcherCombat::Loose(AVLKing* Unit)
 		Dir = Way.Vector();
 	}
 	Arrows->Fire(Unit, Tip, Dir * ArrowSpeed, Gravity, Unit->GarrisonIn.Get(), ArrowDamage);
+	if (Unit->GetNetMode() != NM_Standalone)
+	{
+		Unit->ForceNetUpdate();     // (multiplayer: the joining game's copy lets its string go now, not at its next update)
+	}
 	++Shots;
 	if (ArcherLogOn())
 	{
@@ -956,7 +960,10 @@ void UVLArcherCombat::TickShot(AVLKing* Unit, float Dt)
 			const float WantYaw = Flat.Rotation().Yaw;
 			FRotator Now = Unit->GetActorRotation();
 			Now.Yaw = FMath::FixedTurn(Now.Yaw, WantYaw, TurnRate * Dt);
-			Unit->SetActorRotation(Now);
+			if (!Unit->IsNetCopy())
+			{
+				Unit->SetActorRotation(Now);        // (a copy is turned by the host)
+			}
 			bFacing = FMath::Abs(FMath::FindDeltaAngleDegrees(Now.Yaw, WantYaw)) <= FaceWithin;
 		}
 		FVector Dir;
@@ -969,7 +976,7 @@ void UVLArcherCombat::TickShot(AVLKing* Unit, float Dt)
 	{
 		AimPitch = FMath::FInterpTo(AimPitch, 0.f, Dt, 6.f);
 	}
-	const bool bUp = Phase != EPhase::Rest || bWantDraw || bLooseQueued || (Mode != EMode::None && bEngaged);
+	const bool bUp = Phase != EPhase::Rest || bWantDraw || bLooseQueued || (Mode != EMode::None && bEngaged) || bNetUp;
 	AimW = FMath::FInterpConstantTo(AimW, bUp ? 1.f : 0.f, Dt, 1.f / FMath::Max(RaiseSeconds, 0.02f));
 
 	switch (Phase)
@@ -1227,6 +1234,11 @@ void UVLArcherCombat::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	{
 		return;
 	}
+	if (Unit->IsNetCopy())
+	{
+		NetMirror(Unit, DeltaTime);     // (the joining player's game: the host's shot, shown)
+		return;
+	}
 	TickHands(Unit, DeltaTime);
 	TickOrders(Unit, DeltaTime);
 	if (Unit->RigPosedAtTick())
@@ -1255,6 +1267,76 @@ void UVLArcherCombat::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 	// (an order, the player's hands, vl.Bow)
 	if (!bShot && !bHands && Mode == EMode::None && BashTime < 0.f && AimW <= 0.f && HandW <= 0.f && AimPitch == 0.f && !bStringDrawn && !bTestDraw
 		&& TestAimTime <= 0.f && TestLookTime <= 0.f && !Cast<APlayerController>(Unit->GetController()))
+	{
+		SetComponentTickEnabled(false);
+	}
+}
+
+void UVLArcherCombat::NetFill(AVLKing* Unit) const
+{
+	const bool bUp = Phase != EPhase::Rest || bWantDraw || bLooseQueued || (Mode != EMode::None && bEngaged) || bBattle;
+	// bit 0 drawing, bit 1 the bow up, bit 2 a quick shot, bits 3..7 the count of shots loosed (each change: one more)
+	Unit->NetBow = uint8(((bWantDraw || bLooseQueued) ? 1 : 0) | (bUp ? 2 : 0) | (bQuick ? 4 : 0) | ((Shots & 31) << 3));
+	// what she aims at: an actor both games know (a unit, one of the level's), else the point
+	AActor* At = (bUp && Mode == EMode::Actor) ? Target.Get() : nullptr;
+	if (At && At->ActorHasTag(TEXT("Built")))
+	{
+		At = nullptr;
+	}
+	Unit->NetBowTarget = At;
+	Unit->NetBowAim = (bUp && !At && bHasAim) ? AimPoint : FVector::ZeroVector;
+}
+
+void UVLArcherCombat::NetMirror(AVLKing* Unit, float Dt)
+{
+	const uint8 Net = Unit->NetBow;
+	const int32 TheirShots = Net >> 3;
+	bWantDraw = (Net & 1) != 0;
+	bNetUp = (Net & 2) != 0;
+	bQuick = (Net & 4) != 0;
+	bLooseQueued = false;
+	if (const AActor* At = Unit->NetBowTarget)
+	{
+		const UVLBattle* Battle = UVLBattle::Get(this);
+		AimPoint = Battle ? Battle->AimPoint(At, Unit->GetActorLocation()) : At->GetActorLocation();
+		bHasAim = true;
+	}
+	else
+	{
+		AimPoint = Unit->NetBowAim;
+		bHasAim = !AimPoint.IsZero();
+	}
+	bBattle = bNetUp;
+	if (NetShotsSeen < 0)
+	{
+		NetShotsSeen = TheirShots;
+	}
+	else if (TheirShots != NetShotsSeen)
+	{
+		// the host loosed: the string is let go here (the arrow itself comes with the host's arrows)
+		NetShotsSeen = TheirShots;
+		ShowArrow(false);
+		Phase = EPhase::Loose;
+		PhaseTime = 0.f;
+	}
+	if (Unit->RigPosedAtTick())
+	{
+		Pose(Unit, Dt);
+	}
+	TickShot(Unit, Dt);
+	if (Unit->KindId() == EVLUnitKind::Spy)
+	{
+		if (USceneComponent* Glass = Unit->GetJoint(TEXT("Spyglass")))
+		{
+			const bool bShow = Phase == EPhase::Rest || Phase == EPhase::Loose;
+			if (Glass->IsVisible() != bShow)
+			{
+				Glass->SetVisibility(bShow, true);
+			}
+		}
+	}
+	// at rest with the bow down: no tick until the host's word changes (AVLKing::OnRep_NetBow)
+	if (Phase == EPhase::Rest && !bWantDraw && !bNetUp && AimW <= 0.f && HandW <= 0.f && AimPitch == 0.f && !bStringDrawn)
 	{
 		SetComponentTickEnabled(false);
 	}

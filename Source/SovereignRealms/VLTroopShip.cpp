@@ -1,4 +1,5 @@
 #include "VLTroopShip.h"
+#include "VLNet.h"
 
 #include "SovereignRealms.h"
 #include "VLBattle.h"
@@ -1258,6 +1259,12 @@ void UVLFleet::SpawnShips()
 	UWorld* World = GetWorld();
 	if (!World)
 	{
+		return;
+	}
+	if (VLNet::IsMultiplayer(World))
+	{
+		// multiplayer, stage one: no troop ships (a ship and who is aboard it are not replicated yet), in either game
+		UE_LOG(LogSovereignRealms, Log, TEXT("fleet: no troop ships in a multiplayer match (not replicated yet)"));
 		return;
 	}
 	TArray<TPair<AActor*, int32>> Marks;

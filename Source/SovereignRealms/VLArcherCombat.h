@@ -105,6 +105,11 @@ public:
 	void SetTestLook(const FVector& Point, float Seconds) { TestLook = Point; TestLookTime = Seconds; SetComponentTickEnabled(true); }
 	/** Drawing, holding or loosing: she faces her aim and strafes. */
 	bool InBattleState() const { return bBattle; }
+	// ---- multiplayer (VLNet.h): the bow as the joining player's game shows it
+	/** The host: this unit's AVLKing::NetBow / NetBowTarget / NetBowAim from how the shot stands (AVLKing::PreReplication). */
+	void NetFill(AVLKing* Unit) const;
+	/** The joining game: the copy's bow follows what the host says (the draw, the aim, each shot loosed). */
+	void NetMirror(AVLKing* Unit, float Dt);
 	/** One line for vl.Archers. */
 	FString Describe() const;
 
@@ -393,6 +398,8 @@ private:
 	int32 ShotsLeft = -1;
 	bool bOrderRun = false;
 	bool bEngaged = false;
+	bool bNetUp = false;            // (a copy: the host has the bow up)
+	int32 NetShotsSeen = -1;        // (a copy: the host's count of shots when last looked at)
 	bool bApproaching = false;
 	bool bInternalOrder = false;    // the walk into range is her own order: it must not end the attack
 	int32 Approaches = 0;

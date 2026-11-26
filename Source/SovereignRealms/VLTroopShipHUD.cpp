@@ -30,7 +30,7 @@ bool AVLHUD::DrawShipPanel(float X, float Bottom, float Room)
 	for (const TWeakObjectPtr<AVLTroopShip>& S : Fleet->GetShips())
 	{
 		const AVLTroopShip* Ship = S.Get();
-		if (!Ship || Ship->GetTeam() != UVLBattle::Player)
+		if (!Ship || Ship->GetTeam() != UVLBattle::Mine())
 		{
 			continue;
 		}
@@ -52,7 +52,7 @@ bool AVLHUD::DrawShipPanel(float X, float Bottom, float Room)
 	}
 	// the selected ship's course: the troops' route lines (AVLHUD::DrawRouteLines), on the water. Blue: the corners
 	// and the queued points of the course it sails; orange: a patrol's whole loop, a square on its first point
-	if (Sel && Sel->GetTeam() == UVLBattle::Player && Command->NumSelected() == 0)
+	if (Sel && Sel->GetTeam() == UVLBattle::Mine() && Command->NumSelected() == 0)
 	{
 		auto Dashed = [this](const FVector& A0, const FVector& B0, const FLinearColor& Color)
 		{
@@ -95,7 +95,7 @@ bool AVLHUD::DrawShipPanel(float X, float Bottom, float Room)
 	for (const TWeakObjectPtr<AVLTroopShip>& S : Fleet->GetShips())
 	{
 		AVLTroopShip* Ship = S.Get();
-		if (!Ship || Ship->GetTeam() != UVLBattle::Player || !Ship->CanDock())
+		if (!Ship || Ship->GetTeam() != UVLBattle::Mine() || !Ship->CanDock())
 		{
 			continue;
 		}
@@ -132,7 +132,7 @@ bool AVLHUD::DrawShipPanel(float X, float Bottom, float Room)
 	const FFit Fit(*this, Room / FMath::Max(U(DesignW), 1.f));
 	const FBox2D Box(FVector2D(X, Bottom - U(152.f)), FVector2D(X + FMath::Min(U(DesignW), FMath::Max(Room, 1.f)), Bottom));
 	HudPanel(Box);
-	const bool bMine = Sel->GetTeam() == UVLBattle::Player;
+	const bool bMine = Sel->GetTeam() == UVLBattle::Mine();
 	const float TX = Box.Min.X + U(18.f), TY = Box.Min.Y + U(12.f);
 	TArray<AVLKing*> In;
 	Sel->GetAboard(In);

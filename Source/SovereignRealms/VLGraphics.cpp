@@ -1,6 +1,7 @@
 // The Graphics settings: see VLGraphics.h.
 
 #include "VLGraphics.h"
+#include "VLNet.h"
 #include "SovereignRealms.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Engine/Engine.h"
@@ -676,7 +677,10 @@ void UVLGraphics::UpdateThermalAndFrameCap(bool bForce)
 	};
 	if (!GIsEditor)
 	{
-		if (CVarIdleThrottle.GetValueOnGameThread() != 0)
+		// (not in a multiplayer match: the other player's game depends on this one keeping its pace, focused or not,
+		// and its menu does not pause anything)
+		const UWorld* ThrottleWorld = GetWorld();
+		if (CVarIdleThrottle.GetValueOnGameThread() != 0 && !VLNet::IsMultiplayer(ThrottleWorld))
 		{
 			if (!FPlatformApplicationMisc::IsThisApplicationForeground())
 			{

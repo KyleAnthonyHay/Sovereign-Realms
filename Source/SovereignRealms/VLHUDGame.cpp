@@ -257,13 +257,13 @@ void AVLHUD::DrawChipList()
 	TArray<AVLKing*> Who;
 	if (bBuilders)
 	{
-		C->GetBuilders(UVLBattle::Player, Who);
+		C->GetBuilders(UVLBattle::Mine(), Who);
 	}
 	else
 	{
 		for (AVLKing* Un : UnitsThisFrame().Live)
 		{
-			if (Un->IsAlive() && Un->Team == UVLBattle::Player && Un->GetKind() == TEXT("Spy"))
+			if (Un->IsAlive() && Un->Team == UVLBattle::Mine() && Un->GetKind() == TEXT("Spy"))
 			{
 				Who.Add(Un);
 			}
@@ -301,7 +301,7 @@ void AVLHUD::DrawChipList()
 	}
 	if (Who.Num() == 0)
 	{
-		const bool bLocked = !bBuilders && Battle->GetCastleLevel(UVLBattle::Player) < VLRules::SpyCastleLevel;
+		const bool bLocked = !bBuilders && Battle->GetCastleLevel(UVLBattle::Mine()) < VLRules::SpyCastleLevel;
 		TextIn(FBox2D(FVector2D(X + Pad, RY), FVector2D(Box.Max.X - Pad, RY + RowH)), bBuilders ? FString(TEXT("No Builders: train one at the castle"))
 			: (bLocked ? FString::Printf(TEXT("Locked: the castle at level %d trains the Spy"), VLRules::SpyCastleLevel) : FString(TEXT("No Spy in the field: train one at the castle"))), U(14.f), Dim, AlignCentre);
 	}
@@ -342,7 +342,7 @@ void AVLHUD::DrawJonathanOffer(const FBox2D& Row)
 	// the hero list's row for Jonathan before he is bought: locked (greyed: "Unlocks at Castle level 3"), or unlocked
 	// with his price and a Buy button (no training: he is at the castle's door at once; UVLBattle::BuyJonathan)
 	UVLBattle* Battle = UVLBattle::Get(this);
-	const bool bUnlocked = Battle->IsJonathanUnlocked(UVLBattle::Player);
+	const bool bUnlocked = Battle->IsJonathanUnlocked(UVLBattle::Mine());
 	const FVLCost Cost = UVLBattle::JonathanCost();
 	const float RowH = Row.Max.Y - Row.Min.Y;
 	Fill(Row.Min.X, Row.Min.Y, Row.Max.X - Row.Min.X, RowH, bUnlocked ? FLinearColor(0.16f, 0.13f, 0.05f, 0.95f) : A(Inset, 0.7f));
@@ -359,7 +359,7 @@ void AVLHUD::DrawJonathanOffer(const FBox2D& Row)
 	}
 	Text(TEXT("Unlocked  ·  no training"), TX, Row.Min.Y + U(24.f), U(13.f), GoldBright);
 	// Buy: the price on the button, red where the stores fall short
-	const FString Why = Battle->JonathanBuyRefusal(UVLBattle::Player);
+	const FString Why = Battle->JonathanBuyRefusal(UVLBattle::Mine());
 	const bool bEnabled = Why.IsEmpty();
 	const float BW = U(150.f);
 	const FBox2D R(FVector2D(Row.Max.X - U(6.f) - BW, Row.Min.Y + U(5.f)), FVector2D(Row.Max.X - U(6.f), Row.Max.Y - U(5.f)));
@@ -369,8 +369,8 @@ void AVLHUD::DrawJonathanOffer(const FBox2D& Row)
 	const float Lift = B.bHeld ? U(1.f) : 0.f;
 	const float MidY = R.Min.Y + (R.Max.Y - R.Min.Y) * 0.5f;
 	Text(TEXT("Buy"), R.Min.X + U(10.f), MidY - U(9.f) + Lift, U(14.f), bEnabled ? Parchment : Dim, AlignLeft, Bold);
-	const bool bGold = Battle->GetStock(UVLBattle::Player, EVLRes::Gold) >= Cost.Gold;
-	const bool bFood = Battle->GetStock(UVLBattle::Player, EVLRes::Food) >= Cost.Food;
+	const bool bGold = Battle->GetStock(UVLBattle::Mine(), EVLRes::Gold) >= Cost.Gold;
+	const bool bFood = Battle->GetStock(UVLBattle::Mine(), EVLRes::Food) >= Cost.Food;
 	float CX = R.Min.X + U(46.f);
 	Icon(EVLIcon::Coin, CX, MidY - U(8.f) + Lift, U(16.f));
 	Text(FString::FromInt(Cost.Gold), CX + U(18.f), MidY - U(9.f) + Lift, U(14.f), bGold ? Gold : Refuse, AlignLeft, Bold);
@@ -388,7 +388,7 @@ void AVLHUD::DrawJonathanOffer(const FBox2D& Row)
 	}
 	if (B.bClicked)
 	{
-		const bool bOk = Battle->BuyJonathan(UVLBattle::Player);      // (refused: it says why, with the error sound)
+		const bool bOk = Battle->BuyJonathan(UVLBattle::Mine());      // (refused: it says why, with the error sound)
 		if (bOk) { Click(); }
 		UE_LOG(LogSovereignRealms, Log, TEXT("hud: hero list: buy Jonathan -> %s"), bOk ? TEXT("bought") : *Why);
 	}
@@ -402,20 +402,20 @@ void AVLHUD::DrawHeroList()
 	AVLKing* David = nullptr;
 	for (AVLKing* Un : Battle->AllUnits())
 	{
-		if (Un && !Un->IsTroop() && Un->Team == UVLBattle::Player)
+		if (Un && !Un->IsTroop() && Un->Team == UVLBattle::Mine())
 		{
 			David = Un;
 			break;
 		}
 	}
-	AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Player);
+	AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Mine());
 	struct FHeroRow { AVLKing* Unit; FString Name; EVLPortrait Face; float Wait; };
 	TArray<FHeroRow, TInlineAllocator<2>> Rows;
-	const bool bCastle = Battle->GetCastle(UVLBattle::Player) != nullptr;
+	const bool bCastle = Battle->GetCastle(UVLBattle::Mine()) != nullptr;
 	Rows.Add({ David, TEXT("King David"), EVLPortrait::King, David && !David->IsAlive() ? FMath::Max(0.f, VLRules::KingRespawnSeconds - David->DeadFor()) : 0.f });
-	Rows.Add({ Jonathan, TEXT("Jonathan"), EVLPortrait::Jonathan, Jonathan && Jonathan->IsAlive() ? 0.f : Battle->GetJonathanWait(UVLBattle::Player) });
+	Rows.Add({ Jonathan, TEXT("Jonathan"), EVLPortrait::Jonathan, Jonathan && Jonathan->IsAlive() ? 0.f : Battle->GetJonathanWait(UVLBattle::Mine()) });
 	// Jonathan not bought yet: his row is greyed and locked until the castle's level 3, then shows his price and Buy
-	const bool bJonathanOwned = Jonathan || Battle->HasJonathanCome(UVLBattle::Player) || Battle->IsJonathanBought(UVLBattle::Player);
+	const bool bJonathanOwned = Jonathan || Battle->HasJonathanCome(UVLBattle::Mine()) || Battle->IsJonathanBought(UVLBattle::Mine());
 	const APawn* Played = PCtrl ? PCtrl->GetPawn() : nullptr;
 	const float W = U(440.f), Pad = U(8.f), HeadH = U(30.f), RowH = U(46.f), Gap = U(4.f);
 	const float H = HeadH + Rows.Num() * (RowH + Gap) + Pad;
@@ -555,7 +555,7 @@ void AVLHUD::DrawCornerRow(float X, float Y, float Right, AActor* Castle)
 		Lines.Add(FString::Printf(TEXT("Repairs cost %.0f gold a point of health a corner lacks (at least %d); Builders at the castle mend them."), VLRules::CornerRepairGoldPerHp, VLRules::CornerRepairMinGold));
 		SetTooltip(Bars, TEXT("The castle's corners"), Lines);
 	}
-	if (St->Team != UVLBattle::Player)
+	if (St->Team != UVLBattle::Mine())
 	{
 		return;
 	}
@@ -576,7 +576,7 @@ void AVLHUD::DrawCornerRow(float X, float Y, float Right, AActor* Castle)
 	}
 	const float RW = FMath::Max(U(60.f), FMath::Min(U(150.f), Right - CX));
 	const FBox2D R(FVector2D(CX, Y - U(3.f)), FVector2D(CX + RW, Y + U(19.f)));
-	const bool bGold = Battle->GetStock(UVLBattle::Player, EVLRes::Gold) >= Cost;
+	const bool bGold = Battle->GetStock(UVLBattle::Mine(), EVLRes::Gold) >= Cost;
 	FBtn B = Button(R, VLId::CornerRepair);
 	ButtonFrame(R, B, bGold);
 	Icon(EVLIcon::Coin, R.Min.X + U(5.f), R.Min.Y + U(3.f), U(15.f));
@@ -593,12 +593,12 @@ void AVLHUD::DrawCornerRow(float X, float Y, float Right, AActor* Castle)
 		UVLCommand* Command = UVLCommand::Get(this);
 		TArray<AVLKing*> Sel, Builders;
 		if (Command) { Command->GetSelection(Sel); }
-		Builders = Sel.FilterByPredicate([](const AVLKing* U2) { return UVLBuilderWork::IsBuilder(U2) && U2->IsAlive() && U2->Team == UVLBattle::Player; });
+		Builders = Sel.FilterByPredicate([](const AVLKing* U2) { return UVLBuilderWork::IsBuilder(U2) && U2->IsAlive() && U2->Team == UVLBattle::Mine(); });
 		if (Builders.Num() == 0 && C)
 		{
 			// the nearest Builder that is not at work
 			TArray<AVLKing*> All;
-			C->GetBuilders(UVLBattle::Player, All);
+			C->GetBuilders(UVLBattle::Mine(), All);
 			AVLKing* Best = nullptr;
 			float BestD = TNumericLimits<float>::Max();
 			for (AVLKing* U2 : All)
@@ -721,11 +721,11 @@ void AVLHUD::CastleUnlocks(int32 From, int32 To, TArray<FUnlock>& Out) const
 void AVLHUD::DrawCastleCard()
 {
 	const UVLBattle* Battle = UVLBattle::Get(this);
-	if (!Battle || !Battle->GetCastle(UVLBattle::Player))
+	if (!Battle || !Battle->GetCastle(UVLBattle::Mine()))
 	{
 		return;
 	}
-	const int32 Level = Battle->GetCastleLevel(UVLBattle::Player);
+	const int32 Level = Battle->GetCastleLevel(UVLBattle::Mine());
 	// a level gained one step at a time is a raise (a jump, or the first look, is a new match: no card)
 	if (SeenCastleLevel > 0 && Level == SeenCastleLevel + 1)
 	{
@@ -788,7 +788,7 @@ void AVLHUD::DrawTopBar()
 	{
 		return;
 	}
-	const FVLKingdom& K = Battle->GetKingdom(UVLBattle::Player);
+	const FVLKingdom& K = Battle->GetKingdom(UVLBattle::Mine());
 	FLinearColor EnemyCol = Dim;
 	const FString Enemy = Battle->EnemyStatus(&EnemyCol);
 	// top-right: controls, pause (drawn last; the bar keeps clear of them)
@@ -827,12 +827,12 @@ void AVLHUD::DrawTopBar()
 		Icon(i == 0 ? EVLIcon::Coin : EVLIcon::Food, CX + Shake - (IS - U(30.f)) * 0.5f, Y + (H - IS) * 0.5f, IS);
 		const FLinearColor BaseCol = i == 0 ? GoldBright : FoodColor;
 		// the stores' limit (the castle's level): shown beside the amount, amber when full (income is being lost)
-		const int32 Have = Battle->GetStock(UVLBattle::Player, Res), Store = Battle->GetStorage(UVLBattle::Player, Res);
+		const int32 Have = Battle->GetStock(UVLBattle::Mine(), Res), Store = Battle->GetStorage(UVLBattle::Mine(), Res);
 		const bool bFull = Have >= Store;
 		const FLinearColor Color = FMath::Lerp(FMath::Lerp(bFull ? Amber : Parchment, BaseCol, bFull ? 0.f : 0.35f + 0.65f * Pulse), Refuse, FMath::Clamp(Flash * 1.4f, 0.f, 1.f));
 		const float AW = TextIn(Row(CX + Shake + U(38.f)), FString::FromInt(Have), U(25.f), Color, AlignLeft, Bold);
 		const float SW = TextIn(Row(CX + U(40.f) + AW), FString::Printf(TEXT("/%d"), Store), U(14.f), bFull ? Amber : Dim, AlignLeft);
-		TextIn(Row(CX + U(48.f) + AW + SW), FString::Printf(TEXT("+%.0f/min"), Battle->GetIncomePerMinute(UVLBattle::Player, Res)), U(14.f), Dim, AlignLeft);
+		TextIn(Row(CX + U(48.f) + AW + SW), FString::Printf(TEXT("+%.0f/min"), Battle->GetIncomePerMinute(UVLBattle::Mine(), Res)), U(14.f), Dim, AlignLeft);
 		if (bInputOpen && bMouse && FBox2D(FVector2D(CX - U(8.f), Y), FVector2D(CX + U(200.f), Y + H)).IsInside(Mouse))
 		{
 			SetTooltip(FBox2D(FVector2D(CX, Y), FVector2D(CX, Y + H + U(4.f))), i == 0 ? TEXT("Gold") : TEXT("Food"),
@@ -847,7 +847,7 @@ void AVLHUD::DrawTopBar()
 	// population: housing taken (troops alive + the ones paid for and still training: their place is held for them)
 	// against housing
 	{
-		const int32 Pop = Battle->GetPopulation(UVLBattle::Player), Queued = Battle->GetQueuedPopulation(UVLBattle::Player), Cap = Battle->GetPopulationCap(UVLBattle::Player);
+		const int32 Pop = Battle->GetPopulation(UVLBattle::Mine()), Queued = Battle->GetQueuedPopulation(UVLBattle::Mine()), Cap = Battle->GetPopulationCap(UVLBattle::Mine());
 		const int32 Taken = Pop + Queued;
 		Icon(EVLIcon::Pop, CX, Y + (H - U(30.f)) * 0.5f, U(30.f));
 		const FLinearColor Color = Taken >= Cap ? Amber : Parchment;
@@ -1163,7 +1163,7 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 			continue;
 		}
 		const FVector2D At(B.Actor->GetActorLocation());
-		if (B.Team == UVLBattle::Enemy && Fog && !Fog->WasSeen(B.Actor.Get()))
+		if (B.Team == UVLBattle::Foe() && Fog && !Fog->WasSeen(B.Actor.Get()))
 		{
 			continue;           // (the fog of war: not seen yet)
 		}
@@ -1173,7 +1173,7 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 			Dot(At, FMath::Max(3.f, U(5.f)), GoldBright, true);
 			continue;
 		}
-		const FLinearColor Color = B.Team == UVLBattle::Player ? TeamBlue : TeamRed;
+		const FLinearColor Color = B.Team == UVLBattle::Mine() ? TeamBlue : TeamRed;
 		const bool bCastle = B.Kind == EVLBuilding::Castle;
 		Dot(At, FMath::Max(4.f, U(bCastle ? 13.f : 8.f)), Color, true);
 		if (bCastle) { Dot(At, FMath::Max(2.f, U(5.f)), GoldBright, false); }
@@ -1189,7 +1189,7 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 		{
 			continue;
 		}
-		const bool bEnemy = Unit->Team == UVLBattle::Enemy;
+		const bool bEnemy = Unit->Team == UVLBattle::Foe();
 		const bool bSel = !bEnemy && Frame.Selected.Contains(Unit);
 		const FLinearColor Col = bSel ? FLinearColor::White : (bEnemy ? FLinearColor(1.f, 0.42f, 0.30f, 1.f) : FLinearColor(0.55f, 0.80f, 1.f, 1.f));
 		// King David: a larger mark with a gold rim
@@ -1215,7 +1215,7 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 			TArray<FVector> Pts;
 			bool bLoop = false, bPing = false;
 			int32 Next = 0, Id = 0;
-			if (!Un || Un->Team != UVLBattle::Player || !PatrolCmd->GetRoute(Un, Pts, bLoop, Next, &Id, &bPing) || !bLoop || Drawn.Contains(Id))
+			if (!Un || Un->Team != UVLBattle::Mine() || !PatrolCmd->GetRoute(Un, Pts, bLoop, Next, &Id, &bPing) || !bLoop || Drawn.Contains(Id))
 			{
 				continue;
 			}
@@ -1298,7 +1298,7 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 			Points[i] = ToMap(FVector2D(Origin + Dir * Along));
 		}
 		MapViewMid = bOk ? 0.25f * (Points[0] + Points[1] + Points[2] + Points[3]) : FVector2D::ZeroVector;
-		if (const AActor* Castle = Battle->GetCastle(UVLBattle::Player))
+		if (const AActor* Castle = Battle->GetCastle(UVLBattle::Mine()))
 		{
 			MapCastleAt = ToMap(FVector2D(Castle->GetActorLocation()));
 		}
@@ -1359,7 +1359,7 @@ void AVLHUD::DrawMinimap(const FBox2D& Box)
 		{
 			// a troop ship is the selection: it sails there (Shift: one more point of its course)
 		}
-		else if (St && St->Trains() && St->Team == UVLBattle::Player)
+		else if (St && St->Trains() && St->Team == UVLBattle::Mine())
 		{
 			Battle->SetRally(Sel, At);
 			AVLGameMode::PlayOrderSound(this);
@@ -1386,7 +1386,7 @@ void AVLHUD::DrawSelectionPanel(float X, float Bottom, float Room)
 	// the player's castle has three buttons (Builder, Spy, upgrade): its panel is wider
 	float DesignW = 760.f;
 	const UVLBattle* Battle = UVLBattle::Get(this);
-	if (const FVLBuildingState* St = Building && Battle ? Battle->FindBuilding(Building) : nullptr; St && St->Kind == EVLBuilding::Castle && St->Team == UVLBattle::Player)
+	if (const FVLBuildingState* St = Building && Battle ? Battle->FindBuilding(Building) : nullptr; St && St->Kind == EVLBuilding::Castle && St->Team == UVLBattle::Mine())
 	{
 		DesignW += 200.f;
 	}
@@ -1412,7 +1412,7 @@ void AVLHUD::DrawTroopSelection(const FBox2D& Box, const TArray<AVLKing*>& Units
 	AVLKing* First = Units[0];
 	for (AVLKing* Unit : Units)
 	{
-		bEnemy |= Unit->Team != UVLBattle::Player;
+		bEnemy |= Unit->Team != UVLBattle::Mine();
 		++Count[KindIndex(Unit)];
 		++Total;
 		Engaged += IsFighting(Unit) ? 1 : 0;
@@ -1625,11 +1625,11 @@ void AVLHUD::DrawUpgradeButton(const FBox2D& R, AActor* Building)
 	const bool bBusy = St->UpgradeLeft >= 0.f;
 	const VLRules::FLevel& Cur = VLRules::Level(St->Kind, L), &Next = VLRules::Level(St->Kind, L + 1);
 	const FVLCost Cost = Next.Cost;
-	const bool bGold = Battle->GetStock(UVLBattle::Player, EVLRes::Gold) >= Cost.Gold;
-	const bool bFood = Battle->GetStock(UVLBattle::Player, EVLRes::Food) >= Cost.Food;
+	const bool bGold = Battle->GetStock(UVLBattle::Mine(), EVLRes::Gold) >= Cost.Gold;
+	const bool bFood = Battle->GetStock(UVLBattle::Mine(), EVLRes::Food) >= Cost.Food;
 	// a level that waits for the castle (a storehouse's): shown, locked
 	const int32 NeedCastle = Next.CastleLevel;
-	const bool bLocked = !bTop && !bBusy && NeedCastle > Battle->GetCastleLevel(UVLBattle::Player);
+	const bool bLocked = !bTop && !bBusy && NeedCastle > Battle->GetCastleLevel(UVLBattle::Mine());
 	const bool bEnabled = !bTop && !bBusy && !bLocked && bGold && bFood;
 	FBtn B = Button(R, VLId::Upgrade);
 	if (!bEnabled) { B.Hot *= 0.3f; }
@@ -1685,7 +1685,7 @@ void AVLHUD::DrawUpgradeButton(const FBox2D& R, AActor* Building)
 	{
 		const bool bGranary = St->Kind == EVLBuilding::Granary;
 		const TCHAR* What = bGranary ? TEXT("food") : TEXT("gold");
-		const int32 Kingdom = Battle->GetStorage(UVLBattle::Player, bGranary ? EVLRes::Food : EVLRes::Gold);
+		const int32 Kingdom = Battle->GetStorage(UVLBattle::Mine(), bGranary ? EVLRes::Food : EVLRes::Gold);
 		Gain = FString::Printf(TEXT("holds %d > %d %s"), Cur.Storage, Next.Storage, What);
 		Lines.Add(FString::Printf(TEXT("Holds %d > %d %s   ·   health %.0f > %.0f"), Cur.Storage, Next.Storage, What, Cur.Health, Next.Health));
 		Lines.Add(FString::Printf(TEXT("Your kingdom's %s stores: %d > %d"), What, Kingdom, Kingdom + Next.Storage - Cur.Storage));
@@ -1804,7 +1804,7 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 		return;
 	}
 	DrawRotateTab(Box, Building, DrawDemolishTab(Box, Building));
-	const bool bPlayer = St->Team == UVLBattle::Player;
+	const bool bPlayer = St->Team == UVLBattle::Mine();
 	const bool bNeutral = St->Team == UVLBattle::Neutral;
 	const bool bRecruits = bPlayer && St->Trains();
 	const bool bUpgradable = bPlayer && VLRules::NumLevels(St->Kind) > 1;
@@ -1813,7 +1813,7 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 	const float MeterW = bRecruits ? U(150.f) : U(260.f);
 	const float Frac = St->Health / FMath::Max(St->MaxHealth, 1.f);
 
-	Icon(BuildingIcon(St->Kind), X, Y, U(42.f), FLinearColor::White, St->Team == UVLBattle::Enemy);
+	Icon(BuildingIcon(St->Kind), X, Y, U(42.f), FLinearColor::White, St->Team == UVLBattle::Foe());
 	Text(St->Name, X + U(52.f), Y - U(2.f), U(22.f), bPlayer ? GoldBright : (bNeutral ? Parchment : FLinearColor(1.f, 0.55f, 0.45f, 1.f)), AlignLeft, Bold);
 	{
 		FString SubLine = bPlayer ? TEXT("Your kingdom") : (bNeutral ? TEXT("Neutral: nobody's") : TEXT("Enemy kingdom"));
@@ -1872,7 +1872,7 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 		Text(FString::Printf(TEXT("Holds %d %s"), Lv.Storage, bGranary ? TEXT("food") : TEXT("gold")), X + U(27.f), LY, U(15.f), Parchment);
 		if (bPlayer)
 		{
-			const int32 Have = Battle->GetStock(UVLBattle::Player, Res), Store = Battle->GetStorage(UVLBattle::Player, Res);
+			const int32 Have = Battle->GetStock(UVLBattle::Mine(), Res), Store = Battle->GetStorage(UVLBattle::Mine(), Res);
 			Meter(X, LY + U(28.f), MeterW, U(8.f), Store > 0 ? FMath::Clamp(float(Have) / Store, 0.f, 1.f) : 0.f, Have >= Store ? Amber : (bGranary ? FoodColor : Gold));
 			Text(FString::Printf(TEXT("Kingdom: %d / %d"), Have, Store), X + MeterW + U(14.f), LY + U(22.f), U(14.f), Have >= Store ? Amber : Dim);
 			if (bUpgradable) { DrawUpgradeButton(RightSlot(0), Building); }
@@ -1895,15 +1895,15 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 		DrawBuilderButton(RightSlot(0), Building);
 		{
 			const VLRules::FTroop& T = VLRules::Troop(TEXT("Spy"));
-			const bool bLocked = Battle->GetCastleLevel(UVLBattle::Player) < VLRules::SpyCastleLevel;
+			const bool bLocked = Battle->GetCastleLevel(UVLBattle::Mine()) < VLRules::SpyCastleLevel;
 			int32 SQueued = 0;
-			const int32 SAlive = Battle->GetSpyCount(UVLBattle::Player, &SQueued);
+			const int32 SAlive = Battle->GetSpyCount(UVLBattle::Mine(), &SQueued);
 			const bool bSpyOut = !bLocked && SAlive + SQueued >= VLRules::MaxSpies;
-			const int32 WaitSec = !bLocked ? FMath::CeilToInt(Battle->GetSpyCooldown(UVLBattle::Player)) : 0;
+			const int32 WaitSec = !bLocked ? FMath::CeilToInt(Battle->GetSpyCooldown(UVLBattle::Mine())) : 0;
 			const FString WaitText = FString::Printf(TEXT("%d:%02d"), WaitSec / 60, WaitSec % 60);
 			const FString Why = Battle->TrainRefusal(Building);
-			const bool bGold = Battle->GetStock(UVLBattle::Player, EVLRes::Gold) >= T.Cost.Gold;
-			const bool bFood = Battle->GetStock(UVLBattle::Player, EVLRes::Food) >= T.Cost.Food;
+			const bool bGold = Battle->GetStock(UVLBattle::Mine(), EVLRes::Gold) >= T.Cost.Gold;
+			const bool bFood = Battle->GetStock(UVLBattle::Mine(), EVLRes::Food) >= T.Cost.Food;
 			const bool bHoused = !Why.StartsWith(TEXT("Housing"));
 			const bool bEnabled = Why.IsEmpty();
 			if (SQueued > 0)
@@ -2036,7 +2036,7 @@ void AVLHUD::DrawBuildingSelection(const FBox2D& Box, AActor* Building)
 	{
 		const VLRules::FTroop& T = VLRules::Troop(Troop);
 		const FString Why = Battle->TrainRefusal(Building);
-		const bool bFood = Battle->GetStock(UVLBattle::Player, EVLRes::Food) >= T.Cost.Food;
+		const bool bFood = Battle->GetStock(UVLBattle::Mine(), EVLRes::Food) >= T.Cost.Food;
 		const bool bHoused = !Why.StartsWith(TEXT("Housing"));
 		const bool bEnabled = Why.IsEmpty();
 		const FBox2D R = RightSlot(0);
@@ -2536,20 +2536,20 @@ void AVLHUD::DrawHeroBits()
 			AVLKing* David = nullptr;
 			for (AVLKing* Un : Battle->AllUnits())
 			{
-				if (Un && !Un->IsTroop() && Un->Team == UVLBattle::Player)
+				if (Un && !Un->IsTroop() && Un->Team == UVLBattle::Mine())
 				{
 					David = Un;
 					break;
 				}
 			}
-			AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Player);
-			if (David && (Jonathan || Battle->HasJonathanCome(UVLBattle::Player)))
+			AVLTroop* Jonathan = Battle->GetJonathan(UVLBattle::Mine());
+			if (David && (Jonathan || Battle->HasJonathanCome(UVLBattle::Mine())))
 			{
 				const APawn* Played = PCtrl ? PCtrl->GetPawn() : nullptr;
 				struct FOther { AVLKing* Unit; const TCHAR* Name; EVLPortrait Face; float Wait; };
 				TArray<FOther, TInlineAllocator<2>> Others;
 				if (Played != David) { Others.Add({ David, TEXT("King David"), EVLPortrait::King, David->IsAlive() ? 0.f : FMath::Max(0.f, VLRules::KingRespawnSeconds - David->DeadFor()) }); }
-				if (!Jonathan || Played != Jonathan) { Others.Add({ Jonathan, TEXT("Jonathan"), EVLPortrait::Jonathan, Jonathan && Jonathan->IsAlive() ? 0.f : Battle->GetJonathanWait(UVLBattle::Player) }); }
+				if (!Jonathan || Played != Jonathan) { Others.Add({ Jonathan, TEXT("Jonathan"), EVLPortrait::Jonathan, Jonathan && Jonathan->IsAlive() ? 0.f : Battle->GetJonathanWait(UVLBattle::Mine()) }); }
 				float OY = Box.Max.Y;
 				for (int32 i = 0; i < Others.Num(); ++i)
 				{

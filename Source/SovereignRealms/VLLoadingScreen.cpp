@@ -377,7 +377,8 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 				{
 					if (Context.WorldType == EWorldType::Game && Context.World())
 					{
-						return Context.World()->URL.HasOption(TEXT("Match"));
+						// (a multiplayer match never waits for Enter: the other player's game is waiting for this one)
+						return Context.World()->URL.HasOption(TEXT("Match")) && !Context.World()->URL.HasOption(TEXT("MP"));
 					}
 				}
 			}

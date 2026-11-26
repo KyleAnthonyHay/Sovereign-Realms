@@ -93,6 +93,25 @@ public:
 	// them the title screen comes up over it (AVLHUD)
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	bool HasMatchOption() const { return bMatchOption; }
+
+	// ---- multiplayer (VLNet.h): a match hosted with ?listen?MP=1 (UVLNetSession::Host) waits for the other player,
+	// who is checked at the door (the same version, room for one), given King David of team 1, and whose leaving ends it
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
+	virtual void PostLogin(APlayerController* NewPlayer) override;
+	virtual void Logout(AController* Exiting) override;
+	virtual APawn* SpawnDefaultPawnAtTransform_Implementation(AController* NewPlayer, const FTransform& SpawnTransform) override;
+	virtual void PreInitializeComponents() override;
+	bool IsMultiplayerMatch() const { return bMPOption; }
+	/** A hosted match that has not begun: the other player is not in yet. */
+	bool IsWaitingForPlayer() const { return bMPOption && !bMatchStarted && !bStandIn; }
+	/**
+	 * This game's own game mode for what a game mode does locally (the music, the ambience, the marching shuffle, the
+	 * command inbox, the windmill's sails): the world's, or in the joining player's game, which has no game mode of
+	 * its own, a stand-in that does only those (SpawnClientStandIn). Null only while a world is coming up.
+	 */
+	static AVLGameMode* Local(const UObject* WorldContext);
+	static void SpawnClientStandIn(UWorld* World);
+	bool IsStandIn() const { return bStandIn; }
 	/** Opened as the Test World (?TestWorld=1: UVLBattle::SetupTestWorld right after the match starts). */
 	bool IsTestWorld() const { return bTestWorldOption; }
 
@@ -105,6 +124,9 @@ private:
 	float OptionTimeScale = 0.f;        // ?TimeScale=N
 	bool bDuelsOption = false;          // ?Duels=1[?DuelAt=X,Y]: the standard duels (FVLDuels), then quit
 	bool bMatchStarted = false;
+	bool bMPOption = false;             // ?MP=1: a multiplayer match (the map is a listen server)
+	bool bStandIn = false;              // the joining player's game: the local stand-in (see Local)
+	bool bStartupArgs = false;          // -VLHost= / -VLJoin= looked at
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UAudioComponent> Music;

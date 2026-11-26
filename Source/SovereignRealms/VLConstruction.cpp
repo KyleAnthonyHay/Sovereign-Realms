@@ -4,6 +4,8 @@
 // this game's tagged buildings (UVLBattle) and path grid (UVLGrid). See VLConstruction.h.
 
 #include "VLConstruction.h"
+#include "VLNet.h"
+#include "VLPlayerController.h"
 #include "VLFarmer.h"
 #include "SovereignRealms.h"
 #include "VLBattle.h"
@@ -1062,16 +1064,50 @@ AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<A
 	UWorld* World = GetWorld();
 	UVLBattle* Battle = UVLBattle::Get(this);
 	UVLGrid* Grid = UVLGrid::Get(this);
+	if (Battle && Battle->IsNetClient())
+	{
+		// the joining player's game: the host lays it (checked and paid for there); this game's copy of the site
+		// arrives with the building list. What this game can already see is refused here, as ever.
+		FVLPlacement Seen;
+		FString Why;
+		if (!CheckPlacement(Where.Kind, Where.Team, Where.Location, Where.Yaw, Seen, false))
+		{
+			Why = Seen.Reason;
+		}
+		else
+		{
+			Why = BuildRefusal(Where.Kind, Where.Team);
+		}
+		if (OutWhy)
+		{
+			*OutWhy = Why;
+		}
+		if (!Why.IsEmpty())
+		{
+			if (!bQuiet)
+			{
+				Battle->PushAlert(Why);
+				Battle->Play2D(TEXT("S_UIError"), 0.5f);
+			}
+			return nullptr;
+		}
+		if (AVLPlayerController* PC = VLNet::LocalController(this))
+		{
+			TArray<AVLKing*> Crew = InBuilders.FilterByPredicate([](const AVLKing* U) { return U && U->IsNetCopy(); });
+			PC->ServerPlace(uint8(Where.Kind), Seen.Location, Seen.Yaw, Crew, bQueue);
+		}
+		return Seen.Vein.IsValid() ? Seen.Vein.Get() : World->GetWorldSettings();     // (not null: it was asked for; nobody uses this actor)
+	}
 	auto Refuse = [&](const FString& Why) -> AActor*
 	{
 		if (OutWhy)
 		{
 			*OutWhy = Why;
 		}
-		if (Battle && Where.Team == UVLBattle::Player && !bQuiet)
+		if (Battle && Battle->IsHuman(Where.Team) && !bQuiet)
 		{
-			Battle->PushAlert(Why);
-			Battle->Play2D(TEXT("S_UIError"), 0.5f);
+			Battle->PushAlertTo(Where.Team, Why);
+			Battle->Play2DTo(Where.Team, TEXT("S_UIError"), 0.5f);
 		}
 		return nullptr;
 	};
@@ -1309,10 +1345,10 @@ AActor* UVLConstruction::PlaceBuilding(const FVLPlacement& Where, const TArray<A
 	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("BUILD team %d lays a %s (%s) at %.0f %.0f %.0f yaw %.0f for %s: %d tree(s) cleared, %d builder(s) sent"), Where.Team, VLRules::Name(Where.Kind), *MeshName,
 		W.Location.X, W.Location.Y, W.Location.Z, W.Yaw, *CostText(Spec->Cost), Trees, Crew.Num());
-	if (Where.Team == UVLBattle::Player && Crew.Num() == 0 && !bQuiet)
+	if (Battle->IsHuman(Where.Team) && Crew.Num() == 0 && !bQuiet)
 	{
 		const FVector At = A->GetActorLocation();
-		Battle->PushAlert(FString::Printf(TEXT("The %s waits for a Builder"), VLRules::Name(Where.Kind)), EVLAlert::Info, &At);
+		Battle->PushAlertTo(Where.Team, FString::Printf(TEXT("The %s waits for a Builder"), VLRules::Name(Where.Kind)), EVLAlert::Info, &At);
 	}
 	return A;
 }
@@ -1503,13 +1539,13 @@ void UVLConstruction::Finish(FVLBuildingState& B)
 	}
 	UVLBattle* Battle = UVLBattle::Get(this);
 	UE_LOG(LogSovereignRealms, Log, TEXT("BUILD %s of team %d finished at %.0f %.0f"), *B.Name, B.Team, A->GetActorLocation().X, A->GetActorLocation().Y);
-	if (Battle)
+	if (Battle && !Battle->IsNetClient())       // (the joining game's copy: the host's sound and alert arrive)
 	{
 		Battle->PlayAt(TEXT("S_BuildComplete"), A->GetActorLocation(), 0.6f, 9000.f, 0.2f);
-		if (B.Team == UVLBattle::Player)
+		if (Battle->IsHuman(B.Team))
 		{
 			const FVector At = A->GetActorLocation();
-			Battle->PushAlert(FString::Printf(TEXT("%s completed"), *B.Name), EVLAlert::Good, &At);
+			Battle->PushAlertTo(B.Team, FString::Printf(TEXT("%s completed"), *B.Name), EVLAlert::Good, &At);
 		}
 	}
 }
@@ -1534,6 +1570,10 @@ bool UVLConstruction::CancelSite(AActor* Building)
 	if (!St || !St->IsAlive() || !St->IsSite())
 	{
 		return false;
+	}
+	if (VLNet::SendBuilding(this, EVLNetBuildingAsk::Cancel, Building))
+	{
+		return true;
 	}
 	const FVLCost Back = RefundFor(Building);
 	const int32 Team = St->Team;
@@ -1587,10 +1627,10 @@ bool UVLConstruction::CancelSite(AActor* Building)
 		Grid->RebuildArea(FBox2D(BC - FVector2D(R, R), BC + FVector2D(R, R)));
 	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("BUILD %s of team %d cancelled: %s back"), *Name, Team, *CostText(Back));
-	if (Team == UVLBattle::Player)
+	if (Battle->IsHuman(Team))
 	{
 		const FVector At(BC.X, BC.Y, 0.f);
-		Battle->PushAlert(FString::Printf(TEXT("%s cancelled: %s back"), *Name, *CostText(Back)), EVLAlert::Info, &At);
+		Battle->PushAlertTo(Team, FString::Printf(TEXT("%s cancelled: %s back"), *Name, *CostText(Back)), EVLAlert::Info, &At);
 	}
 	return true;
 }
@@ -1648,6 +1688,10 @@ bool UVLConstruction::Demolish(AActor* Building)
 	{
 		return false;
 	}
+	if (VLNet::SendBuilding(this, EVLNetBuildingAsk::Demolish, Building))
+	{
+		return true;
+	}
 	const FVLCost Back = RefundFor(Building);
 	const int32 Team = St->Team;
 	const FString Name = St->Name;
@@ -1656,10 +1700,10 @@ bool UVLConstruction::Demolish(AActor* Building)
 	Battle->AddStock(Team, EVLRes::Gold, Back.Gold);
 	Battle->AddStock(Team, EVLRes::Food, Back.Food);
 	UE_LOG(LogSovereignRealms, Log, TEXT("DEMOLISH %s of team %d: %s back"), *Name, Team, *CostText(Back));
-	if (Team == UVLBattle::Player)
+	if (Battle->IsHuman(Team))
 	{
 		const FVector At = Building->GetActorLocation();
-		Battle->PushAlert(FString::Printf(TEXT("%s demolished: %s back"), *Name, *CostText(Back)), EVLAlert::Info, &At);
+		Battle->PushAlertTo(Team, FString::Printf(TEXT("%s demolished: %s back"), *Name, *CostText(Back)), EVLAlert::Info, &At);
 	}
 	return true;
 }
@@ -1734,6 +1778,26 @@ FString UVLConstruction::ClaimRefusal(const AActor* Mine, int32 Team) const
 AActor* UVLConstruction::ClaimMine(AActor* Mine, int32 Team, const TArray<AVLKing*>& Builders, FString* OutWhy, bool bQuiet, bool bQueue)
 {
 	UVLBattle* Battle = UVLBattle::Get(this);
+	if (Battle && Battle->IsNetClient())
+	{
+		// the joining game: the host claims it (and takes the price); what this game can see is refused here
+		const FString Why = ClaimRefusal(Mine, Team);
+		if (OutWhy)
+		{
+			*OutWhy = Why;
+		}
+		if (!Why.IsEmpty())
+		{
+			if (!bQuiet)
+			{
+				Battle->PushAlert(Why);
+				Battle->Play2D(TEXT("S_UIError"), 0.5f);
+			}
+			return nullptr;
+		}
+		VLNet::SendOrder(this, EVLNetOrder::ClaimMine, Builders, Mine, FVector::ZeroVector, false, bQueue);
+		return Mine;
+	}
 	if (!Battle || !IsFreeMine(Mine))
 	{
 		if (OutWhy)
@@ -1751,10 +1815,10 @@ AActor* UVLConstruction::ClaimMine(AActor* Mine, int32 Team, const TArray<AVLKin
 		{
 			*OutWhy = Why;
 		}
-		if (Team == UVLBattle::Player && !bQuiet)
+		if (Battle->IsHuman(Team) && !bQuiet)
 		{
-			Battle->PushAlert(Why);
-			Battle->Play2D(TEXT("S_UIError"), 0.5f);
+			Battle->PushAlertTo(Team, Why);
+			Battle->Play2DTo(Team, TEXT("S_UIError"), 0.5f);
 		}
 		return nullptr;
 	}
@@ -1883,6 +1947,10 @@ bool UVLConstruction::Rotate(AActor* Building, FString* OutWhy, bool bQuiet)
 	UVLGrid* Grid = UVLGrid::Get(this);
 	FVLPlacement W;
 	const FString Why = RotateRefusal(Building, &W);
+	if (Why.IsEmpty() && VLNet::SendBuilding(this, EVLNetBuildingAsk::Rotate, Building))
+	{
+		return true;        // (the joining game: the host turns it; this game's copy follows)
+	}
 	FVLBuildingState* St = Battle ? Battle->FindBuilding(Building) : nullptr;
 	FVector2D OC, OH;
 	float OY = 0.f;
@@ -1893,10 +1961,10 @@ bool UVLConstruction::Rotate(AActor* Building, FString* OutWhy, bool bQuiet)
 		{
 			*OutWhy = Said;
 		}
-		if (Battle && St && St->Team == UVLBattle::Player && !bQuiet)
+		if (Battle && St && Battle->IsHuman(St->Team) && !bQuiet)
 		{
-			Battle->PushAlert(Said);
-			Battle->Play2D(TEXT("S_UIError"), 0.5f);
+			Battle->PushAlertTo(St->Team, Said);
+			Battle->Play2DTo(St->Team, TEXT("S_UIError"), 0.5f);
 		}
 		UE_LOG(LogSovereignRealms, Log, TEXT("ROTATE %s refused: %s"), St ? *St->Name : *GetNameSafe(Building), *Said);
 		return false;
@@ -2061,11 +2129,21 @@ bool UVLConstruction::OrderWork(const TArray<AVLKing*>& Units, AActor* Building,
 {
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const FVLBuildingState* St = Battle ? Battle->FindBuilding(Building) : nullptr;
+	if (Battle && Battle->IsNetClient())
+	{
+		// the joining game: the host sends them, if there is work on it for Builders of its side
+		const bool bAny = St && NeedsWork(*St) && Units.ContainsByPredicate([St](const AVLKing* U) { return U && UVLBuilderWork::IsBuilder(U) && U->IsAlive() && U->Team == St->Team; });
+		if (bAny)
+		{
+			VLNet::SendOrder(this, EVLNetOrder::Work, Units, Building, FVector::ZeroVector, false, bQueue);
+		}
+		return bAny;
+	}
 	// Builders ordered onto the castle with corners to mend: the repair is paid for now (VLCastleCorners.cpp)
 	if (St && bOrdered && St->Kind == EVLBuilding::Castle && Battle->CornerRepairCost(*St) > 0
 		&& Units.ContainsByPredicate([St](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U) && U->IsAlive() && U->Team == St->Team; }))
 	{
-		UVLBattle::Get(this)->PayCornerRepair(Building, St->Team != UVLBattle::Player);
+		UVLBattle::Get(this)->PayCornerRepair(Building, !Battle->IsHuman(St->Team));
 	}
 	if (!St || !NeedsWork(*St))
 	{
@@ -2101,6 +2179,10 @@ bool UVLConstruction::QueueMove(const TArray<AVLKing*>& Units, const FVector& Gr
 	if (Builders.Num() == 0)
 	{
 		return false;
+	}
+	if (VLNet::SendOrder(this, EVLNetOrder::WorkMove, Builders, nullptr, Ground, bRun))
+	{
+		return true;
 	}
 	// a point on open ground near the one clicked (as UVLCommand::OrderMove finds it), each its place in a line there
 	FVector Dest = Ground;
@@ -2139,6 +2221,16 @@ bool UVLConstruction::QueueMove(const TArray<AVLKing*>& Units, const FVector& Gr
 
 bool UVLConstruction::ClearQueues(const TArray<AVLKing*>& Units)
 {
+	if (VLNet::IsClient(this))
+	{
+		// the joining game: whether they have queued orders is the host's to know; they are dropped there
+		TArray<AVLKing*> Builders = Units.FilterByPredicate([](const AVLKing* U) { return UVLBuilderWork::IsBuilder(U) && U->IsAlive(); });
+		if (Builders.Num() > 0)
+		{
+			VLNet::SendOrder(this, EVLNetOrder::WorkClear, Builders);
+		}
+		return false;
+	}
 	bool bAny = false;
 	for (AVLKing* U : Units)
 	{
@@ -2158,6 +2250,10 @@ bool UVLConstruction::OrderRepair(const TArray<AVLKing*>& Units)
 	if (!Battle || Builders.Num() == 0)
 	{
 		return false;
+	}
+	if (VLNet::SendOrder(this, EVLNetOrder::Repair, Builders))
+	{
+		return true;
 	}
 	// the nearest damaged building of theirs (sites after)
 	FVector Mid = FVector::ZeroVector;
@@ -2182,9 +2278,9 @@ bool UVLConstruction::OrderRepair(const TArray<AVLKing*>& Units)
 	}
 	if (!Best)
 	{
-		if (Builders[0]->Team == UVLBattle::Player)
+		if (Battle->IsHuman(Builders[0]->Team))
 		{
-			const_cast<UVLBattle*>(Battle)->PushAlert(TEXT("Nothing of yours needs repair"));
+			const_cast<UVLBattle*>(Battle)->PushAlertTo(Builders[0]->Team, TEXT("Nothing of yours needs repair"));
 		}
 		return false;
 	}
@@ -2267,6 +2363,14 @@ void UVLConstruction::Tick(float DeltaSeconds)
 	{
 		TickFarmhands(DeltaSeconds);    // (a match, or one ended and watched on)
 	}
+	if (Battle->IsNetClient())
+	{
+		if (Battle->GetState() != EVLMatch::Idle)
+		{
+			TickSites(DeltaSeconds);    // (the joining game: only what a fallen building's copy leaves behind is cleared)
+		}
+		return;
+	}
 	if (Battle->GetState() != EVLMatch::Playing)
 	{
 		return;
@@ -2279,6 +2383,7 @@ void UVLConstruction::Tick(float DeltaSeconds)
 void UVLConstruction::TickSites(float Dt)
 {
 	UVLBattle* Battle = UVLBattle::Get(this);
+	const bool bCopies = Battle->IsNetClient();     // (the joining game: the numbers are the host's)
 	TMap<const AActor*, int32>& AtWork = AtWorkScratch;
 	AtWork.Reset();
 	// (the battle's registry, not a walk over the world's actors: every Builder is in it; the farms' hands are not,
@@ -2294,6 +2399,10 @@ void UVLConstruction::TickSites(float Dt)
 	for (FVLBuildingState& B : Battle->GetBuildingsMutable())
 	{
 		AActor* A = B.Actor.Get();
+		if (bCopies && B.IsAlive())
+		{
+			continue;
+		}
 		if (!B.IsAlive())
 		{
 			B.BuildersAt = 0;
@@ -2579,14 +2688,14 @@ void UVLConstruction::BeginPlacement(EVLBuilding Kind)
 	{
 		return;
 	}
-	const FString Why = Kind == EVLBuilding::Mine ? FString(TEXT("A mine is claimed, not built: right-click a free mine with Builders selected")) : BuildRefusal(Kind, UVLBattle::Player);
+	const FString Why = Kind == EVLBuilding::Mine ? FString(TEXT("A mine is claimed, not built: right-click a free mine with Builders selected")) : BuildRefusal(Kind, UVLBattle::Mine());
 	if (!Why.IsEmpty())
 	{
 		if (Why.StartsWith(TEXT("Not enough")))
 		{
 			if (const VLBuild::FSpec* S = VLBuild::Spec(Kind))
 			{
-				Battle->TrySpend(UVLBattle::Player, S->Cost);        // (refused: flashes the gold counter, says why)
+				Battle->TrySpendSaid(S->Cost);        // (refused: flashes the gold counter, says why)
 			}
 		}
 		else
@@ -2692,7 +2801,7 @@ void UVLConstruction::UpdateGhost(APlayerController* PC, AVLHUD* HUD, AVLKing* M
 		LastYaw = Yaw;
 		CheckedAt = Now;
 		const double T0 = FPlatformTime::Seconds();
-		CheckPlacementForGhost(Placing, UVLBattle::Player, Ground, Yaw, Current);
+		CheckPlacementForGhost(Placing, UVLBattle::Mine(), Ground, Yaw, Current);
 		if (CVarPlacementLog.GetValueOnGameThread() != 0)
 		{
 			UE_LOG(LogSovereignRealms, Log, TEXT("PLACEMENT check: %.3f ms (%d plates, %s)"), (FPlatformTime::Seconds() - T0) * 1000.0, Current.Cells.Num(), Current.bValid ? TEXT("fits") : *Current.Reason);
@@ -2851,7 +2960,7 @@ bool UVLConstruction::OverviewInput(APlayerController* PC, AVLHUD* HUD, AVLKing*
 			{
 				AVLGameMode::PlayOrderSound(Me);
 				// Shift: another of the same (as long as it can be had)
-				if (!bShift || !BuildRefusal(Placing, UVLBattle::Player).IsEmpty())
+				if (!bShift || !BuildRefusal(Placing, UVLBattle::Mine()).IsEmpty())
 				{
 					CancelPlacement();
 				}
@@ -2944,7 +3053,7 @@ void UVLConstruction::BenchPlacement(EVLBuilding Kind, const FVector& At, int32 
 		{
 			FVLPlacement Out;
 			const double T0 = FPlatformTime::Seconds();
-			CheckPlacementForGhost(Kind, UVLBattle::Player, Want, 0.f, Out);
+			CheckPlacementForGhost(Kind, UVLBattle::Mine(), Want, 0.f, Out);
 			(Pass == 0 ? Moved : Still) += FPlatformTime::Seconds() - T0;
 			Digest = HashCombine(Digest, GetTypeHash(Out.Reason));
 			Digest = HashCombine(Digest, uint32(Out.bValid) | uint32(Out.Trees) << 1);
@@ -3581,4 +3690,221 @@ AActor* UVLConstruction::RestoreBuilding(const FRestore& In, TArray<FBox2D>& Out
 	}
 	PlaceMemos.Reset();
 	return A;
+}
+
+// ------------------------------------------------------------------------------------------------ multiplayer (VLNet.h)
+
+bool UVLConstruction::NetApplyBuilding(const FVLNetBuilding& Item)
+{
+	UWorld* World = GetWorld();
+	UVLBattle* Battle = UVLBattle::Get(this);
+	if (!World || !Battle)
+	{
+		return false;
+	}
+	const bool bSpawned = (Item.Flags & 64) != 0;
+	const bool bDestroyed = (Item.Flags & 1) != 0;
+	const bool bClaim = (Item.Flags & 8) != 0;
+	const EVLBuilding Kind = EVLBuilding(Item.Kind);
+	AActor* Level = Item.LevelActor.Get();
+	if (!bSpawned && !Level)
+	{
+		return false;           // (the level's actor it stands for is not known to this game yet: tried again)
+	}
+	// this game's copy of it, if there is one already
+	FVLBuildingState* B = nullptr;
+	for (FVLBuildingState& S : Battle->GetBuildingsMutable())
+	{
+		if (S.NetId == Item.Id)
+		{
+			B = &S;
+			break;
+		}
+	}
+	if (!B && Level)
+	{
+		B = Battle->FindBuilding(Level);
+	}
+	const FRotator Rotation(0.f, Item.Yaw, 0.f);
+	bool bRestore = !B;
+	if (B)
+	{
+		AActor* Have = B->Actor.Get();
+		const bool bHadClaim = Have && Have->ActorHasTag(TEXT("Claim"));
+		const bool bFinishes = B->IsSite() && Item.Build >= 1.f && !bDestroyed && B->Team == Item.Team && !B->bDestroyed;
+		if (bSpawned && Have && (FVector::DistSquared2D(B->Rest, FVector(Item.Location)) > 25. || FMath::Abs(FMath::FindDeltaAngleDegrees(Have->GetActorRotation().Yaw, Item.Yaw)) > 1.f))
+		{
+			// turned (or moved) by the host: this copy goes and is raised again as it stands now
+			NetRemoveBuilding(Item.Id);
+			B = nullptr;
+			bRestore = true;
+		}
+		else if (B->Team != Item.Team || B->Kind != Kind || (B->bDestroyed && !bDestroyed) || (bHadClaim != bClaim && !bFinishes) || (!B->IsSite() && Item.Build < 1.f && !bDestroyed))
+		{
+			bRestore = true;    // it changed hands, was claimed, or stands again: as a saved game puts it back
+		}
+		else if (bFinishes)
+		{
+			B->Health = Item.Health;
+			B->MaxHealth = Item.MaxHealth;
+			Finish(*B);         // the walls are up: its own mesh, its props, a claimed mine in its side's look
+			if (UVLGrid* Grid = UVLGrid::Get(this); Grid && Grid->IsBuilt() && Have)
+			{
+				FVector2D BC, BH;
+				float BY = 0.f;
+				if (BoxOf(Have, BC, BH, BY))
+				{
+					const float R = BH.Size() + 300.f;
+					Grid->RebuildArea(FBox2D(BC - FVector2D(R, R), BC + FVector2D(R, R)));
+				}
+			}
+		}
+		else if (!B->bDestroyed && bDestroyed)
+		{
+			// it fell on the host: this copy slumps into the ground (UVLBattle::TickCollapse); a mine stands, abandoned.
+			// What it leaves behind (its props, its rising walls) is cleared by TickSites.
+			B->bDestroyed = true;
+			B->Collapse = Kind == EVLBuilding::Mine ? -1.f : 0.f;
+			B->Health = 0.f;
+			B->Queue.Reset();
+			B->UpgradeLeft = -1.f;
+		}
+	}
+	if (bRestore)
+	{
+		FRestore In;
+		In.Actor = bSpawned ? nullptr : Level;
+		In.Kind = Kind;
+		In.Team = Item.Team;
+		In.Mesh = Item.Mesh;
+		In.Location = Item.Location;
+		In.Rotation = bSpawned ? Rotation : Level->GetActorRotation();
+		In.Build = Item.Build;
+		In.bDestroyed = bDestroyed;
+		In.bClaim = bClaim;
+		In.bWasNeutral = (Item.Flags & 16) != 0;
+		if (!bSpawned && Kind == EVLBuilding::Mine)
+		{
+			In.Location = Level->GetActorLocation();
+		}
+		TArray<FBox2D> Changed;
+		AActor* A = RestoreBuilding(In, Changed);
+		if (!A)
+		{
+			return false;
+		}
+		if (UVLGrid* Grid = UVLGrid::Get(this); Grid && Grid->IsBuilt() && Changed.Num() > 0)
+		{
+			Grid->RebuildAreas(Changed);
+		}
+		B = Battle->FindBuilding(A);
+		if (!B)
+		{
+			return false;
+		}
+		B->NetId = Item.Id;
+		UE_LOG(LogSovereignRealms, Log, TEXT("multiplayer: building %d (%s of team %d%s) %s"), Item.Id, *B->Name, B->Team, bSpawned ? TEXT(", raised in the match") : TEXT(""),
+			bDestroyed ? TEXT("is down") : (Item.Build < 1.f ? TEXT("is a site") : TEXT("stands")));
+	}
+	// its numbers
+	B->NetId = Item.Id;
+	B->Level = Item.Level;
+	B->MaxHealth = Item.MaxHealth;
+	B->Health = Item.Health;
+	B->UpgradeLeft = Item.UpgradeLeft;
+	B->UpgradeTotal = Item.UpgradeTotal;
+	B->bRepairing = (Item.Flags & 2) != 0;
+	B->bRuntime = (Item.Flags & 4) != 0;
+	B->BuildersAt = Item.BuildersAt;
+	B->Queue.Reset(Item.Queue.Num());
+	for (const uint8 Q : Item.Queue)
+	{
+		B->Queue.Add(VLNetKinds::ToName(Q));
+	}
+	B->TrainClock = Item.TrainClock;
+	B->bHasRally = (Item.Flags & 32) != 0;
+	B->Rally = Item.Rally;
+	B->Paid.Gold = Item.PaidGold;
+	B->Paid.Food = Item.PaidFood;
+	if (B->IsSite() && !B->bDestroyed && Item.Build < 1.f)
+	{
+		B->Build = Item.Build;
+		ShowRising(*B, B->Build);       // the walls, a course higher
+	}
+	if (Kind == EVLBuilding::Castle)
+	{
+		// the corners' archers: up where the corner stands, gone where it is knocked out
+		const bool bNewLevel = B->CornerLevel != Item.CornerLevel;
+		B->CornerLevel = Item.CornerLevel;
+		for (int32 c = 0; c < VLRules::MaxCorners; ++c)
+		{
+			B->CornerHealth[c] = Item.CornerHealth[c];
+			B->bCornerDown[c] = (Item.CornerBits & (1 << c)) != 0;
+			B->bCornerRepair[c] = (Item.CornerBits & (1 << (4 + c))) != 0;
+			if (AActor* A = B->Actor.Get())
+			{
+				if (bNewLevel)
+				{
+					B->CornerYaw[c] = (Battle->CornerPoint(A, c, 0.f) - A->GetActorLocation()).Rotation().Yaw;
+				}
+				Battle->ShowCornerFigure(*B, c, B->IsAlive() && !B->IsSite() && Battle->IsCornerUp(*B, c));
+			}
+		}
+	}
+	return true;
+}
+
+void UVLConstruction::NetRemoveBuilding(int32 NetId)
+{
+	UVLBattle* Battle = UVLBattle::Get(this);
+	AActor* A = Battle ? Battle->NetBuilding(NetId) : nullptr;
+	if (!A)
+	{
+		return;
+	}
+	FVector2D BC, BH;
+	float BY = 0.f;
+	const bool bBox = BoxOf(A, BC, BH, BY);
+	if (TObjectPtr<AStaticMeshActor>* R = Rising.Find(A))
+	{
+		if (*R)
+		{
+			(*R)->Destroy();
+		}
+		Rising.Remove(A);
+	}
+	if (TArray<TWeakObjectPtr<AActor>>* Mine = Props.Find(A))
+	{
+		for (const TWeakObjectPtr<AActor>& P : *Mine)
+		{
+			if (AActor* PA = P.Get())
+			{
+				PA->Destroy();
+			}
+		}
+		Props.Remove(A);
+	}
+	Battle->Forget(A);
+	if (A->ActorHasTag(TEXT("Built")))
+	{
+		A->Destroy();           // (raised in the match: this game's own copy)
+	}
+	else
+	{
+		// the level's own (a claim on a neutral mine given up): nobody's again, as it stood
+		A->Tags.Remove(TEXT("Claim"));
+		A->Tags.Remove(TEXT("WasNeutral"));
+		SetTeamTag(A, UVLBattle::Neutral);
+		ApplyTeamLook(MeshOf(A), UVLBattle::Neutral);
+		if (UStaticMeshComponent* C = MeshOf(A))
+		{
+			C->SetVisibility(true);
+		}
+	}
+	if (UVLGrid* Grid = UVLGrid::Get(this); Grid && Grid->IsBuilt() && bBox)
+	{
+		const float R = BH.Size() + 300.f;
+		Grid->RebuildArea(FBox2D(BC - FVector2D(R, R), BC + FVector2D(R, R)));
+	}
+	PlaceMemos.Reset();
 }

@@ -69,6 +69,9 @@ public:
 	void Fire(AVLKing* Shooter, const FVector& Tip, const FVector& Velocity, float Gravity, AActor* Ignore = nullptr, float Damage = 10.f);
 	/** An arrow loosed by a building (a watch tower, the castle's walls) of a team: it passes through its own side. */
 	void FireFrom(AActor* Source, int32 Team, const FVector& Tip, const FVector& Velocity, float Gravity, float Damage);
+	/** Multiplayer, the joining player's game: an arrow the host loosed, flown and landed here by the same code (it
+	 *  stops at a foe of its side as the host's does; the damage is the host's alone). */
+	void NetShow(const struct FVLNetArrow& Arrow);
 
 	/** A blow with the bow itself on a training dummy: it rocks a little (Degrees at most; a sword or an arrow rocks
 	 *  it 24), a dull knock, and Damage for when dummies have health. */
@@ -193,4 +196,6 @@ private:
 	void Place(int32 Index);
 	void SetFade(int32 Index, float Alpha);
 	void Play(int32 Kind, const FVector& At, float Volume);
+	/** The host: the arrow just loosed is told to the joining player's game. */
+	void NetTell(int32 Index);
 };

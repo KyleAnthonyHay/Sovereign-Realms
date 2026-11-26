@@ -318,6 +318,15 @@ public:
 	AActor* RestoreBuilding(const FRestore& In, TArray<FBox2D>& OutChanged);
 	friend struct FVLSaveIO;
 
+	// ---- multiplayer (VLNet.h): the joining player's game keeps its own copy of every building, made and changed
+	// from the host's list (AVLGameState::Buildings)
+	/** A building of the host's list as it is now: this game's copy is raised (as a saved game's is: RestoreBuilding),
+	 *  its walls rise, it is finished, it falls, it changes hands, and its numbers are taken. False: it cannot be done
+	 *  yet (the level's actor it stands for has not arrived). */
+	bool NetApplyBuilding(const struct FVLNetBuilding& Item);
+	/** The host has taken it out of the battle (a site cancelled, a claim given back): this game's copy goes. */
+	void NetRemoveBuilding(int32 NetId);
+
 	void LogStatus() const;
 	/** vl.PlacementBench: the ghost's check at N places in a row from At (each twice: moved there, then standing still),
 	 *  timed, with a digest of every answer (to compare vl.Opt.Placement 0 and 1). */

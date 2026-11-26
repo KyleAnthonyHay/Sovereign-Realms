@@ -12,6 +12,9 @@
 #include "VLConstruction.h"
 #include "VLMatchLog.h"
 #include "VLSave.h"
+#include "VLNet.h"
+#include "VLGameMode.h"
+#include "VLPlayerController.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -344,6 +347,22 @@ bool UVLBattle::DoesSupportWorldType(const EWorldType::Type WorldType) const
 void UVLBattle::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
+	// multiplayer (VLNet.h): which game this is. A single-player game is neither, and Mine() is the player's side.
+	bNetClient = VLNet::IsClient(&InWorld);
+	bNetHost = InWorld.GetNetMode() == NM_ListenServer;
+	bAbandoned = false;
+	NextNetId = 1;
+	LocalTeam = bNetClient ? Enemy : Player;
+	if (IsNetGame())
+	{
+		UE_LOG(LogSovereignRealms, Log, TEXT("multiplayer: this game is the %s (its player commands team %d), version %s"), bNetHost ? TEXT("host") : TEXT("joining player's"), LocalTeam, *VLNet::Version());
+	}
+	if (bNetClient)
+	{
+		// the joining game has no game mode of its own: a stand-in does a game mode's local work here (the music, the
+		// ambience, the command inbox: AVLGameMode::Local)
+		AVLGameMode::SpawnClientStandIn(&InWorld);
+	}
 	// the unit registry: every unit there is now, and each one that comes or goes from here on
 	SpawnedHandle = InWorld.AddOnActorSpawnedHandler(FOnActorSpawned::FDelegate::CreateUObject(this, &UVLBattle::OnActorSpawned));
 	DestroyedHandle = InWorld.AddOnActorDestroyedHandler(FOnActorDestroyed::FDelegate::CreateUObject(this, &UVLBattle::OnActorDestroyed));
@@ -395,6 +414,7 @@ namespace
 		TEXT("1: every frame, check the registry against a walk over every unit, and every unit's choice of foe by the hash against the choice by the full walk; differences are logged"));
 }
 
+int32 UVLBattle::LocalTeam = 0;
 bool FVLOptTiming::bOn = false;
 double FVLOptTiming::Seconds[FVLOptTiming::Num] = {};
 int32 FVLOptTiming::Calls[FVLOptTiming::Num] = {};
@@ -757,7 +777,7 @@ FLinearColor UVLBattle::TeamColour(int32 Team)
 
 const TCHAR* UVLBattle::TeamName(int32 Team)
 {
-	return Team == Player ? TEXT("yours") : (Team == Enemy ? TEXT("the enemy's") : TEXT("neutral"));
+	return Team == Mine() ? TEXT("yours") : (Team == Foe() ? TEXT("the enemy's") : TEXT("neutral"));
 }
 
 // ------------------------------------------------------------------------------------------------ buildings
@@ -817,6 +837,7 @@ void UVLBattle::RegisterBuilding(AActor* Actor)
 		bBuildingIndexDirty = true;
 		bTagsDirty = true;
 		B->Actor = Actor;
+		B->NetId = bNetClient ? 0 : NextNetId++;        // (the joining game's copy gets the host's number: AVLGameState)
 		B->Rest = Actor->GetActorLocation();
 		B->Payout = FMath::FRandRange(0.f, VLRules::PayoutInterval);
 	}
@@ -1107,9 +1128,9 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 {
 	UWorld* World = GetWorld();
 	const int32 TargetTeam = TeamOf(Target);
-	if (!World || !Target || Amount <= 0.f || TargetTeam == Neutral || TargetTeam == ByTeam || !IsAlive(Target))
+	if (!World || !Target || Amount <= 0.f || TargetTeam == Neutral || TargetTeam == ByTeam || !IsAlive(Target) || bNetClient)
 	{
-		return 0.f;
+		return 0.f;         // (the joining player's game deals no damage: health comes from the host)
 	}
 	const double Now = World->GetTimeSeconds();
 	AVLKing* Striker = Cast<AVLKing>(By);
@@ -1153,6 +1174,14 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 				PushAlert(TEXT("Your troops are under attack!"), EVLAlert::Attack, &At);
 				Play2D(TEXT("S_AttackAlert"), 0.5f);
 			}
+		}
+		else if (bNetHost && U->Team == Enemy && State == EVLMatch::Playing && Now - LastTroopAlertRemote > 15.0)
+		{
+			// (the joining player's troops: where that player is looking is not known here, so the alert always goes)
+			LastTroopAlertRemote = Now;
+			const FVector At = U->GetActorLocation();
+			PushAlertTo(Enemy, TEXT("Your troops are under attack!"), EVLAlert::Attack, &At);
+			Play2DTo(Enemy, TEXT("S_AttackAlert"), 0.5f);
 		}
 		if (UVLCommand* Command = UVLCommand::Get(this); Command && By && IsAlive(By))
 		{
@@ -1224,13 +1253,21 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 			const FVector CornerAtPoint = CornerPoint(Target, Corner);
 			UE_LOG(LogSovereignRealms, Log, TEXT("CORNERS %s of team %d: corner %d knocked out: its archer is lost (by %s)"), *B->Name, B->Team, Corner, By ? *By->GetName() : TEXT("-"));
 			PlayAt(TEXT("S_BuildingHit"), CornerAtPoint, 0.7f, 5000.f, 0.1f);
-			if (B->Team == Player)
+			for (int32 Side = 0; Side < 2; ++Side)
 			{
-				PushAlert(FString::Printf(TEXT("A corner of your castle has fallen: its archer is lost (repair: %d gold)"), CornerRepairCost(*B)), EVLAlert::Lost, &CornerAtPoint);
-			}
-			else if (B->Team == Enemy)
-			{
-				PushAlert(TEXT("An enemy castle corner has fallen: its archer is silenced"), EVLAlert::Good, &CornerAtPoint);
+				// (each player is told: whose corner it was, and whose foe's)
+				if (!IsHuman(Side) || B->Team < 0)
+				{
+					continue;
+				}
+				if (B->Team == Side)
+				{
+					PushAlertTo(Side, FString::Printf(TEXT("A corner of your castle has fallen: its archer is lost (repair: %d gold)"), CornerRepairCost(*B)), EVLAlert::Lost, &CornerAtPoint);
+				}
+				else
+				{
+					PushAlertTo(Side, TEXT("An enemy castle corner has fallen: its archer is silenced"), EVLAlert::Good, &CornerAtPoint);
+				}
 			}
 		}
 	}
@@ -1255,12 +1292,12 @@ float UVLBattle::Damage(AActor* Target, float Amount, AActor* By, int32 ByTeam)
 		UE_LOG(LogSovereignRealms, Log, TEXT("hit: %s of team %d takes %.0f from %s (%.0f of %.0f left%s)"), *B->Name, B->Team, Amount, By ? *By->GetName() : TEXT("-"), B->Health, B->MaxHealth,
 			Corner != INDEX_NONE ? *FString::Printf(TEXT("; taken by corner %d"), Corner) : TEXT(""));
 	}
-	if (B->Team == Player && State == EVLMatch::Playing && Now - B->LastAlert > 10.0)
+	if (IsHuman(B->Team) && State == EVLMatch::Playing && Now - B->LastAlert > 10.0)
 	{
 		B->LastAlert = Now;
 		const FVector At = Target->GetActorLocation();
-		PushAlert(FString::Printf(TEXT("Your %s is under attack!"), *B->Name), EVLAlert::Attack, &At);
-		Play2D(TEXT("S_AttackAlert"), 0.55f);
+		PushAlertTo(B->Team, FString::Printf(TEXT("Your %s is under attack!"), *B->Name), EVLAlert::Attack, &At);
+		Play2DTo(B->Team, TEXT("S_AttackAlert"), 0.55f);
 	}
 	// troops of its side nearby come to its defence (and its guards, wherever they stand)
 	if (Striker && Striker->IsAlive())
@@ -1328,21 +1365,21 @@ void UVLBattle::OnUnitKilled(AVLKing* Unit, AActor* By)
 		Command->OnUnitDied(Unit);
 	}
 	Unit->Die();
-	if (!Unit->IsTroop() && Unit->Team == Player)
+	if (!Unit->IsTroop() && IsHuman(Unit->Team))
 	{
 		const FVector At = Unit->GetActorLocation();
-		PushAlert(FString::Printf(TEXT("King David has fallen! He will rise again at the castle in %.0f s"), VLRules::KingRespawnSeconds), EVLAlert::Lost, &At);
-		Play2D(TEXT("S_AttackAlert"), 0.6f);
+		PushAlertTo(Unit->Team, FString::Printf(TEXT("King David has fallen! He will rise again at the castle in %.0f s"), VLRules::KingRespawnSeconds), EVLAlert::Lost, &At);
+		Play2DTo(Unit->Team, TEXT("S_AttackAlert"), 0.6f);
 	}
 	if (Unit->IsJonathan() && (Unit->Team == Player || Unit->Team == Enemy) && Jonathans[Unit->Team].Get() == Unit)
 	{
 		// the prince comes back to the castle, as the king does (TickJonathan)
 		JonathanWait[Unit->Team] = VLRules::JonathanRespawnSeconds;
-		if (Unit->Team == Player)
+		if (IsHuman(Unit->Team))
 		{
 			const FVector At = Unit->GetActorLocation();
-			PushAlert(FString::Printf(TEXT("Jonathan has fallen! He will return to the castle in %.0f s"), VLRules::JonathanRespawnSeconds), EVLAlert::Lost, &At);
-			Play2D(TEXT("S_AttackAlert"), 0.6f);
+			PushAlertTo(Unit->Team, FString::Printf(TEXT("Jonathan has fallen! He will return to the castle in %.0f s"), VLRules::JonathanRespawnSeconds), EVLAlert::Lost, &At);
+			Play2DTo(Unit->Team, TEXT("S_AttackAlert"), 0.6f);
 		}
 	}
 }
@@ -1378,13 +1415,23 @@ void UVLBattle::Collapse(FVLBuildingState& B, AActor* By, int32 ByTeam, bool bDe
 		{
 			// (pulled down by its own side: UVLConstruction::Demolish says what came back)
 		}
-		else if (B.Team == Player)
-		{
-			PushAlert(FString::Printf(TEXT("Your %s has been destroyed"), *B.Name), EVLAlert::Lost, &At);
-		}
 		else
 		{
-			PushAlert(FString::Printf(TEXT("The enemy's %s is destroyed"), *B.Name), EVLAlert::Good, &At);
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				if (!IsHuman(Side))
+				{
+					continue;
+				}
+				if (B.Team == Side)
+				{
+					PushAlertTo(Side, FString::Printf(TEXT("Your %s has been destroyed"), *B.Name), EVLAlert::Lost, &At);
+				}
+				else
+				{
+					PushAlertTo(Side, FString::Printf(TEXT("The enemy's %s is destroyed"), *B.Name), EVLAlert::Good, &At);
+				}
+			}
 		}
 		DismissTowerGuards(B);                  // the tower's own archers go with it
 		if (UVLCommand* Command = UVLCommand::Get(this))
@@ -1509,7 +1556,7 @@ bool UVLBattle::TrySpend(int32 Team, const FVLCost& Cost, bool bQuiet)
 	FVLKingdom& K = Kingdoms[Team];
 	if (!CanAfford(Team, Cost))
 	{
-		if (Team == Player && !bQuiet)
+		if (IsHuman(Team) && !bQuiet)
 		{
 			if (K.Gold < Cost.Gold)
 			{
@@ -1519,8 +1566,8 @@ bool UVLBattle::TrySpend(int32 Team, const FVLCost& Cost, bool bQuiet)
 			{
 				K.Flash[1] = 1.f;
 			}
-			PushAlert(K.Food < Cost.Food ? FString::Printf(TEXT("Not enough food (%d needed)"), Cost.Food) : FString::Printf(TEXT("Not enough gold (%d needed)"), Cost.Gold));
-			Play2D(TEXT("S_UIError"), 0.5f);
+			PushAlertTo(Team, K.Food < Cost.Food ? FString::Printf(TEXT("Not enough food (%d needed)"), Cost.Food) : FString::Printf(TEXT("Not enough gold (%d needed)"), Cost.Gold));
+			Play2DTo(Team, TEXT("S_UIError"), 0.5f);
 		}
 		return false;
 	}
@@ -1528,6 +1575,27 @@ bool UVLBattle::TrySpend(int32 Team, const FVLCost& Cost, bool bQuiet)
 	K.Food -= Cost.Food;
 	K.Spent[0] += Cost.Gold;
 	K.Spent[1] += Cost.Food;
+	return true;
+}
+
+bool UVLBattle::TrySpendSaid(const FVLCost& Cost)
+{
+	const int32 Team = Mine();
+	if (CanAfford(Team, Cost))
+	{
+		return false;
+	}
+	FVLKingdom& K = Kingdoms[Team];
+	if (K.Gold < Cost.Gold)
+	{
+		K.Flash[0] = 1.f;
+	}
+	if (K.Food < Cost.Food)
+	{
+		K.Flash[1] = 1.f;
+	}
+	PushAlert(K.Food < Cost.Food ? FString::Printf(TEXT("Not enough food (%d needed)"), Cost.Food) : FString::Printf(TEXT("Not enough gold (%d needed)"), Cost.Gold));
+	Play2D(TEXT("S_UIError"), 0.5f);
 	return true;
 }
 
@@ -1651,14 +1719,17 @@ void UVLBattle::TickEconomy(float Dt)
 		{
 			FVector Origin, Extent;
 			A->GetActorBounds(true, Origin, Extent);
-			FVLPopup& P = Popups.AddDefaulted_GetRef();
-			P.At = Origin + FVector(0.f, 0.f, Extent.Z * 0.8f);
-			P.Text = FString::Printf(TEXT("+%d %s"), Amount, bGold ? TEXT("gold") : TEXT("food"));
-			P.Amount = Amount;
-			P.bGold = bGold;
-			P.Colour = bGold ? FLinearColor(1.f, 0.82f, 0.25f) : FLinearColor(0.85f, 0.95f, 0.45f);
-			P.Time = World->GetRealTimeSeconds();
-			PlayAt(bGold ? TEXT("S_CoinPayout") : TEXT("S_GrainPayout"), Origin, 0.22f, 3500.f, 0.5f);
+			AddPopup(Origin + FVector(0.f, 0.f, Extent.Z * 0.8f), Amount, bGold);
+		}
+		else if (bNetHost && B.Team == Enemy && Amount > 0)
+		{
+			// (the joining player's payout: the number and its sound are that game's to show)
+			FVector Origin, Extent;
+			A->GetActorBounds(true, Origin, Extent);
+			if (AVLPlayerController* Remote = VLNet::RemoteController(this))
+			{
+				Remote->ClientPopup(Origin + FVector(0.f, 0.f, Extent.Z * 0.8f), Amount, bGold);
+			}
 		}
 	}
 	const double Now = World->GetRealTimeSeconds();
@@ -1787,6 +1858,22 @@ FString UVLBattle::TrainRefusal(const AActor* Building, const FString& InKind) c
 
 int32 UVLBattle::Train(AActor* Building, int32 Count, bool bQuiet, const FString& InKind)
 {
+	if (bNetClient)
+	{
+		// the joining player's game: the host queues them (and says why not); what this game can already see is said here
+		const FString Why = TrainRefusal(Building, InKind);
+		if (!Why.IsEmpty() && !Why.StartsWith(TEXT("Not enough")))
+		{
+			if (!bQuiet)
+			{
+				PushAlert(Why);
+				Play2D(TEXT("S_UIError"), 0.5f);
+			}
+			return 0;
+		}
+		VLNet::SendBuilding(this, EVLNetBuildingAsk::Train, Building, Count, InKind);
+		return Why.IsEmpty() ? Count : 0;
+	}
 	FVLBuildingState* B = FindBuilding(Building);
 	const FString Kind = InKind.IsEmpty() ? TroopFor(Building) : InKind;
 	if (!B || Kind.IsEmpty() || !B->IsAlive() || !TrainsKind(Building, Kind))
@@ -1800,7 +1887,7 @@ int32 UVLBattle::Train(AActor* Building, int32 Count, bool bQuiet, const FString
 		const FString Why = TrainRefusal(Building, Kind);
 		if (!Why.IsEmpty())
 		{
-			if (B->Team == Player && !bQuiet && Queued == 0)
+			if (IsHuman(B->Team) && !bQuiet && Queued == 0)
 			{
 				const bool bFood = Why.StartsWith(TEXT("Not enough"));
 				if (bFood)
@@ -1809,8 +1896,8 @@ int32 UVLBattle::Train(AActor* Building, int32 Count, bool bQuiet, const FString
 				}
 				if (!bFood)
 				{
-					PushAlert(Why);
-					Play2D(TEXT("S_UIError"), 0.5f);
+					PushAlertTo(B->Team, Why);
+					Play2DTo(B->Team, TEXT("S_UIError"), 0.5f);
 				}
 			}
 			break;
@@ -1861,6 +1948,7 @@ float UVLBattle::TrainProgress(const AActor* Building) const
 
 void UVLBattle::SetRally(AActor* Building, const FVector& Ground, bool bClear)
 {
+	VLNet::SendBuilding(this, bClear ? EVLNetBuildingAsk::ClearRally : EVLNetBuildingAsk::SetRally, Building, 0, FString(), Ground);     // (the joining game: the host's too; shown here at once)
 	if (FVLBuildingState* B = FindBuilding(Building))
 	{
 		B->bHasRally = !bClear;
@@ -1903,6 +1991,10 @@ void UVLBattle::TickTraining(float Dt)
 AVLTroop* UVLBattle::SpawnTroop(const FString& Kind, int32 Team, const FVector& Ground, float Yaw)
 {
 	UWorld* World = GetWorld();
+	if (bNetClient)
+	{
+		return nullptr;         // (the joining player's game makes no troops: the host's arrive)
+	}
 	const TSoftObjectPtr<UVLCharacterData> Data = AVLTroop::DataFor(Kind);
 	if (!World || !Data.LoadSynchronous())
 	{
@@ -1915,7 +2007,7 @@ AVLTroop* UVLBattle::SpawnTroop(const FString& Kind, int32 Team, const FVector& 
 	{
 		return nullptr;
 	}
-	const FString Prefix = Team == Enemy ? TEXT("Enemy ") : TEXT("");
+	const FString Prefix = (Team == Enemy && !bNetHost) ? TEXT("Enemy ") : TEXT("");      // (a multiplayer match: both sides' troops are a player's)
 	const int32 Number = ++Numbers.FindOrAdd(Prefix + Kind);
 	T->SetCharacterData(Data);
 	T->SetKind(Kind);
@@ -1985,9 +2077,9 @@ void UVLBattle::SpawnRecruit(FVLBuildingState& B, const FString& Kind)
 		Command->AddToPlatoon(Join, { T });
 		if (bToPlatoon && Leader && Leader != T && Command->OrderFollow({ T }, Leader, false) > 0)
 		{
-			if (B.Team == Player)
+			if (IsHuman(B.Team))
 			{
-				Play2D(TEXT("S_RecruitReady"), 0.45f);
+				Play2DTo(B.Team, TEXT("S_RecruitReady"), 0.45f);
 			}
 			UE_LOG(LogSovereignRealms, Log, TEXT("trained %s at %s (team %d): joins platoon %d%s, follows %s"), *T->GetDisplayName(), *B.Name, B.Team, Join + 1,
 				bFlagged ? TEXT(" (the recruits' flag)") : TEXT(""), *Leader->GetDisplayName());
@@ -1999,9 +2091,9 @@ void UVLBattle::SpawnRecruit(FVLBuildingState& B, const FString& Kind)
 	UVLConstruction* Construction = UVLConstruction::Get(this);
 	if (!B.bHasRally && !bToPlatoon && Construction && Construction->SendToYard(B, T))
 	{
-		if (B.Team == Player)
+		if (IsHuman(B.Team))
 		{
-			Play2D(TEXT("S_RecruitReady"), 0.45f);
+			Play2DTo(B.Team, TEXT("S_RecruitReady"), 0.45f);
 		}
 		UE_LOG(LogSovereignRealms, Log, TEXT("trained %s at %s (team %d): waits in the yard"), *T->GetDisplayName(), *B.Name, B.Team);
 		return;
@@ -2022,9 +2114,9 @@ void UVLBattle::SpawnRecruit(FVLBuildingState& B, const FString& Kind)
 	{
 		Command->OrderMove({ T }, Fitted, false, EVLFormation::Line);
 	}
-	if (B.Team == Player)
+	if (IsHuman(B.Team))
 	{
-		Play2D(TEXT("S_RecruitReady"), 0.45f);
+		Play2DTo(B.Team, TEXT("S_RecruitReady"), 0.45f);
 	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("trained %s at %s (team %d)"), *T->GetDisplayName(), *B.Name, B.Team);
 }
@@ -2068,12 +2160,16 @@ FString UVLBattle::UpgradeRefusal(const AActor* Building, FVLCost* OutCost) cons
 
 bool UVLBattle::Upgrade(AActor* Building, bool bQuiet)
 {
+	if (VLNet::SendBuilding(this, EVLNetBuildingAsk::Upgrade, Building))
+	{
+		return UpgradeRefusal(Building).IsEmpty();
+	}
 	FVLBuildingState* B = FindBuilding(Building);
 	FVLCost Cost;
 	const FString Why = UpgradeRefusal(Building, &Cost);
 	if (!B || !Why.IsEmpty())
 	{
-		if (B && B->Team == Player && !bQuiet && Why != TEXT("-"))
+		if (B && IsHuman(B->Team) && !bQuiet && Why != TEXT("-"))
 		{
 			if (Why.StartsWith(TEXT("Not enough")))
 			{
@@ -2081,8 +2177,8 @@ bool UVLBattle::Upgrade(AActor* Building, bool bQuiet)
 			}
 			else
 			{
-				PushAlert(Why);
-				Play2D(TEXT("S_UIError"), 0.5f);
+				PushAlertTo(B->Team, Why);
+				Play2DTo(B->Team, TEXT("S_UIError"), 0.5f);
 			}
 		}
 		return false;
@@ -2109,11 +2205,11 @@ void UVLBattle::TickUpgrades(float Dt)
 			++B.Level;
 			ApplyLevel(B, B.Kind == EVLBuilding::Castle);       // the castle's new walls come up whole
 			UE_LOG(LogSovereignRealms, Log, TEXT("upgrade done: %s of team %d is level %d"), *B.Name, B.Team, B.Level);
-			if (B.Team == Player)
+			if (IsHuman(B.Team))
 			{
 				const FVector At = B.Actor->GetActorLocation();
-				PushAlert(FString::Printf(TEXT("%s raised to level %d"), *B.Name, B.Level), EVLAlert::Good, &At);
-				Play2D(TEXT("S_RecruitReady"), 0.4f);
+				PushAlertTo(B.Team, FString::Printf(TEXT("%s raised to level %d"), *B.Name, B.Level), EVLAlert::Good, &At);
+				Play2DTo(B.Team, TEXT("S_RecruitReady"), 0.4f);
 			}
 		}
 	}
@@ -2341,7 +2437,7 @@ bool UVLBattle::SpawnTowerGuard(int32 Slot)
 	}
 	T->bTowerGuard = true;
 	T->RefreshSilhouette();         // (a tower's own archer never leaves it: no outline through walls; the HUD leaves its diamond out too)
-	const FString Prefix = Team == Enemy ? TEXT("Enemy ") : TEXT("");
+	const FString Prefix = (Team == Enemy && !bNetHost) ? TEXT("Enemy ") : TEXT("");      // (a multiplayer match: both sides' troops are a player's)
 	--Numbers.FindOrAdd(Prefix + TEXT("Archer"));      // (its own count: the trained archers' names run on without a gap)
 	T->SetDisplayName(FString::Printf(TEXT("%sTower Archer %d"), *Prefix, ++Numbers.FindOrAdd(Prefix + TEXT("Tower Archer"))));
 	if (UVLArcherCombat* Bow = UVLArcherCombat::For(T, true))
@@ -3033,9 +3129,9 @@ void UVLBattle::TickKings(float Dt)
 		{
 			Command->OnKingRevived(K);     // (King David back into the platoon he fell from, leading it)
 		}
-		if (K->Team == Player)
+		if (IsHuman(K->Team))
 		{
-			PushAlert(TEXT("King David has returned to the castle"), EVLAlert::Good, &Feet);
+			PushAlertTo(K->Team, TEXT("King David has returned to the castle"), EVLAlert::Good, &Feet);
 		}
 	}
 }
@@ -3049,6 +3145,10 @@ namespace
 
 bool UVLBattle::JonathanFor(int32 Team)
 {
+	if (const UWorld* World = GWorld; World && World->GetNetMode() != NM_Standalone)
+	{
+		return Team == Player || Team == Enemy;     // (a multiplayer match: each player's own, bought as the player's is)
+	}
 	return Team == Player || (Team == Enemy && CVarJonathanEnemy.GetValueOnGameThread() != 0);
 }
 
@@ -3128,13 +3228,17 @@ FString UVLBattle::JonathanBuyRefusal(int32 Team) const
 
 bool UVLBattle::BuyJonathan(int32 Team)
 {
+	if (VLNet::SendBuilding(this, EVLNetBuildingAsk::BuyJonathan, nullptr))
+	{
+		return JonathanBuyRefusal(Team).IsEmpty();
+	}
 	const FString Why = (Team == Player || Team == Enemy) ? JonathanBuyRefusal(Team) : FString(TEXT("no side"));
 	if (!Why.IsEmpty())
 	{
-		if (Team == Player)
+		if (IsHuman(Team))
 		{
-			PushAlert(Why);
-			Play2D(TEXT("S_UIError"), 0.5f);
+			PushAlertTo(Team, Why);
+			Play2DTo(Team, TEXT("S_UIError"), 0.5f);
 		}
 		UE_LOG(LogSovereignRealms, Log, TEXT("Jonathan not bought for team %d: %s"), Team, *Why);
 		return false;
@@ -3170,11 +3274,11 @@ AVLTroop* UVLBattle::JonathanToCastle(int32 t)
 		return nullptr;
 	}
 	J->WalkTo(FVector2D(Rally + Side * 220.f), false);      // out of the gate, beside where the recruits gather
-	if (t == Player)
+	if (IsHuman(t))
 	{
-		PushAlert(bJonathanCame[t] ? TEXT("Jonathan has returned to the castle (J: play him)")
+		PushAlertTo(t, bJonathanCame[t] ? TEXT("Jonathan has returned to the castle (J: play him)")
 			: TEXT("Prince Jonathan, the archer, has come to your castle (J: play him)"), EVLAlert::Good, &Door);
-		Play2D(TEXT("S_RecruitReady"), 0.5f);
+		Play2DTo(t, TEXT("S_RecruitReady"), 0.5f);
 	}
 	bJonathanCame[t] = true;
 	return J;
@@ -3199,15 +3303,15 @@ void UVLBattle::TickJonathan(float Dt)
 		{
 			continue;
 		}
-		if (t == Player && !bJonathanBought[t])
+		if (IsHuman(t) && !bJonathanBought[t])
 		{
 			if (!bJonathanOffered[t])
 			{
 				bJonathanOffered[t] = true;
 				const FVector At = GetCastle(t) ? GetCastle(t)->GetActorLocation() : FVector::ZeroVector;
-				PushAlert(FString::Printf(TEXT("Prince Jonathan is unlocked: buy him in the hero list (top bar) for %d gold + %d food"), VLRules::JonathanGold, VLRules::JonathanFood),
+				PushAlertTo(t, FString::Printf(TEXT("Prince Jonathan is unlocked: buy him in the hero list (top bar) for %d gold + %d food"), VLRules::JonathanGold, VLRules::JonathanFood),
 					EVLAlert::Good, &At);
-				Play2D(TEXT("S_RecruitReady"), 0.4f);
+				Play2DTo(t, TEXT("S_RecruitReady"), 0.4f);
 			}
 			continue;
 		}
@@ -3316,7 +3420,7 @@ void UVLBattle::StartMatch(int32 InDifficulty)
 	}
 	bBattle = Kingdoms[0].bHasCastle && Kingdoms[1].bHasCastle;
 	Commanders[1]->Reset(this, Enemy, Difficulty);
-	Commanders[1]->bActive = bBattle;
+	Commanders[1]->bActive = bBattle && !bNetHost;      // (a multiplayer match: team 1 is the joining player's, no commander)
 	Commanders[0]->bActive = false;
 	if (bBattle)
 	{
@@ -3593,9 +3697,9 @@ float UVLBattle::GetEndTime() const
 FString UVLBattle::EnemyStatus(FLinearColor* OutColour) const
 {
 	const FVLCommander* C = Commanders[1].Get();
-	if (!bBattle || !C || State != EVLMatch::Playing)
+	if (!bBattle || !C || State != EVLMatch::Playing || IsNetGame())
 	{
-		return FString();
+		return FString();       // (a multiplayer match: the other side is a player, with no plan to tell of)
 	}
 	FLinearColor Col(0.75f, 0.72f, 0.62f);
 	FString S;
@@ -3632,6 +3736,11 @@ void UVLBattle::Tick(float DeltaSeconds)
 		return;
 	}
 	FVLOptTiming::FScope Timing(FVLOptTiming::BattleTick);
+	if (bNetClient)
+	{
+		TickNetClient(DeltaSeconds);    // (the joining player's game: no rules here, the host's state arrives)
+		return;
+	}
 	RefreshUnitHash();          // (the actors have ticked: where every unit stands now)
 	if (CVarOptRegistryCheck.GetValueOnGameThread() != 0)
 	{
@@ -3668,8 +3777,9 @@ void UVLBattle::Tick(float DeltaSeconds)
 		if (GetEndTime() >= VLRules::EndScreenDelay && Sounded != EndedAt)
 		{
 			Sounded = EndedAt;
-			Play2D(Winner == Player ? TEXT("S_Victory") : TEXT("S_Defeat"), 0.7f);
+			Play2D(Winner == Mine() ? TEXT("S_Victory") : TEXT("S_Defeat"), 0.7f);
 		}
+		PushNet();
 		return;
 	}
 	Clock += DeltaSeconds;
@@ -3687,6 +3797,131 @@ void UVLBattle::Tick(float DeltaSeconds)
 		}
 	}
 	CheckEnd();
+	PushNet();
+}
+
+void UVLBattle::PushNet()
+{
+	if (bNetHost)
+	{
+		if (AVLGameState* Net = VLNet::State(this))
+		{
+			Net->Push(*this);       // (what changed goes to the joining player's game)
+		}
+	}
+}
+
+void UVLBattle::TickNetClient(float Dt)
+{
+	UWorld* World = GetWorld();
+	RefreshUnitHash();
+	TickCollapse(Dt);
+	const double Now = World->GetRealTimeSeconds();
+	Alerts.RemoveAll([Now](const FVLAlert& A) { return Now - A.Time > 7.0; });
+	Popups.RemoveAll([Now](const FVLPopup& P) { return Now - P.Time > 1.5; });
+	for (int32 t = 0; t < 2; ++t)
+	{
+		for (int32 r = 0; r < 2; ++r)
+		{
+			Kingdoms[t].Flash[r] = FMath::Max(0.f, Kingdoms[t].Flash[r] - Dt / 0.55f);
+			Kingdoms[t].Pulse[r] = FMath::Max(0.f, Kingdoms[t].Pulse[r] - Dt / 0.6f);
+		}
+	}
+	if (State == EVLMatch::Playing)
+	{
+		Clock += Dt;            // (between the host's whole seconds)
+	}
+	else if (State == EVLMatch::Ended)
+	{
+		static double SoundedNet = -1.0;
+		if (GetEndTime() >= VLRules::EndScreenDelay && SoundedNet != EndedAt)
+		{
+			SoundedNet = EndedAt;
+			Play2D(Winner == Mine() ? TEXT("S_Victory") : TEXT("S_Defeat"), 0.7f);
+		}
+	}
+}
+
+void UVLBattle::EndAbandoned(int32 InWinner)
+{
+	if (State != EVLMatch::Playing)
+	{
+		return;
+	}
+	Winner = InWinner;
+	bAbandoned = true;
+	State = EVLMatch::Ended;
+	EndedAt = GetWorld()->GetRealTimeSeconds();
+	UE_LOG(LogSovereignRealms, Log, TEXT("match over after %s: the other player left, team %d wins"), *ClockText(Clock), Winner);
+	PushNet();
+}
+
+void UVLBattle::AddPopup(const FVector& At, int32 Amount, bool bGold)
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	FVLPopup& P = Popups.AddDefaulted_GetRef();
+	P.At = At;
+	P.Text = FString::Printf(TEXT("+%d %s"), Amount, bGold ? TEXT("gold") : TEXT("food"));
+	P.Amount = Amount;
+	P.bGold = bGold;
+	P.Colour = bGold ? FLinearColor(1.f, 0.82f, 0.25f) : FLinearColor(0.85f, 0.95f, 0.45f);
+	P.Time = World->GetRealTimeSeconds();
+	PlayAt(bGold ? TEXT("S_CoinPayout") : TEXT("S_GrainPayout"), At, 0.22f, 3500.f, 0.5f);
+}
+
+void UVLBattle::PushAlertTo(int32 Team, const FString& Text, EVLAlert Kind, const FVector* At)
+{
+	if (Team == Mine())
+	{
+		PushAlert(Text, Kind, At);
+	}
+	else if (bNetHost)
+	{
+		if (AVLPlayerController* Remote = VLNet::RemoteController(this); Remote && VLNet::TeamOf(Remote) == Team)
+		{
+			Remote->ClientAlert(Text, uint8(Kind), At != nullptr, At ? *At : FVector::ZeroVector);
+		}
+	}
+}
+
+void UVLBattle::Play2DTo(int32 Team, const TCHAR* Base, float Volume)
+{
+	if (Team == Mine())
+	{
+		Play2D(Base, Volume);
+	}
+	else if (bNetHost)
+	{
+		if (AVLPlayerController* Remote = VLNet::RemoteController(this); Remote && VLNet::TeamOf(Remote) == Team)
+		{
+			Remote->ClientSound(FName(Base), false, FVector::ZeroVector, Volume, 0.f);
+		}
+	}
+}
+
+int32 UVLBattle::NetIdOf(const AActor* Building) const
+{
+	const FVLBuildingState* B = FindBuilding(Building);
+	return B ? B->NetId : 0;
+}
+
+AActor* UVLBattle::NetBuilding(int32 Id) const
+{
+	if (Id != 0)
+	{
+		for (const FVLBuildingState& B : Buildings)
+		{
+			if (B.NetId == Id)
+			{
+				return B.Actor.Get();
+			}
+		}
+	}
+	return nullptr;
 }
 
 // ------------------------------------------------------------------------------------------------ feedback
@@ -3752,6 +3987,15 @@ void UVLBattle::PlayAt(const TCHAR* Base, const FVector& At, float Volume, float
 	if (Now - Set->LastTime < Gap)
 	{
 		return;
+	}
+	if (bNetHost && !bNetEcho)
+	{
+		// the battle's sounds are made here, on the host: the joining player's game is told of each (it fades them by
+		// where its own player looks). The gap between two of a kind is this game's, checked above.
+		if (AVLPlayerController* Remote = VLNet::RemoteController(this))
+		{
+			Remote->ClientSound(FName(Base), true, At, Volume, Range);
+		}
 	}
 	const APlayerController* PC = World->GetFirstPlayerController();
 	const AVLKing* Me = PC ? Cast<AVLKing>(PC->GetPawn()) : nullptr;

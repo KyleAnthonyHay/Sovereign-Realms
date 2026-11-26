@@ -1,4 +1,6 @@
 #include "VLArrow.h"
+#include "VLNet.h"
+#include "VLPlayerController.h"
 #include "VLArrowTrail.h"
 #include "VLGrid.h"
 #include "VLBattle.h"
@@ -380,6 +382,46 @@ void UVLArrows::Fire(AVLKing* Shooter, const FVector& Tip, const FVector& Veloci
 	++Fired;
 	Play(ArrowSoundRelease, Tip, CVarArrowReleaseVolume.GetValueOnGameThread());
 	Play(ArrowSoundFly, Tip, CVarArrowFlyVolume.GetValueOnGameThread());
+	if (Shooter)
+	{
+		NetTell(Index);         // (a building's arrow is told once it has its side: FireFrom)
+	}
+}
+
+void UVLArrows::NetTell(int32 Index)
+{
+	// multiplayer, the host: the joining player's game is told of the arrow (sent with this frame's others)
+	if (AVLPlayerController* Remote = VLNet::RemoteController(this))
+	{
+		const FArrow& A = Arrows[Index];
+		FVLNetArrow& Out = Remote->ArrowsOut.AddDefaulted_GetRef();
+		Out.Tip = A.Tip;
+		Out.Velocity = A.Velocity;
+		Out.Gravity = A.Gravity;
+		Out.Team = int8(A.Team);
+		// (what it flies out over: only an actor both games know, a unit or one of the level's)
+		AActor* Over = A.Ignore.Get();
+		Out.Ignore = (Over && !Over->ActorHasTag(TEXT("Built"))) ? Over : nullptr;
+	}
+}
+
+void UVLArrows::NetShow(const FVLNetArrow& Arrow)
+{
+	const int32 Before = Fired;
+	Fire(nullptr, Arrow.Tip, Arrow.Velocity, Arrow.Gravity, Arrow.Ignore, 1.f);
+	if (Fired == Before)
+	{
+		return;
+	}
+	// (Fire took the newest free arrow: it gets its side, so it stops at that side's foes)
+	for (FArrow& A : Arrows)
+	{
+		if (A.State == EState::Flying && A.Age == 0.f && A.Team == -1 && A.Tip.Equals(FVector(Arrow.Tip), 0.5))
+		{
+			A.Team = Arrow.Team;
+			break;
+		}
+	}
 }
 
 void UVLArrows::FireFrom(AActor* Source, int32 Team, const FVector& Tip, const FVector& Velocity, float Gravity, float Damage)
@@ -392,6 +434,7 @@ void UVLArrows::FireFrom(AActor* Source, int32 Team, const FVector& Tip, const F
 		{
 			A.Source = Source;
 			A.Team = Team;
+			NetTell(int32(&A - Arrows.GetData()));
 		}
 	}
 }
@@ -614,7 +657,10 @@ void UVLArrows::Tick(float DeltaSeconds)
 			if (UVLBattle* Battle = UVLBattle::Get(this))
 			{
 				Battle->Damage(Foe, A.Damage, A.Source.Get(), A.Team);
-				Battle->PlayAt(TEXT("S_ArrowHitFlesh"), Foe->GetActorLocation(), 0.4f, 3500.f, 0.05f);
+				if (!Battle->IsNetClient())     // (the joining game hears the host's: UVLBattle::PlayAt sends it)
+				{
+					Battle->PlayAt(TEXT("S_ArrowHitFlesh"), Foe->GetActorLocation(), 0.4f, 3500.f, 0.05f);
+				}
 			}
 			if (CVarArcherLog.GetValueOnGameThread() != 0)
 			{

@@ -229,6 +229,7 @@ struct FVLBuildingState
 	TArray<FString> Queue;
 	float TrainClock = 0.f;
 	int32 Trained = 0;
+	int32 NetId = 0;                    // multiplayer: its number in this match, the same in both games (VLNet.h)
 	int32 FeedPlatoon = INDEX_NONE;     // its recruits join this platoon (the main game's "Joins" row)
 	bool bHasRally = false;
 	FVector Rally = FVector::ZeroVector;
@@ -380,6 +381,33 @@ public:
 	static FLinearColor TeamColour(int32 Team);
 	static const TCHAR* TeamName(int32 Team);
 
+	// ---- multiplayer (VLNet.h). In a single-player game: Mine() is Player, only Player is human, nothing is sent.
+	/** The side this game's own player commands: Player (0) everywhere but in the joining player's game, where it is
+	 *  Enemy (1). What the interface, the selection, the fog and the alerts mean by "the player's". */
+	static int32 Mine() { return LocalTeam; }
+	/** The other side. */
+	static int32 Foe() { return 1 - LocalTeam; }
+	static int32 LocalTeam;
+	/** A side a person plays (it gets alerts, refusals said aloud, the player's rules): the player's, and in a
+	 *  multiplayer match the joining player's too. */
+	bool IsHuman(int32 Team) const { return Team == Player || (bNetHost && Team == Enemy); }
+	/** The joining player's game: the battle's rules do not run here, its state arrives from the host (AVLGameState). */
+	bool IsNetClient() const { return bNetClient; }
+	bool IsNetHost() const { return bNetHost; }
+	bool IsNetGame() const { return bNetClient || bNetHost; }
+	/** A multiplayer match is over because a player left (the end screen says so instead of counting castles). */
+	bool IsAbandoned() const { return bAbandoned; }
+	/** The host: the other player has gone, the one left wins. */
+	void EndAbandoned(int32 InWinner);
+	/** An alert / a 2D sound / a payout number for the player of Team: this game's own, or sent to the joining player. */
+	void PushAlertTo(int32 Team, const FString& Text, EVLAlert Kind = EVLAlert::Info, const FVector* At = nullptr);
+	void Play2DTo(int32 Team, const TCHAR* Base, float Volume = 0.6f);
+	/** A building's number in this match (the same in both games), and back. 0 / null: none. */
+	int32 NetIdOf(const AActor* Building) const;
+	AActor* NetBuilding(int32 Id) const;
+	friend class AVLGameState;
+	friend class UVLConstruction;       // (the joining game's copies of the buildings: UVLConstruction::NetApplyBuilding)
+
 	// ---- the unit registry (vl.Opt.Registry 0: the old TActorIterator walks, for comparing)
 	/** Every unit of the world, alive or fallen (as TActorIterator<AVLKing> gave them), in the order they came into
 	 *  it. Kept by the world's actor-spawned / actor-destroyed delegates. For loops that only read; one that gives
@@ -456,6 +484,9 @@ public:
 	bool CanAfford(int32 Team, const FVLCost& Cost) const;
 	/** Pays, or refuses (the player: the short counter flashes, an alert says why). */
 	bool TrySpend(int32 Team, const FVLCost& Cost, bool bQuiet = false);
+	/** This game's own player cannot pay Cost: the counter that falls short flashes and an alert says so (the interface's
+	 *  "refused" before anything is asked of the battle). False if it can be paid: nothing is taken. */
+	bool TrySpendSaid(const FVLCost& Cost);
 	int32 GetStorage(int32 Team, EVLRes Res) const;
 	int32 GetCastleLevel(int32 Team) const;
 	/** Jonathan, the archer prince, of a side (alive or just fallen), or null: he is not in the field. */
@@ -575,6 +606,8 @@ public:
 	void PushAlert(const FString& Text, EVLAlert Kind = EVLAlert::Info, const FVector* At = nullptr);
 	const TArray<FVLAlert>& GetAlerts() const { return Alerts; }
 	const TArray<FVLPopup>& GetPopups() const { return Popups; }
+	/** "+14" over a farm or a mine that has paid (with its sound). */
+	void AddPopup(const FVector& At, int32 Amount, bool bGold);
 	/** Seconds since the unit was last hurt (health bars). */
 	static constexpr float BarSeconds = 4.f;
 	/** Plays /Game/Voxel/Audio/<Base>[_n] at a point (fading with the distance from where the player looks), or 2D. */
@@ -692,9 +725,21 @@ private:
 	float ScanTimer = 0.f;
 	float AutoTimer = 0.f;
 	double LastTroopAlert = -100.0;
+	double LastTroopAlertRemote = -100.0;       // (the joining player's troops: VLNet.h)
 	float SpyCooldownLeft[2] = { 0.f, 0.f };
 	TArray<FVLAlert> Alerts;
 	TArray<FVLPopup> Popups;
+	// multiplayer
+	bool bNetClient = false;
+	bool bNetHost = false;
+	bool bAbandoned = false;
+	int32 NextNetId = 1;
+	/** The joining player's game: its tick (the unit hash, collapses, the clock; no rules). */
+	void TickNetClient(float Dt);
+	/** The host: this frame's state to the game state (AVLGameState::Push). */
+	void PushNet();
+	/** Set while a sound the host sent is played in the joining game (it is not sent on). */
+	bool bNetEcho = false;
 	TMap<FString, int32> Numbers;          // "Swordsman" / "Enemy Swordsman" -> how many there have been (names)
 	TSharedPtr<FVLCommander> Commanders[2];
 	/** The balance log of this match (vl.MatchLog; VLMatchLog.*), while it is on. */

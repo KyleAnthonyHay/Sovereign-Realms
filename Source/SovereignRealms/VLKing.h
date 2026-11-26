@@ -93,6 +93,63 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PossessedBy(AController* NewController) override;
+
+	// ---- multiplayer (VLNet.h, VLKingNet.cpp). A unit replicates: where it is (the engine's replicated movement), its
+	// side, health, death, stance, its sword's swings and its bow. In the joining player's game every unit but the
+	// farms' hands is a COPY of one the host runs (IsNetCopy): it is shown and animated there, and none of its rules
+	// run (no orders, no fights, no damage). In a single-player game nothing here does anything.
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker) override;
+	/** The joining player's game: this unit is now the one its player plays (its camera, its view). */
+	virtual void PawnClientRestart() override;
+	/** A copy, in the joining player's game, of a unit the host runs. */
+	bool IsNetCopy() const { return GetLocalRole() != ROLE_Authority; }
+	/** The host's side: the joining player plays this unit (its movement comes from that game). */
+	bool IsRemotelyPlayed() const;
+	/** The host's side: the joining player's game says which view its unit is played in (the overview: it takes orders
+	 *  and fights by itself, as the host's own does). */
+	void NetSetHero(bool bHero) { bHeroMode = bHero; }
+	/** Either side: the walk it is on ended on the other machine (no word of it is sent back). */
+	void NetFinishOrder(bool bArrived, bool bStopped);
+	/** Its swing as the other game sees it: a counter (bits 2..7) and the swing's kind (bits 0..1). */
+	UPROPERTY(ReplicatedUsing = OnRep_NetSwing)
+	uint8 NetSwing = 0;
+	/** Its bow (UVLArcherCombat fills and reads these): bit 0 drawing or held, bit 1 the bow up, bits 2..4 the shot's
+	 *  phase, bit 5 a quick shot; what it aims at (a unit or a level's actor), else the point. */
+	UPROPERTY(ReplicatedUsing = OnRep_NetBow)
+	uint8 NetBow = 0;
+	UFUNCTION()
+	void OnRep_NetBow();
+	UPROPERTY(Replicated)
+	TObjectPtr<AActor> NetBowTarget = nullptr;
+	UPROPERTY(Replicated)
+	FVector_NetQuantize NetBowAim;
+	/** bit 0 on an order, bit 1 at a run, bit 2 its sword drawn, bit 3 a hold order, bit 4 a Builder at its work */
+	UPROPERTY(ReplicatedUsing = OnRep_NetFlags)
+	uint8 NetFlags = 0;
+	/** The tower whose lookout it stands on (the battle's number for it), or 0. */
+	UPROPERTY(ReplicatedUsing = OnRep_NetGarrison)
+	int32 NetGarrison = 0;
+	UFUNCTION()
+	void OnRep_NetSwing();
+	UFUNCTION()
+	void OnRep_NetFlags();
+	UFUNCTION()
+	void OnRep_NetGarrison();
+	UFUNCTION()
+	void OnRep_Team();
+	UFUNCTION()
+	void OnRep_Health(float Old);
+	UFUNCTION()
+	void OnRep_Dead();
+	/** The white flash and the held pose of a blow that landed (ReceiveDamage; a copy: when its health drops). */
+	void ShowHurt();
+	/** A copy's figure against its capsule: the capsule jumps to each of the host's updates, the figure is eased
+	 *  there (the movement component's own smoothing offset, and the turn). */
+	void NetEase(float Dt, FVector& OutShift, FQuat& OutTurn);
+	/** The joining game: at its work (a Builder's hammer), as the host says. */
+	bool IsNetWorking() const { return IsNetCopy() && (NetFlags & 16) != 0; }
+	bool IsNetOnOrder() const { return (NetFlags & 1) != 0; }
 	/** (wakes its movement component if it was asleep: UpdateMovementSleep) */
 	virtual void AddMovementInput(FVector WorldDirection, float ScaleValue = 1.0f, bool bForce = false) override;
 	virtual void UnPossessed() override;
@@ -167,7 +224,7 @@ public:
 
 	// ---- the battle (UVLBattle): its side, how it fights on its own, and its death
 	/** 0 the player's, 1 the enemy's. */
-	UPROPERTY(EditAnywhere, Category = "Voxel|Battle")
+	UPROPERTY(EditAnywhere, ReplicatedUsing = OnRep_Team, Category = "Voxel|Battle")
 	int32 Team = 0;
 	/** The look of its side: the custom-depth stencil (1 the player's, whose units show through trees and buildings in
 	 *  M_Silhouette; 2 the enemy's, never shown) and the enemy's red cloth (the "_Enemy" materials). Call after
@@ -176,7 +233,7 @@ public:
 	/** A part of a figure that is not a unit (the castle corners' archers) in a side's look: the enemy's red cloth, never
 	 *  outlined through walls. */
 	static void ApplyPartLook(UStaticMeshComponent* Mesh, int32 InTeam);
-	UPROPERTY(EditAnywhere, Category = "Voxel|Battle")
+	UPROPERTY(EditAnywhere, Replicated, Category = "Voxel|Battle")
 	EVLStance Stance = EVLStance::Aggressive;
 	/** On a move it fights what it meets (the commander's orders); a plain move ignores foes. */
 	bool bAttackMove = false;
@@ -203,6 +260,7 @@ public:
 	/** One of a watch tower's own archers (UVLBattle::TickTowerGuards): it stands on the tower's lookout and shoots
 	 *  from it, takes no housing and is not counted in the army, cannot be selected or ordered, and goes with its
 	 *  tower. Set when it is spawned. */
+	UPROPERTY(Replicated)
 	bool bTowerGuard = false;
 	/** Where it took up the fight (a defensive unit goes back there). */
 	FVector Post = FVector::ZeroVector;
@@ -256,14 +314,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Voxel")
 	TSoftObjectPtr<UVLCharacterData> Data;
 
-	UPROPERTY(EditAnywhere, Category = "Voxel")
+	UPROPERTY(EditAnywhere, Replicated, Category = "Voxel")
 	FString DisplayName = TEXT("King David");
 
 	UPROPERTY(EditAnywhere, Category = "Voxel")
 	bool bTroop = false;
 
 	/** "King", "Swordsman", "Archer". */
-	UPROPERTY(EditAnywhere, Category = "Voxel")
+	UPROPERTY(EditAnywhere, Replicated, Category = "Voxel")
 	FString UnitKind = TEXT("King");
 
 	UPROPERTY(EditAnywhere, Category = "Voxel")
@@ -729,9 +787,19 @@ private:
 	/** A blow of a swing landing (Share: its part of the swing's damage): the dummies in front of him rock, and the
 	 *  foe in front of him (the one he is fighting, if it is there) or else a foe's building takes it. */
 	void HitDummies(float Share = 1.f);
+	UPROPERTY(ReplicatedUsing = OnRep_Dead)
 	bool bDead = false;
 	float DeadTime = 0.f;
 	void TickDeath(float DeltaSeconds);
+	// multiplayer
+	bool bNetQuiet = false;         // an order's end is being applied from the other machine: nothing is sent back
+	uint8 NetSwingSeen = 0;
+	float NetPaceSent = -1.f;       // the pace last told to the host (the unit the joining player plays)
+	bool bNetHeroSent = true;
+	float NetYawShown = 0.f;        // a copy's turn, eased between the host's updates
+	bool bNetYawSet = false;
+	friend class AVLPlayerController;
+	friend class AVLGameMode;
 	void StartSwing(int32 Kind);
 	/** Dt: the game's time (the swing's and the draw's own clocks). AnimDt: the time the pose moves on by (0 while a hit holds it). */
 	void Animate(float Dt, float AnimDt);
@@ -912,6 +980,7 @@ private:
 	float SkidTimer = 0.f;
 
 	// being hurt
+	UPROPERTY(ReplicatedUsing = OnRep_Health)
 	float Health = 100.f;
 	float HitPauseLeft = 0.f;  // seconds the pose still holds
 	float AnimLag = 0.f;       // seconds the pose is behind the game

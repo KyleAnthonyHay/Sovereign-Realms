@@ -1,4 +1,6 @@
 #include "VLGameMode.h"
+#include "VLNet.h"
+#include "VLTroop.h"
 #include "VLMatchLog.h"
 #include "SovereignRealms.h"
 #include "VLKing.h"
@@ -248,7 +250,7 @@ namespace
 	FAutoConsoleCommandWithWorldAndArgs CmdTrain(TEXT("vl.Train"), TEXT("vl.Train <building name> [count]: queue troops there (Barracks: swordsmen, Archery Range: archers)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
-			AVLGameMode* GM = World ? World->GetAuthGameMode<AVLGameMode>() : nullptr;
+			AVLGameMode* GM = AVLGameMode::Local(World);
 			if (!GM || Args.Num() == 0)
 			{
 				return;
@@ -285,7 +287,7 @@ namespace
 			const FString Name = (Args.Num() ? FString::Join(Args, TEXT(" ")) : FString(TEXT("king"))).Replace(TEXT("_"), TEXT(" "));
 			for (TActorIterator<AVLKing> It(World); It; ++It)
 			{
-				if (It->Team != UVLBattle::Player || It->IsDead())
+				if (It->Team != UVLBattle::Mine() || It->IsDead())
 				{
 					continue;       // never the enemy's
 				}
@@ -373,13 +375,13 @@ namespace
 			}
 			if (Who.Equals(TEXT("enemy"), ESearchCase::IgnoreCase))
 			{
-				if (It->Team != UVLBattle::Player)
+				if (It->Team != UVLBattle::Mine())
 				{
 					Out.Add(*It);
 				}
 				continue;
 			}
-			if (It->Team != UVLBattle::Player && !It->GetDisplayName().Equals(Name, ESearchCase::IgnoreCase))
+			if (It->Team != UVLBattle::Mine() && !It->GetDisplayName().Equals(Name, ESearchCase::IgnoreCase))
 			{
 				continue;       // (the group words mean the player's own units)
 			}
@@ -528,7 +530,7 @@ namespace
 	FAutoConsoleCommandWithWorldAndArgs CmdSpawn(TEXT("vl.Spawn"), TEXT("vl.Spawn Swordsman|Archer X Y [count]: troops on the ground there, without training (rows of five)"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
-			AVLGameMode* GM = World ? World->GetAuthGameMode<AVLGameMode>() : nullptr;
+			AVLGameMode* GM = AVLGameMode::Local(World);
 			UVLGrid* Grid = UVLGrid::Get(World);
 			if (!GM || Args.Num() < 3)
 			{
@@ -811,7 +813,7 @@ namespace
 	FAutoConsoleCommandWithWorldAndArgs CmdMusic(TEXT("vl.Music"), TEXT("vl.Music [0..1]: the music setting, applied but not saved (0: nothing plays, no song stays loaded); alone: what the music is doing"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
-			if (AVLGameMode* GM = World ? World->GetAuthGameMode<AVLGameMode>() : nullptr)
+			if (AVLGameMode* GM = AVLGameMode::Local(World))
 			{
 				if (Args.Num() > 0)
 				{
@@ -849,6 +851,7 @@ AVLGameMode::AVLGameMode()
 	DefaultPawnClass = AVLKing::StaticClass();
 	HUDClass = AVLHUD::StaticClass();
 	PlayerControllerClass = AVLPlayerController::StaticClass();     // the trackpad's gestures
+	GameStateClass = AVLGameState::StaticClass();                   // what a joining player's game is told of the match (VLNet.h)
 }
 
 void AVLGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -886,13 +889,22 @@ float AVLGameMode::Progress(const AActor* Building) const
 AVLTroop* AVLGameMode::SpawnTroopAt(const FString& Kind, const FVector& Ground, float Yaw)
 {
 	UVLBattle* Battle = UVLBattle::Get(this);
-	return Battle ? Battle->SpawnTroop(Kind, UVLBattle::Player, Ground, Yaw) : nullptr;
+	return Battle ? Battle->SpawnTroop(Kind, UVLBattle::Mine(), Ground, Yaw) : nullptr;
 }
 
 void AVLGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
 	bMatchOption = UGameplayStatics::HasOption(Options, TEXT("Match"));
+	bMPOption = UGameplayStatics::HasOption(Options, TEXT("MP")) && UGameplayStatics::HasOption(Options, TEXT("listen"));
+	if (bMPOption)
+	{
+		// a battle has hundreds of units: one that is not changing is sent less often (down to its MinNetUpdateFrequency)
+		if (IConsoleVariable* Adaptive = IConsoleManager::Get().FindConsoleVariable(TEXT("net.UseAdaptiveNetUpdateFrequency")))
+		{
+			Adaptive->Set(1, ECVF_SetByCode);
+		}
+	}
 	OptionDifficulty = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("Difficulty"), 1), 0, 2);
 	bTestWorldOption = UGameplayStatics::HasOption(Options, TEXT("TestWorld"));     // (New Game > Test World: both sides start at their most)
 	// balance runs (Tools/aivsai.py): ?AIvsAI=<difficulty of the player's side>?TimeScale=N?MatchLog=1?MaxMinutes=N?Quit=1?Tag=name?King=1
@@ -1025,6 +1037,170 @@ void AVLGameMode::BeginPlay()
 	{
 		Grid->EnsureBuilt();            // where units can walk (once, at the start of play)
 	}
+}
+
+// ------------------------------------------------------------------------------------------------ multiplayer (VLNet.h)
+
+void AVLGameMode::PreInitializeComponents()
+{
+	if (VLNet::IsClient(this))
+	{
+		// the joining player's game: this is the local stand-in (Local). It must not do what a real game mode does as
+		// it comes up (a game state and a network manager of its own): only an actor's part.
+		bStandIn = true;
+		bMatchOption = true;
+		bMPOption = true;
+		AInfo::PreInitializeComponents();
+		return;
+	}
+	Super::PreInitializeComponents();
+}
+
+AVLGameMode* AVLGameMode::Local(const UObject* WorldContext)
+{
+	UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	if (!World)
+	{
+		return nullptr;
+	}
+	if (AVLGameMode* Mode = World->GetAuthGameMode<AVLGameMode>())
+	{
+		return Mode;
+	}
+	for (TActorIterator<AVLGameMode> It(World); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
+void AVLGameMode::SpawnClientStandIn(UWorld* World)
+{
+	if (!World || !VLNet::IsClient(World) || Local(World))
+	{
+		return;
+	}
+	FActorSpawnParameters SP;
+	SP.ObjectFlags |= RF_Transient;
+	SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	World->SpawnActor<AVLGameMode>(AVLGameMode::StaticClass(), FTransform::Identity, SP);
+}
+
+void AVLGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+	if (!ErrorMessage.IsEmpty())
+	{
+		return;
+	}
+	// a game from another build is refused, with a line its player can read (the title screen shows it)
+	const FString Theirs = UGameplayStatics::ParseOption(Options, TEXT("VLVer"));
+	if (Theirs != VLNet::Version())
+	{
+		ErrorMessage = FString::Printf(TEXT("Different versions: the host runs %s, this game is %s. Both players need the same build."), *VLNet::Version(),
+			Theirs.IsEmpty() ? TEXT("another build") : *Theirs);
+	}
+	else if (!bMPOption)
+	{
+		ErrorMessage = TEXT("That game is not hosting a multiplayer match");
+	}
+	else if (VLNet::RemoteController(this))
+	{
+		ErrorMessage = TEXT("The match is full: it is for two players");
+	}
+	else if (bMatchStarted)
+	{
+		ErrorMessage = TEXT("That match is over: ask the host to start a new one");
+	}
+	UE_LOG(LogSovereignRealms, Log, TEXT("multiplayer: a game at %s asks to join (version %s): %s"), *Address, *Theirs, ErrorMessage.IsEmpty() ? TEXT("let in") : *ErrorMessage);
+}
+
+void AVLGameMode::PostLogin(APlayerController* NewPlayer)
+{
+	Super::PostLogin(NewPlayer);
+	if (NewPlayer && !NewPlayer->IsLocalController())
+	{
+		UE_LOG(LogSovereignRealms, Log, TEXT("multiplayer: the other player has joined (team %d)"), VLNet::TeamOf(NewPlayer));
+		if (UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			Battle->PushAlert(TEXT("The other player has joined"), EVLAlert::Good);
+		}
+	}
+}
+
+void AVLGameMode::Logout(AController* Exiting)
+{
+	const APlayerController* PC = Cast<APlayerController>(Exiting);
+	const bool bRemote = PC && !PC->IsLocalController() && bMPOption;
+	Super::Logout(Exiting);
+	if (bRemote)
+	{
+		// the other player is gone (left, or the connection dropped): the host is told, and a match under way is over
+		UE_LOG(LogSovereignRealms, Log, TEXT("multiplayer: the other player has left"));
+		if (UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			Battle->PushAlert(TEXT("The other player has left the match"), EVLAlert::Lost);
+			if (Battle->IsPlaying())
+			{
+				Battle->EndAbandoned(UVLBattle::Mine());
+			}
+		}
+	}
+}
+
+APawn* AVLGameMode::SpawnDefaultPawnAtTransform_Implementation(AController* NewPlayer, const FTransform& SpawnTransform)
+{
+	const APlayerController* PC = Cast<APlayerController>(NewPlayer);
+	UWorld* World = GetWorld();
+	UVLBattle* Battle = UVLBattle::Get(this);
+	if (!PC || PC->IsLocalController() || !World || !Battle || GetNetMode() != NM_ListenServer)
+	{
+		return Super::SpawnDefaultPawnAtTransform_Implementation(NewPlayer, SpawnTransform);
+	}
+	// the joining player's King David: team 1's, on that side's start (the level's TeamStart:1, else Rally:1, else in
+	// front of its castle), as the host's stands on the PlayerStart
+	const int32 Team = UVLBattle::Enemy;
+	FVector Where = SpawnTransform.GetLocation(), Door, CastleRally, Front = FVector::ForwardVector;
+	bool bFound = false;
+	for (const FName& Tag : { FName(TEXT("TeamStart:1")), FName(TEXT("Rally:1")) })
+	{
+		for (TActorIterator<AActor> It(World); It && !bFound; ++It)
+		{
+			if (It->ActorHasTag(Tag))
+			{
+				Where = It->GetActorLocation();
+				bFound = true;
+			}
+		}
+	}
+	if (AActor* Castle = Battle->GetCastle(Team))
+	{
+		Battle->FrontOf(Castle, Door, CastleRally, Front);
+		if (!bFound)
+		{
+			Where = CastleRally;
+			bFound = true;
+		}
+	}
+	if (UVLGrid* Grid = UVLGrid::Get(this); bFound && Grid && Grid->EnsureBuilt())
+	{
+		const int32 Node = Grid->NearestNode(FVector(Where.X, Where.Y, Where.Z + 300.f), 30, Grid->MainRegion());
+		if (Node != INDEX_NONE)
+		{
+			Where = Grid->NodePos(Node);
+		}
+	}
+	const FTransform At(FRotator(0.f, Front.Rotation().Yaw, 0.f), bFound ? Where + FVector(0.f, 0.f, 95.f) : SpawnTransform.GetLocation());
+	AVLKing* King = World->SpawnActorDeferred<AVLKing>(AVLKing::StaticClass(), At, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!King)
+	{
+		return Super::SpawnDefaultPawnAtTransform_Implementation(NewPlayer, SpawnTransform);
+	}
+	King->Team = Team;
+	King->FinishSpawning(At);
+	King->RefreshSilhouette();
+	UE_LOG(LogSovereignRealms, Log, TEXT("multiplayer: the joining player's King David stands at %s"), *At.GetLocation().ToCompactString());
+	return King;
 }
 
 void AVLGameMode::CycleMusicVolume()
@@ -1184,7 +1360,7 @@ void AVLGameMode::NextSong(bool bNow)
 void AVLGameMode::PlayOrderSound(const UObject* WorldContext)
 {
 	const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
-	AVLGameMode* GM = World ? World->GetAuthGameMode<AVLGameMode>() : nullptr;
+	AVLGameMode* GM = AVLGameMode::Local(World);
 	if (GM && GM->OrderSound && GM->OrderVolume > 0.f)
 	{
 		const float Pitch = 1.f + FMath::FRandRange(-GM->OrderPitchJitter, GM->OrderPitchJitter);
@@ -1282,7 +1458,37 @@ void AVLGameMode::TickShuffle(float DeltaSeconds)
 void AVLGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (!bMatchStarted && bMatchOption)
+	if (!bStartupArgs && !bStandIn)
+	{
+		// -VLHost=<map> / -VLJoin=<address>: straight into a multiplayer match from the command line (once, from the
+		// title screen's world)
+		bStartupArgs = true;
+		static bool bArgsDone = false;
+		if (!bArgsDone && !bMatchOption && !GIsEditor)
+		{
+			bArgsDone = true;
+			FString StartArg;
+			if (UVLNetSession* Session = UVLNetSession::Get(this))
+			{
+				if (FParse::Value(FCommandLine::Get(), TEXT("VLHost="), StartArg))
+				{
+					Session->Host(this, AVLHUD::MapByName(StartArg));
+				}
+				else if (FParse::Value(FCommandLine::Get(), TEXT("VLJoin="), StartArg))
+				{
+					Session->Join(this, StartArg);
+				}
+			}
+		}
+	}
+	bool bStartNow = !bMatchStarted && bMatchOption && !bStandIn;
+	if (bStartNow && bMPOption)
+	{
+		// a multiplayer match starts when the other player's game has the level up and its King in hand
+		const AVLPlayerController* Remote = VLNet::RemoteController(this);
+		bStartNow = Remote && Remote->bNetReady && Remote->GetPawn();
+	}
+	if (bStartNow)
 	{
 		// opened from the New Game screen (Restart, vl.Map): the match starts at once
 		bMatchStarted = true;
@@ -1389,7 +1595,14 @@ void AVLGameMode::Tick(float DeltaSeconds)
 		return;
 	}
 	PollTimer = 0.f;
-	const FString Inbox = FPaths::ProjectSavedDir() / TEXT("VLCommands.txt");
+	// (-VLInbox=<file name>: another inbox, so that two games started from one folder, the host and the joining game of a
+	// multiplayer test, each take their own commands)
+	static FString InboxName;
+	if (InboxName.IsEmpty() && !FParse::Value(FCommandLine::Get(), TEXT("VLInbox="), InboxName))
+	{
+		InboxName = TEXT("VLCommands.txt");
+	}
+	const FString Inbox = FPaths::ProjectSavedDir() / FPaths::GetCleanFilename(InboxName);
 	if (!IFileManager::Get().FileExists(*Inbox))
 	{
 		return;

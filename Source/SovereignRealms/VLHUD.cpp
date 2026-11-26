@@ -1,6 +1,7 @@
 // The interface's frame, input, drawing primitives and world-space feedback: the main game's SRHUD.cpp, ported.
 
 #include "VLHUD.h"
+#include "VLNet.h"
 #include "VLLoadingScreen.h"
 #include "VLHUDStyle.h"
 #include "SovereignRealms.h"
@@ -155,10 +156,16 @@ const TCHAR* AVLHUD::MapName(int32 Map)
 	return Names[FMath::Clamp(Map, 0, NumMaps - 1)];
 }
 
+int32 AVLHUD::MapByName(const FString& Name)
+{
+	return Name.StartsWith(TEXT("t"), ESearchCase::IgnoreCase) ? 4 : Name.Contains(TEXT("3")) ? 5 : Name.Contains(TEXT("2")) ? 0
+		: (Name.StartsWith(TEXT("h"), ESearchCase::IgnoreCase) ? 3 : (Name.StartsWith(TEXT("f"), ESearchCase::IgnoreCase) ? 2 : 1));
+}
+
 int32 AVLHUD::CurrentMap() const
 {
 	const FString Name = GetWorld() ? GetWorld()->GetMapName() : FString();
-	if (const AVLGameMode* Mode = GetWorld() ? GetWorld()->GetAuthGameMode<AVLGameMode>() : nullptr; Mode && Mode->IsTestWorld())
+	if (const AVLGameMode* Mode = AVLGameMode::Local(this); Mode && Mode->IsTestWorld())
 	{
 		return 4;                   // the Test World (Realm v2 with both sides at their most)
 	}
@@ -173,6 +180,12 @@ bool AVLHUD::InFlatlands() const
 
 void AVLHUD::OpenMatch(const UObject* WorldContext, int32 Map, int32 Difficulty)
 {
+	if (VLNet::IsMultiplayer(WorldContext))
+	{
+		// (a multiplayer match is left first: Esc > Leave the match. Restart, New Game and the map keys do nothing in one)
+		UE_LOG(LogSovereignRealms, Log, TEXT("hud: no new match from inside a multiplayer match"));
+		return;
+	}
 	UGameplayStatics::SetGamePaused(WorldContext, false);
 	VLLoadingScreen::Travel(WorldContext, MapPath(Map), FString::Printf(TEXT("Match=1?Difficulty=%d%s"), FMath::Clamp(Difficulty, 0, 2), Map == 4 ? TEXT("?TestWorld=1") : TEXT("")));     // (the loading screen, playable at once)
 }
@@ -226,7 +239,8 @@ void AVLHUD::SetScreen(EVLScreen InScreen)
 	UVLGraphics::SetMenuThrottle(GetWorld(), bMenu);
 	Press.bPending = false;
 	// the pause menu (and what opens from it) pauses the match: troops, buildings, the commander, the clock
-	const bool bPause = Base != EVLScreen::None && Base != EVLScreen::End && Battle && Battle->IsPlaying();
+	// (a multiplayer match never pauses: the other player is playing it)
+	const bool bPause = Base != EVLScreen::None && Base != EVLScreen::End && Battle && Battle->IsPlaying() && !Battle->IsNetGame();
 	if (UGameplayStatics::IsGamePaused(this) != bPause)
 	{
 		UGameplayStatics::SetGamePaused(this, bPause);
@@ -265,6 +279,11 @@ void AVLHUD::DoConfirmed()
 		OpenMatch(this, CurrentMap(), Battle ? Battle->GetDifficulty() : PickDifficulty);
 		break;
 	case EConfirm::MainMenu:
+		if (UVLNetSession* Session = UVLNetSession::Get(this); Session && Battle && Battle->IsNetGame())
+		{
+			Session->Leave(this);       // (a multiplayer match: the connection ends; the title screen comes up)
+			break;
+		}
 		UGameplayStatics::SetGamePaused(this, false);
 		VLLoadingScreen::Travel(this, MapPath(CurrentMap()), FString());      // (no match: the title screen comes up)
 		break;
@@ -377,6 +396,10 @@ void AVLHUD::MenuInput(APlayerController* PC, AVLKing* Me)
 		OnMousePress(FVector2D(MX, MY), false);
 	}
 	auto Key = [PC](const FKey& K) { return PC->WasInputKeyJustPressed(K); };
+	if (Sub == EVLScreen::Multiplayer && !bConfirm)
+	{
+		TypeAddress(PC);        // (the Join panel's address box takes the keys)
+	}
 	if (UVLGraphics::DisplayConfirmSeconds() > 0.f)
 	{
 		// "Keep this display mode?": Enter keeps it (Esc goes back: OnEscape); no other key of the menus meanwhile
@@ -390,6 +413,11 @@ void AVLHUD::MenuInput(APlayerController* PC, AVLKing* Me)
 		if (bConfirm) { DoConfirmed(); }
 		else if (Sub == EVLScreen::SaveGame || Sub == EVLScreen::LoadGame) { /* (a slot is picked with the pointer) */ }
 		else if (Sub == EVLScreen::NewGame) { SaveSettings(); OpenMatch(this, PickMap, PickDifficulty); }
+		else if (Sub == EVLScreen::Multiplayer)
+		{
+			// (Enter in the address box: join)
+			if (UVLNetSession* Session = UVLNetSession::Get(this); Session && !Session->IsJoining() && !JoinAddress.IsEmpty()) { Session->Join(this, JoinAddress); }
+		}
 		else if (Sub != EVLScreen::None) { OpenSub(EVLScreen::None); }
 		else if (Base == EVLScreen::Main) { OpenSub(EVLScreen::NewGame); }
 		else if (Base == EVLScreen::Pause) { SetScreen(EVLScreen::None); }
@@ -399,7 +427,7 @@ void AVLHUD::MenuInput(APlayerController* PC, AVLKing* Me)
 	// the keys of the old Esc menu: M the next map, U music, V camera angle, L look speed, I invert, X quits
 	if (Base == EVLScreen::Pause || Sub == EVLScreen::Settings)
 	{
-		AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
+		AVLGameMode* GM = AVLGameMode::Local(this);
 		if (Key(EKeys::M) && Base == EVLScreen::Pause && Sub == EVLScreen::None)
 		{
 			const UVLBattle* Battle = UVLBattle::Get(this);
@@ -567,7 +595,7 @@ void AVLHUD::DrawHUD()
 	if (!bBooted)
 	{
 		bBooted = true;
-		const AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
+		const AVLGameMode* GM = AVLGameMode::Local(this);
 		if (GM && !GM->HasMatchOption() && Battle && !Battle->IsPlaying() && Base == EVLScreen::None)
 		{
 			SetScreen(EVLScreen::Main);
@@ -608,6 +636,7 @@ void AVLHUD::DrawHUD()
 		DrawPayoutPopups();
 		DrawSelectionBox();
 		DrawGameHUD();
+		DrawNetStatus();        // (a multiplayer match waiting for its other player)
 		bInputOpen = true;
 	}
 	switch (Base)
@@ -1212,11 +1241,11 @@ void AVLHUD::DrawUnitRings()
 	};
 	if (AActor* B = SelectedBuilding())
 	{
-		Footprint(B, Battle->TeamOf(B) == UVLBattle::Enemy ? EnemyRing : SelectionRing, FMath::Max(1.f, U(2.5f)));
+		Footprint(B, Battle->TeamOf(B) == UVLBattle::Foe() ? EnemyRing : SelectionRing, FMath::Max(1.f, U(2.5f)));
 	}
 	if (Under && !Cast<AVLKing>(Under) && Under != King->GetSelected() && Battle->FindBuilding(Under))
 	{
-		Footprint(Under, Battle->IsHostile(Under, UVLBattle::Player) ? FLinearColor(EnemyRing.R, EnemyRing.G, EnemyRing.B, 0.6f) : HoverRing, FMath::Max(1.f, U(1.5f)));
+		Footprint(Under, Battle->IsHostile(Under, UVLBattle::Mine()) ? FLinearColor(EnemyRing.R, EnemyRing.G, EnemyRing.B, 0.6f) : HoverRing, FMath::Max(1.f, U(1.5f)));
 	}
 }
 
@@ -1248,7 +1277,7 @@ namespace
 	 *  above them. */
 	int32 OverheadRows(const FVLBuildingState& B)
 	{
-		return (B.Queue.Num() > 0 ? 1 : 0) + ((B.Team == UVLBattle::Player && B.UpgradeLeft >= 0.f) ? 1 : 0);
+		return (B.Queue.Num() > 0 ? 1 : 0) + ((B.Team == UVLBattle::Mine() && B.UpgradeLeft >= 0.f) ? 1 : 0);
 	}
 }
 
@@ -1309,7 +1338,7 @@ void AVLHUD::DrawHealthBars()
 		{
 			continue;
 		}
-		Bar(Unit->GetActorLocation() + FVector(0.f, 0.f, 120.f), U(HealthBarW), FMath::Max(3.f, U(HealthBarH + 1.f)), Frac, Unit->Team == UVLBattle::Enemy, 0.f, Alpha);
+		Bar(Unit->GetActorLocation() + FVector(0.f, 0.f, 120.f), U(HealthBarW), FMath::Max(3.f, U(HealthBarH + 1.f)), Frac, Unit->Team == UVLBattle::Foe(), 0.f, Alpha);
 	}
 	EndRects();
 	for (const FVLBuildingState& Bs : Battle->GetBuildings())
@@ -1326,7 +1355,7 @@ void AVLHUD::DrawHealthBars()
 		}
 		// over the progress rows (training, upgrade) rather than hidden by them
 		const int32 Rows = OverheadRows(Bs);
-		Bar(LabelPoint(Bs.Actor.Get()), U(110.f), U(8.f), Frac, Bs.Team == UVLBattle::Enemy, Rows > 0 ? Rows * U(26.f) - U(4.f) : 0.f);
+		Bar(LabelPoint(Bs.Actor.Get()), U(110.f), U(8.f), Frac, Bs.Team == UVLBattle::Foe(), Rows > 0 ? Rows * U(26.f) - U(4.f) : 0.f);
 	}
 	// the castle's corners (VLCastleCorners.cpp): a small bar over each manned turret, while the castle's shows, or one
 	// was hit lately, or it is knocked out (red, empty) or being mended
@@ -1343,7 +1372,7 @@ void AVLHUD::DrawHealthBars()
 			const float CF = Bs.CornerHealth[i] / CMax;
 			if (bCastleBar || (WorldNow - Bs.CornerHit[i]) < HealthBarLinger || Bs.bCornerDown[i] || Bs.bCornerRepair[i] || (CF < 1.f && Bs.Actor.Get() == Sel))
 			{
-				Bar(Battle->CornerPoint(Bs.Actor.Get(), i, 760.f), U(44.f), U(5.f), CF, Bs.Team == UVLBattle::Enemy);
+				Bar(Battle->CornerPoint(Bs.Actor.Get(), i, 760.f), U(44.f), U(5.f), CF, Bs.Team == UVLBattle::Foe());
 			}
 		}
 	}
@@ -1545,7 +1574,7 @@ void AVLHUD::DrawFarPips()
 	for (AVLKing* Unit : Frame.Live)
 	{
 		// (a tower's own archer never leaves its lookout: no diamond, as it has no outline through walls)
-		if (Unit->IsDead() || Unit->bTowerGuard || (bHero && Unit->Team != UVLBattle::Enemy))
+		if (Unit->IsDead() || Unit->bTowerGuard || (bHero && Unit->Team != UVLBattle::Foe()))
 		{
 			continue;
 		}
@@ -1563,7 +1592,7 @@ void AVLHUD::DrawFarPips()
 		const FLinearColor Team = UVLBattle::TeamColour(Unit->Team);
 		FLinearColor Col = FLinearColor(FMath::Min(Team.R * 1.6f + 0.15f, 1.f), FMath::Min(Team.G * 1.6f + 0.15f, 1.f), FMath::Min(Team.B * 1.6f + 0.15f, 1.f), Alpha);
 		// a platoon's troops show in its colour from afar too; the player's units in no platoon are grey
-		if (Command && Unit->Team == UVLBattle::Player)
+		if (Command && Unit->Team == UVLBattle::Mine())
 		{
 			Col = FLinearColor(0.62f, 0.63f, 0.66f, Alpha);
 			if (bFast)
@@ -1656,7 +1685,7 @@ void AVLHUD::DrawRangeCircles()
 					BuildingReach.Sight.Add(FVector(P.X, P.Y, GroundZ(P, RefZ) + 15.f));
 				}
 			}
-			const FLinearColor Color = St->Team == UVLBattle::Enemy ? FLinearColor(1.f, 0.3f, 0.25f, 0.9f) : RangeCircle;
+			const FLinearColor Color = St->Team == UVLBattle::Foe() ? FLinearColor(1.f, 0.3f, 0.25f, 0.9f) : RangeCircle;
 			const int32 N = BuildingReach.Sight.Num();
 			for (int32 i = 0; i < N; ++i)
 			{
@@ -1666,7 +1695,7 @@ void AVLHUD::DrawRangeCircles()
 			}
 			// what the player's tower sees (the fog of war's outline, dashed: its reach x vl.Fog.TowerView and the ground's lie)
 			TArray<FVector> TowerView;
-			if (St->Team == UVLBattle::Player && UVLFog::Get(this) && UVLFog::Get(this)->Outline(B, TowerView))
+			if (St->Team == UVLBattle::Mine() && UVLFog::Get(this) && UVLFog::Get(this)->Outline(B, TowerView))
 			{
 				for (int32 i = 0; i < TowerView.Num(); i += 2)
 				{
@@ -1760,7 +1789,7 @@ void AVLHUD::DrawRangeCircles()
 			if (UVLFog* Fog = UVLFog::Get(this); !Fog || !Fog->Outline(Un, C.Sight)) { MakeRing(P, Sight(Un), Un->GetFeet().Z, C.Sight); }    // (the fog of war on: what it sees)
 			if (R > 0.f) { MakeRing(P, R, Un->GetFeet().Z, C.Reach); } else { C.Reach.Reset(); }
 		}
-		const bool bEnemy = Un->Team == UVLBattle::Enemy;
+		const bool bEnemy = Un->Team == UVLBattle::Foe();
 		Draw(C.Sight, P, SightDiscs, bEnemy ? FLinearColor(1.f, 0.4f, 0.35f, 0.45f) : SightCircle, true);
 		if (C.Reach.Num() > 0) { Draw(C.Reach, P, ReachDiscs, RangeCircle, false); }
 	}
@@ -2046,7 +2075,7 @@ void AVLHUD::DrawRouteLines()
 		if (const UVLConstruction* Cons = UVLConstruction::Get(this))
 		{
 			TArray<AVLKing*> Crew;
-			Cons->GetBuilders(UVLBattle::Player, Crew);
+			Cons->GetBuilders(UVLBattle::Mine(), Crew);
 			for (AVLKing* B : Crew)
 			{
 				if (const UVLBuilderWork* BW = UVLBuilderWork::For(B, false); BW && BW->HasTasks())
@@ -2161,7 +2190,7 @@ void AVLHUD::DrawRouteLines()
 		LineStats.Chains = Chains.Num();
 	}
 	// (a barracks' / range's only when one was set: without one its recruits wait in its yard)
-	if (const FVLBuildingState* St = Battle->FindBuilding(SelectedBuilding()); St && St->Trains() && St->Team == UVLBattle::Player && (St->bHasRally || St->Kind == EVLBuilding::Castle))
+	if (const FVLBuildingState* St = Battle->FindBuilding(SelectedBuilding()); St && St->Trains() && St->Team == UVLBattle::Mine() && (St->bHasRally || St->Kind == EVLBuilding::Castle))
 	{
 		FVector Door, Rally, Front;
 		Battle->FrontOf(St->Actor.Get(), Door, Rally, Front);
@@ -2410,7 +2439,7 @@ void AVLHUD::DrawTrainingBars()
 	}
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
-		if (!B.IsAlive() || B.Team != UVLBattle::Player || B.UpgradeLeft < 0.f)
+		if (!B.IsAlive() || B.Team != UVLBattle::Mine() || B.UpgradeLeft < 0.f)
 		{
 			continue;
 		}
@@ -2437,7 +2466,7 @@ void AVLHUD::DrawTrainingBars()
 		{
 			continue;
 		}
-		const bool bEnemy = B.Team == UVLBattle::Enemy;
+		const bool bEnemy = B.Team == UVLBattle::Foe();
 		const float W = U(110.f), H = U(9.f), IS = U(26.f);
 		const float X = FMath::RoundToFloat(S.X - W * 0.5f + IS * 0.5f), Y = FMath::RoundToFloat(S.Y);
 		Portrait(VLPortraitOf(B.Queue[0]), X - IS - U(5.f), Y + H * 0.5f - IS * 0.5f, IS, FLinearColor::White, bEnemy);

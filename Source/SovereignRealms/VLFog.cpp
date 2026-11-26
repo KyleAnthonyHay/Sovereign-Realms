@@ -111,7 +111,7 @@ bool UVLFog::InSight(const AActor* Building)
 	}
 	const UVLBattle* Battle = UVLBattle::Get(Building);
 	const FVLBuildingState* B = Battle ? Battle->FindBuilding(Building) : nullptr;
-	return !B || B->Team == UVLBattle::Player || Fog->InSightNow.Contains(Building);
+	return !B || B->Team == UVLBattle::Mine() || Fog->InSightNow.Contains(Building);
 }
 
 bool UVLFog::ToCell(const FVector2D& P, int32& Out) const
@@ -348,7 +348,7 @@ bool UVLFog::EyeParams(const AActor* A, FEye& E) const
 	E.Notice = 1.f;
 	if (const AVLKing* K = Cast<AVLKing>(A))
 	{
-		if (K->IsDead() || K->Team != UVLBattle::Player || K->bAmbient || K->bTowerGuard)
+		if (K->IsDead() || K->Team != UVLBattle::Mine() || K->bAmbient || K->bTowerGuard)
 		{
 			return false;
 		}
@@ -367,7 +367,7 @@ bool UVLFog::EyeParams(const AActor* A, FEye& E) const
 	}
 	if (const AVLTroopShip* Ship = Cast<AVLTroopShip>(A))
 	{
-		if (Ship->GetTeam() != UVLBattle::Player)
+		if (Ship->GetTeam() != UVLBattle::Mine())
 		{
 			return false;
 		}
@@ -379,7 +379,7 @@ bool UVLFog::EyeParams(const AActor* A, FEye& E) const
 	}
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const FVLBuildingState* B = Battle ? Battle->FindBuilding(A) : nullptr;
-	if (!B || !B->IsAlive() || B->Team != UVLBattle::Player)
+	if (!B || !B->IsAlive() || B->Team != UVLBattle::Mine())
 	{
 		return false;
 	}
@@ -643,7 +643,7 @@ void UVLFog::UpdateVision()
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
 		const AActor* A = B.Actor.Get();
-		if (!A || B.Team == UVLBattle::Player)
+		if (!A || B.Team == UVLBattle::Mine())
 		{
 			continue;
 		}
@@ -679,7 +679,7 @@ void UVLFog::UpdateHidden()
 	};
 	for (AVLKing* U : Battle->AllUnits())
 	{
-		if (U->Team == UVLBattle::Player || U->bAmbient)
+		if (U->Team == UVLBattle::Mine() || U->bAmbient)
 		{
 			continue;
 		}
@@ -704,7 +704,7 @@ void UVLFog::UpdateHidden()
 	{
 		for (const TWeakObjectPtr<AVLTroopShip>& S : Fleet->GetShips())
 		{
-			if (AVLTroopShip* Ship = S.Get(); Ship && Ship->GetTeam() != UVLBattle::Player)
+			if (AVLTroopShip* Ship = S.Get(); Ship && Ship->GetTeam() != UVLBattle::Mine())
 			{
 				const bool bShow = Shown(FVector2D(Ship->GetActorLocation()));
 				if (!bShow) { HiddenNow.Add(Ship); }
@@ -716,7 +716,7 @@ void UVLFog::UpdateHidden()
 	for (const FVLBuildingState& B : Battle->GetBuildings())
 	{
 		AActor* A = B.Actor.Get();
-		if (!A || B.Team == UVLBattle::Player || B.Team == UVLBattle::Neutral)
+		if (!A || B.Team == UVLBattle::Mine() || B.Team == UVLBattle::Neutral)
 		{
 			continue;
 		}

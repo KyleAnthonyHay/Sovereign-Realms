@@ -21,6 +21,7 @@
 #include "VLBattle.h"
 #include "VLTroop.h"
 #include "VLConstruction.h"
+#include "VLNet.h"
 #include "Camera/CameraActor.h"
 #include "Components/SkeletalMeshComponent.h"      // (these four: the file also builds on its own, outside the unity blob)
 #include "Engine/Engine.h"
@@ -67,6 +68,18 @@ AVLKing::AVLKing()
 	// whoever the player is not controlling walks to orders under an AI controller (troops get one when spawned)
 	AIControllerClass = AAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::Disabled;
+
+	// Multiplayer (VLNet.h): a unit replicates, with the engine's replicated movement. A battle has hundreds, so each
+	// is sent ten times a second at most, and the engine lowers that by itself for one that is not changing (adaptive
+	// net update frequency, down to twice a second); the joining game's movement component carries it on between
+	// updates. Every unit is always relevant: the minimap and the fog of war need them all. The unit a player plays is
+	// sent more often (PossessedBy). None of this does anything in a single-player game.
+	bReplicates = true;
+	SetReplicatingMovement(true);
+	bAlwaysRelevant = true;
+	SetNetUpdateFrequency(10.f);
+	SetMinNetUpdateFrequency(2.f);
+	NetPriority = 1.f;
 
 	// what the voxel materials (MI_Vox_<slot>) sound like underfoot
 	for (const TCHAR* Slot : { TEXT("grass"), TEXT("grass_side"), TEXT("dirt"), TEXT("moss"), TEXT("leaves"), TEXT("hay"), TEXT("wheat"), TEXT("wheat_top"), TEXT("wool"), TEXT("cloth") })
@@ -148,6 +161,13 @@ void AVLKing::BeginPlay()
 	if (GConfig && GConfig->GetFloat(TEXT("SovereignRealms.Camera"), TEXT("LookSpeed"), SavedSpeed, GGameUserSettingsIni) && SavedSpeed > 0.f)
 	{
 		LookSpeedSetting = FMath::Clamp(SavedSpeed, 0.1f, 2.f);
+	}
+	if (IsNetCopy() && bTroop)
+	{
+		// the joining game's copy of a troop: its kind arrived with it, its character data follows from that
+		Data = AVLTroop::DataFor(UnitKind);
+		CachedKind = EVLUnitKind::Unknown;
+		CachedRules = nullptr;
 	}
 	MaxHealth = VLRules::Troop(UnitKind).Health;          // the rules for its kind (UVLBattle)
 	BuildFigure();
@@ -252,7 +272,7 @@ namespace
 		const bool bEnemy = Team != 0;
 		Mesh->SetRenderCustomDepth(bDepth);          // (off behind the title screen and far from the camera: AVLKing::RigLate)
 		// (a figure of the scenery: 2, never shown through walls; so too a tower's own archer, who never leaves it)
-		Mesh->SetCustomDepthStencilValue(bEnemy || bNoOutline ? 2 : 1);
+		Mesh->SetCustomDepthStencilValue(Team != UVLBattle::Mine() || bNoOutline ? 2 : 1);        // (shown through walls: this game's own player's)
 		const UStaticMesh* Asset = Mesh->GetStaticMesh();
 		for (int32 i = 0; Asset && i < Asset->GetStaticMaterials().Num(); ++i)
 		{
@@ -298,7 +318,10 @@ void AVLKing::BuildFigure()
 	{
 		Boom->SetRelativeLocation(FVector(0.f, 0.f, Half * 0.45f));
 	}
-	Health = MaxHealth;
+	if (!IsNetCopy())
+	{
+		Health = MaxHealth;         // (multiplayer: a copy's health is the host's, which came with it)
+	}
 
 	// every part is a joint at its pivot, hung from its parent's joint (or from the figure), with its mesh on it
 	TMap<FName, FVector> Pivot;
@@ -546,6 +569,15 @@ void AVLKing::FollowPath(const TArray<FVector>& Points, bool bRun)
 	// On the march units pass through one another (kept apart by AutoSteer, as the main game's are by its own
 	// separation): capsules that block each other jam a gate or the bridge when a whole group arrives at it.
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, (bAutoWalk || bAmbient) ? ECR_Ignore : ECR_Block);
+	if (IsRemotelyPlayed() && !bNetQuiet)
+	{
+		// the joining player plays this unit: its movement is that game's (predicted there), so the walk is walked
+		// there too; that game says when it is over (AVLPlayerController::ServerOrderDone)
+		if (AVLPlayerController* Remote = Cast<AVLPlayerController>(GetController()))
+		{
+			Remote->ClientFollowPath(this, Points, bRun);
+		}
+	}
 }
 
 void AVLKing::QueueLeg(const FVector& Slot, bool bRun)
@@ -673,6 +705,24 @@ void AVLKing::AddMovementInput(FVector WorldDirection, float ScaleValue, bool bF
 
 void AVLKing::StopOrder()
 {
+	if (bAutoWalk && !bNetQuiet)
+	{
+		// multiplayer, the unit the joining player plays: the other machine drops the walk too
+		if (IsRemotelyPlayed())
+		{
+			if (AVLPlayerController* Remote = Cast<AVLPlayerController>(GetController()))
+			{
+				Remote->ClientStopOrder(this);
+			}
+		}
+		else if (IsNetCopy())
+		{
+			if (AVLPlayerController* Mine = Cast<AVLPlayerController>(GetController()))
+			{
+				Mine->ServerOrderDone(this, false, true);
+			}
+		}
+	}
 	bAutoWalk = false;
 	Waypoints.Reset();
 	PaceCap = 0.f;              // (its own pace again: the march is over for it)
@@ -685,7 +735,24 @@ void AVLKing::FinishOrder(bool bArrived)
 	const bool bHad = bAutoWalk;
 	const float Cap = PaceCap;
 	const int32 March = MarchId;
-	StopOrder();
+	if (IsNetCopy())
+	{
+		// the joining game's own unit, at the end of a walk the host gave it: the host is told, and does the rest
+		// (what follows the order is the host's to decide)
+		const TGuardValue<bool> Quiet(bNetQuiet, true);
+		StopOrder();
+		if (AVLPlayerController* Mine = Cast<AVLPlayerController>(GetController()); Mine && bHad)
+		{
+			Mine->ServerOrderDone(this, bArrived, false);
+		}
+		return;
+	}
+	{
+		// (the host's copy of a unit the joining player plays: that game has just said the walk is over)
+		const TGuardValue<bool> Quiet(bNetQuiet, bNetQuiet || IsRemotelyPlayed());
+		StopOrder();
+	}
+
 	if (bHad)
 	{
 		static const IConsoleVariable* BattleLog = IConsoleManager::Get().FindConsoleVariable(TEXT("vl.BattleLog"));
@@ -925,6 +992,14 @@ void AVLKing::SetView(int32 Mode, float Blend)
 void AVLKing::SetHeroMode(bool bHero)
 {
 	bHeroMode = bHero;
+	if (IsNetCopy() && bNetHeroSent != bHero)
+	{
+		if (AVLPlayerController* Mine = Cast<AVLPlayerController>(GetController()))
+		{
+			bNetHeroSent = bHero;
+			Mine->ServerSetHero(this, bHero);
+		}
+	}
 	if (!bHero)
 	{
 		bCommandMode = bCommandChain = bChainHeldByTest = false;    // (command mode is the hero view's)
@@ -977,6 +1052,17 @@ void AVLKing::TakeControlOf(AVLKing* Unit)
 		}
 		return;
 	}
+	if (IsNetCopy())
+	{
+		// multiplayer, stage one: the joining player plays King David; the other units are commanded (the host can
+		// play any of its own, as in a single-player game)
+		if (UVLBattle* Battle = UVLBattle::Get(this))
+		{
+			Battle->PushAlert(TEXT("In a multiplayer match the joining player plays King David only (for now)"));
+			Battle->Play2D(TEXT("S_UIError"), 0.5f);
+		}
+		return;
+	}
 	if (Unit->IsDead() && Unit->IsTroop())
 	{
 		return;
@@ -1015,6 +1101,15 @@ void AVLKing::Attack(int32 Kind)
 	if (bTroop && !UVLSwordsmanCombat::CanFight(this) && !bHammer)
 	{
 		return;                                 // of the troops the swordsman fights with a sword, as the king does
+	}
+	if (IsNetCopy())
+	{
+		// the joining player's own unit: the click goes to the host, whose swing is the one that lands; this game
+		// swings at once as well (what follows here), so the blade answers the click without waiting
+		if (AVLPlayerController* Mine = Cast<AVLPlayerController>(GetController()))
+		{
+			Mine->ServerSwing(this, Kind, FaceMouseLeft > 0.f, FaceYaw);
+		}
 	}
 	if (!bArmed || Draw < 1.f)
 	{
@@ -1062,6 +1157,12 @@ void AVLKing::StartSwing(int32 Kind)
 	SwingTime = 0.f;
 	HitsLanded = 0;
 	bComboQueued = false;
+	if (HasAuthority() && GetNetMode() != NM_Standalone)
+	{
+		// multiplayer: the swing is shown in the joining player's game (OnRep_NetSwing), at once
+		NetSwing = uint8(((((NetSwing >> 2) + 1) & 63) << 2) | (SwingKind & 3));
+		ForceNetUpdate();
+	}
 	if (UVLSwordFx* Fx = UVLSwordFx::Get(this))
 	{
 		Fx->Swing(this);                     // the whoosh
@@ -1075,6 +1176,10 @@ float AVLKing::SwingDamage() const
 
 void AVLKing::HitDummies(float Share)
 {
+	if (IsNetCopy())
+	{
+		return;         // (a copy's blows are shown, not dealt: the host's land)
+	}
 	const FVector Me = GetActorLocation();
 	const FVector Fwd = GetActorForwardVector();
 	// a foe in front of the blade: the one it is fighting if that is in reach, else the nearest in the arc, else a
@@ -2909,6 +3014,17 @@ namespace
 void AVLKing::PollInput(float DeltaSeconds)
 {
 	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC && !PC->IsLocalController())
+	{
+		// multiplayer, the host's side of the unit the joining player plays: its keys, its camera and its walking
+		// are that game's (its moves arrive through the movement component); nothing to read here
+		bCommandMode = bCommandChain = bChainHeldByTest = false;
+		if (WayIgnored.Num() > 0)
+		{
+			MakeWay(DeltaSeconds, false);
+		}
+		return;
+	}
 	if (!PC)
 	{
 		// not the player's: it walks to its orders by itself (under its AI controller)
@@ -3245,6 +3361,10 @@ void AVLKing::PollInput(float DeltaSeconds)
 		{
 			bArmed = !bArmed;
 			bAttackQueued = false;
+			if (AVLPlayerController* Mine = Cast<AVLPlayerController>(PC); Mine && IsNetCopy())
+			{
+				Mine->ServerSetArmed(this, bArmed);     // (multiplayer: the host's copy draws or sheathes too)
+			}
 		}
 		// commanding from here: R turns command mode on (at the crosshair a left click selects, a right click orders,
 		// Shift queues); out of it the right click (Ctrl / Cmd + click) orders the selection; 1..6 the platoons, G follow
@@ -3318,12 +3438,25 @@ void AVLKing::PollInput(float DeltaSeconds)
 	{
 		GetCharacterMovement()->MaxWalkSpeed = FMath::Min(GetCharacterMovement()->MaxWalkSpeed, MoveSpeedCap);     // an archer drawing her bow
 	}
+	if (IsNetCopy() && GetCharacterMovement()->MaxWalkSpeed != NetPaceSent)
+	{
+		// multiplayer: the host moves its copy at the same pace (walking, running, a march's), or the two would
+		// disagree about where the unit is
+		if (AVLPlayerController* Mine = Cast<AVLPlayerController>(PC))
+		{
+			NetPaceSent = GetCharacterMovement()->MaxWalkSpeed;
+			Mine->ServerSetPace(this, NetPaceSent);
+		}
+	}
 	if (!Wish.IsNearlyZero())
 	{
 		AddMovementInput(Wish, 1.f);
 	}
 	// his own way: the player's units he walks into step aside (foes do not)
-	MakeWay(DeltaSeconds, bHeroMode && !bDead);
+	if (!IsNetCopy())
+	{
+		MakeWay(DeltaSeconds, bHeroMode && !bDead);
+	}
 	// after a swing he faces where it was aimed (the pointer when clicked) for FaceMouseHoldSeconds, WASD strafing; then
 	// he turns back to his way of walking (the movement component's own turn). Archers aim with their own component.
 	if (!bTroop || !FindComponentByClass<UVLArcherCombat>())
@@ -3762,25 +3895,23 @@ bool AVLKing::PointerYaw(APlayerController* PC, float& OutYaw) const
 	return true;
 }
 
+void AVLKing::OnRep_Health(float Old)
+{
+	if (Health < Old - 0.01f && !bDead)
+	{
+		ShowHurt();         // (the joining game: the host's blow landed)
+	}
+}
+
 void AVLKing::ReceiveDamage(float Amount, AActor* From)
 {
-	if (Amount <= 0.f || bDead)
+	if (Amount <= 0.f || bDead || IsNetCopy())
 	{
 		return;
 	}
 	SetMovementAwake(true);         // (hurt: awake for whatever follows)
 	Health = FMath::Max(0.f, Health - Amount);
-	LastHurtTime = GetWorld()->GetTimeSeconds();
-	HitPauseLeft = FMath::Max(0.f, HitPauseSeconds);
-	FlashLeft = CVarHitFlash.GetValueOnGameThread() != 0 ? FMath::Max(0.f, HitFlashSeconds) : 0.f;
-	if (FlashMID && !bFlashOn && FlashLeft > 0.f)
-	{
-		for (UStaticMeshComponent* PartMesh : Meshes)
-		{
-			PartMesh->SetOverlayMaterial(FlashMID);
-		}
-		bFlashOn = true;
-	}
+	ShowHurt();
 	if (!bTroop)
 	{
 		UE_LOG(LogSovereignRealms, Log, TEXT("King hurt: %.0f from %s, health %.0f"), Amount, From ? *From->GetName() : TEXT("nobody"), Health);
@@ -3795,6 +3926,57 @@ void AVLKing::ReceiveDamage(float Amount, AActor* From)
 		{
 			Die();
 		}
+	}
+}
+
+void AVLKing::ShowHurt()
+{
+	LastHurtTime = GetWorld()->GetTimeSeconds();
+	HitPauseLeft = FMath::Max(0.f, HitPauseSeconds);
+	FlashLeft = CVarHitFlash.GetValueOnGameThread() != 0 ? FMath::Max(0.f, HitFlashSeconds) : 0.f;
+	if (FlashMID && !bFlashOn && FlashLeft > 0.f)
+	{
+		for (UStaticMeshComponent* PartMesh : Meshes)
+		{
+			PartMesh->SetOverlayMaterial(FlashMID);
+		}
+		bFlashOn = true;
+	}
+}
+
+void AVLKing::OnRep_Dead()
+{
+	// the joining game: the host's copy fell (or, the king, rose again): what Die and Revive show
+	if (bDead)
+	{
+		DeadTime = 0.f;
+		{
+			const TGuardValue<bool> Quiet(bNetQuiet, true);
+			StopOrder();
+		}
+		ClearQueue();
+		if (UVLArcherCombat* A = UVLArcherCombat::For(this, false))
+		{
+			A->LetDown();
+		}
+		GarrisonIn = nullptr;
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		if (UVLCommand* Command = UVLCommand::Get(this))
+		{
+			Command->OnUnitDied(this);          // (out of this game's selection and its platoons)
+		}
+		if (Cast<APlayerController>(GetController()))
+		{
+			SetHeroMode(false);                 // the king fallen: the overview until he rises again
+		}
+	}
+	else
+	{
+		DeadTime = 0.f;
+		SetActorHiddenInGame(false);        // (the king risen again; the fog hides him again if he is out of sight)
+		GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		RigSetFigure(FigureLocal.GetLocation(), FQuat::Identity);
+		bRigForce = true;
 	}
 }
 
@@ -3877,6 +4059,10 @@ void AVLKing::TickDeath(float DeltaSeconds)
 	{
 		if (bTroop)
 		{
+			if (IsNetCopy())
+			{
+				return;         // (the host takes it away, and with it this copy)
+			}
 			if (AController* C = GetController(); C && !Cast<APlayerController>(C))
 			{
 				C->UnPossess();
@@ -4458,7 +4644,13 @@ void AVLKing::PoseFigure(float AnimDt)
 	const FQuat TiltQ = Rot(-Tilt, 0.f, 0.f);
 	const FVector HipMid(0.f, 0.f, Rig.HipHeight);
 	const float DropNow = P[P_Drop] * (1.f - Air), ShiftNow = P[P_Shift] * (1.f - Air);
-	RigSetFigure(FigureRest + FVector(ShiftNow, 0.f, -DropNow) + HipMid - TiltQ.RotateVector(HipMid), TiltQ);
+	FVector NetShift = FVector::ZeroVector;
+	FQuat NetTurn = FQuat::Identity;
+	if (IsNetCopy())
+	{
+		NetEase(AnimDt, NetShift, NetTurn);
+	}
+	RigSetFigure(NetTurn.RotateVector(FigureRest + FVector(ShiftNow, 0.f, -DropNow) + HipMid - TiltQ.RotateVector(HipMid)) + NetShift, NetTurn * TiltQ);
 	const FQuat PelvisQ = Rot(-P[P_PelvLean], P[P_PelvTwist], P[P_PelvSide]);
 	const FQuat ChestQ = Rot(-P[P_ChestLean], P[P_ChestTwist], P[P_ChestSide]);
 	const FQuat HeadQ = Rot(-P[P_HeadLean], P[P_HeadTwist], 0.f);
@@ -4872,7 +5064,7 @@ void AVLKing::PlayFootstep(const FVector& At, float RunBlend)
 	{
 		const APlayerController* LPC = GetWorld()->GetFirstPlayerController();
 		const AVLKing* Listener = LPC ? Cast<AVLKing>(LPC->GetPawn()) : nullptr;
-		const AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
+		const AVLGameMode* GM = AVLGameMode::Local(this);
 		if (Listener && !(Listener == this && bHeroMode))
 		{
 			const float Near = GM ? GM->ShuffleNear : 900.f, Range = GM ? GM->ShuffleRange : 4500.f;
@@ -4921,8 +5113,15 @@ void AVLKing::Tick(float DeltaSeconds)
 		return;
 	}
 	PollInput(DeltaSeconds);
-	UpdateMovementSleep();
-	UpdateSafety(DeltaSeconds);
+	if (!IsNetCopy())
+	{
+		UpdateMovementSleep();
+		UpdateSafety(DeltaSeconds);
+	}
+	else if (NetGarrison != 0 && !GarrisonIn.IsValid())
+	{
+		OnRep_NetGarrison();        // (the tower's copy was not there yet when the unit's was)
+	}
 	// Being hurt holds the POSE for a moment, nothing else: the pose's clock stops while the game's runs on, and
 	// afterwards runs a little fast until it has caught up.
 	float AnimDt = DeltaSeconds;

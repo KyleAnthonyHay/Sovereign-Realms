@@ -27,6 +27,7 @@
 #include "VLCharacterData.h"
 #include "VLConstruction.h"
 #include "VLEnemyAI.h"
+#include "VLNet.h"
 #include "VLKing.h"
 #include "VLTroop.h"
 #include "Components/StaticMeshComponent.h"
@@ -175,6 +176,10 @@ int32 UVLBattle::CornerRepairCost(const FVLBuildingState& B) const
 
 bool UVLBattle::PayCornerRepair(AActor* Castle, bool bQuiet)
 {
+	if (VLNet::SendBuilding(this, EVLNetBuildingAsk::RepairCorners, Castle))
+	{
+		return true;
+	}
 	FVLBuildingState* B = FindBuilding(Castle);
 	const int32 Cost = B ? CornerRepairCost(*B) : 0;
 	if (!B || Cost <= 0 || (B->Team != Player && B->Team != Enemy))
@@ -199,9 +204,9 @@ bool UVLBattle::PayCornerRepair(AActor* Castle, bool bQuiet)
 		}
 	}
 	UE_LOG(LogSovereignRealms, Log, TEXT("CORNERS %s of team %d: %d corner(s) paid to be mended, %d gold; Builders at the castle mend them"), *B->Name, B->Team, N, Cost);
-	if (B->Team == Player && !bQuiet)
+	if (IsHuman(B->Team) && !bQuiet)
 	{
-		PushAlert(FString::Printf(TEXT("Corner repair paid: %d gold. Builders at the castle mend it"), Cost), EVLAlert::Good);
+		PushAlertTo(B->Team, FString::Printf(TEXT("Corner repair paid: %d gold. Builders at the castle mend it"), Cost), EVLAlert::Good);
 	}
 	return true;
 }
@@ -323,10 +328,10 @@ void UVLBattle::TickCastleCorners(float Dt)
 					const bool bWasDown = B.bCornerDown[i];
 					B.bCornerDown[i] = false;
 					UE_LOG(LogSovereignRealms, Log, TEXT("CORNERS %s of team %d: the %s corner mended%s"), *B.Name, B.Team, CornerName[i], bWasDown ? TEXT(": its archer is back") : TEXT(""));
-					if (B.Team == Player)
+					if (IsHuman(B.Team))
 					{
 						const FVector At = CornerPoint(A, i);
-						PushAlert(bWasDown ? FString::Printf(TEXT("The castle's %s corner is mended: its archer is back"), CornerName[i])
+						PushAlertTo(B.Team, bWasDown ? FString::Printf(TEXT("The castle's %s corner is mended: its archer is back"), CornerName[i])
 							: FString::Printf(TEXT("The castle's %s corner is mended"), CornerName[i]), EVLAlert::Good, &At);
 					}
 				}

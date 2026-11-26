@@ -45,6 +45,7 @@ namespace
 AVLFarmer::AVLFarmer()
 {
 	bAmbient = true;                    // (set before it is spawned: the battle's registry leaves it out)
+	bReplicates = false;                // (scenery: each game of a multiplayer match has its own farm hands)
 	Team = UVLBattle::Neutral;
 	DisplayName = TEXT("Farmer");
 	UnitKind = TEXT("FarmerWoman");

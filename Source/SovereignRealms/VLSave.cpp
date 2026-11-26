@@ -1602,6 +1602,10 @@ FString UVLSaves::SaveRefusal() const
 	{
 		return TEXT("The match is over: there is nothing to save");
 	}
+	if (Battle->IsNetGame())
+	{
+		return TEXT("A multiplayer match cannot be saved");
+	}
 	return FString();
 }
 
@@ -1654,7 +1658,9 @@ bool UVLSaves::Save(const FString& Slot, FString* OutWhy, bool bQuiet)
 bool UVLSaves::Load(const FString& Slot, FString* OutWhy)
 {
 	const FVLSaveInfo Info = Slot.IsEmpty() ? FVLSaveInfo() : GetInfo(Slot);
-	const FString Why = Slot.IsEmpty() ? FString(TEXT("No such slot")) : (!Info.bExists ? FString::Printf(TEXT("%s is empty"), *SlotTitle(Slot)) : Info.Problem);
+	const UVLBattle* NetBattle = UVLBattle::Get(this);
+	const FString Why = (NetBattle && NetBattle->IsNetGame()) ? FString(TEXT("Leave the multiplayer match first (Esc > Leave match)"))
+		: Slot.IsEmpty() ? FString(TEXT("No such slot")) : (!Info.bExists ? FString::Printf(TEXT("%s is empty"), *SlotTitle(Slot)) : Info.Problem);
 	if (!Why.IsEmpty())
 	{
 		UE_LOG(LogSovereignRealms, Warning, TEXT("load: %s not loaded: %s"), *Slot, *Why);

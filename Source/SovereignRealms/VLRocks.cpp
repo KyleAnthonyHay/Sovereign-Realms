@@ -1,5 +1,7 @@
 // Clearing rocks: Builders take the loose rocks and boulders of a map away (VLRocks.h).
 #include "VLRocks.h"
+#include "VLNet.h"
+#include "VLPlayerController.h"
 #include "SovereignRealms.h"
 #include "VLBattle.h"
 #include "VLCommand.h"
@@ -150,6 +152,16 @@ bool UVLRocks::OrderClear(const TArray<AVLKing*>& Units, AActor* Rock, bool bQue
 	if (!IsRock(Rock))
 	{
 		return false;
+	}
+	if (VLNet::IsClient(this))
+	{
+		// the joining player's game: the host sends the Builders
+		const TArray<AVLKing*> Builders = Units.FilterByPredicate([](const AVLKing* U) { return U && U->IsAlive() && UVLBuilderWork::IsBuilder(U); });
+		if (Builders.Num() > 0)
+		{
+			VLNet::SendOrder(this, EVLNetOrder::ClearRock, Builders, Rock, FVector::ZeroVector, false, bQueue);
+		}
+		return Builders.Num() > 0;
 	}
 	int32 Sent = 0;
 	for (AVLKing* U : Units)
@@ -326,6 +338,10 @@ void UVLRocks::Clear(AActor* Rock, bool bQuiet)
 	if (!IsRock(Rock))
 	{
 		return;
+	}
+	if (AVLPlayerController* Remote = VLNet::RemoteController(this))
+	{
+		Remote->ClientRockCleared(Rock);        // (multiplayer, the host: it goes in the joining player's game too)
 	}
 	FBox B = Work.Contains(Rock) ? FBox(ForceInit) : RockBox(Rock);
 	if (const FWork* W = Work.Find(Rock))

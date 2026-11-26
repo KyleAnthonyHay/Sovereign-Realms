@@ -23,7 +23,8 @@ enum class EVLScreen : uint8
 	End,        // victory / defeat, with the match's numbers
 	Controls,   // every key (F1)
 	SaveGame,   // the slots to save the match to (over the pause menu; VLHUDSaves.cpp)
-	LoadGame    // the slots to load (over the pause menu or the title screen)
+	LoadGame,   // the slots to load (over the pause menu or the title screen)
+	Multiplayer // host a match on a map, or join one by its address (over the title screen; VLNet.h)
 };
 
 /** Cells of the icon atlas /Game/Voxel/UI/T_UI_Icons (the main game's, Tools/ui/gen_ui_art.py), in its order. */
@@ -90,6 +91,8 @@ public:
 	static const int32 NumMaps = 6;
 	static FString MapPath(int32 Map);
 	static const TCHAR* MapName(int32 Map);
+	/** A map by a word of its name ("realm", "realmv2", "realmv3", "highlands", "flatlands", "test"), as vl.Map takes it. */
+	static int32 MapByName(const FString& Name);
 	int32 CurrentMap() const;
 	/** The two maps that are not this one: Which 0 = the next round, 1 = the one after. */
 	int32 OtherMap(int32 Which) const { return (CurrentMap() + 1 + Which) % NumMaps; }
@@ -122,7 +125,8 @@ public:
 	/** Is this a screen drawn over the pause menu or the title screen (New Game, Settings, Controls, Save, Load)? */
 	static bool IsSubScreen(EVLScreen Screen)
 	{
-		return Screen == EVLScreen::NewGame || Screen == EVLScreen::Settings || Screen == EVLScreen::Controls || Screen == EVLScreen::SaveGame || Screen == EVLScreen::LoadGame;
+		return Screen == EVLScreen::NewGame || Screen == EVLScreen::Settings || Screen == EVLScreen::Controls || Screen == EVLScreen::SaveGame || Screen == EVLScreen::LoadGame
+			|| Screen == EVLScreen::Multiplayer;
 	}
 
 private:
@@ -329,6 +333,14 @@ private:
 	void DrawControlsPanel(float CentreX, bool bCloseButton);
 	void DrawSettingsPanel(float CentreX);
 	void DrawNewGamePanel(float CentreX);
+	// multiplayer (VLNet.h): the title screen's Host / Join panel, and what a match says while it waits for a player
+	void DrawMultiplayerPanel(float CentreX);
+	void DrawNetStatus();
+	/** The keys typed into the Join panel's address box (digits, '.', ':', Backspace, Ctrl / Cmd + V). */
+	void TypeAddress(APlayerController* PC);
+	FString JoinAddress;
+	int32 HostMap = 5;
+	bool bAddressLoaded = false;
 	// ---- saved games (VLHUDSaves.cpp; UVLSaves): the Save Game / Load Game screens (a row a slot: its map, the time
 	// played, when it was saved), with a question before a slot is written over or a match in progress is left; F5
 	// the quicksave, F9 loads it; the title screen's Continue

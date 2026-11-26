@@ -10,6 +10,9 @@
 #include "VLBattle.h"
 #include "VLSave.h"
 #include "VLLoadingScreen.h"
+#include "VLNet.h"
+#include "HAL/PlatformApplicationMisc.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Engine/Canvas.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -165,12 +168,12 @@ void AVLHUD::DrawMainMenu()
 	Y += U(64.f);
 
 	// entries. Continue: the game saved last (its map and time beside the label), when there is one
-	const float BW = U(340.f), BH = U(56.f), Gap = U(12.f);
+	const float BW = U(340.f), BH = U(50.f), Gap = U(9.f);     // (seven entries in the height six had at 56 + 12)
 	FVLSaveInfo Last;
 	const bool bCanContinue = UVLSaves::MostRecent(Last);
-	const int32 N = 6, Quit = N - 1;
-	const TCHAR* Labels[N] = { TEXT("CONTINUE"), TEXT("NEW GAME"), TEXT("LOAD GAME"), TEXT("HOW TO PLAY"), TEXT("SETTINGS"), TEXT("QUIT") };
-	const EVLScreen Opens[N] = { EVLScreen::None, EVLScreen::NewGame, EVLScreen::LoadGame, EVLScreen::Controls, EVLScreen::Settings, EVLScreen::None };
+	const int32 N = 7, Quit = N - 1;
+	const TCHAR* Labels[N] = { TEXT("CONTINUE"), TEXT("NEW GAME"), TEXT("MULTIPLAYER"), TEXT("LOAD GAME"), TEXT("HOW TO PLAY"), TEXT("SETTINGS"), TEXT("QUIT") };
+	const EVLScreen Opens[N] = { EVLScreen::None, EVLScreen::NewGame, EVLScreen::Multiplayer, EVLScreen::LoadGame, EVLScreen::Controls, EVLScreen::Settings, EVLScreen::None };
 	for (int32 i = 0; i < N; ++i)
 	{
 		if (i == 0 && !bCanContinue)
@@ -199,6 +202,11 @@ void AVLHUD::DrawMainMenu()
 		Y += BH + Gap;
 	}
 	Text(TEXT("F1  controls      Enter  new game      Esc  back"), X, View.Y - U(48.f), U(14.f), A(Dim, 0.9f * In));
+	// a multiplayer match that could not be joined, or was cut off: why (until the next try)
+	if (const UVLNetSession* Session = UVLNetSession::Get(this); Session && !Session->GetNote().IsEmpty() && Sub != EVLScreen::Multiplayer)
+	{
+		Text(Session->GetNote(), X, View.Y - U(26.f), U(15.f), A(Amber, In), AlignLeft, Bold);
+	}
 
 	if (Sub != EVLScreen::None || bConfirm)
 	{
@@ -228,7 +236,8 @@ void AVLHUD::DrawPauseMenu()
 	const float H = U(104.f) + N * (BH + Gap) + U(56.f);
 	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = FMath::RoundToFloat((View.Y - H) * 0.5f - (1.f - In) * U(12.f));
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
-	Text(TEXT("PAUSED"), X + W * 0.5f, Y + U(26.f), U(32.f), GoldBright, AlignCentre, Bold, U(6.f));
+	const bool bNet = Battle && Battle->IsNetGame();        // (a multiplayer match goes on behind this menu)
+	Text(bNet ? TEXT("MENU") : TEXT("PAUSED"), X + W * 0.5f, Y + U(26.f), U(32.f), GoldBright, AlignCentre, Bold, U(6.f));
 	Rule(X + U(40.f), Y + U(78.f), W - U(80.f));
 	const TCHAR* Labels[N] = { TEXT("RESUME"), TEXT("SAVE GAME"), TEXT("LOAD GAME"), TEXT("RESTART"), TEXT("NEW GAME"), TEXT("CONTROLS"), TEXT("SETTINGS"), TEXT("QUIT TO MAIN MENU"), TEXT("QUIT GAME") };
 	// (a match that is over has nothing to save)
@@ -238,7 +247,8 @@ void AVLHUD::DrawPauseMenu()
 	for (int32 i = 0; i < N; ++i, BY += BH + Gap)
 	{
 		const FBox2D Box(FVector2D(X + U(34.f), BY), FVector2D(X + W - U(34.f), BY + BH));
-		if (!MenuButton(Box, VLId::Menu + 10 + i, Labels[i], i != 1 || bCanSave))
+		const bool bOff = (i == 1 && !bCanSave) || (bNet && i >= 1 && i <= 4);     // (multiplayer: no saves, no restart, no new game)
+		if (!MenuButton(Box, VLId::Menu + 10 + i, (bNet && i == 7) ? TEXT("LEAVE THE MATCH") : Labels[i], !bOff))
 		{
 			continue;
 		}
@@ -259,8 +269,10 @@ void AVLHUD::DrawPauseMenu()
 	const FString Note = Battle && Battle->IsBattle()
 		? FString::Printf(TEXT("%s  ·  %s  ·  %s"), MapName(CurrentMap()), UVLBattle::DifficultyName(Battle->GetDifficulty()), *ClockText(Battle->GetClock()))
 		: FString::Printf(TEXT("%s  ·  sandbox"), MapName(CurrentMap()));
-	Text(Note, X + W * 0.5f, BY - U(4.f), U(14.f), Dim, AlignCentre);
-	Text(FString::Printf(TEXT("Enter resume  ·  F5 save  ·  F9 load  ·  M %s  ·  X quit"), MapName(OtherMap(0))), X + W * 0.5f, BY + U(14.f), U(13.f), Dim, AlignCentre);
+	Text(bNet ? FString::Printf(TEXT("%s  ·  multiplayer (%s)  ·  %s"), MapName(CurrentMap()), Battle->IsNetHost() ? TEXT("host") : TEXT("joined"), *ClockText(Battle->GetClock())) : Note,
+		X + W * 0.5f, BY - U(4.f), U(14.f), Dim, AlignCentre);
+	Text(bNet ? FString(TEXT("The match goes on while this menu is up  ·  Enter resume")) : FString::Printf(TEXT("Enter resume  ·  F5 save  ·  F9 load  ·  M %s  ·  X quit"), MapName(OtherMap(0))),
+		X + W * 0.5f, BY + U(14.f), U(13.f), Dim, AlignCentre);
 }
 
 // ---------------------------------------------------------------------------- victory / defeat
@@ -272,16 +284,17 @@ void AVLHUD::DrawEndScreen()
 	{
 		return;
 	}
-	const bool bWon = Battle->GetWinner() == UVLBattle::Player;
+	const bool bWon = Battle->GetWinner() == UVLBattle::Mine();
+	const bool bNet = Battle->IsNetGame();
 	const float In = FMath::Clamp(float(Now - StateTime) / 0.35f, 0.f, 1.f);
 	DimScreen(0.5f * In);
 
-	const FVLKingdom& Me = Battle->GetKingdom(UVLBattle::Player);
-	const FVLKingdom& Foe = Battle->GetKingdom(UVLBattle::Enemy);
+	const FVLKingdom& Me = Battle->GetKingdom(UVLBattle::Mine());
+	const FVLKingdom& Foe = Battle->GetKingdom(UVLBattle::Foe());
 	const TPair<const TCHAR*, FString> Rows[] = {
 		{ TEXT("Time"), ClockText(Battle->GetClock()) },
 		{ TEXT("Map"), MapName(CurrentMap()) },
-		{ TEXT("Difficulty"), DifficultyNames[FMath::Clamp(Battle->GetDifficulty(), 0, 2)] },
+		{ bNet ? TEXT("Match") : TEXT("Difficulty"), bNet ? TEXT("Multiplayer") : DifficultyNames[FMath::Clamp(Battle->GetDifficulty(), 0, 2)] },
 		{ TEXT("Troops recruited"), FString::FromInt(Me.Recruited) },
 		{ TEXT("Troops lost"), FString::FromInt(Me.Lost) },
 		{ TEXT("Enemies slain"), FString::FromInt(Me.Killed) },
@@ -297,7 +310,8 @@ void AVLHUD::DrawEndScreen()
 	const FLinearColor Accent = bWon ? GoldBright : FLinearColor(0.95f, 0.30f, 0.22f, 1.f);
 	Icon(bWon ? EVLIcon::Crown : EVLIcon::AlertLost, X + W * 0.5f - U(24.f), Y + U(20.f), U(48.f), FLinearColor(1.f, 1.f, 1.f, In));
 	Text(bWon ? TEXT("VICTORY") : TEXT("DEFEAT"), X + W * 0.5f, Y + U(66.f), U(54.f), A(Accent, In), AlignCentre, Black, U(10.f));
-	Text(bWon ? TEXT("The enemy's castle has fallen.") : TEXT("Your castle has fallen."), X + W * 0.5f, Y + U(132.f), U(16.f), A(Parchment, In), AlignCentre);
+	Text(Battle->IsAbandoned() ? TEXT("The other player left the match.") : (bWon ? TEXT("The enemy's castle has fallen.") : TEXT("Your castle has fallen.")),
+		X + W * 0.5f, Y + U(132.f), U(16.f), A(Parchment, In), AlignCentre);
 	Rule(X + U(50.f), Y + U(162.f), W - U(100.f), In);
 	float RY = Y + U(176.f);
 	for (int32 i = 0; i < NumRows; ++i, RY += RowH)
@@ -308,12 +322,17 @@ void AVLHUD::DrawEndScreen()
 		TextIn(Row, Rows[i].Value, U(17.f), A(Parchment, In), AlignRight, Bold);
 	}
 	const float BW = (W - U(80.f) - U(14.f)) * 0.5f, BY = Y + H - U(82.f) - U(62.f);
-	if (MenuButton(FBox2D(FVector2D(X + U(40.f), BY), FVector2D(X + U(40.f) + BW, BY + U(54.f))), VLId::Menu + 20, TEXT("PLAY AGAIN")))
+	if (MenuButton(FBox2D(FVector2D(X + U(40.f), BY), FVector2D(X + U(40.f) + BW, BY + U(54.f))), VLId::Menu + 20, TEXT("PLAY AGAIN"), !bNet))
 	{
 		OpenMatch(this, CurrentMap(), Battle->GetDifficulty());
 	}
 	if (MenuButton(FBox2D(FVector2D(X + W - U(40.f) - BW, BY), FVector2D(X + W - U(40.f), BY + U(54.f))), VLId::Menu + 21, TEXT("MAIN MENU")))
 	{
+		if (UVLNetSession* Session = UVLNetSession::Get(this); Session && bNet)
+		{
+			Session->Leave(this);       // (a multiplayer match: the connection ends, the title screen comes up)
+			return;
+		}
 		UGameplayStatics::SetGamePaused(this, false);
 		VLLoadingScreen::Travel(this, MapPath(CurrentMap()), FString());      // (no match: the title screen comes up)
 	}
@@ -346,6 +365,7 @@ void AVLHUD::DrawSub(float CentreX)
 	switch (Sub)
 	{
 	case EVLScreen::NewGame: DrawNewGamePanel(CentreX); break;
+	case EVLScreen::Multiplayer: DrawMultiplayerPanel(CentreX); break;
 	case EVLScreen::Controls: DrawControlsPanel(CentreX, true); break;
 	case EVLScreen::Settings: DrawSettingsPanel(CentreX); break;
 	case EVLScreen::SaveGame: DrawSavesPanel(CentreX, true); break;
@@ -399,7 +419,7 @@ void AVLHUD::DrawControlsPanel(float CentreX, bool bCloseButton)
 
 void AVLHUD::DrawSettingsPanel(float CentreX)
 {
-	AVLGameMode* GM = GetWorld()->GetAuthGameMode<AVLGameMode>();
+	AVLGameMode* GM = AVLGameMode::Local(this);
 	AVLKing* Me = King;
 #if PLATFORM_MAC
 	const int32 NumRows = 12;
@@ -710,22 +730,219 @@ void AVLHUD::DrawConfirmPanel(float CentreX)
 	// is there a match that would be lost? (what was saved stays: Save Game, F5, the autosave)
 	const UVLBattle* Battle = UVLBattle::Get(this);
 	const bool bInMatch = Base == EVLScreen::Pause && Battle && Battle->IsPlaying();
-	const FString Note = !bInMatch ? FString(TEXT("Until next time, sovereign."))
+	const bool bNetMatch = Battle && Battle->IsNetGame();
+	const FString Note = bNetMatch ? FString(Battle->IsNetHost() ? TEXT("The match ends for both players.") : TEXT("The other player wins the match."))
+		: !bInMatch ? FString(TEXT("Until next time, sovereign."))
 		: (Confirm == EConfirm::Restart ? FString(TEXT("The battle starts over.")) : FString(TEXT("What is not saved will be lost.")));
 
 	const FFit Fit(*this, FitScale(520.f, 250.f));
 	const float W = U(520.f), H = U(250.f);
 	const float X = PanelX(CentreX, W), Y = FMath::RoundToFloat((View.Y - H) * 0.5f);
 	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
-	Text(Titles[K], X + W * 0.5f, Y + U(30.f), U(23.f), GoldBright, AlignCentre, Bold, U(3.f));
+	Text((bNetMatch && Confirm == EConfirm::MainMenu) ? TEXT("LEAVE THE MATCH?") : Titles[K], X + W * 0.5f, Y + U(30.f), U(23.f), GoldBright, AlignCentre, Bold, U(3.f));
 	Rule(X + U(40.f), Y + U(72.f), W - U(80.f));
-	Text(Note, X + W * 0.5f, Y + U(90.f), U(17.f), bInMatch ? Amber : Parchment, AlignCentre);
+	Text(Note, X + W * 0.5f, Y + U(90.f), U(17.f), (bInMatch || bNetMatch) ? Amber : Parchment, AlignCentre);
 	Text(TEXT("Enter: yes   ·   Esc: cancel"), X + W * 0.5f, Y + U(116.f), U(14.f), Dim, AlignCentre);
 
 	const float Gap = U(14.f), BW = (W - U(80.f) - Gap) / 2.f, BY = Y + H - U(84.f);
 	auto Btn = [&](int32 i) { const float BX = X + U(40.f) + i * (BW + Gap); return FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + U(54.f))); };
 	if (MenuButton(Btn(0), VLId::Screen + 8, TEXT("CANCEL"))) { bConfirm = false; return; }
-	if (MenuButton(Btn(1), VLId::Screen + 9, Yes[K])) { DoConfirmed(); }
+	if (MenuButton(Btn(1), VLId::Screen + 9, (bNetMatch && Confirm == EConfirm::MainMenu) ? TEXT("LEAVE") : Yes[K])) { DoConfirmed(); }
+}
+
+// ---------------------------------------------------------------------------- multiplayer (VLNet.h)
+
+void AVLHUD::TypeAddress(APlayerController* PC)
+{
+	if (!PC || JoinAddress.Len() > 64)
+	{
+		JoinAddress.LeftInline(64);
+	}
+	if (!PC)
+	{
+		return;
+	}
+	static const FKey Digits[10] = { EKeys::Zero, EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+	static const FKey Pad[10] = { EKeys::NumPadZero, EKeys::NumPadOne, EKeys::NumPadTwo, EKeys::NumPadThree, EKeys::NumPadFour, EKeys::NumPadFive, EKeys::NumPadSix, EKeys::NumPadSeven,
+		EKeys::NumPadEight, EKeys::NumPadNine };
+	const bool bShift = PC->IsInputKeyDown(EKeys::LeftShift) || PC->IsInputKeyDown(EKeys::RightShift);
+	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl) || PC->IsInputKeyDown(EKeys::LeftCommand) || PC->IsInputKeyDown(EKeys::RightCommand);
+	if (bCtrl && PC->WasInputKeyJustPressed(EKeys::V))
+	{
+		// pasted: what of it an address can have
+		FString Clip;
+		FPlatformApplicationMisc::ClipboardPaste(Clip);
+		JoinAddress.Reset();
+		for (const TCHAR C : Clip.TrimStartAndEnd())
+		{
+			if (FChar::IsAlnum(C) || C == TEXT('.') || C == TEXT(':') || C == TEXT('-'))
+			{
+				JoinAddress.AppendChar(C);
+			}
+		}
+		JoinAddress.LeftInline(64);
+		return;
+	}
+	for (int32 d = 0; d < 10; ++d)
+	{
+		if ((PC->WasInputKeyJustPressed(Digits[d]) && !bShift) || PC->WasInputKeyJustPressed(Pad[d]))
+		{
+			JoinAddress.AppendInt(d);
+		}
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::Period) || PC->WasInputKeyJustPressed(EKeys::Decimal))
+	{
+		JoinAddress.AppendChar(TEXT('.'));
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::Semicolon) || PC->WasInputKeyJustPressed(EKeys::Colon))
+	{
+		JoinAddress.AppendChar(TEXT(':'));      // (before a port, if the host's is not 7777)
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::BackSpace) && JoinAddress.Len() > 0)
+	{
+		JoinAddress.LeftChopInline(1);
+	}
+	if (PC->WasInputKeyJustPressed(EKeys::Delete))
+	{
+		JoinAddress.Reset();
+	}
+}
+
+void AVLHUD::DrawMultiplayerPanel(float CentreX)
+{
+	UVLNetSession* Session = UVLNetSession::Get(this);
+	if (!bAddressLoaded)
+	{
+		// the address joined last time is there again
+		bAddressLoaded = true;
+		if (GConfig)
+		{
+			GConfig->GetString(TEXT("SovereignRealms.Multiplayer"), TEXT("LastAddress"), JoinAddress, GGameUserSettingsIni);
+			GConfig->GetInt(TEXT("SovereignRealms.Multiplayer"), TEXT("HostMap"), HostMap, GGameUserSettingsIni);
+		}
+		if (HostMap != 0 && HostMap != 1 && HostMap != 3 && HostMap != 5)
+		{
+			HostMap = 5;
+		}
+	}
+	const FFit Fit(*this, FitScale(820.f, 610.f));
+	const float W = U(820.f), H = U(610.f);
+	const float X = PanelX(CentreX, W), Y = FMath::RoundToFloat(FMath::Max((View.Y - H) * 0.5f, U(8.f)));
+	Panel(FBox2D(FVector2D(X, Y), FVector2D(X + W, Y + H)), true);
+	Text(TEXT("MULTIPLAYER"), X + W * 0.5f, Y + U(22.f), U(26.f), GoldBright, AlignCentre, Bold, U(5.f));
+	Rule(X + U(40.f), Y + U(66.f), W - U(80.f));
+	const float L = X + U(40.f), R = X + W - U(40.f);
+	float RY = Y + U(84.f);
+	if (Session && Session->IsJoining())
+	{
+		// trying to reach a host: nothing else to do but wait, or give up
+		Text(FString::Printf(TEXT("Connecting to %s ..."), *Session->GetLastAddress()), X + W * 0.5f, RY + U(120.f), U(22.f), Parchment, AlignCentre, Bold);
+		Text(TEXT("The host must have its match open (Multiplayer > Host) on the same network."), X + W * 0.5f, RY + U(160.f), U(15.f), Dim, AlignCentre);
+		if (MenuButton(FBox2D(FVector2D(X + W * 0.5f - U(150.f), Y + H - U(78.f)), FVector2D(X + W * 0.5f + U(150.f), Y + H - U(24.f))), VLId::Screen + 20, TEXT("CANCEL")))
+		{
+			Session->Leave(this);
+		}
+		return;
+	}
+
+	// ---- host: a battle map, and this machine's address for the other player
+	Text(TEXT("HOST A MATCH"), L, RY, U(18.f), Gold, AlignLeft, Bold, U(2.f));
+	Text(TEXT("Two players, head to head. You are green; the player who joins is red."), L, RY + U(26.f), U(14.f), Dim);
+	RY += U(54.f);
+	{
+		static const int32 Maps[4] = { 5, 1, 3, 0 };
+		const float Gap = U(10.f), MW = FMath::FloorToFloat((W - U(80.f) - Gap * 3.f) / 4.f), MH = U(52.f);
+		for (int32 k = 0; k < 4; ++k)
+		{
+			const float MX = L + k * (MW + Gap);
+			const FBox2D Box(FVector2D(MX, RY), FVector2D(MX + MW, RY + MH));
+			const FBtn B = Button(Box, VLId::Screen + 21 + k);
+			const bool bChosen = HostMap == Maps[k];
+			ButtonFrame(Box, B, true, bChosen);
+			TextIn(Box, MapTitles[Maps[k]], U(17.f), bChosen ? GoldBright : Parchment, AlignCentre, Bold);
+			if (B.bClicked) { Click(); HostMap = Maps[k]; }
+		}
+		RY += MH + U(12.f);
+	}
+	const FString Mine = VLNet::LocalAddresses();
+	Text(Mine.IsEmpty() ? FString(TEXT("This computer has no network address: is it connected?")) : FString::Printf(TEXT("The other player joins:  %s"), *Mine), L, RY + U(4.f), U(17.f),
+		Mine.IsEmpty() ? Amber : Parchment, AlignLeft, Bold);
+	Text(FString::Printf(TEXT("(port %d; the first time, allow the game through the firewall when asked)"), VLNet::DefaultPort), L, RY + U(30.f), U(13.f), Dim);
+	if (MenuButton(FBox2D(FVector2D(R - U(220.f), RY - U(2.f)), FVector2D(R, RY + U(50.f))), VLId::Screen + 25, TEXT("HOST"), Session != nullptr, true))
+	{
+		if (GConfig)
+		{
+			GConfig->SetInt(TEXT("SovereignRealms.Multiplayer"), TEXT("HostMap"), HostMap, GGameUserSettingsIni);
+			GConfig->Flush(false, GGameUserSettingsIni);
+		}
+		UE_LOG(LogSovereignRealms, Log, TEXT("hud: multiplayer: host %s"), MapName(HostMap));
+		Session->Host(this, HostMap);
+		return;
+	}
+	RY += U(72.f);
+	Rule(L, RY, W - U(80.f));
+	RY += U(22.f);
+
+	// ---- join: the host's address, typed
+	Text(TEXT("JOIN A MATCH"), L, RY, U(18.f), Gold, AlignLeft, Bold, U(2.f));
+	Text(TEXT("Type the address the host's screen shows (digits and dots; Ctrl + V pastes), then Join."), L, RY + U(26.f), U(14.f), Dim);
+	RY += U(56.f);
+	{
+		const FBox2D Field(FVector2D(L, RY), FVector2D(R - U(236.f), RY + U(52.f)));
+		Fill(Field.Min.X, Field.Min.Y, Field.GetSize().X, Field.GetSize().Y, Inset);
+		Outline(Field, Bronze, FMath::Max(1.f, U(2.f)));
+		const bool bCaret = FMath::Fmod(Now, 1.0) < 0.55;
+		const FString Shown = JoinAddress.IsEmpty() ? FString(TEXT("192.168.1.20")) : JoinAddress;
+		Text(Shown + (bCaret && !JoinAddress.IsEmpty() ? TEXT("_") : TEXT("")), Field.Min.X + U(16.f), Field.Min.Y + U(12.f), U(22.f), JoinAddress.IsEmpty() ? A(Dim, 0.6f) : Parchment, AlignLeft, Bold);
+		if (MenuButton(FBox2D(FVector2D(R - U(220.f), RY), FVector2D(R, RY + U(52.f))), VLId::Screen + 26, TEXT("JOIN"), Session != nullptr && !JoinAddress.IsEmpty(), true))
+		{
+			if (GConfig)
+			{
+				GConfig->SetString(TEXT("SovereignRealms.Multiplayer"), TEXT("LastAddress"), *JoinAddress, GGameUserSettingsIni);
+				GConfig->Flush(false, GGameUserSettingsIni);
+			}
+			UE_LOG(LogSovereignRealms, Log, TEXT("hud: multiplayer: join %s"), *JoinAddress);
+			Session->Join(this, JoinAddress);
+			return;
+		}
+		RY += U(66.f);
+	}
+	if (Session && !Session->GetNote().IsEmpty())
+	{
+		Text(Session->GetNote(), L, RY, U(16.f), Amber, AlignLeft, Bold);       // (the last try: why it did not work)
+	}
+	Text(FString::Printf(TEXT("This game: version %s. Both players need the same build."), *VLNet::Version()), L, Y + H - U(110.f), U(13.f), Dim);
+	if (MenuButton(FBox2D(FVector2D(L, Y + H - U(78.f)), FVector2D(L + U(220.f), Y + H - U(24.f))), VLId::Screen + 27, TEXT("BACK"))) { OpenSub(EVLScreen::None); }
+}
+
+void AVLHUD::DrawNetStatus()
+{
+	// a multiplayer match that has not begun: who is waited for (the host: with the address the other player types)
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	const AVLGameMode* GM = AVLGameMode::Local(this);
+	if (!Battle || !GM || !Battle->IsNetGame() || Battle->GetState() != EVLMatch::Idle || Base != EVLScreen::None)
+	{
+		return;
+	}
+	const FFit Fit(*this, FitScale(760.f, 150.f));
+	const float W = U(760.f), H = U(132.f);
+	const float X = FMath::RoundToFloat((View.X - W) * 0.5f), Y = FMath::RoundToFloat(View.Y * 0.16f);
+	const FBox2D Box(FVector2D(X, Y), FVector2D(X + W, Y + H));
+	Panel(Box, true);
+	if (Battle->IsNetHost())
+	{
+		const FString Mine = VLNet::LocalAddresses();
+		Text(TEXT("WAITING FOR THE OTHER PLAYER"), X + W * 0.5f, Y + U(18.f), U(24.f), GoldBright, AlignCentre, Bold, U(3.f));
+		Text(Mine.IsEmpty() ? FString(TEXT("This computer has no network address: is it connected?"))
+			: FString::Printf(TEXT("They choose Multiplayer > Join and type:  %s"), *Mine), X + W * 0.5f, Y + U(58.f), U(18.f), Parchment, AlignCentre, Bold);
+		Text(TEXT("The match starts when they are in.  Esc: menu (Leave the match)"), X + W * 0.5f, Y + U(92.f), U(14.f), Dim, AlignCentre);
+	}
+	else
+	{
+		Text(TEXT("JOINED"), X + W * 0.5f, Y + U(18.f), U(24.f), GoldBright, AlignCentre, Bold, U(3.f));
+		Text(TEXT("Waiting for the host to start the match ..."), X + W * 0.5f, Y + U(58.f), U(18.f), Parchment, AlignCentre, Bold);
+		Text(TEXT("You are the red kingdom."), X + W * 0.5f, Y + U(92.f), U(14.f), Dim, AlignCentre);
+	}
 }
 
 void AVLHUD::DrawDisplayConfirm()
