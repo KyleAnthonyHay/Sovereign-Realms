@@ -9,6 +9,8 @@ The same steps as Tools/mac/package.sh: build + cook + stage + pak, the log in S
 folder copied to Builds\Windows. Nothing for debugging stays in that folder: the .pdb files are moved
 beside it, to Builds\Windows\Symbols\<config> (keep them: a crash dump of this build is read with them), and the staging
 manifests are dropped. Only Direct3D 12 / SM6 shaders are cooked (Config\Windows\WindowsEngine.ini).
+The folder's SovereignRealms.exe is the launcher (Tools\windows\build_launcher.ps1): King David's runner on screen at
+once, playable, while it starts SovereignRealms\Binaries\Win64\SovereignRealms*.exe behind it.
 -NoPrereqs leaves out the installer of the Visual C++ runtime that the folder otherwise carries
 (Engine\Extras\Redist: about 40 MB; without it the game needs that runtime on the machine already).
 The engine: $env:UE_ROOT, else the installed 5.8, else the newest UE_5.* (Tools\windows\_env.ps1).
@@ -49,6 +51,11 @@ New-Item -ItemType Directory -Force -Path $Out | Out-Null
 # (its log, settings, captures) is left alone
 & robocopy $Staged $App /MIR /XD (Join-Path $App 'SovereignRealms\Saved') /NFL /NDL /NJH /NJS /NP /R:2 /W:2 | Out-Null
 if ($LASTEXITCODE -ge 8) { Write-Host "packaging failed: could not copy $Staged to $App (robocopy $LASTEXITCODE)"; exit 1 }
+
+# the launcher in place of the engine's bootstrap SovereignRealms.exe: the runner up at once while the game starts
+# (Tools\windows\launcher). If it cannot be built the engine's bootstrap stays and the game starts as before.
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'build_launcher.ps1') -Out (Join-Path $App 'SovereignRealms.exe')
+if ($LASTEXITCODE -ne 0) { Write-Host 'the launcher was not built: the engine''s bootstrap SovereignRealms.exe stays' }
 
 # no debug files in the game's folder: the symbols beside it, the staging manifests gone
 $Symbols = Join-Path $Out "Symbols\$Config"

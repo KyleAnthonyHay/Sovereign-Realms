@@ -197,6 +197,25 @@ settings (`Saved\HUDShots`).
   `Builds\Windows\SovereignRealms\SovereignRealms.exe`.
 - Or open `SovereignRealms.uproject` and press Play.
 
+**The loading screen's runner** (`VLLoadingScreen.*`, `VLLoadingArt.inl`; the launcher `Tools/windows/launcher`). Whenever
+a map loads, King David runs along a strip of pixel ground (the owner's sprites, References/KingRunSprite and
+KingCrouchRunSprite): rocks, barrels, stakes and arrows are jumped (Space / Up / W), crows ducked (Down / S, which also
+drops him faster in the air); running into something resets the count, and the best is kept (`[VLRunner] Best` in
+GameUserSettings.ini, and `Saved/RunnerBest.txt`). He plays by himself until a key takes him over. A match waits on
+"PRESS ENTER TO PLAY" (Enter / A / Start); the title goes as soon as it is ready; `-unattended` or `-VLNoEnter` never
+waits. `vl.LoadingPreview` films it to `Saved/Screenshots/VL/loading_preview`.
+On Windows the runner is there **from the double click**: the packaged folder's `SovereignRealms.exe` is a small launcher
+(plain Win32 + GDI, the art and the Roboto font bundled in it as resources, built by `Tools\windows\build_launcher.ps1`,
+which `package.ps1` runs) in place of the engine's bootstrap. Its window is up and playable about 0.2 s after launch,
+with the keys live from the first frame (read even while the game's window has the focus); it starts
+`SovereignRealms\Binaries\Win64\SovereignRealms*.exe` behind it and goes once the game's title screen is up (the
+game sets the event `Local\SovereignRealmsTitleReady` when its first loading screen goes); if King David is being
+played then, "PRESS ENTER TO PLAY" first. Esc lets the game show at once. Launched with `-unattended` or `-VLNoRunner`
+it only starts the game (the tools' scripts start the inner exe anyway). Why not an engine PreLoadingScreen module:
+the earliest the engine can show one is after its RHI, Slate and core modules are up (about 1.5-2.5 s after the
+double click here, the game's own window appearing at 2.5 s), and while the engine initialises the game thread reads
+no keys.
+
 There are two ways to play, switched with **Tab**.
 
 **Hero** (the camera follows King David at the diorama angle)

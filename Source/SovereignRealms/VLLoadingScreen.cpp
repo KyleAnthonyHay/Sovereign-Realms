@@ -34,6 +34,11 @@
 #include "TextureResource.h"
 #include "Widgets/SLeafWidget.h"
 #include <atomic>
+#if PLATFORM_WINDOWS
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include "Windows/WindowsHWrapper.h"
+#include "Windows/HideWindowsPlatformTypes.h"
+#endif
 
 namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravity... must not reach the files after this one)
 {
@@ -620,6 +625,33 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 
 	const TCHAR* const BestSection = TEXT("VLRunner");
 
+	/** The best score the launcher's runner shares (Tools/windows/launcher: it plays while the game starts): Saved/RunnerBest.txt. */
+	FString LauncherBestFile() { return FPaths::ProjectSavedDir() / TEXT("RunnerBest.txt"); }
+
+	int32 LauncherBest()
+	{
+		FString Text;
+		return FFileHelper::LoadFileToString(Text, *LauncherBestFile()) ? FMath::Max(0, FCString::Atoi(*Text.TrimStartAndEnd())) : 0;
+	}
+
+	/** The title (or whatever came first) is up: the launcher's runner, if one is playing in front of the game, may go. */
+	void SignalLauncher()
+	{
+#if PLATFORM_WINDOWS
+		static bool bSignalled = false;
+		if (!bSignalled)
+		{
+			bSignalled = true;
+			if (HANDLE Event = ::OpenEventW(EVENT_MODIFY_STATE, 0, L"Local\\SovereignRealmsTitleReady"))
+			{
+				::SetEvent(Event);
+				::CloseHandle(Event);
+				UE_LOG(LogSovereignRealms, Log, TEXT("loading screen: the launcher's runner told the game is up"));
+			}
+		}
+#endif
+	}
+
 	void LoadArt()
 	{
 		if (!bArtLoaded)
@@ -709,7 +741,7 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 		Current->bWait = !FApp::IsUnattended() && !FParse::Param(FCommandLine::Get(), TEXT("VLNoEnter"));
 		int32 Best = 0;
 		GConfig->GetInt(BestSection, TEXT("Best"), Best, GGameUserSettingsIni);
-		Current->Best = Best;
+		Current->Best = FMath::Max(Best, LauncherBest());
 		if (!Keys.IsValid())
 		{
 			Keys = MakeShared<FVLLoadingKeys>();
@@ -820,9 +852,14 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 				GConfig->SetInt(BestSection, TEXT("Best"), Current->Best.load(), GGameUserSettingsIni);
 				GConfig->Flush(false, GGameUserSettingsIni);
 			}
+			if (Current->Best.load() > LauncherBest())
+			{
+				FFileHelper::SaveStringToFile(FString::FromInt(Current->Best.load()), *LauncherBestFile());
+			}
 			UE_LOG(LogSovereignRealms, Log, TEXT("loading screen: down after %.1f s"), FPlatformTime::Seconds() - Current->StartedAt);
 		}
 		Current.Reset();
+		SignalLauncher();
 	}
 
 #if !UE_BUILD_SHIPPING

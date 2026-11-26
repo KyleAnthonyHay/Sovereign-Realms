@@ -25,6 +25,12 @@
  * The movie player does not exist in the editor (IsMoviePlayerEnabled()), so Play In Editor shows no loading screen
  * and is otherwise untouched; a standalone game (-game) and the packaged builds show it. (-NoLoadingScreen turns it
  * off, except in Shipping.)
+ *
+ * Before the engine is even up, the packaged game's SovereignRealms.exe is the launcher (Tools/windows/launcher): the
+ * same runner, a plain Win32 program with the art bundled in it, on screen and playable a fraction of a second after
+ * the double click while it starts the game behind it. When this screen first goes (the title is up) the game tells
+ * it so (the named event Local\SovereignRealmsTitleReady), and it hands over; the best score is shared through
+ * Saved/RunnerBest.txt as well as [VLRunner] Best.
  */
 namespace VLLoadingScreen
 {
