@@ -48,8 +48,8 @@ git lfs pull                     # usually done by the clone already; makes sure
 git checkout dev
 ```
 
-- **macOS**: `sh Tools/editor.sh build` compiles the editor and `sh Tools/editor.sh start` opens the project (or
-  double-click `SovereignRealms.uproject`). `sh Tools/package.sh` makes the playable app,
+- **macOS**: `sh Tools/mac/editor.sh build` compiles the editor and `sh Tools/mac/editor.sh start` opens the project (or
+  double-click `SovereignRealms.uproject`). `sh Tools/mac/package.sh` makes the playable app,
   `Builds/Mac/SovereignRealms.app`. The engine is expected at `/Users/Shared/Epic Games/UnrealInstall/UE_5.8`; set
   `UE_ROOT` to use another install.
 - **Windows**: right-click `SovereignRealms.uproject` > *Generate Visual Studio project files*, then open the project

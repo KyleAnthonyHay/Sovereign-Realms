@@ -274,7 +274,7 @@ namespace
 			}
 		}));
 
-	FAutoConsoleCommandWithWorldAndArgs CmdControl(TEXT("vl.Control"), TEXT("vl.Control king|<unit name>: take control of one of the player's units"),
+	FAutoConsoleCommandWithWorldAndArgs CmdTakeControl(TEXT("vl.Control"), TEXT("vl.Control king|<unit name>: take control of one of the player's units"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			AVLKing* Me = FindKing(World);
