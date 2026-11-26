@@ -772,7 +772,7 @@ bool UVLConstruction::CheckPlacementImpl(EVLBuilding Kind, int32 Team, const FVe
 	}
 
 	// ---- a mine goes on a gold vein: a neutral mine (which it takes over), or the ruin of a fallen one
-	if (Kind == EVLBuilding::Mine)
+	if (Kind == EVLBuilding::Mine && !Self)     // (a claimed mine being turned: its footprint, below)
 	{
 		const AActor* Best = nullptr;
 		FVector BestAt = FVector::ZeroVector;
@@ -950,6 +950,10 @@ bool UVLConstruction::CheckPlacementImpl(EVLBuilding Kind, int32 Team, const FVe
 				Out.CellState.Add(bFoot ? (bOk ? 0 : 1) : (What == 0 && FMath::Abs(Z - BaseZ) <= 60.f ? 2 : 3));
 			}
 		}
+	}
+	if (Self && Kind == EVLBuilding::Mine && !bCells)
+	{
+		Out.Reason.Reset();     // (a mine stands into its hillside: the ground under it is never level or clear)
 	}
 	// the map's edge
 	const FBox2D Bounds = Grid->GetBounds().ExpandBy(-300.f);
@@ -1816,11 +1820,7 @@ bool UVLConstruction::CanEverRotate(const AActor* Building, FString* OutWhy) con
 	{
 		Why = TEXT("It is still being built: it can be turned once it stands");
 	}
-	else if (St->Kind == EVLBuilding::Mine)
-	{
-		Why = TEXT("A mine is part of the land: it cannot be turned");
-	}
-	else if (!St->bRuntime)
+	else if (!St->bRuntime && St->Kind != EVLBuilding::Mine)     // (a mine of the map, once claimed, turns like the rest)
 	{
 		Why = TEXT("The map's own buildings stay as they were laid: only ones you raised can be turned");
 	}
@@ -1953,6 +1953,10 @@ bool UVLConstruction::Rotate(AActor* Building, FString* OutWhy, bool bQuiet)
 		R.Unit->SetBase(static_cast<FMovementBaseInterfaceData*>(nullptr));
 	}
 	// the building itself (its collision with it), then its props, raised again in their new places
+	if (USceneComponent* Root = Building->GetRootComponent(); Root && Root->Mobility != EComponentMobility::Movable)
+	{
+		Root->SetMobility(EComponentMobility::Movable);     // (a map's mine, claimed)
+	}
 	Building->SetActorLocationAndRotation(W.Location, FRotator(0.f, W.Yaw, 0.f), false, nullptr, ETeleportType::TeleportPhysics);
 	St->Rest = W.Location;
 	const FTransform NewT = Building->GetActorTransform();
@@ -3466,6 +3470,20 @@ AActor* UVLConstruction::RestoreBuilding(const FRestore& In, TArray<FBox2D>& Out
 		const FString Tag = TagValue(A, TEXT("Team:"));
 		const int32 Had = Tag.IsEmpty() ? UVLBattle::Player : (Tag.IsNumeric() ? FMath::Clamp(FCString::Atoi(*Tag), 0, 1) : UVLBattle::Neutral);
 		const bool bMine = In.Kind == EVLBuilding::Mine;
+		// (a claimed mine the player turned: where and how it stood when saved)
+		if (bMine && !In.bDestroyed && !A->GetActorRotation().Equals(In.Rotation, 0.5f))
+		{
+			FVector O, E;
+			A->GetActorBounds(true, O, E);
+			OutChanged.Add(FBox2D(FVector2D(O - E), FVector2D(O + E)));
+			if (USceneComponent* Root = A->GetRootComponent())
+			{
+				Root->SetMobility(EComponentMobility::Movable);
+			}
+			A->SetActorLocationAndRotation(In.Location, In.Rotation, false, nullptr, ETeleportType::TeleportPhysics);
+			A->GetActorBounds(true, O, E);
+			OutChanged.Add(FBox2D(FVector2D(O - E), FVector2D(O + E)));
+		}
 		A->Tags.Remove(TEXT("Claim"));
 		A->Tags.Remove(TEXT("WasNeutral"));
 		A->Tags.Remove(TEXT("Abandoned"));
