@@ -634,6 +634,23 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 		return FFileHelper::LoadFileToString(Text, *LauncherBestFile()) ? FMath::Max(0, FCString::Atoi(*Text.TrimStartAndEnd())) : 0;
 	}
 
+	/** The launcher's runner in front of the game while it starts: the keys are its (the focus back to it from the
+	 *  game's new window), or an Enter that lets it go would reach the title behind it as well. */
+	void FocusLauncher()
+	{
+#if PLATFORM_WINDOWS
+		if (HWND Launcher = ::FindWindowW(L"SovereignRealmsRunner", nullptr))
+		{
+			DWORD Pid = 0;
+			::GetWindowThreadProcessId(::GetForegroundWindow(), &Pid);
+			if (Pid == ::GetCurrentProcessId())
+			{
+				::SetForegroundWindow(Launcher);
+			}
+		}
+#endif
+	}
+
 	/** The title (or whatever came first) is up: the launcher's runner, if one is playing in front of the game, may go. */
 	void SignalLauncher()
 	{
@@ -752,6 +769,7 @@ namespace VLLoadingImpl      // (named: in a unity build the runner's Hit, Gravi
 	/** The movie player is about to play (a map is about to load) and has nothing to show: this screen. */
 	void Prepare()
 	{
+		FocusLauncher();
 		IGameMoviePlayer* Player = GetMoviePlayer();
 		if (!Player || !FSlateApplication::IsInitialized())
 		{

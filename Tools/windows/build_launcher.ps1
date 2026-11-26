@@ -38,7 +38,7 @@ $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.
 if (-not $vs) { Write-Host 'build_launcher: no Visual Studio C++ tools found'; exit 1 }
 $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
 $cpp = Join-Path $Src 'VLLauncher.cpp'
-$cmd = "`"$vcvars`" >nul && cd /d `"$Work`" && rc /nologo /fo VLLauncher.res VLLauncher.rc && " +
+$cmd = "set `"PATH=$(Split-Path $vswhere);%PATH%`" && `"$vcvars`" >nul && cd /d `"$Work`" && rc /nologo /fo VLLauncher.res VLLauncher.rc && " +
     "cl /nologo /O2 /MT /EHsc /std:c++17 /W3 /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /I`"$Src`" /Fo`"$Work\\`" `"$cpp`" VLLauncher.res " +
     "/link /SUBSYSTEM:WINDOWS /OUT:`"$Out`" user32.lib gdi32.lib ole32.lib windowscodecs.lib dwmapi.lib"
 & cmd.exe /c $cmd
