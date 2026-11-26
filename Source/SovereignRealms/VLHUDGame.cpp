@@ -2483,10 +2483,9 @@ void AVLHUD::DrawHeroBits()
 			bool bFollowers = false;
 			TArray<AVLKing*> Commanded;
 			King->HeroCommanded(Commanded, &bFollowers);
-			Commanding = King->IsCommandMode()
-				? (Sel.Num() > 0 ? FString::Printf(TEXT("Command mode  ·  %d selected  ·  right click: attack / move (Shift: queue)  ·  R: back"), Sel.Num())
-					: FString(TEXT("Command mode  ·  nobody selected: right click commands the king's guard (his platoon)  ·  R: back")))
-				: Sel.Num() > 0
+			// (2026-11-26, the owner's call: command mode changes only the title, HERO  ·  COMMAND; the card keeps its size
+			// and has no line of its own for it. The card is laid out for the line it has outside command mode.)
+			Commanding = Sel.Num() > 0
 				? FString::Printf(TEXT("Commanding %d  ·  right click: attack / move  ·  R: command mode  ·  G: follow me  ·  Esc: let go"), Sel.Num())
 				: (bFollowers ? FString::Printf(TEXT("%d follow you  ·  R: command mode"), Commanded.Num())
 				: (Commanded.Num() > 0 ? FString::Printf(TEXT("Your platoon (%d)  ·  R: command mode  ·  G: follow me"), Commanded.Num())
@@ -2525,7 +2524,7 @@ void AVLHUD::DrawHeroBits()
 			Meter(TX, PY + U(24.f), MW, U(9.f), Frac, FMath::Lerp(Health(Frac), Refuse, Hit * 0.7f));
 		}
 		Text(Info, Box.Min.X + U(16.f), Box.Min.Y + RowY + PS + U(6.f), U(14.f), InfoCol);
-		if (!Commanding.IsEmpty())
+		if (!Commanding.IsEmpty() && !(bHero && King->IsCommandMode()))
 		{
 			Text(Commanding, Box.Min.X + U(16.f), Box.Min.Y + RowY + PS + U(28.f), U(13.f), Dim);
 		}

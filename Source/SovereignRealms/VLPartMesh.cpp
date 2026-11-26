@@ -4,6 +4,8 @@
 
 namespace
 {
+	// (The Mac ran 1 for a day: this module was compiled with RHI_RAYTRACING 0 against a prebuilt engine that has 1, so
+	// FVLPartSceneProxy's layout and vtable did not match the engine's. The targets now define it, Source/*.Target.cs.)
 	TAutoConsoleVariable<int32> CVarPartOcclusion(TEXT("vl.Opt.PartOcclusion"), 0,
 		TEXT("0: a unit's parts take the engine's approximate occlusion, as a static mesh does (a part seen last frame is asked about again one frame in ten or so). 1: a query a part a frame, as before. 2: never asked about (always drawn when in the view). For parts whose render state is made after it is set"));
 

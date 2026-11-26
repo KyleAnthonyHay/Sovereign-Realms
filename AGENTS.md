@@ -59,7 +59,7 @@ and as the first part of *Push to dev*.
    nothing that `origin/dev` lacks, so first check that `git log --oneline origin/dev..dev` is empty. If it is not
    empty, stop and report.
 6. If the merge brought in changes to `Source/`, `Config/` or `*.uproject`, compile the editor target before carrying
-   on. On the Mac: `sh Tools/editor.sh build` (the editor must be closed). If the editor is open, do not quit it. Copy
+   on. On the Mac: `sh Tools/mac/editor.sh build` (the editor must be closed). If the editor is open, do not quit it. Copy
    `Source/`, `Config/` and `SovereignRealms.uproject` into a temporary folder and run the engine's
    `Engine/Build/BatchFiles/Mac/Build.sh SovereignRealmsEditor Mac Development -Project=<copy>/SovereignRealms.uproject`
    on the copy, then delete the copy. On Windows: `Build.bat SovereignRealmsEditor Win64 Development
