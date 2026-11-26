@@ -365,6 +365,7 @@ public:
 	// ---- the orders
 	UPROPERTY() TArray<FVLSavedPlatoon> Platoons;
 	UPROPERTY() int32 RallyPlatoon = -1;
+	UPROPERTY() int32 KingPlatoon = -1;     // the platoon King David fell from (he rises into it again)
 	UPROPERTY() uint8 LooseFormation = 0;
 	UPROPERTY() bool bLooseMarchTogether = true;
 	UPROPERTY() TArray<FVLSavedRoute> Routes;

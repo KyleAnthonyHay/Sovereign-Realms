@@ -405,6 +405,7 @@ void FVLSaveIO::Capture(UWorld* World, UVLSaveGame& Out)
 			S.Leader = UnitRef(P.Leader.Get());
 		}
 		Out.RallyPlatoon = Command->RallyPlatoon;
+		Out.KingPlatoon = Command->KingPlatoon;
 		Out.LooseFormation = uint8(Command->LooseFormation);
 		Out.bLooseMarchTogether = Command->bLooseMarchTogether;
 		for (const UVLCommand::FRoute& R : Command->Routes)
@@ -605,6 +606,7 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 		P = UVLCommand::FPlatoon();
 	}
 	Command->RallyPlatoon = INDEX_NONE;
+	Command->KingPlatoon = INDEX_NONE;
 	Command->Routes.Reset();
 	Command->GuardPosts.Reset();
 	Command->Roamers.Reset();
@@ -955,6 +957,7 @@ FString FVLSaveIO::Apply(UWorld* World, const UVLSaveGame& In)
 		P.Leader = P.Members.Contains(UnitAt(S.Leader)) ? UnitAt(S.Leader) : nullptr;
 	}
 	Command->RallyPlatoon = In.RallyPlatoon >= 0 && In.RallyPlatoon < UVLCommand::MaxPlatoons ? In.RallyPlatoon : INDEX_NONE;
+	Command->KingPlatoon = In.KingPlatoon >= 0 && In.KingPlatoon < UVLCommand::MaxPlatoons ? In.KingPlatoon : INDEX_NONE;
 	Command->LooseFormation = EVLFormation(FMath::Min<uint8>(In.LooseFormation, uint8(EVLFormation::Smart)));
 	Command->bLooseMarchTogether = In.bLooseMarchTogether;
 

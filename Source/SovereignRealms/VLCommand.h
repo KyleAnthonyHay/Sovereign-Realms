@@ -307,12 +307,21 @@ public:
 	 * platoon has none: there is no succession, and it carries on as a plain group. A member becomes leader when the
 	 * player takes control of it (MakeLeader) or when platoon members are ordered to follow it (OrderFollow). A
 	 * leader takes the front-middle slot of its formation on a move, so the platoon forms up on it.
+	 * King David always leads the platoon he is in (the king's guard): nobody else takes it from him, he takes it
+	 * when he joins one, and when he falls and rises again at the castle he goes back into it and leads it again
+	 * (KingPlatoon; TickPlatoonLeads keeps it so after a load or a re-forming too).
+	 * While the player plays a platoon's leader (the hero view) all its other members follow it (OrderFollow): all
+	 * of them when he takes control, and from then on any that come free (an order done, a fight over, a recruit
+	 * joining, the king risen again), so an order given to them still works and they fall back in after it.
 	 */
 	AVLKing* GetPlatoonLeader(int32 Index) const;
 	bool IsPlatoonLeader(const AVLKing* Unit) const;
-	/** Unit becomes its platoon's leader (false: it is in none). bRally: the platoon's idle members fall in behind
-	 *  it (OrderFollow) as well. */
+	/** Unit becomes its platoon's leader (false: it is in none, or King David leads that platoon). bRally: the
+	 *  platoon's members fall in behind it (OrderFollow) as well: all but those in the tower, at a Builder's work
+	 *  or in a fight (they follow once free: TickPlatoonLeads). */
 	bool MakeLeader(AVLKing* Unit, bool bRally = false);
+	/** UVLBattle: King David rose again at the castle: back into the platoon he fell from (KingPlatoon), leading it. */
+	void OnKingRevived(AVLKing* King);
 	/**
 	 * The recruits' platoon (the platoon panel's flag, the main game's "recruits join here"): new swordsmen and
 	 * archers from every barracks and range join it and march to it (UVLBattle::SpawnRecruit), unless the building
@@ -374,6 +383,12 @@ private:
 	};
 	TArray<FFollower> Followers;
 	void TickFollowers();
+	/** King David leads his platoon; the members of a played leader's platoon follow it (see GetPlatoonLeader). */
+	void TickPlatoonLeads();
+	/** Has it nothing it was told to do (no order, post, route, follow, tower, Builder's work, chain, fight)? */
+	bool IsFreeToFollow(const AVLKing* M) const;
+	/** The player's King David, alive, in platoon Index? */
+	AVLKing* KingIn(int32 Index) const;
 	/** The most senior of Units to lead them (see GetPlatoonLeader), or null. */
 	static AVLKing* PickLeader(const TArray<AVLKing*>& Units);
 	/** A group's way through points: a patrol (loops) or an attack-move (stops at the last). */
@@ -462,6 +477,7 @@ private:
 	TArray<TWeakObjectPtr<AVLKing>> Selection;
 	FPlatoon Platoons[MaxPlatoons];
 	int32 RallyPlatoon = INDEX_NONE;
+	int32 KingPlatoon = INDEX_NONE;     // the platoon King David fell from: he goes back into it when he rises
 	EVLFormation LooseFormation = EVLFormation::Smart;
 	TArray<FTower> Towers;
 	TArray<FMarker> Markers;

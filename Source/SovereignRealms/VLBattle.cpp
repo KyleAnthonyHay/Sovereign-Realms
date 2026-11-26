@@ -3029,6 +3029,10 @@ void UVLBattle::TickKings(float Dt)
 			}
 		}
 		K->Revive(Feet);
+		if (UVLCommand* Command = UVLCommand::Get(this))
+		{
+			Command->OnKingRevived(K);     // (King David back into the platoon he fell from, leading it)
+		}
 		if (K->Team == Player)
 		{
 			PushAlert(TEXT("King David has returned to the castle"), EVLAlert::Good, &Feet);

@@ -859,6 +859,10 @@ void UVLCommand::OnUnitDied(AVLKing* Unit)
 	{
 		FPlatoon& P = Platoons[i];
 		const bool bWas = P.Members.Contains(Unit);
+		if (bWas && Unit->KindId() == EVLUnitKind::King && Unit->Team == UVLBattle::Player)
+		{
+			KingPlatoon = i;                // (he goes back into it when he rises at the castle: OnKingRevived)
+		}
 		if (P.Leader.Get() == Unit)
 		{
 			// the leader is gone: the platoon has none now (no one steps up; it carries on as a plain group)
@@ -1022,7 +1026,7 @@ void UVLCommand::AssignPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 	Platoons[Index].Members.Reset();
 	Platoons[Index].Leader = nullptr;
 	AddToPlatoon(Index, Units);
-	if (OldLeader && Platoons[Index].Members.Contains(OldLeader))
+	if (OldLeader && Platoons[Index].Members.Contains(OldLeader) && !KingIn(Index))
 	{
 		Platoons[Index].Leader = OldLeader;
 	}
@@ -1085,12 +1089,21 @@ void UVLCommand::AddToPlatoon(int32 Index, const TArray<AVLKing*>& Units)
 			UE_LOG(LogSovereignRealms, Log, TEXT("platoon %d formed: %s leads it"), Index + 1, *L->GetDisplayName());
 		}
 	}
+	else if (AVLKing* const* King = Joined.FindByPredicate([](const AVLKing* U) { return U->KindId() == EVLUnitKind::King; }))
+	{
+		Platoons[Index].Leader = *King;     // (King David always leads the platoon he is in)
+		UE_LOG(LogSovereignRealms, Log, TEXT("platoon %d: King David joins and leads it"), Index + 1);
+	}
 	UpdateMarchPace();              // (a newcomer on a march: the platoon's pace is the slowest's again)
 }
 
 AVLKing* UVLCommand::PickLeader(const TArray<AVLKing*>& Units)
 {
 	// King David if he is among them; else the longest-serving troop (not a Builder: a Builder only if nobody else)
+	if (AVLKing* const* King = Units.FindByPredicate([](const AVLKing* U) { return U && U->IsAlive() && U->KindId() == EVLUnitKind::King; }))
+	{
+		return *King;
+	}
 	AVLKing* Best = nullptr;
 	float BestScore = -1.f;
 	for (AVLKing* U : Units)
@@ -1142,6 +1155,10 @@ bool UVLCommand::MakeLeader(AVLKing* Unit, bool bRally)
 	{
 		return false;
 	}
+	if (const AVLKing* King = KingIn(P); King && King != Unit)
+	{
+		return false;               // (King David leads the king's guard: nobody takes it from him)
+	}
 	if (Platoons[P].Leader.Get() != Unit)
 	{
 		Platoons[P].Leader = Unit;
@@ -1149,17 +1166,14 @@ bool UVLCommand::MakeLeader(AVLKing* Unit, bool bRally)
 	}
 	if (bRally)
 	{
-		// the members with nothing to do fall in behind it (one on an order, a guard, a patrol, on the tower or in a
-		// fight keeps to it)
-		TArray<AVLKing*> Members, Idle;
+		// the whole platoon falls in behind it, whatever it was doing (but for those in the tower or on their way up,
+		// at a Builder's work, or in a fight: they follow once free, TickPlatoonLeads)
+		TArray<AVLKing*> Members, Rally;
 		GetPlatoon(P, Members);
 		for (AVLKing* M : Members)
 		{
-			TArray<FVector> RoutePoints;
-			bool bLoop = false;
-			int32 Next = 0;
-			if (M != Unit && !M->IsOnOrder() && !M->IsGarrisoned() && !M->PendingGarrison.IsValid() && !M->bHoldOrder && !GuardWardOf(M) && !IsRoaming(M)
-				&& !GetRoute(M, RoutePoints, bLoop, Next) && !FollowedBy(M) && !UVLBuilderWork::IsAtWork(M))
+			if (M != Unit && FollowedBy(M) != Unit && !M->IsGarrisoned() && !M->PendingGarrison.IsValid() && !M->bTowerGuard
+				&& !UVLBuilderWork::IsAtWork(M) && !(Cast<APlayerController>(M->GetController()) && M->IsHeroMode()))
 			{
 				const UVLSwordsmanCombat* Sw = UVLSwordsmanCombat::For(M, false);
 				const UVLArcherCombat* Bw = UVLArcherCombat::For(M, false);
@@ -1167,12 +1181,12 @@ bool UVLCommand::MakeLeader(AVLKing* Unit, bool bRally)
 				{
 					continue;           // (in a fight)
 				}
-				Idle.Add(M);
+				Rally.Add(M);
 			}
 		}
-		if (Idle.Num() > 0)
+		if (Rally.Num() > 0)
 		{
-			OrderFollow(Idle, Unit);
+			OrderFollow(Rally, Unit);
 		}
 	}
 	return true;
@@ -1219,6 +1233,10 @@ void UVLCommand::DisbandPlatoon(int32 Index)
 		}
 		Platoons[Index].Members.Reset();
 		Platoons[Index].Leader = nullptr;
+		if (KingPlatoon == Index)
+		{
+			KingPlatoon = INDEX_NONE;       // (broken up while the king was down: he rises into none)
+		}
 		if (RallyPlatoon == Index)
 		{
 			RallyPlatoon = INDEX_NONE;      // (the recruits' flag goes with it)
@@ -2953,6 +2971,85 @@ void UVLCommand::TickFollowers()
 	}
 }
 
+AVLKing* UVLCommand::KingIn(int32 Index) const
+{
+	if (Index < 0 || Index >= MaxPlatoons)
+	{
+		return nullptr;
+	}
+	for (const TWeakObjectPtr<AVLKing>& M : Platoons[Index].Members)
+	{
+		if (AVLKing* U = M.Get(); U && U->IsAlive() && U->KindId() == EVLUnitKind::King && U->Team == UVLBattle::Player)
+		{
+			return U;
+		}
+	}
+	return nullptr;
+}
+
+bool UVLCommand::IsFreeToFollow(const AVLKing* M) const
+{
+	if (!M || M->IsDead() || PlayedByHand(M) || M->IsOnOrder() || M->IsGarrisoned() || M->PendingGarrison.IsValid() || M->bTowerGuard
+		|| M->bHoldOrder || GuardWardOf(M) || IsRoaming(M) || FollowedBy(M) || HasChain(M) || UVLBuilderWork::IsAtWork(M) || IsFightingNow(M))
+	{
+		return false;
+	}
+	TArray<FVector> RoutePoints;
+	bool bLoop = false;
+	int32 Next = 0;
+	return !GetRoute(M, RoutePoints, bLoop, Next);
+}
+
+void UVLCommand::TickPlatoonLeads()
+{
+	for (int32 i = 0; i < MaxPlatoons; ++i)
+	{
+		// King David leads the platoon he is in (after a load, a re-forming, his rising again: whatever left it else)
+		if (AVLKing* King = KingIn(i); King && Platoons[i].Leader.Get() != King)
+		{
+			Platoons[i].Leader = King;
+			UE_LOG(LogSovereignRealms, Log, TEXT("platoon %d: King David leads it again"), i + 1);
+		}
+		// the leader the player plays: the rest of his platoon keeps with him; those that come free fall back in
+		AVLKing* L = GetPlatoonLeader(i);
+		if (!L || !PlayedByHand(L))
+		{
+			continue;
+		}
+		TArray<AVLKing*> Members, Free;
+		GetPlatoon(i, Members);
+		for (AVLKing* M : Members)
+		{
+			if (M != L && IsFreeToFollow(M))
+			{
+				Free.Add(M);
+			}
+		}
+		if (Free.Num() > 0)
+		{
+			OrderFollow(Free, L, false);
+		}
+	}
+}
+
+void UVLCommand::OnKingRevived(AVLKing* King)
+{
+	if (!King || King->Team != UVLBattle::Player || King->KindId() != EVLUnitKind::King)
+	{
+		return;
+	}
+	const int32 P = KingPlatoon;
+	KingPlatoon = INDEX_NONE;
+	if (P == INDEX_NONE || PlatoonIndexOf(King) != INDEX_NONE)
+	{
+		return;
+	}
+	AddToPlatoon(P, { King });          // (he takes its lead: AddToPlatoon, PickLeader)
+	Platoons[P].Leader = King;
+	UE_LOG(LogSovereignRealms, Log, TEXT("King David rises and takes the lead of platoon %d again"), P + 1);
+	// (played, his guard falls in behind him again: TickPlatoonLeads; else it stays where it was sent)
+}
+
 bool UVLCommand::IsDismissAsked() const
 {
 	return GetWorld() && GetWorld()->GetRealTimeSeconds() - DismissAskedAt < DismissAskSeconds;
@@ -3346,6 +3443,9 @@ void UVLCommand::TickOrders(float Dt)
 	OrdersClock = 0.25f;
 	const UWorld* World = GetWorld();
 	const double Now = World ? World->GetTimeSeconds() : 0.0;
+
+	// ---- platoon leads: King David leads his; the played leader's platoon keeps with him
+	TickPlatoonLeads();
 
 	// ---- followers: after the one they follow
 	TickFollowers();
