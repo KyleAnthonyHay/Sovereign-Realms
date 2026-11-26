@@ -3154,6 +3154,18 @@ bool UVLBattle::JonathanFor(int32 Team)
 
 AVLTroop* UVLBattle::GetJonathan(int32 Team) const
 {
+	if (bNetClient)
+	{
+		// (the joining player's game: found among the copies it has of the host's units)
+		for (AVLKing* U : AllUnits())
+		{
+			if (U && U->IsJonathan() && U->Team == Team && U->IsTroop())
+			{
+				return static_cast<AVLTroop*>(U);
+			}
+		}
+		return nullptr;
+	}
 	return (Team == Player || Team == Enemy) ? Jonathans[Team].Get() : nullptr;
 }
 

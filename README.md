@@ -424,6 +424,26 @@ no housing but a limit of his own by the castle's level (2, 3, 3, 4, 4, 5, 6); h
 **Only Builders build**: see *Building* below. At his work he swings the hammer (the up-down-up blows) and the main
 game's hammer and saw sounds play.
 
+## Multiplayer (`VLNet.*`, `VLKingNet.cpp`, `VLPlayerController.*`)
+
+Stage one (2026-11-26): **two players head to head on a home network**. Title screen > **MULTIPLAYER**: one player
+picks a map and presses **HOST** (the map opens as a listen server and waits, showing this machine's address), the
+other types that address and presses **JOIN** (port 7777). The host is the green kingdom, the joining player the red
+one, each with its own King David, HUD, selection and fog of war; there is no enemy commander, no pause, no saving and
+no troop ships in a multiplayer match. Both games must be the same build: another version is refused at the door with
+a message. A single-player game runs none of this.
+
+It is the conventional Unreal set-up: the host's game runs every rule, units replicate with the engine's replicated
+movement, the joining player's hero is predicted by its CharacterMovementComponent, buildings travel as a fast array
+on the game state, and every order function sends itself to the host from the joining game. What is replicated and
+how, and the rules chosen: `Docs/Multiplayer/DESIGN.md`. How to test it on the PC and the Mac, the known limits and
+the next steps (Epic Online Services for internet play): `Docs/Multiplayer/TESTING.md`.
+
+`Tools\windows\mp_test.ps1` plays a scripted match with two games on one PC and compares what each holds (join,
+state, move, fight, build, hero, end, leave). Console: `vl.Host <map>`, `vl.Join <address>`, `vl.Leave`, `vl.Net`,
+`vl.NetDump <name>`; command line: `-VLHost=<map>`, `-VLJoin=<address>`, `-VLInbox=<file>` (a game's own command
+inbox, so two games can run from one folder).
+
 ## Building (`UVLConstruction`, `VLConstruction.*`; HUD `VLHUDBuild.cpp`)
 
 The first draft's construction (`SRBuilding.cpp` site / StepConstruction / CancelConstruction / Demolish,

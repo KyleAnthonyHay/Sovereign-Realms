@@ -771,6 +771,7 @@ void AVLKing::PossessedBy(AController* NewController)
 	if (Cast<APlayerController>(NewController))
 	{
 		EnsureCameraRig();      // the player's now: the hero camera and the overview's
+		SetNetUpdateFrequency(30.f);        // (multiplayer: the unit a player plays is sent to the other game more often)
 	}
 	else if (NewController)
 	{
@@ -785,6 +786,7 @@ void AVLKing::PossessedBy(AController* NewController)
 void AVLKing::UnPossessed()
 {
 	Super::UnPossessed();
+	SetNetUpdateFrequency(10.f);            // (multiplayer: a unit's usual rate again)
 	WakeRigPosers();
 }
 
