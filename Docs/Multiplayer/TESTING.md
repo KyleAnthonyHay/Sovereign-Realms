@@ -123,7 +123,7 @@ the game with `-VLHost=realmv3` / `-VLJoin=192.168.1.20`.
   work.
 - **No troop ships** in a multiplayer match (neither player has one). No pause. No saving or loading. A player who
   drops out cannot come back into the same match.
-- **The joining player's hero does not pass through its own troops** (in single player they step aside for him).
+- The joining player's troops step aside for its hero a moment later than in single player (the host moves them).
 - Training dummies of a barracks built during the match cannot be attacked by the joining player.
 - **Fog of war is per player but not enforced**: both games are sent every unit, and each hides what its player cannot
   see. Fine between friends; it is not cheat-proof.

@@ -2326,7 +2326,10 @@ void AVLKing::MakeWay(float DeltaSeconds, bool bActive)
 				{
 					Strength *= 0.5f;
 				}
-				O->YieldTo(Push.GetSafeNormal(), Strength, FMath::Max(Speed, O->WalkSpeed), this);
+				if (!O->IsNetCopy())    // (multiplayer: the host moves them aside; the joining game only passes through them)
+				{
+					O->YieldTo(Push.GetSafeNormal(), Strength, FMath::Max(Speed, O->WalkSpeed), this);
+				}
 			}
 		}
 	}
@@ -3019,10 +3022,9 @@ void AVLKing::PollInput(float DeltaSeconds)
 		// multiplayer, the host's side of the unit the joining player plays: its keys, its camera and its walking
 		// are that game's (its moves arrive through the movement component); nothing to read here
 		bCommandMode = bCommandChain = bChainHeldByTest = false;
-		if (WayIgnored.Num() > 0)
-		{
-			MakeWay(DeltaSeconds, false);
-		}
+		// (its own troops make way for it here as they do for the host's hero: that game's copy of it passes through
+		// the same ones, so the two agree about where it can walk)
+		MakeWay(DeltaSeconds, bHeroMode && !bDead);
 		return;
 	}
 	if (!PC)
@@ -3453,10 +3455,7 @@ void AVLKing::PollInput(float DeltaSeconds)
 		AddMovementInput(Wish, 1.f);
 	}
 	// his own way: the player's units he walks into step aside (foes do not)
-	if (!IsNetCopy())
-	{
-		MakeWay(DeltaSeconds, bHeroMode && !bDead);
-	}
+	MakeWay(DeltaSeconds, bHeroMode && !bDead);
 	// after a swing he faces where it was aimed (the pointer when clicked) for FaceMouseHoldSeconds, WASD strafing; then
 	// he turns back to his way of walking (the movement component's own turn). Archers aim with their own component.
 	if (!bTroop || !FindComponentByClass<UVLArcherCombat>())
