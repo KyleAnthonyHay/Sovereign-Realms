@@ -11,6 +11,7 @@
 #include "VLFog.h"
 #include "VLCommand.h"
 #include "VLConstruction.h"
+#include "VLRocks.h"
 #include "VLTroop.h"
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
@@ -305,6 +306,7 @@ void AVLHUD::DrawBuildFeedback()
 	// ---- sites rising and repairs: a bar over each (the main game's construction bar: red "needs a Builder" while
 	// nobody works at it; "queued: Builder 1, 2nd" when it is on a Builder's queue, a Shift order)
 	TMap<const AActor*, FString> QueuedFor;
+	TSet<const AActor*> JobOf;          // (what the player's Builders are at or on their way to: a rock's bar shows)
 	if (const UVLConstruction* Cons = UVLConstruction::Get(this))
 	{
 		TArray<AVLKing*> Crew;
@@ -315,6 +317,10 @@ void AVLHUD::DrawBuildFeedback()
 			if (!BW)
 			{
 				continue;
+			}
+			if (const AActor* Job = BW->GetJob())
+			{
+				JobOf.Add(Job);
 			}
 			int32 Place = BW->GetJob() ? 1 : 0;
 			for (const UVLBuilderWork::FTask& T : BW->GetTasks())
@@ -354,6 +360,56 @@ void AVLHUD::DrawBuildFeedback()
 		{
 			Meter(X, Y, W, H, B.Health / FMath::Max(B.MaxHealth, 1.f), Good);
 			Text(TEXT("repairing"), X + W + U(6.f), Y - U(5.f), U(14.f), Parchment, AlignLeft, Bold);
+		}
+	}
+	// ---- the same bar for the Builders' other timed work: a rock being cleared (VLRocks.*: while a Builder is at it,
+	// on the way to it or has it queued), and the castle's paid corner repairs (VLCastleCorners.cpp), one over each
+	// corner being mended
+	auto WorkBar = [this](const FVector& World, float Frac, const FString& Label, bool bWaiting, const FLinearColor& Fill, float Width = 110.f)
+	{
+		const FVector S = Project(World);
+		if (S.Z <= 0.f)
+		{
+			return;
+		}
+		const float W = U(Width), H = U(9.f), IS = U(24.f);
+		const float X = FMath::RoundToFloat(S.X - W * 0.5f + IS * 0.5f), Y = FMath::RoundToFloat(S.Y);
+		Icon(EVLIcon::Hammer, X - IS - U(5.f), Y + H * 0.5f - IS * 0.5f, IS, FLinearColor::White, false);
+		Meter(X, Y, W, H, Frac, Fill);
+		Text(Label, X + W + U(6.f), Y - U(5.f), U(14.f), bWaiting ? Refuse : Parchment, AlignLeft, Bold);
+	};
+	if (const UVLRocks* Rocks = UVLRocks::Get(this))
+	{
+		TArray<UVLRocks::FWorkView> Works;
+		Rocks->GetWork(Works);
+		for (const UVLRocks::FWorkView& R : Works)
+		{
+			const FString* Queued = QueuedFor.Find(R.Rock);
+			if ((R.Builders == 0 && !Queued && !JobOf.Contains(R.Rock)) || !UVLFog::InSight(R.Rock))
+			{
+				continue;       // (a rock left half cleared, with nobody to finish it, shows nothing)
+			}
+			const FString Label = R.Builders > 0 || !Queued ? FString::Printf(TEXT("%d%%%s"), FMath::FloorToInt(R.Frac * 100.f), R.Builders > 1 ? *FString::Printf(TEXT("  x%d"), R.Builders) : TEXT(""))
+				: *Queued;
+			WorkBar(TopOf(R.Rock), R.Frac, Label, false, GoldBright);
+		}
+	}
+	for (const FVLBuildingState& B : Battle->GetBuildings())
+	{
+		if (B.Kind != EVLBuilding::Castle || !B.IsAlive() || B.Team != UVLBattle::Player || !B.Actor.IsValid())
+		{
+			continue;
+		}
+		const float CMax = FMath::Max(Battle->CornerMaxHealth(B), 1.f);
+		for (int32 i = 0; i < VLRules::CastleCorners(B.Level); ++i)
+		{
+			if (B.bCornerRepair[i])
+			{
+				const FString* Queued = B.BuildersAt > 0 ? nullptr : QueuedFor.Find(B.Actor.Get());
+				const FString Label = B.BuildersAt > 0 ? FString::Printf(TEXT("mending%s"), B.BuildersAt > 1 ? *FString::Printf(TEXT("  x%d"), B.BuildersAt) : TEXT(""))
+					: (Queued ? *Queued : FString(TEXT("needs a Builder")));
+				WorkBar(Battle->CornerPoint(B.Actor.Get(), i, 1000.f), B.CornerHealth[i] / CMax, Label, B.BuildersAt == 0 && !Queued, Good, 60.f);
+			}
 		}
 	}
 }
@@ -463,7 +519,7 @@ float AVLHUD::DrawDemolishTab(const FBox2D& Box, AActor* Building)
 void AVLHUD::DrawRotateTab(const FBox2D& Box, AActor* Building, float RightX)
 {
 	// beside the Demolish tab: a finished building of yours (not the castle) turns a quarter turn clockwise where it
-	// stands (UVLConstruction::Rotate), if it fits that way; a mine and the map's own buildings say why not
+	// stands (UVLConstruction::Rotate), if it fits that way (a claimed mine too); the map's own buildings say why not
 	UVLBattle* Battle = UVLBattle::Get(this);
 	UVLConstruction* C = UVLConstruction::Get(this);
 	const FVLBuildingState* St = Battle ? Battle->FindBuilding(Building) : nullptr;

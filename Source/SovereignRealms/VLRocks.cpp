@@ -193,6 +193,23 @@ float UVLRocks::WorkOn(const AActor* Rock) const
 	return W ? W->Done : 0.f;
 }
 
+void UVLRocks::GetWork(TArray<FWorkView>& Out) const
+{
+	Out.Reset();
+	for (const TPair<TWeakObjectPtr<AActor>, FWork>& It : Work)
+	{
+		AActor* Rock = It.Key.Get();
+		if (!Rock || !IsRock(Rock))
+		{
+			continue;
+		}
+		FWorkView& V = Out.AddDefaulted_GetRef();
+		V.Rock = Rock;
+		V.Frac = FMath::Clamp(It.Value.Done / ClearSeconds, 0.f, 1.f);
+		V.Builders = GFrameCounter - It.Value.Frame <= 2 ? It.Value.InFrame : 0;     // (worked this frame or the last)
+	}
+}
+
 bool UVLRocks::AddWork(AActor* Rock, const AVLKing* Builder, float Dt)
 {
 	if (!IsRock(Rock))

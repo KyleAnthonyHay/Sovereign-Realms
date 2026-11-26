@@ -54,6 +54,15 @@ public:
 	bool AddWork(AActor* Rock, const AVLKing* Builder, float Dt);
 	/** Seconds of one Builder's work done on it, of ClearSeconds. */
 	float WorkOn(const AActor* Rock) const;
+	/** A rock with work done on it (the HUD's progress bar over it): how far along, and how many Builders hammer at it
+	 *  this frame. */
+	struct FWorkView
+	{
+		AActor* Rock = nullptr;
+		float Frac = 0.f;
+		int32 Builders = 0;
+	};
+	void GetWork(TArray<FWorkView>& Out) const;
 	/** Takes it away now: the dust, the sound, the path grid. */
 	void Clear(AActor* Rock, bool bQuiet = false);
 

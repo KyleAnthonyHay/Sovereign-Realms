@@ -469,7 +469,7 @@ a little more than a level-3 castle's own 1500, so one fully raised Granary doub
   the view (Q / E) to turn it, in steps of 90 degrees, and **T** turns the ghost a quarter turn clockwise on top of that
   (R stays the view's "back to north"); the footprint, its plates, the ghost's colour and the site laid all follow the
   turn, and it is kept for the next ghost of a Shift placing and the next placing of the same kind (`vl.Place turn`).
-  Mines are never placed or turned. Plates of a metre on the ground show
+  Mines are never placed (a claimed one turns where it stands: Rotate, below). Plates of a metre on the ground show
   which ground refuses it (red: uneven by more than 30 cm, water, something standing there; a pale fringe of 2 m round
   it, red where blocked); a pill at the pointer says why, or how many trees it clears. Also refused: within 1 m of another
   building, enemy troops on it, the map's edge, a gate opening onto ground nobody can walk to. LMB places it (paid
@@ -517,7 +517,9 @@ a little more than a level-3 castle's own 1500, so one fully raised Granary doub
   and whoever waits or walks in them, the archers on a tower's lookout, a Builder at its walls, and the door and
   default rally point (read from the actor); a rally point you set stays where you put it unless the walls now stand
   on it. The path grid is sampled again over the old footprint and the new. Not turned, and the tab says why: the
-  castle, a site, a mine (part of its map), the map's own buildings.
+  castle, a site, the map's own buildings. **A mine you hold turns too** (claimed from the map, the one exception to
+  "the map's own"): the ground under it (set into its hillside) is not asked to be level or clear, the rest is checked
+  as for any building; the turned mine is kept in a saved game (`UVLConstruction::RestoreBuilding`).
 - **Mines are claimed, not built**: every mine is part of its map (set into a mountain or a hill by the layout), so
   the build menu has none. A free mine (a neutral one, or one that has fallen: it is not taken away, it stands
   **abandoned**) is claimed by Builders: select them and **right-click the mine**, or select the mine and press
@@ -533,7 +535,9 @@ a little more than a level-3 castle's own 1500, so one fully raised Granary doub
   `Realm/Rocks` folder; the mountains, ridges, crags and mesas are terrain and stay) block placing and walking. Select
   Builders and **right-click a rock** (Shift: on the end of their queues): they walk to it and hammer at it, **10 s
   with one Builder**, each further Builder adds as much again (`ExtraSpeed`, up to 4: 2.5 s). The rock sinks and
-  shrinks a little as they work, with stone dust at the blows; then it goes with a puff of dust and a rumble, and the
+  shrinks a little as they work, with stone dust at the blows, and **a progress bar floats over it** (the
+  construction bar's look: hammer, gold meter, "45%  x2", or "queued: Builder 1, #2"; overview and hero view, while a
+  Builder is at it, on the way to it or has it queued; `UVLRocks::GetWork`, `AVLHUD::DrawBuildFeedback`); then it goes with a puff of dust and a rumble, and the
   path grid is sampled again round it so the ground can be walked and built on. **Free.** `UVLRocks` (`VLRocks.*`;
   `UVLBuilderWork` takes a rock as its job). Saved games keep the cleared rocks and the work done on others.
   `vl.Rocks` (how many, cleared, at work), `vl.Rocks clear | order` (the rock nearest the played unit: gone now / the
@@ -1105,7 +1109,8 @@ first draft's, the voxel troops keeping their own swing (1.25 s) and shot (2.4 s
   makes every manned corner whole (and mans the next). The castle panel shows "Corners 3/3" and four small bars
   (grey: no archer at this level yet; red: knocked out; amber: being mended), the Repair button with its price, or
   "Mending · 2 Builders"; small bars float over the turrets with the castle's own, when a corner is hit, knocked out
-  or being mended. **Arrows aimed at a castle go for its nearest standing corner first** (`UVLBattle::AimPoint`), both
+  or being mended. A paid corner also gets the construction-style progress bar over its turret
+  (hammer, green meter, "mending" or red "needs a Builder"), in both views. **Arrows aimed at a castle go for its nearest standing corner first** (`UVLBattle::AimPoint`), both
   sides'. **The enemy's commander** pays for its own repairs once nothing has hit its castle for 10 s and it has the
   gold with 100 over; its Builders then go to work there of their own accord. Console: `vl.Corners` (each castle's
   corners, their health and where they are), `vl.Corners hit <0-3> <amount> [enemy]`, `vl.Corners repair [enemy]`.
