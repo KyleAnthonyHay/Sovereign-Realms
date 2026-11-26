@@ -2086,28 +2086,68 @@ bool AVLKing::HeroCommands(APlayerController* PC, bool bClickSpent)
 		}
 	}
 	// G: "follow me": the selection (none selected: his platoon) falls in behind the one played; his own platoon's
-	// members following him make him its leader
+	// members following him make him its leader (FollowMe; the HUD's Follow me button by the health bar does the same)
 	if (PC->WasInputKeyJustPressed(EKeys::G))
 	{
-		TArray<AVLKing*> Units;
-		Command->GetSelection(Units);
-		Units.Remove(this);
-		if (Units.Num() == 0)
-		{
-			Command->GetPlatoon(Command->PlatoonIndexOf(this), Units);
-			Units.Remove(this);
-		}
-		if (Command->OrderFollow(Units, this) > 0)
-		{
-			AVLGameMode::PlayOrderSound(this);
-		}
-		else if (UVLBattle* Battle = UVLBattle::Get(this))
-		{
-			Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or R: command mode, and click one)"));
-			Battle->Play2D(TEXT("S_UIError"), 0.4f);
-		}
+		FollowMe();
 	}
 	return bTook;
+}
+
+void AVLKing::GetFollowMeUnits(TArray<AVLKing*>& Out) const
+{
+	Out.Reset();
+	const UVLCommand* Command = UVLCommand::Get(this);
+	const UVLBattle* Battle = UVLBattle::Get(this);
+	if (!Command)
+	{
+		return;
+	}
+	// King David, and whether the one played is of his guard (in his platoon, not the King himself)
+	AVLKing* David = nullptr;
+	if (Battle)
+	{
+		for (AVLKing* U : Battle->AllUnits())
+		{
+			if (U && U->Team == Team && !U->IsTroop() && !U->bAmbient)
+			{
+				David = U;
+				break;
+			}
+		}
+	}
+	const int32 Mine = Command->PlatoonIndexOf(this);
+	const bool bGuard = David && David != this && Mine != INDEX_NONE && Command->PlatoonIndexOf(David) == Mine;
+	auto Drop = [this](const AVLKing* U) { return !U || U == this || !U->IsAlive() || U->Team != Team || U->IsGarrisoned(); };
+	Command->GetSelection(Out);
+	if (bGuard)
+	{
+		Out.Remove(David);          // (the King keeps leading his guard)
+	}
+	Out.RemoveAll(Drop);
+	if (Out.Num() == 0 && !bGuard && Mine != INDEX_NONE)
+	{
+		Command->GetPlatoon(Mine, Out);     // (one of the guard: not his platoon, the King's)
+		Out.RemoveAll(Drop);
+	}
+}
+
+bool AVLKing::FollowMe()
+{
+	UVLCommand* Command = UVLCommand::Get(this);
+	TArray<AVLKing*> Units;
+	GetFollowMeUnits(Units);
+	if (Command && Units.Num() > 0 && Command->OrderFollow(Units, this) > 0)
+	{
+		AVLGameMode::PlayOrderSound(this);
+		return true;
+	}
+	if (UVLBattle* Battle = UVLBattle::Get(this))
+	{
+		Battle->PushAlert(TEXT("Follow me: select troops first (1-6, or R: command mode, and click one)"));
+		Battle->Play2D(TEXT("S_UIError"), 0.4f);
+	}
+	return false;
 }
 
 // ------------------------------------------------------------------------------------------------ making way
@@ -3512,7 +3552,10 @@ bool AVLKing::GetAimRay(APlayerController* PC, FVector& Origin, FVector& Dir) co
 
 void AVLKing::UpdateCursorMode(APlayerController* PC, const AVLHUD* HUD)
 {
-	const bool bWant = bMouseLook && bHeroMode && ViewMode == 0 && !(HUD && HUD->bMenu) && PC->GetPawn() == this;
+	// (Alt / Option held: the pointer is free for as long, to click the hero view's buttons: Follow me, the minimap,
+	// the platoon panel; their tooltips show while it is held too)
+	const bool bAltFree = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
+	const bool bWant = bMouseLook && bHeroMode && ViewMode == 0 && !bAltFree && !(HUD && HUD->bMenu) && PC->GetPawn() == this;
 	// At launch the window can come up without the keyboard and mouse focus (the input mode is applied before the
 	// window is in front): until the game viewport really has the mouse, focus it and capture again, twice a second.
 	if (bWant && bCursorModeSet)

@@ -78,7 +78,7 @@ namespace VLId
 {
 	enum : uint32
 	{
-		Pause = 1, Help, Minimap, PlatoonHeader, LegendClose, Upgrade, CastleCard, SendOut,
+		Pause = 1, Help, Minimap, PlatoonHeader, LegendClose, Upgrade, CastleCard, SendOut, FollowMe,
 		Command = 20,     // + 0..19
 		Recruit = 40,     // + 0 the building's troop
 		Slot = 100,       // + platoon * 5 + {0 row, 1 formation, 2 stance, 3 (unused), 4 disband}

@@ -668,6 +668,16 @@ public:
 	 *  the platoon King David is in (platoon 1 from the match's start), not King David, the unit played, nor those
 	 *  garrisoned. Empty: no guard (the hint says so; nothing is ordered). */
 	void GetKingsGuard(TArray<AVLKing*>& Out) const;
+	/**
+	 * "Follow me" (G in the hero view, and the HUD's Follow me button by the health bar): who falls in behind the unit
+	 * played: the selection, or with nobody selected the rest of his platoon. Played as one of the king's guard (in
+	 * King David's platoon, not the King): only the selection, and never King David, so the guard is not taken from
+	 * the King, who keeps leading it. Without the unit played, the dead or the garrisoned. Empty: nobody to follow.
+	 */
+	void GetFollowMeUnits(TArray<AVLKing*>& Out) const;
+	/** Gives "follow me" (GetFollowMeUnits): the order's sound, or with nobody to follow the alert and the error sound.
+	 *  True if anyone follows. */
+	bool FollowMe();
 	/** Those ordered from command mode who are still on it (their plan shows in command mode). */
 	void GetCommandPlanned(TArray<AVLKing*>& Out) const;
 	/** (tests) A Shift chain stays open (its selection held) until EndCommandChain, with no Shift key down. */

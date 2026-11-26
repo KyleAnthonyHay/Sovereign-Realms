@@ -2630,6 +2630,42 @@ void AVLHUD::DrawHeroBits()
 			// a hit flashes the bar red for a moment
 			const float Hit = FMath::Clamp(1.f - float(GetWorld()->GetTimeSeconds() - King->LastHurtTime) / 0.4f, 0.f, 1.f);
 			Meter(TX, HB.Min.Y + U(33.f), MW, U(13.f), Frac, FMath::Lerp(Health(Frac), Refuse, Hit * 0.7f));
+
+			// "Follow me" (G), right of the health bar (above its right end when the platoon panel leaves no room),
+			// while someone would follow (the selection, or his platoon: AVLKing::GetFollowMeUnits). Clicked with the
+			// pointer: Alt / Option held frees it in the mouse-look view (AVLKing::UpdateCursorMode); with mouse look
+			// off, or in C's postcard, it is free anyway.
+			TArray<AVLKing*> Would;
+			King->GetFollowMeUnits(Would);
+			if (Would.Num() > 0)
+			{
+				const float BW = U(168.f), BH = HH, Gap = U(10.f);
+				const float RoomR = PlatoonRect.bIsValid ? PlatoonRect.Min.X - Gap : View.X - U(14.f);
+				const FBox2D FB = HB.Max.X + Gap + BW <= RoomR
+					? FBox2D(FVector2D(HB.Max.X + Gap, HB.Min.Y), FVector2D(HB.Max.X + Gap + BW, HB.Max.Y))
+					: FBox2D(FVector2D(HB.Max.X - BW, HB.Min.Y - Gap - U(40.f)), FVector2D(HB.Max.X, HB.Min.Y - Gap));
+				Block(FB);
+				const FBtn B = Button(FB, VLId::FollowMe);
+				ButtonFrame(FB, B, true);
+				const float Lift = B.bHeld ? U(1.f) : 0.f;
+				const float KeyW = U(19.f);
+				const float LabelW = TextSize(TEXT("Follow me"), U(15.f), Bold).X;
+				const float LX = FMath::RoundToFloat(FB.GetCenter().X - (LabelW + U(10.f) + KeyW) * 0.5f);
+				Text(TEXT("Follow me"), LX, FB.GetCenter().Y - U(10.f) + Lift, U(15.f), B.bHover ? GoldBright : Parchment, AlignLeft, Bold);
+				KeyCap(TEXT("G"), LX + LabelW + U(10.f) + KeyW, FB.GetCenter().Y - U(9.5f) + Lift, true);
+				if (B.bHover)
+				{
+					SetTooltip(FB, FString::Printf(TEXT("Follow me   ·   %d would fall in behind you"), Would.Num()), {
+						TEXT("The selection falls in behind you; nobody selected: the rest of your platoon."),
+						TEXT("Playing one of the king's guard: only the selection (never King David); the King keeps his guard."),
+						TEXT("Click (hold Alt / Option for the pointer in the mouse-look view), or press G.") });
+				}
+				if (B.bClicked)
+				{
+					Click();
+					King->FollowMe();
+				}
+			}
 		}
 	}
 }
